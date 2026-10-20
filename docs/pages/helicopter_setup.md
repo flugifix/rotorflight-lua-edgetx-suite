@@ -64,7 +64,8 @@ The short instruction area may show only its first lines; **?** opens the full t
 ## Overrides, connection loss and saving
 
 MSP_ARMING_DISABLE blocks arming while the page is open and is asserted again after
-a restart. Servo, mixer and motor overrides are explicitly released on each task/step
+a restart. The MSP arming-disable flag is independently read back before controls
+are enabled and checked throughout the visit. Servo, mixer and motor overrides are explicitly released on each task/step
 exit and on page teardown. Leaving drops unsent override keepalives. Configuration
 writes are acknowledged before EEPROM and before moving to the next step.
 
@@ -80,6 +81,7 @@ firmware's fixed one-second expiry.
 Do not switch helicopters during a visit. The wizard binds itself to the FC identity.
 An armed transition, lost connection, refused operation or malformed response blocks
 progress; it does not report a successful save. Retry is an explicit action.
+Returning to a physical-check step requires fresh answers.
 
 The connection gate batches the initial restart. Receiver wiring and later ESC
 telemetry can need their own restart, as in the Configurator sequence. Unsupported

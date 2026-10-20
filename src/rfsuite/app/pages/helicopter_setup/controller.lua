@@ -46,7 +46,30 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:run(fn) self.bus:add({ run = fn }) end
   function w:rebuild() if self.requestRebuild then self.requestRebuild() end end
-  function w:usable() return self.ready and not self.error and not self.transition and self:allowed() end
+  function w:usable() return self.ready and self.locked and not self.error and not self.transition and self:allowed() end
+  function w:acceptStatus(d)
+    self.data.status, self.statusAt = d, now()
+    if self.locked and (d.arming_disable_flags & (1 << 16)) == 0 then
+      self.locked = false; self:fail("arming_disable", "lock lost"); return
+    end
+    self.statusArmed = false
+    for i, id in ipairs(self.data.boxids and self.data.boxids.box_ids or {}) do
+      if id == 0 then self.statusArmed = (d.flight_mode_flags & (1 << (i - 1))) ~= 0; break end
+    end
+    if self.calibrationAt and now() - self.calibrationAt >= 200 and (d.arming_disable_flags & (1 << 23)) == 0 then
+      self.calibrationAt = nil; self.message = self.L.calibrated
+    end
+  end
+  function w:retry()
+    if not self.bus:idle() or not self:allowed() then return end
+    self.error, self.transition = nil, true
+    self:write("arming_disable", { disabled = true })
+    self:read("status", function(d)
+      if (d.arming_disable_flags & (1 << 16)) == 0 then self:fail("arming_disable", "not active"); return end
+      self.locked = true; self:acceptStatus(d)
+      if not self.ready then self:load() else self.transition = nil; self:rebuild() end
+    end)
+  end
   function w:touch(api, reboot, live)
     self.dirty[api] = true
     if reboot then self.rebootPending = true end
@@ -193,12 +216,20 @@ function M.new(runtime, transport, mathModule, labels)
   function w:navigate(step, card)
     if self.transition or not self.ready then return end
     if self.step >= 10 and step <= 9 then self.checks.unplugged = nil end
+    if step ~= self.step then
+      local owned = ({ [1] = {"orientation", "unplugged", "blades"}, [10] = {"connected"}, [11] = {"motorDirection"},
+        [13] = {"servoUp0", "servoUp1", "servoUp2", "servoCentre0", "servoCentre1", "servoCentre2", "servoCentre3"},
+        [14] = {"control1", "control2", "control4"}, [15] = {"level"}, [16] = {"pitch"},
+        [17] = {"tailCentre", "tailDirection"}, [18] = {"gyro1", "gyro2", "gyro3"}, [19] = {"finish"} })[step]
+      for _, name in ipairs(owned or {}) do self.checks[name] = nil end
+      if step == 11 or step == 17 then self.bladesOff, self.percent = false, 10 end
+    end
     self:release()
     self.step, self.card, self.commit, self.cards, self.enter, self.onLive = step, card or 1, nil, nil, nil, nil
     self.buildRequested = true; self:rebuild()
   end
   function w:next()
-    if not self:usable() or not self.bus:idle() then return end
+    if not self:usable() or not self.cards then return end
     if self.step == 1 and (not self:ack("unplugged") or not self:ack("blades")) then return end
     if self.card < #self.cards then self:navigate(self.step, self.card + 1); return end
     if self.validate and not self.validate() then return end
@@ -252,7 +283,12 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:load()
     self.ready, self.error, self.progress, self.transition = false, nil, 0, true
-    self:write("arming_disable", { disabled = true }, function() self.locked = true end)
+    self.locked = false
+    self:write("arming_disable", { disabled = true })
+    self:read("status", function(d)
+      if (d.arming_disable_flags & (1 << 16)) == 0 then self:fail("arming_disable", "not active"); return end
+      self.locked = true; self:acceptStatus(d)
+    end)
     for _, api in ipairs({ "servo_override", "mixer_override", "motor_override" }) do
       local name = api
       self:run(function() self.bus.apis[name] = assert(loadScript(BASE .. "tasks/msp/api/" .. name .. ".lua", "t"))() end)
@@ -268,7 +304,7 @@ function M.new(runtime, transport, mathModule, labels)
         self.data[api], self.progress = d, self.progress + 1
         if api == "status" then
           -- The ARM box bit is identified by BOXIDS below, never assumed to be bit zero.
-          self.statusAt = now()
+          self:acceptStatus(d)
         end
       end, api == "tail_motor_output")
       self:run(function() self.saved[api] = copy(self.data[api]) end)
@@ -297,10 +333,7 @@ function M.new(runtime, transport, mathModule, labels)
     self:read(api, function(d)
       self.data[api] = d
       if api == "status" then
-        self.statusAt, self.statusArmed = now(), false
-        for i, id in ipairs(self.data.boxids.box_ids) do
-          if id == 0 then self.statusArmed = (d.flight_mode_flags & (1 << (i - 1))) ~= 0; break end
-        end
+        self:acceptStatus(d)
       end
       if self.onLive then self.onLive(api, d) end
     end)
@@ -360,11 +393,11 @@ function M.new(runtime, transport, mathModule, labels)
     if not self.ready or self.error or self.transition then return end
     if self.trialTick and self:trialTick() then return end
     if now() - (self.statusAt or 0) > 100 then
-      self:read("status", function(d) self.data.status, self.statusAt = d, now() end); return
+      self:read("status", function(d) self:acceptStatus(d) end); return
     end
     if now() - (self.statusAt or 0) > 300 then
       self:release(); self.message = self.L.stale
-      self:read("status", function(d) self.data.status, self.statusAt = d, now() end)
+      self:read("status", function(d) self:acceptStatus(d) end)
       return
     end
     if self.live and next(self.live) then

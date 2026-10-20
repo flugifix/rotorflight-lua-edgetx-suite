@@ -18,7 +18,13 @@ return function(w)
         end
         w:touch("mixer_input", false, true); w.pitchMeasured[index] = 90
       end),
-      w:input(axis, "rate", L.ratePercent, -2000, 2000, 10)
+      { kind = "number", label = L.ratePercent, min = 200, max = 2000, divisor = 10,
+        get = function() return math.abs(w.data.mixer_input.inputs[axis].rate) end,
+        set = function(v)
+          for _, i in ipairs(index == 1 and {4} or {1,2}) do
+            local input = w.data.mixer_input.inputs[i]; input.rate = (input.rate < 0 and -1 or 1) * v
+          end; w:touch("mixer_input", false, true)
+        end }
     }, function() w:holdAxes(nil, 0) end, "pitch")
   end
   local function limit(axis, label)

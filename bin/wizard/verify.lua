@@ -35,9 +35,11 @@ end
 local function u16(p,v) p[#p+1],p[#p+2] = v & 255,(v >> 8) & 255 end
 local modules = {}
 local function api(name) if not modules[name] then modules[name] = load("tasks/msp/api/" .. name .. ".lua") end; return modules[name] end
+local lockDisabled = true
 local function status()
   local values = { sensor_status = 3, pid_profile_count = 3, control_rate_profile_count = 3,
-    motor_count = 2, servo_count = 4, current_pid_profile_index = 1, current_control_rate_profile_index = 2 }
+    motor_count = 2, servo_count = 4, current_pid_profile_index = 1, current_control_rate_profile_index = 2,
+    arming_disable_flags = lockDisabled and (1 << 16) or 0 }
   local p = {}
   for _, f in ipairs(api("status").fields) do
     local n = f[2] == "U32" and 4 or f[2] == "U16" and 2 or 1
@@ -64,6 +66,7 @@ local failCommand, legacy = nil, false
 local function pump()
   local m = table.remove(q.messages,1); if not m then return end
   q.sent[#q.sent+1] = m
+  if m.command==99 then lockDisabled=m.payload[1]==1;fixtures[101]=status() end
   if m.command == failCommand or (legacy and m.command == 196 and #m.payload == 4) then
     if m.errorHandler then m.errorHandler(m,"error") end; return
   end
@@ -79,6 +82,9 @@ local function measure(name, fn)
   if count > 14000 then check(false, name .. " exceeds 14000: " .. count) end
 end
 local H = load(PATH .. "math.lua")
+for i=1,#arg do
+  if arg[i]=="--mixer-api" then modules.mixer_override=assert(loadfile(arg[i+1]))() end
+end
 eq(H.calibrated(-1000,18),-500,"pitch scale preserves sign")
 eq(H.calibrated(1000,4.5),2000,"pitch scale clamp")
 eq(H.calibrated(1000,0),nil,"zero measurement refused")
@@ -128,7 +134,8 @@ local function resolve(t)
   local out = {}
   for k,v in pairs(t) do
     if type(v) == "function" then
-      if k=="text" or k=="get" or k=="active" then out[k] = v() end
+      if k=="text" or k=="get" or k=="active" then out[k] = v()
+      elseif k=="display" and t.get then out[k] = v(t.get()) end
     elseif type(v)=="table" then out[k] = resolve(v)
     else out[k] = v end
   end
@@ -237,6 +244,31 @@ for _=1,500 do
   measure("page sweep",function() resolve(ctx.children) end)
 end
 page.onClose()
+-- Follow all 19 steps with explicit positive physical answers. No simulator or
+-- radio events are synthesized; these are calls into the actual page controller.
+w=world();q.sent={};w.requestClose=function() w.closed=true end
+w.checks=setmetatable({},{__index=function() return true end})
+w.data.mode_ranges.mode_ranges[1]={id=0,auxChannelIndex=0,range={start=1800,["end"]=2100}}
+local visited={}
+for _=1,3000 do
+  w:tick();pump();ticks=ticks+5
+  if w.ready and w.cards and not w.transition and not w.error then
+    visited[w.step]=true;w:next()
+  end
+  if w.closed or w.error then break end
+end
+check(w.closed and not w.error,"complete 19-step walk exits")
+local visitedCount=0;for _ in pairs(visited) do visitedCount=visitedCount+1 end
+eq(visitedCount,19,"all nineteen steps visited in order")
+eq(q.sent[#q.sent].command,99,"exit finishes with arming command")
+eq(q.sent[#q.sent].payload[1],0,"arming availability restored only on exit")
+-- ACK alone is insufficient: disappearance of the status flag blocks edits.
+w=world();w.holds={};w:hold("mixer",1,0)
+local unlocked=api("status").parse(status());unlocked.arming_disable_flags=0
+w:acceptStatus(unlocked)
+check(w.error and not w.locked and next(w.holds)==nil,"arming-lock readback failure stops bench work")
+w=world();w.checks.gyro1=true;w.step=17;w:navigate(18,1)
+check(w.checks.gyro1==nil,"returning to a physical check requires a fresh answer")
 for name,count in pairs(worst) do print(string.format("BUDGET %-12s %d / 14000",name,count)) end
 if arg[1]=="--export" then
   local function json(v)

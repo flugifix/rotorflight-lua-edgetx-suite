@@ -276,6 +276,10 @@ local L = {
   gyroCheck = "@i18n(helicopter.gyroCheck)@",
   help = "@i18n(helicopter.help)@",
   help_title = "@i18n(helicopter.help_title)@",
+  calibrated = "@i18n(helicopter.calibrated)@",
+  centreDegrees = "@i18n(helicopter.centreDegrees)@",
+  clockwiseDegrees = "@i18n(helicopter.clockwiseDegrees)@",
+  counterclockwiseDegrees = "@i18n(helicopter.counterclockwiseDegrees)@",
 }
 L.steps = { L.sensors, L.receiver, L.modeSwitches, L.profiles, L.rates, L.swash, L.servoType, L.governor, L.motor,
   L.connect, L.spinTest, L.escTelemetry, L.servoDirectionCentre, L.controlDirections, L.level, L.bladePitch, L.tail, L.gyroCheck, L.finish }

@@ -53,7 +53,7 @@ function M.wakeup(ctx)
   end
   w:tick()
   w.canEdit = w:usable()
-  w.canNext = w.canEdit and w.bus:idle()
+  w.canNext = w.canEdit and w.cards ~= nil
 end
 function M.onBack()
   if w then w:back() elseif context and context.requestClose then context.requestClose() end

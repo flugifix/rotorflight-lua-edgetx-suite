@@ -8,7 +8,7 @@ return function(w)
       w:button(L.calibrate, function()
         if not acc or not w.checks.unplugged or not w.checks.blades then w.message = L.confirmCheck; return end
         w:write("acc_calibration", {}, function() w.message = L.calibrating; w.calibrationAt = getTime() end)
-      end, function() return acc end),
+      end, function() return acc and not w.calibrationAt end),
       w:value(L.accelerometer, function() return acc and L.available or L.unavailable end)
     }, nil, "heli"),
     w:cardDef(L.orientation, L.alignHint, {

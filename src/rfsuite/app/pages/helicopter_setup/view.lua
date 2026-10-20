@@ -58,11 +58,7 @@ function M.new(w, ctx)
   elseif w.error then
     all[#all + 1] = label(12, 48, width-24, w.L.failed)
     all[#all + 1] = label(12, 76, width-24, w.error)
-    button(12, 116, width-24, w.L.retry, function()
-      w.error, w.transition = nil, nil
-      if not w.ready then w.bus:cancel(); w:load() end
-      w:rebuild()
-    end)
+    button(12, 116, width-24, w.L.retry, function() w:retry() end)
   elseif card then
     local formX, formW = large and math.floor(width * 0.43) or 10, large and math.floor(width * 0.55)-12 or width-20
     all[#all + 1] = label(10, large and 50 or 27, large and formX-24 or width-20, card.title, large and MIDSIZE or SMLSIZE)

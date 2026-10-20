@@ -277,6 +277,10 @@ return {
     gyroCheck = "Gyro check",
     help = "Guided setup. Remove all blades. Release motor buttons to stop.\nBack: previous task; at the start, choose Save or Discard.\nContinue: next task within this step.\nSave & next: store this step in the flight controller.\nReboot: keep servos unplugged until restart completes.\nFinish: save, release overrides and leave.",
     help_title = "Helicopter Setup",
+    calibrated = "Calibration complete",
+    centreDegrees = "Centre trim (deg)",
+    clockwiseDegrees = "CW limit (deg)",
+    counterclockwiseDegrees = "CCW limit (deg)",
   },
   app = {
     loading = "Loading...",

@@ -27,7 +27,9 @@ return function(w)
   local function hold(value) w:hold("mixer", 3, value) end
   return {
     w:cardDef(L.tailCentre, L.tailCentreHint, {
-      w:n("mixer_config", "tail_center_trim", L.centreTrim, -1042, 1042, false, true),
+      { kind = "number", label = L.centreDegrees, min = -250, max = 250, divisor = 10,
+        get = function() return w.math.round(w.data.mixer_config.tail_center_trim * 0.24) end,
+        set = function(v) w:field("mixer_config", "tail_center_trim", w.math.round(v / 0.24), false, true) end },
       w:check("tailCentre", L.tailCentred)
     }, function() hold(0) end, "servo"),
     w:cardDef(L.tailDirection, L.tailDirectionHint, {
@@ -38,12 +40,22 @@ return function(w)
     w:cardDef(L.tailCalibration, L.tailCalibrationHint, {
       w:button(L.holdPositive22, function() hold(917) end),
       w:button(L.holdNegative22, function() hold(-917) end),
-      w:input(3, "rate", L.ratePercent, -5000, 5000, 10)
+      { kind = "number", label = L.ratePercent, min = 100, max = 5000, divisor = 10,
+        get = function() return math.abs(w.data.mixer_input.inputs[3].rate) end,
+        set = function(v)
+          local input = w.data.mixer_input.inputs[3]; input.rate = (input.rate < 0 and -1 or 1) * v
+          w:touch("mixer_input", false, true)
+        end }
     }, function() hold(0) end, "pitch"),
     w:cardDef(L.tailLimits, L.tailLimitHint, {
       w:button(L.holdPositive60, function() hold(2500) end),
       w:button(L.holdNegative60, function() hold(-2500) end),
-      w:input(3, "min", L.clockwiseLimit, -2500, 0), w:input(3, "max", L.counterclockwiseLimit, 0, 2500)
+      { kind = "number", label = L.clockwiseDegrees, min = 0, max = 600, divisor = 10,
+        get = function() return w.math.round(-w.data.mixer_input.inputs[3].min * 0.24) end,
+        set = function(v) w.data.mixer_input.inputs[3].min = -w.math.round(v / 0.24); w:touch("mixer_input", false, true) end },
+      { kind = "number", label = L.counterclockwiseDegrees, min = 0, max = 600, divisor = 10,
+        get = function() return w.math.round(w.data.mixer_input.inputs[3].max * 0.24) end,
+        set = function(v) w.data.mixer_input.inputs[3].max = w.math.round(v / 0.24); w:touch("mixer_input", false, true) end }
     }, function() hold(0) end)
   }
 end

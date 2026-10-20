@@ -68,7 +68,7 @@ def render(scene):
                     values = item['values']
                     text = values[int(value)-1] if isinstance(value,(int,float)) and 1 <= value <= len(values) else '?'
                 else:
-                    text = str(value)
+                    text = item.get('display',str(value))
             while draw.textlength(str(text),font=face) > w-12 and size > 8:
                 size -= 1
                 face = font(size)

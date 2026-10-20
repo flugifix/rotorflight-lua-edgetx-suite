@@ -277,6 +277,10 @@ return {
     gyroCheck = "Kreiselprüfung",
     help = "Geführte Einrichtung. Alle Blätter abnehmen. Loslassen stoppt den Motor.\nZurück: vorherige Aufgabe; am Anfang Speichern oder Verwerfen wählen.\nWeiter: nächste Aufgabe dieses Schritts.\nSpeichern & weiter: Schritt im Flugregler speichern.\nNeustart: Servos bis zum abgeschlossenen Neustart abgesteckt lassen.\nAbschließen: speichern, Übersteuerungen beenden und verlassen.",
     help_title = "Helikopter einrichten",
+    calibrated = "Kalibrierung abgeschlossen",
+    centreDegrees = "Mittentrimmung (Grad)",
+    clockwiseDegrees = "CW-Grenze (Grad)",
+    counterclockwiseDegrees = "CCW-Grenze (Grad)",
   },
   app = {
     loading = "Lade...",
