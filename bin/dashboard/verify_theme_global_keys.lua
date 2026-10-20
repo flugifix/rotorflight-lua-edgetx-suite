@@ -33,7 +33,7 @@ local THEMES = { "urban", "grid", "deck" }
 -- The fields an earlier build of the theme Keys pages stored; they must stay as they are and be
 -- read by nothing.
 local OLD_FIELDS = { "key_page_down", "key_page_up", "key_mdl", "key_sys", "key_tele" }
-local NEW_FIELD = { pageDown = "theme_key_page_down", sys = "theme_key_sys" }
+local NEW_FIELD = { pageDown = "theme_key_page_down", pageUp = "theme_key_page_up", sys = "theme_key_sys" }
 local GLOBAL_TAG = "@i18n(app.pages.settings_dashboard_settings.urban_key_global)@"
 
 local function readFile(path)
@@ -126,9 +126,8 @@ local function hasTag(row)
   return string.find(row.label or "", GLOBAL_TAG, 1, true) ~= nil
 end
 
--- The Keys page in one scope: starts unbound over old choices, marks what the global page holds,
--- and stores a choice in the new field of that scope only.
-local function pageCase(theme, scope)
+-- Open the real Keys page over old stored choices in either preference scope.
+local function openPage(theme, scope)
   local DashboardLib = loadRel("app/pages/settings/dashboard/lib.lua")()
   local radio = seedOld(theme)
   local model = seedOld(theme)
@@ -147,8 +146,15 @@ local function pageCase(theme, scope)
   rows = {}
   page.onReload(ctx)
   page.build(ctx)
+  return page, ctx, radio, model, reports, DashboardLib
+end
+
+-- The Keys page in one scope: starts unbound over old choices, marks what the global page holds,
+-- and stores a choice in the new field of that scope only.
+local function pageCase(theme, scope)
+  local page, ctx, radio, model, reports = openPage(theme, scope)
   if #rows ~= 5 then return "the Keys page drew " .. #rows .. " rows, expected 5" end
-  local unbound = { "menu", "menu", "none", "none", "none" }
+  local unbound = { "none", "none", "none", "none", "none" }
   for i = 1, 5 do
     if rows[i].selected ~= unbound[i] then
       return "row " .. i .. " starts on " .. tostring(rows[i].selected) .. ", expected " .. unbound[i]
@@ -180,6 +186,62 @@ local function pageCase(theme, scope)
   page.build(ctx)
   if isHeld(rows[4]) or hasTag(rows[4]) then return "SYS on Theme radio-wide is still marked held" end
   if not isHeld(rows[5]) then return "TELE lost its mark when only SYS changed" end
+  if type(page.onClose) == "function" then page.onClose() end
+end
+
+-- PAGE must distinguish an untouched row from a deliberate Quick menu choice, through the
+-- actual page callback, preference store, layout and global resolver in both scopes.
+local function pageMenuCase(theme, scope)
+  local page, ctx, radio, model, reports, DashboardLib = openPage(theme, scope)
+  if #rows ~= 5 then return "the Keys page drew " .. #rows .. " rows, expected 5" end
+  local layout = loadRel("widgets/dashboard/themes/" .. theme .. "/layout.lua")()
+  local Keys = loadRel("widgets/dashboard/keys.lua")()
+  local bound = { keys = {}, action = function() end, entry = function() end }
+  local modelPrefs = _G.rfsuite.session.modelPreferences
+  local function resolve(name)
+    local cfg = DashboardLib.getThemeConfig(ctx.preferences, "system/" .. theme, nil, modelPrefs)
+    layout.bindKeys({ themeConfig = cfg }, bound)
+    return Keys.resolve(radio, name, bound.keys)
+  end
+  for _, name in ipairs({ "pageDown", "pageUp" }) do
+    local action, global = resolve(name)
+    if action ~= nil or global then return "untouched " .. name .. " resolved to " .. tostring(action) end
+  end
+  local target = scope == "model" and model or radio
+  local other = scope == "model" and radio or model
+  for i, name in ipairs({ "pageDown", "pageUp" }) do
+    rows[i].onSelect("menu")
+    page.onSave(ctx)
+    if #reports ~= i or reports[i].ok ~= true then return "Quick menu save did not report success" end
+    local key = configKey(theme, NEW_FIELD[name])
+    if target[key] ~= "menu" then return name .. " Quick menu was not stored in " .. key end
+    if other[key] ~= nil then return name .. " Quick menu leaked into the other scope" end
+    local action, global = resolve(name)
+    if action ~= "openView:menu" or global then
+      return name .. " Quick menu resolved to " .. tostring(action) .. ", expected openView:menu"
+    end
+    if i == 1 then
+      action, global = resolve("pageUp")
+      if action ~= nil or global then return "untouched pageUp changed when pageDown was bound" end
+    end
+  end
+  local bad = checkOld(theme, radio, "radio store") or checkOld(theme, model, "model store")
+  if bad then return bad end
+  rows = {}
+  page.onReload(ctx)
+  page.build(ctx)
+  if #rows ~= 5 or rows[1].selected ~= "menu" or rows[2].selected ~= "menu" then
+    return "saved PAGE Quick menu choices did not reload"
+  end
+  -- Clearing a choice must remove the previous build's binding as well.
+  for i, name in ipairs({ "pageDown", "pageUp" }) do
+    rows[i].onSelect("none")
+    page.onSave(ctx)
+    local action, global = resolve(name)
+    if action ~= nil or global then return "cleared " .. name .. " still resolves to " .. tostring(action) end
+  end
+  bad = checkOld(theme, radio, "radio store") or checkOld(theme, model, "model store")
+  if bad then return bad end
   if type(page.onClose) == "function" then page.onClose() end
 end
 
@@ -228,6 +290,8 @@ for _, theme in ipairs(THEMES) do
   CASES[#CASES + 1] = { id = theme .. " page, radio scope", fn = function() return pageCase(theme, "standard") end }
   CASES[#CASES + 1] = { id = theme .. " page, model scope", fn = function() return pageCase(theme, "model") end }
   CASES[#CASES + 1] = { id = theme .. " binding", fn = function() return bindingCase(theme) end }
+  CASES[#CASES + 1] = { id = theme .. " page menu, radio scope", fn = function() return pageMenuCase(theme, "standard") end }
+  CASES[#CASES + 1] = { id = theme .. " page menu, model scope", fn = function() return pageMenuCase(theme, "model") end }
 end
 
 -- The theme modules keep themselves in globals (`__rfsuiteTheme<Name>Module`) and hand that copy
@@ -266,6 +330,19 @@ local MUTANTS = {
       '{ key = "sys",      pref = "theme_key_sys",       default = "none"',
       '{ key = "sys",      pref = "theme_key_sys",       default = "suite_tool"' } },
     expect = { "page", "binding" },
+  },
+  {
+    name = "the theme selects Quick menu by default for PAGE",
+    change = { ["widgets/dashboard/themes/%s/layout.lua"] = {
+      '{ key = "pageDown", pref = "theme_key_page_down", default = "none"',
+      '{ key = "pageDown", pref = "theme_key_page_down", default = "menu"' } },
+    expect = { "page", "binding" },
+  },
+  {
+    name = "PAGE Quick menu is left unbound",
+    change = { ["widgets/dashboard/themes/%s/layout.lua"] = {
+      'if id == entry.host then', 'if id == entry.host or id == "menu" then' } },
+    expect = { "page menu" },
   },
   {
     name = "the page marks no key as held",
@@ -312,7 +389,7 @@ if selfTest then
   end
   local again = run(true)
   if #again > 0 then print("SELF-TEST FAILED: a mutant left the next run red: " .. again[1].case); os.exit(1) end
-  print("SELF-TEST PASSED: old fields, theme defaults and the held mark are enforced in all three themes")
+  print("SELF-TEST PASSED: old fields, empty defaults, explicit PAGE menu bindings and the held mark are enforced in all three themes")
   os.exit(0)
 end
 

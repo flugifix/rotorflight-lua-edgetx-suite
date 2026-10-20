@@ -268,9 +268,10 @@ resolver. Per theme it builds the Keys page over key choices an earlier version 
 that the page starts unbound, marks the keys the radio-wide page holds, saves a choice in radio and
 model scope without touching the old fields, and that the layout binds only the new fields, which
 act only while the radio-wide choice is Theme. The self-test makes the layout read the old fields,
-gives the theme a SYS default again and removes the held mark; each must turn a case red in all
-three themes. Controls and preference-card writes are stubbed; native touch delivery is outside
-this offline check.
+gives the theme a SYS or PAGE default again, leaves an explicit PAGE Quick menu choice unbound,
+and removes the held mark; each must turn a case red in all three themes. Both PAGE directions
+start on Nothing and can save, reload and clear an explicit Quick menu binding in either scope.
+Controls and preference-card writes are stubbed; native touch delivery is outside this offline check.
 
 Release notes wait under `release-notes/`, one file per pull request, until the release is cut:
 `python bin/release/collect_release_notes.py` files them under the version in

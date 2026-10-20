@@ -315,12 +315,11 @@ L.KEY_ACTIONS = {
   { id = "exit",       action = "exitFullscreen" },
 }
 
--- The keys the pilot can bind: the host's name in `ctx.keys`, the stored key, the theme's default
--- and `host`, what the host does with the key when the theme binds nothing -- the page keys open
--- the quick menu, MDL, SYS and TELE do nothing. The theme binds nothing of its own: every default
--- is the host's answer, and the radio-wide defaults of Settings > Dashboard > Keys
--- (widgets/dashboard/keys.lua) are where SYS and TELE get theirs. A binding here acts only while
--- that page leaves the key on Theme.
+-- The keys the pilot can bind: the host's name in `ctx.keys`, the stored key, and the
+-- unbound default. `host` is the choice that leaves `ctx.keys` empty; all rows start on Nothing.
+-- Quick menu is an explicit binding, including on PAGE keys. The radio-wide defaults of
+-- Settings > Dashboard > Keys (widgets/dashboard/keys.lua) are where SYS and TELE get theirs.
+-- A binding here acts only while that page leaves the key on Theme.
 --
 -- The stored keys are `theme_key_*`. The `key_*` ones an earlier build of this page wrote stay in
 -- the pilot's files and bind nothing any more, so a key starts unbound here.
@@ -328,8 +327,8 @@ L.KEY_ACTIONS = {
 -- Not rows of L.SETTINGS: those are what the drawing reads, and the page probe holds each of them
 -- to a change in the picture. A key binding draws nothing.
 L.KEYS = {
-  { key = "pageDown", pref = "theme_key_page_down", default = "menu", host = "menu" },
-  { key = "pageUp",   pref = "theme_key_page_up",   default = "menu", host = "menu" },
+  { key = "pageDown", pref = "theme_key_page_down", default = "none", host = "none" },
+  { key = "pageUp",   pref = "theme_key_page_up",   default = "none", host = "none" },
   { key = "mdl",      pref = "theme_key_mdl",       default = "none", host = "none" },
   { key = "sys",      pref = "theme_key_sys",       default = "none", host = "none" },
   { key = "tele",     pref = "theme_key_tele",      default = "none", host = "none" },
