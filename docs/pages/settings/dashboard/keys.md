@@ -37,8 +37,9 @@ A radio without one of these keys never sends it; its saved choice still remains
 - On the connection screen, global actions already work. A theme's bindings become available when
   that theme has built.
 - An opened menu can be closed with its bound menu key. Short RTN keeps the current Back/Close
-  behavior, and long RTN leaves fullscreen. A key on Theme does nothing while another view is on
-  top unless the theme binds it to that view; a global action — a default included — still
+  behavior, and long RTN leaves fullscreen. MDL, SYS or TELE on Theme does nothing while another
+  view is on top unless the theme binds it to that view (the page keys there close the quick menu
+  or open it over the view); a global action — a default included — still
   applies there. Nothing also consumes the key before LVGL sees it.
 - While the suite tool or in-flight tuning owns the fullscreen, these shortcuts do not take its keys.
 - Main menu is refused while armed. Flight log also requires its preview switch.
