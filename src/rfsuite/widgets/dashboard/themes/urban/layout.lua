@@ -310,7 +310,7 @@ L.KEY_ACTIONS = {
 -- that page leaves the key on Theme.
 --
 -- The stored keys are `theme_key_*`. The `key_*` ones an earlier build of this page wrote stay in
--- the pilot's files and are read by nothing, so a key starts unbound here.
+-- the pilot's files and bind nothing any more, so a key starts unbound here.
 --
 -- Not rows of L.SETTINGS: those are what the drawing reads, and the page probe holds each of them
 -- to a change in the picture. A key binding draws nothing.

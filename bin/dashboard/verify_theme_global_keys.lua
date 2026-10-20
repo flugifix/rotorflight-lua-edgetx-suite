@@ -288,6 +288,10 @@ if selfTest then
     local red = {}
     for i = 1, #failures do
       local f = failures[i]
+      if string.find(f.detail, "raised:", 1, true) == 1 then
+        print("SELF-TEST FAILED: mutant '" .. m.name .. "' raised instead of failing a check (a stale anchor?): " .. f.case .. ": " .. f.detail)
+        os.exit(1)
+      end
       local expected = false
       for j = 1, #m.expect do
         if string.find(f.case, m.expect[j], 1, true) then expected = true end

@@ -3,11 +3,10 @@
 local M = {}
 
 -- `default` is the choice a key has while the radio's preferences hold none for it: SYS opens
--- the suite's tool and TELE the quick menu, the two places a pilot on the full screen goes most,
--- and the page keys open the quick menu too -- on a theme that draws its own full screen they are
--- the key path to it, and where full screen is the quick menu they answer with it. MDL is left to
--- the theme. The defaults live here and nowhere else, so the
--- Keys page and the widget cannot disagree about them.
+-- the suite's tool and TELE the quick menu, the two places a pilot on the full screen goes most;
+-- the page keys and MDL are left to the theme. The defaults live here and nowhere else, so the
+-- Keys page, the widget and the themes' own key pages (which mark the keys held here) cannot
+-- disagree about them.
 M.KEYS = {
   { id = "pageDown", pref = "key_page_down", default = "menu" },
   { id = "pageUp", pref = "key_page_up", default = "menu" },
