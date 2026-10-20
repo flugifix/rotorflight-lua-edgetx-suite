@@ -15,6 +15,11 @@ local Common = nil
 local MspRuntime = nil
 local BoardAlignmentApi = nil
 local SensorAlignmentApi = nil
+local BoardAutoAlignApi = nil
+local ApiVersion = nil
+local Armed = nil
+local AutoAlignLifecycle = nil
+local AutoAlignView = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local t = nil
@@ -54,7 +59,17 @@ local function newRuntime()
   return {
     readPending = false,
     requestRebuild = nil,
-    lastSessionSignature = nil
+    lastSessionSignature = nil,
+    generation = 0,
+    autoAlignSupported = nil,
+    autoAlignPending = false,
+    autoAlignActive = false,
+    autoAlignState = nil,
+    autoAlignNeedsProbe = false,
+    autoAlignNeedsReload = false,
+    autoAlignPollAt = 0,
+    autoAlignStartedAt = 0,
+    autoAlignArmedChanges = nil
   }
 end
 
@@ -102,6 +117,11 @@ local function ensureDeps()
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not BoardAlignmentApi then BoardAlignmentApi = loadModule("tasks/msp/api/board_alignment_config.lua") end
   if not SensorAlignmentApi then SensorAlignmentApi = loadModule("tasks/msp/api/sensor_alignment.lua") end
+  if not BoardAutoAlignApi then BoardAutoAlignApi = loadModule("tasks/msp/api/board_auto_align.lua") end
+  if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
+  if not Armed then Armed = loadModule("lib/armed.lua") end
+  if not AutoAlignLifecycle then AutoAlignLifecycle = loadModule("app/pages/setup/alignment/auto_align_lifecycle.lua") end
+  if not AutoAlignView then AutoAlignView = loadModule("app/pages/setup/alignment/auto_align_view.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not t then t = Common and Common.pageT("setup_alignment") or nil end
@@ -109,6 +129,31 @@ local function ensureDeps()
   if type(ui.runtime) ~= "table" then
     ui.runtime = newRuntime()
   end
+end
+
+local function currentSessionSignature()
+  local session = getSession()
+  return session and session.signature or nil
+end
+
+local function autoAlignCallbackIsCurrent(token)
+  local session = getSession()
+  if Armed and type(Armed.isArmed) == "function" then Armed.isArmed() end
+  local armedChanges = Armed and type(Armed.changeCount) == "function" and Armed.changeCount() or nil
+  return AutoAlignLifecycle and AutoAlignLifecycle.isCurrent(ui.runtime, ui.loaded,
+    session, currentSessionSignature(), session and session.fblConnected == true, armedChanges, token)
+end
+
+local function resetAutoAlign(invalidate)
+  if not ui.runtime then return end
+  if invalidate and AutoAlignLifecycle then AutoAlignLifecycle.invalidate(ui.runtime) end
+  ui.runtime.autoAlignPending = false
+  ui.runtime.autoAlignActive = false
+  ui.runtime.autoAlignState = nil
+  ui.runtime.autoAlignNeedsProbe = false
+  ui.runtime.autoAlignPollAt = 0
+  ui.runtime.autoAlignStartedAt = 0
+  ui.runtime.autoAlignArmedChanges = nil
 end
 
 local function nowSeconds()
@@ -661,6 +706,8 @@ local function requestAttitude(queue, now)
   })
 end
 
+local queueAutoAlignProbe
+
 local function queueAlignmentRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
   ui.runtime.readComplete = false
@@ -728,6 +775,7 @@ local function queueAlignmentRead(isAutoReload)
           ui.dirty = false
           ui.progress = 100
           ui.runtime.readComplete = readValid
+          if readValid then ui.runtime.autoAlignNeedsProbe = true end
           if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
             ui.runtime.requestRebuild()
           end
@@ -753,6 +801,109 @@ local function queueAlignmentRead(isAutoReload)
   })
 
   return true, nil
+end
+
+local function sessionSupportsAutoAlignApi()
+  local session = getSession()
+  return ApiVersion and type(ApiVersion.isAtLeast) == "function" and session
+    and ApiVersion.isAtLeast(session.apiVersion, { 12, 0, 10 }) == true
+end
+
+local function showAutoAlignResult(result)
+  if not ConfirmDialog or not result then return end
+  local state = result.state
+  local message
+  if state == BoardAutoAlignApi.states.success then
+    message = pageText(nil, "auto_align_success", "Alignment loaded into the fields. Review it, then select Save to keep it.")
+  elseif state == BoardAutoAlignApi.states.rejectedArmed then
+    message = pageText(nil, "auto_align_armed", "Disarm the model before starting auto-align.")
+  elseif state == BoardAutoAlignApi.states.rejectedUncalibrated then
+    message = pageText(nil, "auto_align_uncalibrated", "Calibrate the accelerometer before starting auto-align.")
+  elseif state == BoardAutoAlignApi.states.timeout then
+    message = pageText(nil, "auto_align_timeout", "No tail lift was detected in time. Hold the model level and try again.")
+  elseif state == BoardAutoAlignApi.states.noMatch then
+    message = pageText(nil, "auto_align_no_match", "The movement did not match a supported board orientation. Hold level and try again.")
+  else
+    return
+  end
+  ConfirmDialog.show({ title = pageText(nil, "auto_align", "Auto-align"), message = message })
+end
+
+local function queueAutoAlignRequest(action)
+  if not ui.runtime or ui.runtime.autoAlignPending or not BoardAutoAlignApi then return false end
+  local session = getSession()
+  if not session or session.fblConnected ~= true then return false end
+  if Armed and type(Armed.isArmed) == "function" and Armed.isArmed() == true then
+    ui.runtime.autoAlignState = BoardAutoAlignApi.states.rejectedArmed
+    return false
+  end
+  local mspState = MspRuntime and MspRuntime.getState()
+  local queue = mspState and mspState.queue
+  if not queue or type(queue.add) ~= "function" or not queue:isProcessed() then return false end
+  local signature = currentSessionSignature()
+  local armedChanges = Armed and type(Armed.changeCount) == "function" and Armed.changeCount() or nil
+  local token = AutoAlignLifecycle.capture(ui.runtime, session, signature, armedChanges)
+  ui.runtime.autoAlignPending = true
+  return queue:add({
+    command = BoardAutoAlignApi.command,
+    payload = BoardAutoAlignApi.buildPayload(action),
+    isWrite = action == BoardAutoAlignApi.actions.start,
+    maxRetries = action == BoardAutoAlignApi.actions.start and 0 or nil,
+    completeOnErrorReplyAttempt = 1,
+    processReply = function(_, buf)
+      if not autoAlignCallbackIsCurrent(token) then return end
+      ui.runtime.autoAlignPending = false
+      local result = BoardAutoAlignApi.parse(buf)
+      if not result then
+        if ui.runtime.autoAlignSupported == nil then ui.runtime.autoAlignSupported = false end
+        ui.runtime.autoAlignActive = false
+        ui.runtime.autoAlignNeedsReload = true
+        ui.runtime.readComplete = false
+      else
+        ui.runtime.autoAlignSupported = true
+        ui.runtime.autoAlignState = result.state
+        local outcome, active = BoardAutoAlignApi.classify(result.state)
+        ui.runtime.autoAlignActive = active
+        if active then
+          ui.runtime.autoAlignPollAt = nowSeconds() + 0.25
+        else
+          if outcome == "success" then
+            ui.display.roll_degrees = result.roll_degrees
+            ui.display.pitch_degrees = result.pitch_degrees
+            ui.display.yaw_degrees = result.yaw_degrees
+            ui.dirty = true
+            saveToSession()
+          end
+          showAutoAlignResult(result)
+        end
+      end
+      if type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
+    end,
+    errorHandler = function()
+      if not autoAlignCallbackIsCurrent(token) then return end
+      ui.runtime.autoAlignPending = false
+      if action == BoardAutoAlignApi.actions.start then
+        -- A lost START reply is ambiguous: the controller may already be sampling. Polling is
+        -- safe; repeating START would replace the level reference with the lifted attitude.
+        ui.runtime.autoAlignActive = true
+        ui.runtime.autoAlignPollAt = nowSeconds() + 0.25
+      else
+        ui.runtime.autoAlignActive = false
+        ui.runtime.autoAlignNeedsReload = true
+        ui.runtime.readComplete = false
+      end
+      if type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
+    end
+  })
+end
+
+queueAutoAlignProbe = function()
+  if not ui.runtime or ui.runtime.autoAlignSupported ~= nil then return false end
+  if not sessionSupportsAutoAlignApi() then
+    ui.runtime.autoAlignSupported = false
+    return false
+  end
+  return queueAutoAlignRequest(BoardAutoAlignApi.actions.poll)
 end
 
 local function queueAlignmentWrite()
@@ -803,7 +954,7 @@ local function queueAlignmentWrite()
 end
 
 local function buildSessionSignature()
-  return "1"
+  return tostring(currentSessionSignature() or "")
 end
 
 local function getBaseTitle()
@@ -841,8 +992,43 @@ function M.wakeup(ctx)
 
   local signature = buildSessionSignature()
   if signature ~= ui.runtime.lastSessionSignature then
+    resetAutoAlign(true)
+    ui.runtime.autoAlignSupported = nil
     ui.runtime.lastSessionSignature = signature
     queueAlignmentRead(false)
+  end
+
+  if ui.runtime.autoAlignActive then
+    local session = getSession()
+    local now = nowSeconds()
+    if Armed and type(Armed.isArmed) == "function" then Armed.isArmed() end
+    local armedChanges = Armed and type(Armed.changeCount) == "function" and Armed.changeCount() or nil
+    if not session or session.fblConnected ~= true
+      or (ui.runtime.autoAlignArmedChanges ~= nil and armedChanges ~= ui.runtime.autoAlignArmedChanges)
+      or (Armed and type(Armed.isArmed) == "function" and Armed.isArmed() == true) then
+      resetAutoAlign(true)
+      ui.runtime.autoAlignNeedsReload = true
+      ui.runtime.readComplete = false
+      if type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
+    elseif not ui.runtime.autoAlignPending and now >= ui.runtime.autoAlignPollAt then
+      if (now - ui.runtime.autoAlignStartedAt) > 16 then
+        ui.runtime.autoAlignActive = false
+        ui.runtime.autoAlignState = BoardAutoAlignApi.states.timeout
+        ui.runtime.autoAlignNeedsReload = true
+        ui.runtime.readComplete = false
+        if type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
+      else
+        queueAutoAlignRequest(BoardAutoAlignApi.actions.poll)
+      end
+    end
+  end
+
+  if ui.runtime.autoAlignNeedsReload and not ui.runtime.readPending then
+    if queueAlignmentRead(false) then ui.runtime.autoAlignNeedsReload = false end
+  elseif ui.runtime.autoAlignNeedsProbe and not ui.runtime.autoAlignPending then
+    if queueAutoAlignProbe() or ui.runtime.autoAlignSupported == false then
+      ui.runtime.autoAlignNeedsProbe = false
+    end
   end
 
   if ui.liveViewEnabled then
@@ -946,7 +1132,7 @@ function M.build(ctx)
     x = slotX1 + labelW, y = cellTop1,
     w = editW,
     min = -180, max = 360,
-    active = function() return not ui.liveViewEnabled end,
+    active = function() return not ui.liveViewEnabled and not ui.runtime.autoAlignActive and not ui.runtime.autoAlignPending end,
     get = function() return ui.display.roll_degrees end,
     set = function(v)
       ui.display.roll_degrees = floor(v or 0)
@@ -970,7 +1156,7 @@ function M.build(ctx)
     x = slotX2 + labelW, y = cellTop1,
     w = editW,
     min = -180, max = 360,
-    active = function() return not ui.liveViewEnabled end,
+    active = function() return not ui.liveViewEnabled and not ui.runtime.autoAlignActive and not ui.runtime.autoAlignPending end,
     get = function() return ui.display.pitch_degrees end,
     set = function(v)
       ui.display.pitch_degrees = floor(v or 0)
@@ -994,7 +1180,7 @@ function M.build(ctx)
     x = slotX3 + labelW, y = cellTop1,
     w = editW,
     min = -180, max = 360,
-    active = function() return not ui.liveViewEnabled end,
+    active = function() return not ui.liveViewEnabled and not ui.runtime.autoAlignActive and not ui.runtime.autoAlignPending end,
     get = function() return ui.display.yaw_degrees end,
     set = function(v)
       ui.display.yaw_degrees = floor(v or 0)
@@ -1041,7 +1227,7 @@ function M.build(ctx)
     w = magEditW,
     title = pageText(i18n, "mag", "Mag"),
     values = magAlignChoicesValues,
-    active = function() return not ui.liveViewEnabled end,
+    active = function() return not ui.liveViewEnabled and not ui.runtime.autoAlignActive and not ui.runtime.autoAlignPending end,
     get = function()
       return ui.display.mag_alignment + 1
     end,
@@ -1055,7 +1241,8 @@ function M.build(ctx)
   -- Buttons
   local btnStart = x + leftPad + magLabelW + magEditW + gap * 2
   local remainingW = w - btnStart - rightPad
-  local btnW = floor((remainingW - gap) / 2)
+  local buttonCount = ui.runtime.autoAlignSupported == true and 3 or 2
+  local btnW = floor((remainingW - gap * (buttonCount - 1)) / buttonCount)
 
   scene.liveRemainingFmt = pageText(i18n, "live_remaining_fmt", "Live (%ds)")
   local liveBtnText = pageText(i18n, "live_view", "Live View")
@@ -1070,6 +1257,7 @@ function M.build(ctx)
     x = btnStart, y = controlY,
     w = btnW,
     text = liveBtnText,
+    active = function() return not ui.runtime.autoAlignActive and not ui.runtime.autoAlignPending end,
     press = function()
       if ui.liveViewEnabled then
         ui.liveViewEnabled = false
@@ -1091,12 +1279,43 @@ function M.build(ctx)
     end
   }
 
+  local refreshX = btnStart + btnW + gap
+  if ui.runtime.autoAlignSupported == true then
+    AutoAlignView.append(children, ui.runtime.autoAlignSupported, {
+      type = "button", x = refreshX, y = controlY, w = btnW,
+      text = ui.runtime.autoAlignActive and pageText(i18n, "auto_align_lift_tail", "Lift Tail")
+        or pageText(i18n, "auto_align", "Auto-align"),
+      active = function() return not ui.liveViewEnabled and not ui.runtime.autoAlignActive and not ui.runtime.autoAlignPending end,
+      press = function()
+        local signature = currentSessionSignature()
+        local session = getSession()
+        local armedChanges = Armed and type(Armed.changeCount) == "function" and Armed.changeCount() or nil
+        local token = AutoAlignLifecycle.capture(ui.runtime, session, signature, armedChanges)
+        ConfirmDialog.show({
+          title = pageText(i18n, "auto_align", "Auto-align"),
+          message = pageText(i18n, "auto_align_start", "Hold the model level. Continue, then lift the tail at least 20 degrees."),
+          onConfirm = function()
+            if not autoAlignCallbackIsCurrent(token) then return end
+            if not Armed or type(Armed.isArmed) ~= "function" or Armed.isArmed() == true
+              or (type(Armed.isUncertain) == "function" and Armed.isUncertain() == true) then return end
+            ui.runtime.autoAlignStartedAt = nowSeconds()
+            ui.runtime.autoAlignArmedChanges = armedChanges
+            ui.runtime.autoAlignState = BoardAutoAlignApi.states.idle
+            queueAutoAlignRequest(BoardAutoAlignApi.actions.start)
+            if type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
+          end
+        })
+      end
+    })
+    refreshX = refreshX + btnW + gap
+  end
+
   children[#children + 1] = {
     type = "button",
-    x = btnStart + btnW + gap, y = controlY,
+    x = refreshX, y = controlY,
     w = btnW,
     text = pageText(i18n, "refresh_visual", "Refresh"),
-    active = function() return not ui.liveViewEnabled end,
+    active = function() return not ui.liveViewEnabled and not ui.runtime.autoAlignActive and not ui.runtime.autoAlignPending end,
     press = function()
       local mspState = MspRuntime and MspRuntime.getState()
       local queue = mspState and mspState.queue
@@ -1298,6 +1517,7 @@ end
 
 function M.canSave()
   return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+    and not ui.runtime.autoAlignActive and not ui.runtime.autoAlignPending and not ui.runtime.autoAlignNeedsReload
 end
 
 function M.onSave(ctx)
@@ -1327,8 +1547,11 @@ function M.onSave(ctx)
 end
 
 function M.onReload(ctx)
+  if ui.runtime and (ui.runtime.autoAlignActive or ui.runtime.autoAlignPending) then return false end
   local session = getSession()
   if session then
+    resetAutoAlign(true)
+    ui.runtime.autoAlignSupported = nil
     loadFromSession()
     ui.dirty = false
     ui.liveViewEnabled = false
@@ -1368,6 +1591,7 @@ end
 
 
 function M.onClose()
+  resetAutoAlign(true)
   if Common and type(Common.resetPageState) == "function" then
     Common.resetPageState(ui, {
       resetLoaded = true,
@@ -1383,6 +1607,11 @@ function M.onClose()
   MspRuntime = nil
   BoardAlignmentApi = nil
   SensorAlignmentApi = nil
+  BoardAutoAlignApi = nil
+  ApiVersion = nil
+  Armed = nil
+  AutoAlignLifecycle = nil
+  AutoAlignView = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
   t = nil

@@ -1,0 +1,1 @@
+- Add guided board auto-alignment for Rotorflight 4.7, loading detected mounting angles into the existing fields for review and saving (#817) (setup/alignment).
