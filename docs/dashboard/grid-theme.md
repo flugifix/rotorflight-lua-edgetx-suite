@@ -74,10 +74,10 @@ skipped frames follow the link; both hold for Grid's screen too.
 With *Grid* selected, full screen shows the theme itself rather than the quick menu. The theme
 draws no close button: a **long press on RTN** leaves full screen. What opens where:
 
-- **The menu button** opens the [quick menu](quick-menu.md); so do the page keys and TELE, left at
-  their defaults.
-- **The tool button** opens the suite's tool, only while the model is disarmed; so does SYS, left
-  at its default.
+- **The menu button** opens the [quick menu](quick-menu.md); so do the page keys and TELE, as
+  they come.
+- **The tool button** opens the suite's tool, only while the model is disarmed; so does SYS, as it
+  comes.
 - **The link bars** open the *ELRS* link page.
 - **A value tile** opens *Telemetry*: up to twelve readings as tiles, chosen on the *Telemetry*
   page, each with the least and the most the flight reached.
@@ -113,7 +113,7 @@ radio's frame around it while *Frames on tap areas* is on.
 | Tiles | Units beside the values | The unit in each tile's caption and beside the battery card's cell voltage. On by default. |
 | Tiles | Temperature colours | Colours the ESC and MCU temperature tiles, as on Urban. *Off* (default), *Standard* or *Early*. |
 | Top Bar | Clock, RQ bar, TQ bar, RSSI bars, Transmitter battery, Colour the bars, Link view switch | As on Urban, with Urban's defaults. The link bars' warning and critical steps are not set here: they are the levels of the link announcements, as on Urban -- see [the link steps](urban-theme.md#the-link-steps). |
-| Keys | Key PAGE >, Key PAGE <, Key MDL, Key SYS, Key TELE | As on Urban, with Urban's defaults; *Theme: Tuning* opens *Profile & Tuning*, *Theme: Status* the *Status* page, and so on. |
+| Keys | Key PAGE >, Key PAGE <, Key MDL, Key SYS, Key TELE | As on Urban: for the keys left on *Theme* at *System* → *Settings* → *Dashboard* → [*Keys*](../pages/settings/dashboard/keys.md), unbound until the pilot binds them, a key held radio-wide marked *(global)*; *Theme: Tuning* opens *Profile & Tuning*, *Theme: Status* the *Status* page, and so on. |
 | Telemetry | Tile 1 … Tile 12 | The reading each tile of the *Telemetry* page shows, from the same list as the six slots. Defaults as on Urban. |
 
 Every setting Urban has is carried; *Status bar: TPWR* moved from the top bar's page to the

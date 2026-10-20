@@ -87,10 +87,10 @@ skipped frames follow the link; both hold for Deck's screen too.
 With *Deck* selected, full screen shows the theme itself rather than the quick menu. The theme
 draws no close button: a **long press on RTN** leaves full screen. What opens where:
 
-- **The menu button** opens the [quick menu](quick-menu.md); so do the page keys and TELE, left at
-  their defaults.
-- **The tool button** opens the suite's tool, only while the model is disarmed; so does SYS, left
-  at its default.
+- **The menu button** opens the [quick menu](quick-menu.md); so do the page keys and TELE, as
+  they come.
+- **The tool button** opens the suite's tool, only while the model is disarmed; so does SYS, as it
+  comes.
 - **The link figure and bars** open the *ELRS* link page.
 - **A card showing a reading, flight time or total time, and the row of value cards** open
   *Telemetry*: up to twelve readings as tiles, chosen on the *Telemetry* page, each with the least
@@ -123,7 +123,7 @@ radio's frame around it while *Frames on tap areas* is on.
 | Value Cards | Units beside the values | The unit in brackets after each card's caption. On by default; where a caption does not fit with its unit, the unit is left out. |
 | Value Cards | Temperature colours | Colours the ESC and MCU temperature readings, as on Urban. *Off* (default), *Standard* or *Early*. |
 | Top Bar | Clock, RQ bar, TQ bar, RSSI bars, Transmitter battery, Colour the bars, Link view switch | As on Urban, with Urban's defaults. *RQ bar* also switches the link figure beside the bars. The link bars' warning and critical steps are not set here: they are the levels of the link announcements, as on Urban -- see [the link steps](urban-theme.md#the-link-steps). |
-| Keys | Key PAGE >, Key PAGE <, Key MDL, Key SYS, Key TELE | As on Urban, with Urban's defaults; *Theme: Tuning* opens *Profile & Tuning*, *Theme: Status* the *Status* page, and so on. |
+| Keys | Key PAGE >, Key PAGE <, Key MDL, Key SYS, Key TELE | As on Urban: for the keys left on *Theme* at *System* → *Settings* → *Dashboard* → [*Keys*](../pages/settings/dashboard/keys.md), unbound until the pilot binds them, a key held radio-wide marked *(global)*; *Theme: Tuning* opens *Profile & Tuning*, *Theme: Status* the *Status* page, and so on. |
 | Telemetry | Tile 1 … Tile 12 | The reading each tile of the *Telemetry* page shows, from the same list as the cards. Defaults as on Urban. |
 
 Every setting Urban has is carried but one: *Status bar: TPWR*. Deck has no status bar on its

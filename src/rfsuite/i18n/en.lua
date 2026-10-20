@@ -2899,6 +2899,7 @@ return {
         -- is: "Suite:" for what the dashboard does on every theme, "Theme:" for a page Urban draws itself.
         urban_key = "Key",
         urban_key_none = "Nothing",
+        urban_key_global = "(global)",
         urban_key_menu = "Suite: Quick menu",
         urban_key_tools = "Theme: Tuning",
         urban_key_link = "Theme: ELRS link",

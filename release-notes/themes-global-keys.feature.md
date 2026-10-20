@@ -1,0 +1,2 @@
+- **Urban, Grid and Deck key pages follow the radio-wide keys (`widgets/dashboard/themes/urban`, `widgets/dashboard/themes/grid`, `widgets/dashboard/themes/deck`)**:
+  - For #729, each theme's Keys page binds only the keys left on Theme on Settings > Dashboard > Keys, and marks the ones held there (global). The themes ship no key bindings of their own, so the page starts unbound; choices stored by the earlier Keys page are kept in the files but no longer read.

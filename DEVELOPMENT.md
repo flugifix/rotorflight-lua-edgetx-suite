@@ -256,6 +256,22 @@ before their job step can run. The self-test changes the radio-wide branch, drop
 PAGE > default, makes each theme layout ignore the stored choice, makes the page store Theme as
 absent and disables the early exit guard; each mutation must turn its own case red.
 
+The Urban, Grid and Deck Keys page check runs beside it in both workflows:
+
+```sh
+lua5.3 bin/dashboard/verify_theme_global_keys.lua --self-test
+lua5.3 bin/dashboard/verify_theme_global_keys.lua
+```
+
+It loads the real Urban, Grid and Deck configure, layout and init modules and the real key
+resolver. Per theme it builds the Keys page over key choices an earlier version stored, and checks
+that the page starts unbound, marks the keys the radio-wide page holds, saves a choice in radio and
+model scope without touching the old fields, and that the layout binds only the new fields, which
+act only while the radio-wide choice is Theme. The self-test makes the layout read the old fields,
+gives the theme a SYS default again and removes the held mark; each must turn a case red in all
+three themes. Controls and preference-card writes are stubbed; native touch delivery is outside
+this offline check.
+
 Release notes wait under `release-notes/`, one file per pull request, until the release is cut:
 `python bin/release/collect_release_notes.py` files them under the version in
 `src/rfsuite/lib/version.lua`, and the result is committed before the tag. The format is in

@@ -13,6 +13,8 @@ end
 
 local Controls = loadModule("ui/controls.lua")
 local DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
+-- The radio-wide key choices, which decide whether a key is this theme's to bind at all.
+local GlobalKeys = loadModule("widgets/dashboard/keys.lua")
 -- Through the suite's module loader where there is one, as the theme's own modules load it: in the
 -- widget's Lua state (the tool hosted there) the module then has a cache entry beside its global,
 -- and the dashboard releases the two together once no widget uses this theme
@@ -430,18 +432,23 @@ end
 
 -- One row per key, in the order Layout.KEYS declares them. Every key is shown on every radio: a
 -- radio without the key simply never sends it, and a model's settings stay the same across
--- radios. Answers the cursor the caller continues from.
-local function appendKeys(children, x, cursorY, w)
+-- radios. A key that Settings > Dashboard > Keys holds for every theme -- anything there but
+-- Theme, its defaults included -- is marked so and cannot be changed here: what this page stores
+-- for it would have no effect. Answers the cursor the caller continues from.
+local KEY_HELD = { active = false }
+local function appendKeys(children, x, cursorY, w, dashboard)
   for i = 1, #KEYS do
     local pref = KEYS[i].pref
-    cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-      "@i18n(app.pages.settings_dashboard_settings.urban_key)@ " .. (KEY_NAMES[KEYS[i].key] or KEYS[i].key),
+    local label = "@i18n(app.pages.settings_dashboard_settings.urban_key)@ " .. (KEY_NAMES[KEYS[i].key] or KEYS[i].key)
+    local held = GlobalKeys.global(dashboard, KEYS[i].key) ~= "theme"
+    if held then label = label .. " " .. "@i18n(app.pages.settings_dashboard_settings.urban_key_global)@" end
+    cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w, label,
       KEY_OPTIONS, ui.config[pref],
       function(value)
         if type(value) == "string" and KEY_VALID[value] then
           ui.config[pref] = value
         end
-      end)
+      end, held and KEY_HELD or nil)
   end
   return cursorY
 end
@@ -524,7 +531,7 @@ function M.build(ctx)
     Controls.appendSectionHeader(children, x, cursorY, w,
       "@i18n(app.pages.settings_dashboard_settings.urban_page_keys)@", true, function() end)
     cursorY = cursorY + Controls.SECTION_H
-    cursorY = appendKeys(children, x, cursorY, w)
+    cursorY = appendKeys(children, x, cursorY, w, type(ctx.preferences) == "table" and ctx.preferences.dashboard or nil)
   end
 
   if only == nil or only == "telemetry" then
