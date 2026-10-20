@@ -1,1 +1,2 @@
-- Show the Default dashboard in fullscreen with its existing layouts, quick-menu and exit controls, and suite-tool access while disarmed (widgets/dashboard/themes/default). Implements #729, step 1.
+- **Default dashboard fullscreen (`widgets/dashboard/themes/default`)**:
+  - Show the Default dashboard in fullscreen with its existing layouts, quick menu, exit controls and disarmed Main menu access for #729.
