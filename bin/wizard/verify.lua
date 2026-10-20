@@ -269,6 +269,10 @@ w:acceptStatus(unlocked)
 check(w.error and not w.locked and next(w.holds)==nil,"arming-lock readback failure stops bench work")
 w=world();w.checks.gyro1=true;w.step=17;w:navigate(18,1)
 check(w.checks.gyro1==nil,"returning to a physical check requires a fresh answer")
+local originalId=_G.rfsuite.session.mcu_id
+_G.rfsuite.session.mcu_id="different-board"
+check(not w:allowed(),"a different board cannot inherit a visit")
+_G.rfsuite.session.mcu_id=originalId
 for name,count in pairs(worst) do print(string.format("BUDGET %-12s %d / 14000",name,count)) end
 if arg[1]=="--export" then
   local function json(v)

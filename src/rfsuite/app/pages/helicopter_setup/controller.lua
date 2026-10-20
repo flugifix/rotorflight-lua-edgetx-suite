@@ -19,6 +19,8 @@ function M.new(runtime, transport, mathModule, labels)
   function w:session() return _G.rfsuite and _G.rfsuite.session or {} end
   function w:allowed()
     local s = self:session()
+    if not s.mcu_id or s.mcu_id == "" then return false end
+    if not self.identity then self.identity = s.mcu_id end
     local armed = self.runtime.armedReading()
     return self.active and s.fblConnected == true and armed ~= true and not self.statusArmed
       and (not self.identity or self.identity == s.mcu_id)
