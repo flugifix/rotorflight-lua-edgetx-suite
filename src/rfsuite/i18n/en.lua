@@ -1351,7 +1351,7 @@ return {
         help_voltage_correction = "Voltage Correction: Scales the voltage reading.",
         help_current_correction = "Current Correction: Scales the current reading.",
         help_consumption_correction = "Consumption Correction: Scales the consumption reading.",
-        help_detect_wiring = "Detect wiring: While disarmed, try the Half Duplex and Pin Swap combinations for the saved protocol. Save a successful result to store it and reboot.",
+        help_detect_wiring = "Detect wiring: While disarmed, try each Half Duplex and Pin Swap combination for the saved protocol. Save a result, then reboot.",
         help_detect_cancel = "Cancel: Stop detection and restore the previous live wiring. Reload before saving.",
         loading_telemetry = "Loading telemetry configuration...",
         saving_telemetry = "Saving telemetry configuration...",

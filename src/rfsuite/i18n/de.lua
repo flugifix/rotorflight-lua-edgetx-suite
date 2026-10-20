@@ -1351,7 +1351,7 @@ return {
         help_voltage_correction = "Spannungskorrektur: Skaliert die Spannungsmessung.",
         help_current_correction = "Stromkorrektur: Skaliert die Strommessung.",
         help_consumption_correction = "Verbrauchskorrektur: Skaliert die Verbrauchsmessung.",
-        help_detect_wiring = "Verdrahtung erkennen: probiert im entschärften Zustand die Kombinationen aus Halbduplex und Pin-Tausch für das gespeicherte Protokoll durch. Ein gefundenes Ergebnis speichern und neu starten.",
+        help_detect_wiring = "Verdrahtung erkennen: probiert im entschärften Zustand jede Kombination aus Halbduplex und Pin-Tausch für das gespeicherte Protokoll. Ergebnis speichern, dann neu starten.",
         help_detect_cancel = "Abbrechen: Erkennung beenden und die vorherige aktive Verdrahtung wiederherstellen. Vor dem Speichern neu laden.",
         loading_telemetry = "Lade Telemetriekonfiguration...",
         saving_telemetry = "Speichere Telemetriekonfiguration...",
