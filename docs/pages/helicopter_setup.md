@@ -74,7 +74,7 @@ MSP_SET_SERVO_OVERRIDE_ALL OFF request distinguishes the timeout extension from
 older firmware, which rejects that length. Only a successful probe permits five-byte
 per-servo/mixer holds with a 3000 ms timeout. Releases always use the legacy payload.
 On older firmware, servo/mixer overrides persist if the link is lost; the warning
-requires keeping the connection, and pending cleanup runs when it returns. Reboot
+requires keeping the connection, and pending cleanup runs when the same visit is resumed. Reboot
 the FC before flight if cleanup cannot be confirmed. Motor overrides retain the
 firmware's fixed one-second expiry.
 

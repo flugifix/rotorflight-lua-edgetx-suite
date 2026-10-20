@@ -246,6 +246,11 @@ function M.new(runtime, transport, mathModule, labels)
     end)
   end
   function w:back()
+    if not self:allowed() then
+      self:release(); self.active = false
+      if self.requestClose then self.requestClose() end
+      return
+    end
     if self.transition then return end
     if self.confirmExit then self.confirmExit = nil; self:rebuild(); return end
     if self.card > 1 then self:navigate(self.step, self.card - 1)

@@ -273,6 +273,13 @@ local originalId=_G.rfsuite.session.mcu_id
 _G.rfsuite.session.mcu_id="different-board"
 check(not w:allowed(),"a different board cannot inherit a visit")
 _G.rfsuite.session.mcu_id=originalId
+w.requestClose=function() w.closed=true end
+_G.rfsuite.session.fblConnected=false
+local queuedBefore=#q.messages
+w:back()
+check(w.closed and not w.active,"EXIT remains available after link loss")
+eq(#q.messages,queuedBefore,"disconnected exit sends no unguarded MSP")
+_G.rfsuite.session.fblConnected=true
 for name,count in pairs(worst) do print(string.format("BUDGET %-12s %d / 14000",name,count)) end
 if arg[1]=="--export" then
   local function json(v)

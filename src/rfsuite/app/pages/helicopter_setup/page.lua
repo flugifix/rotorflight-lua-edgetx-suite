@@ -1,5 +1,5 @@
 -- Lazy, visit-local dependencies: opening from a widget never loads the wizard in one call.
-local M = { hideSuiteFrame = true }
+local M = { hideSuiteFrame = true, handlesDisconnect = true }
 local BASE = "/SCRIPTS/TOOLS/rfsuite-core/"
 local PATH = "app/pages/helicopter_setup/"
 local modules, stage, w, context, viewJob, scene, sceneKey = {}, 1

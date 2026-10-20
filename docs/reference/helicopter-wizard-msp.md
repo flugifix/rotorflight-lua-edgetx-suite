@@ -40,6 +40,9 @@ The host's `buildScene` recognizes `hideSuiteFrame = true` on a page module. It
 passes full-screen bounds and omits the native page/header. Lifecycle, queue ownership
 and RTN/EXIT remain in `ui/home.lua`; the native standalone/widget cancel event feeds
 that dispatch. The page supplies its own Back/Continue/Save navigation.
+Its `handlesDisconnect` opt-in also retains the visit through an expected reboot's
+RF-link interruption. The wizard owns reconnection and stops desired overrides;
+other pages keep the host's normal return-to-root behaviour.
 
 Scene assembly is paced, and MSP callbacks only publish buffers. Live labels and
 control properties read cached page state. All visit state is released in `onClose`.

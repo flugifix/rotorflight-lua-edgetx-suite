@@ -1469,6 +1469,8 @@ local function returnToRootOnDisconnect()
   if not state.menu or state.menu.isRoot() then
     return
   end
+  local page = getActivePageModule()
+  if page and page.handlesDisconnect == true then return end
 
   closeHelpDialogIfOpen()
   state.pendingMenuOpen = nil
