@@ -230,12 +230,20 @@ do
   assert(not press(build(page), "Detect wiring"), "unsupported API showed Detect wiring")
 end
 
+-- Every status line the page can draw for a detection (its English fallbacks).
+local STATUS_TEXTS = {
+  "Starting wiring detection...", "Testing ESC telemetry wiring...", "Wiring detected. Save to store it.",
+  "No working wiring was detected.", "Detection was rejected by the flight controller.",
+  "Detection cancelled. Reload before saving.", "Cancelling wiring detection...",
+  "Detection interrupted. Reload before saving.", "The flight controller returned an invalid result.",
+  "Detection needs a live connection and a disarmed model.", "Save the selected telemetry protocol before detection."
+}
 local function statusLabels(children)
   local found = {}
   for i = 1, #children do
     local text = children[i].type == "label" and children[i].text or nil
-    if type(text) == "string" and string.find(string.lower(text), "detect", 1, true) then
-      found[#found + 1] = text
+    for _, status in ipairs(STATUS_TEXTS) do
+      if text == status then found[#found + 1] = text end
     end
   end
   return found
@@ -243,20 +251,25 @@ end
 
 -- The firmware keeps SUCCESS, FAILED and REJECTED until the next START or Cancel. A page
 -- opened later must not take that left-over result for its own: the opening poll only
--- learns that the command is supported. IDLE is the clean control.
+-- learns that the command is supported. IDLE is the clean control. A held SUCCESS is the one
+-- exception that is not a report: its wiring is live but unsaved, so it is an unsaved change.
 local heldFailures = {}
-for _, held in ipairs({ { 3, "FAILED" }, { 4, "REJECTED" }, { 2, "SUCCESS" }, { 0, "IDLE" } }) do
+for _, held in ipairs({ { 3, "FAILED" }, { 4, "REJECTED" }, { 2, "SUCCESS", true }, { 0, "IDLE" } }) do
   local ok, err = pcall(function()
     local page = newPage()
     queued[2].processReply(queued[2], reply(held[1], 1, 1))
     local children = build(page)
     assert(#statusLabels(children) == 0, "held " .. held[2] .. " showed a stale result on open: "
       .. tostring(statusLabels(children)[1]))
-    assert(not page.hasUnsavedChanges(), "held " .. held[2] .. " dirtied the page on open")
+    assert(page.hasUnsavedChanges() == (held[3] == true), "held " .. held[2] .. " unsaved state wrong on open")
     assert(page.canSave() == true, "held " .. held[2] .. " locked Save on open")
     assert(#queued == 2, "held " .. held[2] .. " queued a request on open")
     assert(press(children, "Detect wiring"), "held " .. held[2] .. " hid Detect wiring")
-    assert(queued[#queued].payload[1] == 1, "held " .. held[2] .. " did not allow a new START")
+    if held[3] then
+      assert(#queued == 2, "held SUCCESS started a run over its unsaved wiring")
+    else
+      assert(queued[#queued].payload[1] == 1, "held " .. held[2] .. " did not allow a new START")
+    end
   end)
   if not ok then heldFailures[#heldFailures + 1] = tostring(err) end
 end
@@ -298,4 +311,56 @@ do
   assert(not press(build(page), "Detect wiring"), "malformed capability answer showed Detect wiring")
 end
 
-print("OK: 16 ESC wiring API/lifecycle cases")
+-- The page asks the tool's shared lib/armed.lua: only that copy sees the arm/disarm changes.
+do
+  local asked = nil
+  local shared = { isArmed = function() return false end, isUncertain = function() return false end,
+    changeCount = function() return 0 end }
+  local page = newPage()
+  _G.rfsuite.require = function(path) asked = path; return shared end
+  page.onClose()
+  page.wakeup({ requestRebuild = function() end })
+  assert(asked == "lib/armed.lua", "page did not take the shared lib/armed.lua")
+end
+
+-- A press that only changes the status line asks for a rebuild, or the line is never drawn.
+do
+  local page = newPage()
+  queued[2].processReply(queued[2], reply(0))
+  local rebuilds = 0
+  local children = {}
+  page.build({ children = children, x = 0, y = 0, w = 600, h = 400, i18n = {},
+    requestRebuild = function() rebuilds = rebuilds + 1 end })
+  armed = true
+  press(children, "Detect wiring")
+  armed = false
+  assert(rebuilds > 0, "refused start did not rebuild the page")
+  assert(statusLabels(build(page))[1] == "Detection needs a live connection and a disarmed model.",
+    "refused start did not say why")
+end
+
+-- REJECTED changes nothing in the flight controller, so it does not ask for a Reload.
+do
+  local page = newPage()
+  queued[2].processReply(queued[2], reply(0))
+  press(build(page), "Detect wiring")
+  queued[#queued].processReply(queued[#queued], reply(4))
+  assert(statusLabels(build(page))[1] == "Detection was rejected by the flight controller.", "REJECTED not shown")
+  assert(page.canSave() == true, "REJECTED start locked Save")
+end
+
+-- A lost capability poll does not hide the action for the rest of the visit: Reload asks again.
+do
+  local page = newPage()
+  queued[2].errorHandler(queued[2])
+  assert(not press(build(page), "Detect wiring"), "lost capability poll showed Detect wiring")
+  assert(page.onReload({}) == true, "Reload refused")
+  queued[#queued].processReply(queued[#queued], configReply)
+  page.wakeup({ requestRebuild = function() end })
+  local poll = queued[#queued]
+  assert(poll.command == TrialApi.command and poll.payload[1] == 0, "Reload did not ask the capability again")
+  poll.processReply(poll, reply(0))
+  assert(press(build(page), "Detect wiring"), "capability answered after Reload but action hidden")
+end
+
+print("OK: 20 ESC wiring API/lifecycle cases")

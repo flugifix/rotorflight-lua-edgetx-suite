@@ -63,7 +63,11 @@ local function ensureDeps()
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
   if not EscSensorTrialApi then EscSensorTrialApi = loadModule("tasks/msp/api/esc_sensor_trial.lua") end
-  if not Armed then Armed = loadModule("lib/armed.lua") end
+  -- The shared copy: lib/armed.lua counts arm/disarm changes per Lua state, and only the copy
+  -- the tool asks on every pass sees them.
+  if not Armed then
+    Armed = (_G.rfsuite and _G.rfsuite.require and _G.rfsuite.require("lib/armed.lua")) or loadModule("lib/armed.lua")
+  end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
 end
 
@@ -112,8 +116,16 @@ local function queueTrial(action, quiet)
       elseif quiet and result.state ~= 1 then
         -- The opening poll only learns that the command is supported. A finished state is
         -- kept by the flight controller until the next START or Cancel, so it belongs to an
-        -- earlier run (another visit, another tool) and is not this page's result.
+        -- earlier run (another visit, another tool) and is not this page's result. A held SUCCESS
+        -- still says one thing that is true now: the detected wiring is live but not stored (the
+        -- firmware does not mark its configuration changed, and a reboot ends the state), so the
+        -- page offers it as an unsaved change without reporting the run.
         current.supported = true
+        if result.state == 2 then
+          ui.config.half_duplex = result.half_duplex
+          ui.config.pin_swap = result.pin_swap
+          ui.dirty = true
+        end
       else
         current.supported = true
         current.state = result.state
@@ -132,7 +144,6 @@ local function queueTrial(action, quiet)
           current.mustRead = true
         elseif result.state == 4 then
           current.status = "rejected"
-          current.mustRead = action ~= EscSensorTrialApi.ACTION_POLL
         elseif result.state == 0 then
           if action == EscSensorTrialApi.ACTION_CANCEL then
             current.status = "cancelled"
@@ -186,13 +197,17 @@ local function queueTrial(action, quiet)
   return true
 end
 
+local function requestPageRebuild()
+  if ui.runtime and type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
+end
+
 local function startTrial()
   local trial = ui.runtime.trial
   local armed = Armed and Armed.isArmed and Armed.isArmed()
   local uncertain = Armed and Armed.isUncertain and Armed.isUncertain()
-  if not trialAvailable() or armed or uncertain then trial.status = "unsafe"; return end
+  if not trialAvailable() or armed or uncertain then trial.status = "unsafe"; requestPageRebuild(); return end
   if ui.dirty or ui.runtime.readComplete ~= true or ui.config.protocol == 0 then
-    trial.status = "save_first"; return
+    trial.status = "save_first"; requestPageRebuild(); return
   end
   trial.armedEpoch = Armed and Armed.changeCount and Armed.changeCount() or nil
   trial.status = "starting"
@@ -200,6 +215,7 @@ local function startTrial()
     trial.status = "interrupted"
     trial.mustRead = true
   end
+  requestPageRebuild()
 end
 
 local function cancelTrial()
@@ -215,6 +231,7 @@ local function cancelTrial()
       trial.mustRead = true
     end
   end
+  requestPageRebuild()
 end
 
 local function pageText(i18n, key, fallback)
@@ -456,6 +473,7 @@ function M.wakeup(ctx)
     trial.pending = false
     trial.status = "interrupted"
     trial.mustRead = true
+    requestPageRebuild()
   elseif trial.active and not trial.pending then
     local now = type(getTime) == "function" and getTime() or 0
     if now >= (trial.nextPollAt or 0) then queueTrial(EscSensorTrialApi.ACTION_POLL, false) end
@@ -468,14 +486,14 @@ end
 local function trialStatusText(i18n, status)
   if status == "starting" then return pageText(i18n, "detect_starting", "Starting wiring detection...") end
   if status == "running" then return pageText(i18n, "detect_running", "Testing ESC telemetry wiring...") end
-  if status == "success" then return pageText(i18n, "detect_success", "Wiring detected. Save to store it, then reboot.") end
+  if status == "success" then return pageText(i18n, "detect_success", "Wiring detected. Save to store it.") end
   if status == "failed" then return pageText(i18n, "detect_failed", "No working wiring was detected.") end
   if status == "rejected" then return pageText(i18n, "detect_rejected", "Detection was rejected by the flight controller.") end
   if status == "cancelled" then return pageText(i18n, "detect_cancelled", "Detection cancelled. Reload before saving.") end
   if status == "cancelling" then return pageText(i18n, "detect_cancelling", "Cancelling wiring detection...") end
   if status == "interrupted" then return pageText(i18n, "detect_interrupted", "Detection interrupted. Reload before saving.") end
   if status == "invalid" then return pageText(i18n, "detect_invalid", "The flight controller returned an invalid result.") end
-  if status == "unsafe" then return pageText(i18n, "detect_unsafe", "Detection needs a live, disarmed connection.") end
+  if status == "unsafe" then return pageText(i18n, "detect_unsafe", "Detection needs a live connection and a disarmed model.") end
   if status == "save_first" then return pageText(i18n, "detect_save_first", "Save the selected telemetry protocol before detection.") end
   return nil
 end
@@ -582,7 +600,7 @@ function M.build(ctx)
   appendProtocol("RECORD")
 
   local proto = ui.config.protocol
-  local fieldsActive = not trialBusy() and not ui.runtime.trial.mustRead
+  local function fieldsActive() return not trialBusy() and not ui.runtime.trial.mustRead end
 
   -- 1. Telemetry Protocol
   cursorY = cursorY + Controls.appendComboSelect(
@@ -600,7 +618,7 @@ function M.build(ctx)
         end
       end
     end,
-    { active = function() return fieldsActive end }
+    { active = fieldsActive }
   )
 
   -- 2. Half Duplex
@@ -612,7 +630,7 @@ function M.build(ctx)
       ui.config.half_duplex = nextBool and 1 or 0
       ui.dirty = true
     end,
-    function() return proto ~= 0 and fieldsActive end
+    function() return proto ~= 0 and fieldsActive() end
   )
 
   -- 3. Pin Swap (if apiVersion >= 12.0.7)
@@ -625,7 +643,7 @@ function M.build(ctx)
         ui.config.pin_swap = nextBool and 1 or 0
         ui.dirty = true
       end,
-      function() return proto ~= 0 and fieldsActive end
+      function() return proto ~= 0 and fieldsActive() end
     )
   end
 
@@ -638,7 +656,7 @@ function M.build(ctx)
         min = -99,
         max = 125,
         suffix = "%",
-        active = function() return proto ~= 0 and fieldsActive end,
+        active = function() return proto ~= 0 and fieldsActive() end,
         get = function() return ui.config.voltage_correction end,
         set = function(v)
           ui.config.voltage_correction = tonumber(v) or 0
@@ -655,7 +673,7 @@ function M.build(ctx)
         min = -99,
         max = 125,
         suffix = "%",
-        active = function() return proto ~= 0 and fieldsActive end,
+        active = function() return proto ~= 0 and fieldsActive() end,
         get = function() return ui.config.current_correction end,
         set = function(v)
           ui.config.current_correction = tonumber(v) or 0
@@ -672,7 +690,7 @@ function M.build(ctx)
         min = -99,
         max = 125,
         suffix = "%",
-        active = function() return proto ~= 0 and fieldsActive end,
+        active = function() return proto ~= 0 and fieldsActive() end,
         get = function() return ui.config.consumption_correction end,
         set = function(v)
           ui.config.consumption_correction = tonumber(v) or 0
@@ -741,6 +759,9 @@ function M.onReload(ctx)
   local session = getSession()
   if session then
     ui.dirty = false
+    -- Ask again after the read: a capability poll that was lost does not hide the action for the
+    -- rest of the visit.
+    ui.runtime.trial.supported = nil
     loadFromSession()
     queueTelemetryRead(false)
   end

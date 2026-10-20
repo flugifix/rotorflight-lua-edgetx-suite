@@ -46,8 +46,9 @@ gets a message instead of the settings.
   store them and perform the normal reboot. If the connection is lost or the result is unknown,
   reload the page before saving. Leaving the page does not cancel a completed detection result;
   an unfinished firmware trial expires and restores its previous wiring automatically.
-  A finished detection is reported only on the visit that followed it; opened again later, the
-  page shows the wiring the flight controller currently uses.
+  A finished detection is reported only on the visit that followed it. Opened again before a
+  reboot, the page shows a detected wiring that was not saved yet as an unsaved change, without
+  a message; a failed or rejected detection leaves nothing behind.
 - Saving reboots the flight controller. Once the settings are stored the notice can be closed
   and the page left; the outcome is then shown the next time the page is opened. The page also
   reads again if a different flight controller answers while it is open. Both are described in

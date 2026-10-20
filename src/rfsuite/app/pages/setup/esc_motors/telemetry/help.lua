@@ -19,7 +19,7 @@ return function(ctx)
   local help_current = t(i18n, "help_current_correction", "Current Correction: Scales the current reading.")
   local help_consumption = t(i18n, "help_consumption_correction", "Consumption Correction: Scales the consumption reading.")
   local help_detect = t(i18n, "help_detect_wiring",
-    "Detect wiring: While disarmed, try each Half Duplex and Pin Swap combination for the saved protocol. Save a result, then reboot.")
+    "Detect wiring: While disarmed, try each Half Duplex and Pin Swap combination for the saved protocol. Save a result to store it.")
   local help_cancel = t(i18n, "help_detect_cancel", "Cancel: Stop detection and restore the previous live wiring. Reload before saving.")
 
   return {
