@@ -1,6 +1,5 @@
 -- Ported MIXER_INPUT -> mixer_input.lua
--- Reference module: no shipped page loads it. It is kept for the developer API tester, which
--- loads a module by its name, and as the starting point for a page that needs this message.
+-- Exposes signed indexed records alongside the legacy flat fields.
 local Api = {
     command = 170,
     writeCommand = 171
@@ -49,7 +48,17 @@ function Api.parse(buf)
     if type(buf) ~= "table" then return nil end
     local expected = #INPUT_GROUPS * 6
     if #buf < expected then return nil end
-    local out = {}
+    local out = { inputs = {} }
+    if #buf % 6 ~= 0 then return nil end
+    for pos = 1, #buf, 6 do
+        local record = {}
+        for n, name in ipairs({ "rate", "min", "max" }) do
+            local v = to_u16(buf[pos + (n - 1) * 2], buf[pos + (n - 1) * 2 + 1])
+            if v >= 32768 then v = v - 65536 end
+            record[name] = v
+        end
+        out.inputs[(pos - 1) / 6] = record
+    end
     local i = 1
     for _, g in ipairs(INPUT_GROUPS) do
         out["rate_" .. g[1]] = to_u16(buf[i], buf[i+1]); i = i + 2
