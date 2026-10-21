@@ -1,0 +1,1 @@
+- Add an opt-in live sensor read and shared decoder for all System Status and System Config fields, allowing configuration feedback to reject held or unavailable readings while preserving existing sensor consumers (`lib/sensors.lua`, `lib/system_state.lua`).
