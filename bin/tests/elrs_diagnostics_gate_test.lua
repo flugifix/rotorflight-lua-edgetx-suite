@@ -34,7 +34,12 @@ loadScript = function(path)
   local relative = string.match(path, "/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
   if relative == "lib/elrs_config.lua" then
     configLoads = configLoads + 1
-    return function() return provider end
+    -- As lib/elrs_config.lua does: hand back the registered instance, or register this one.
+    return function()
+      if _G.rfsuite.elrs_config then return _G.rfsuite.elrs_config end
+      _G.rfsuite.elrs_config = provider
+      return provider
+    end
   end
   if relative == "lib/armed.lua" then return function() return armed end end
   if relative == "lib/crsf.lua" then return function() return crsf end end
@@ -122,6 +127,33 @@ do
   WizardPage.onClose()
   assert(resetCount == 2, "closing the setup wizard did not release the link task: " .. tostring(resetCount))
   loadScript = savedLoadScript
+end
+
+-- The dashboard's standby exit unloads the provider (lib/elrs_config.lua and its registry entry)
+-- when no standby screen and no TX power alert use it, and the next consumer loads a new one. The
+-- task must then work with that registered instance rather than one it kept from before: two
+-- instances would each think they own the one parameter conversation.
+do
+  local first = _G.rfsuite.elrs_config
+  assert(first == provider, "the provider the task loaded is not the registered one")
+  local secondInvalidations = 0
+  local second = {}
+  for k, v in pairs(provider) do second[k] = v end
+  second.invalidate = function() secondInvalidations = secondInvalidations + 1 end
+  _G.rfsuite.elrs_config = nil -- the standby release
+  _G.rfsuite.elrs_config = second -- a later consumer loaded the provider again
+  local firstInvalidations = invalidations
+  Task.start(Task.MODE_PROBE)
+  assert(secondInvalidations == 1 and invalidations == firstInvalidations,
+    "after the provider was released and loaded again the diagnostics task used another instance"
+      .. " than the registered one: registered " .. tostring(secondInvalidations)
+      .. ", kept " .. tostring(invalidations - firstInvalidations))
+  Task.reset()
+  _G.rfsuite.elrs_config = nil
+  local loadsBefore = configLoads
+  Task.reset()
+  assert(configLoads == loadsBefore, "a reset after the provider was released loaded it again")
+  _G.rfsuite.elrs_config = provider
 end
 
 print("elrs_diagnostics_gate_test: ok")
