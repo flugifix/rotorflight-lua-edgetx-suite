@@ -4600,22 +4600,24 @@ function Runtime.new(zone, options)
     end
 
     -- STATE pass: the background half, then invalidation checks that only enqueue.
+    -- The flight controller's raw link is asked only where a standby reader runs or standby is on,
+    -- so a dashboard with standby off pays nothing for it on its every pass.
     local standbyFcDetected = false
-    if MspRuntime and type(MspRuntime.getState) == "function" then
+    if self._standbyElrsActive and self._standbyElrsConfig
+        and MspRuntime and type(MspRuntime.getState) == "function" then
       local runtimeState = MspRuntime.getState()
-      standbyFcDetected = type(runtimeState) == "table" and runtimeState.lastConnected == true
-      if self._standbyElrsActive and self._standbyElrsConfig and standbyFcDetected then
+      if type(runtimeState) == "table" and runtimeState.lastConnected == true then
         cancelStandbyElrs(self, "fc_startup")
       end
     end
     local ready = performBackgroundWork(self, false)
-    if MspRuntime and type(MspRuntime.getState) == "function" then
-      local runtimeState = MspRuntime.getState()
-      standbyFcDetected = type(runtimeState) == "table" and runtimeState.lastConnected == true
-    end
 
     local dashboardPrefs = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
     local standbyEnabled = dashboardPrefs.standby_enabled == true
+    if standbyEnabled and MspRuntime and type(MspRuntime.getState) == "function" then
+      local runtimeState = MspRuntime.getState()
+      standbyFcDetected = type(runtimeState) == "table" and runtimeState.lastConnected == true
+    end
     local standbyRenderActive = self._toolHost == nil and not ready
       and self.flightMode ~= "postflight" and self.flightMode ~= "offline"
       and standbyEnabled and self.state.armed ~= true
