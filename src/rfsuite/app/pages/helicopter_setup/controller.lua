@@ -321,6 +321,7 @@ function M.new(runtime, transport, mathModule, labels)
     end
     self:release()
     self.step, self.card, self.commit, self.cards, self.enter, self.onLive = step, card or 1, nil, nil, nil, nil
+    if self.attitudeView then self.attitudeView.valid=false;self.attitudeView=nil end
     if self.updateHistoryHints then self:updateHistoryHints() end
     self.buildRequested = true; self:rebuild()
   end
@@ -526,13 +527,16 @@ function M.new(runtime, transport, mathModule, labels)
     local time = now()
     if time - (self.lastPoll or 0) < 20 then return end
     self.lastPoll = time
-    self.pollIndex = (self.pollIndex or 0) % 3 + 1
-    local api = self.pollIndex == 1 and "status" or self.pollIndex == 2 and "servo" or
+    local attitudeCheck=self.step==1 and self.cards and self.cards[self.card] and self.cards[self.card].art=="attitude"
+    self.pollIndex = (self.pollIndex or 0) % (attitudeCheck and 4 or 3) + 1
+    local api = attitudeCheck and (self.pollIndex%2==1 and "attitude" or self.pollIndex==2 and "status" or "servo") or
+      self.pollIndex == 1 and "status" or self.pollIndex == 2 and "servo" or
       ({ [1] = "attitude", [2] = "rx_channels", [3] = "rc", [4] = "rc", [10] = "motor", [11] = "motor",
         [12] = "motor_telemetry", [14] = "rc_command", [17] = self:motorised() and "motor" or "rc_command" })[self.step]
     if not api then return end
     self:read(api, function(d)
       self.data[api] = d
+      if api == "attitude" then self.attitudeAt = now() end
       if api == "status" then
         self:acceptStatus(d)
       end
@@ -555,8 +559,11 @@ function M.new(runtime, transport, mathModule, labels)
     return list
   end
   function w:tick()
+    if self.attitudeView then
+      self.attitudeView:update(self.data.attitude,self.attitudeAt,now(),
+        self.active and self.ready and self.locked and not self.transition and not self.error and self:allowed())
+    end
     if not self.active then return end
-    self.animationFrame = (math.floor(now() / 70) % 2)
     if not self:allowed() then
       if not self.suspended then
         self.suspended = true; self.bus:cancel(); self:release(); self.message = self.L.disconnected

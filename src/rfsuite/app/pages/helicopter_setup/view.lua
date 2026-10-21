@@ -7,6 +7,9 @@ end
 function M.new(w, ctx, diagrams)
   local width, height = ctx.w, ctx.h
   local large = width >= 700
+  if w.attitudeView then w.attitudeView.valid=false;w.attitudeView=nil end
+  local card = w.cards and w.cards[w.card]
+  local attitudeCard=card and card.art=="attitude"
   local compact = width < 400 and {
     [w.L.servosUnplugged]=w.L.shortUnplugged,[w.L.cyclicServos]=w.L.shortCyclicServos,
     [w.L.swashType]=w.L.shortSwash, [w.L.rotorDirection]=w.L.shortRotation,
@@ -19,6 +22,7 @@ function M.new(w, ctx, diagrams)
   local rowH = large and 52 or math.min(controlH+6, math.floor((height-2*controlH-31-rowY)/3))
   local all = {}
   local title = w.historyMode and w.L.historyTitle or (w.overview or w.modelPreparationCard or w.recoveryCard) and w.L.name or string.format("%d/19  %s", w.step, w.L.steps[w.step] or w.L.name)
+  if attitudeCard then title=string.format("%d/19  %s",w.step,card.title) end
   all[#all + 1] = { type = "rectangle", x = 0, y = 0, w = width, h = height, filled = true, color = COLOR_THEME_PRIMARY2 }
   if w.historyMode or w.overview or w.confirmExit or not w.requestSteps then
     all[#all + 1] = label(10, 4, width - 54, title, large and MIDSIZE or SMLSIZE)
@@ -45,7 +49,6 @@ function M.new(w, ctx, diagrams)
     if not focused and w.prerequisiteDetails then message=message.."\n\n"..w.prerequisiteDetails end
     if w.openHelp then w.openHelp(message, w.L.name) end
   end)
-  local card = w.cards and w.cards[w.card]
   if w.disconnectExit then
     all[#all+1]=label(12,48,width-24,w.L.disconnectedExitHint);all[#all].h=100
     button(12,160,width-24,w.L.powerOffLeave,function() w:leaveDisconnected() end)
@@ -98,7 +101,14 @@ function M.new(w, ctx, diagrams)
     end
     local illustrated = card.art ~= nil
     local formX = large and math.floor(width * 0.43) or illustrated and math.floor(width * 0.35)+4 or 10
+    if attitudeCard then formX=large and math.floor(width*.64) or 10;rowY=large and 166 or height-3*controlH-10 end
     local formW = width-formX-(large and 16 or 10)
+    if attitudeCard then
+      all[#all+1]=label(10,large and 58 or 30,width-20,w.L.orientationModelHint)
+      all[#all].h=large and 32 or 23
+      diagrams.append(all,w,card,10,large and 108 or 56,
+        large and formX-26 or width-20,large and height-controlH-168 or rowY-68)
+    else
     all[#all + 1] = label(10, large and 50 or 27, large and formX-24 or width-20, card.title, large and MIDSIZE or SMLSIZE)
     all[#all + 1] = label(10, large and 94 or 48, large and formX-30 or width-20, card.summary or card.detail)
     all[#all].h = large and (illustrated and 98 or height-controlH-154) or rowY-52
@@ -106,6 +116,7 @@ function M.new(w, ctx, diagrams)
       local artY = large and 204 or rowY+4
       local artH = large and 174 or height-controlH-35-artY
       diagrams.append(all, w, card, 6, artY, formX-18, artH)
+    end
     end
     for i, r in ipairs(card.rows) do
       local y = rowY + (i-1)*rowH
@@ -115,7 +126,12 @@ function M.new(w, ctx, diagrams)
           r.kind == "hold" and "momentaryButton" or "button", r.release)
       else
         local editW = large and 190 or math.floor(formW * 0.48)
+        if attitudeCard and large then
+          all[#all+1]=label(formX,y-34,formW,r.label)
+          editW=formW
+        else
         all[#all + 1] = label(formX, y+3, formW-editW-8, illustrated and compact[r.label] or r.label)
+        end
         if r.kind == "value" then
           all[#all + 1] = label(formX+formW-editW, y+3, editW, function() return tostring(r.get() or "--") end)
           all[#all].h=controlH

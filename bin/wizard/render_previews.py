@@ -90,7 +90,7 @@ def main():
     args = parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=True)
     scenes = json.loads(args.scenes.read_text(encoding="utf-8"))
-    pictures = 0
+    pictures = animations = 0
     for width,height,label in ((320,240,'narrow'),(480,272,'small'),(800,480,'large')):
         selected = [s for s in scenes if s['width']==width and s['height']==height and 'motion' not in s]
         names=set()
@@ -140,7 +140,8 @@ def main():
                 ImageDraw.Draw(frame).text((6,5),f"Binding example: {group} = {sample['input']}",font=font(13),fill='#26394c')
                 frames.append(frame)
             frames[0].save(args.output/f'motion-{group}-{label}.gif',save_all=True,append_images=frames[1:],duration=1000,loop=0)
-    print(f'Rendered {pictures} individual images, three overview sheets, three illustration sheets and 15 binding animations.')
+            animations += 1
+    print(f'Rendered {pictures} individual images, three overview sheets, three illustration sheets and {animations} binding animations.')
 
 
 if __name__=='__main__':

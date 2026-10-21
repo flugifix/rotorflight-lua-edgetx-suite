@@ -41,6 +41,15 @@ return function(w)
     local id, label = mode[1], mode[2]
     local present = false; for _, value in ipairs(w.data.boxids.box_ids) do if value == id then present = true end end
     if present then
+      local function state()
+        if not assigned(id) then return nil end
+        if id ~= 0 then return w:modeActive(id) end
+        -- Arming remains inhibited: show the assigned switch, not an armed FC.
+        local _,r=assigned(id);local c=w.data.rc and w.data.rc.channels
+        local v=c and c[r.auxChannelIndex+6]
+        if not v then return nil end
+        return v>=r.range.start and v<r.range["end"]
+      end
       cards[#cards + 1] = w:cardDef(label, L.modeHint, {
         w:value(L.assigned, function()
           local _, r = assigned(id)
@@ -56,12 +65,10 @@ return function(w)
           local i, r = assigned(id); if i then r.range.start, r.range["end"] = 1500, 1500; send(i) end
         end),
         w:value(L.active, function()
-          if id ~= 0 then return w:modeActive(id) and L.yes or L.no end
-          local _, r = assigned(id); local c = w.data.rc and w.data.rc.channels
-          local v = r and c and c[r.auxChannelIndex + 6]
-          return v and v >= r.range.start and v < r.range["end"] and L.yes or L.no
+          local v=state();return v==true and L.yes or v==false and L.no or L.unavailable
         end)
       }, nil, "switch")
+      cards[#cards].switchState=state
     end
   end
   return cards

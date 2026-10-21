@@ -18,9 +18,7 @@ return function(w)
       w:n("board_alignment_config", "yaw_degrees", L.yaw, -180, 180, true)
     }, nil, "heliLift"),
     w:cardDef(L.checkOrientation, L.orientationHint, {
-      w:value(L.roll, function() return (w.data.attitude or {}).roll or "--" end),
-      w:value(L.pitch, function() return (w.data.attitude or {}).pitch or "--" end),
       w:check("orientation", L.directionCorrect)
-    }, nil, "board")
+    }, nil, "attitude")
   }
 end

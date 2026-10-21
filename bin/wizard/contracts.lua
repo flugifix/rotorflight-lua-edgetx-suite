@@ -215,6 +215,74 @@ return function(h)
     eq(w.data.board_alignment_config.yaw_degrees,45,"S01 manual angle remains editable after refusal")
     check(w.dirty.board_alignment_config and w.rebootPending,"S01 manual fallback retains save/reboot semantics")
   end)
+  case("VISUAL.live-orientation-model",function()
+    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+      local w=world();settle(w);step(w,"sensors");w.card=3
+      local scene=h.view.new(w,{w=size[1],h=size[2]},h.diagrams)
+      while not scene:step() do end
+      check(w.attitudeView~=nil,"VISUAL orientation check has a live model")
+      if w.attitudeView then
+        local function pose(roll,pitch)
+          w.data.attitude={roll=roll,pitch=pitch,yaw=0};w.attitudeAt=getTime()
+          h.measure("attitude update",function() w:tick() end)
+          return h.resolve(scene.children)
+        end
+        local neutral=pose(0,0)
+        local model=w.attitudeView
+        check(model.valid,"VISUAL fresh attitude enables the model")
+        local nose=model.projected[1][2];local right=model.projected[17][2]
+        pose(0,25);check(model.projected[1][2]>nose,"VISUAL positive pitch lowers the nose")
+        pose(0,-25);check(model.projected[1][2]<nose,"VISUAL negative pitch raises the nose")
+        pose(25,0);check(model.projected[17][2]>right,"VISUAL positive roll lowers the right side")
+        pose(-25,0);check(model.projected[17][2]<right,"VISUAL negative roll raises the right side")
+        local slots={}
+        for i,item in ipairs(scene.children) do if item.type=="line" and type(item.pts)=="function" then slots[i]=item.pts() end end
+        for _,angles in ipairs({{180,0},{-180,0},{0,90},{0,-90},{90,90},{-90,-90},{45,-45}}) do
+          pose(angles[1],angles[2])
+          for i,points in pairs(slots) do
+            eq(scene.children[i].pts(),points,"VISUAL attitude retains point table identity")
+            for _,p in ipairs(points) do check(p[1]>=0 and p[2]>=0 and p[1]<size[1] and p[2]<size[2] and p[1]%1==0 and p[2]%1==0,
+              "VISUAL full attitude range keeps valid native points") end
+          end
+        end
+        check(not w.checks.orientation,"VISUAL motion never confirms physical orientation")
+        local rebuilds=w.rebuilds;pose(12,17);eq(w.rebuilds,rebuilds,"VISUAL attitude never rebuilds the scene")
+        local sin,cos=math.sin,math.cos
+        math.sin=function() error("projection in native getter") end;math.cos=math.sin
+        local ok=pcall(h.resolve,scene.children);math.sin,math.cos=sin,cos
+        check(ok,"VISUAL native getters only read projected caches")
+        h.advance(201);w:tick();check(not model.valid,"VISUAL stale attitude hides the model")
+        pose(0,0);check(model.valid,"VISUAL fresh attitude restores the same model")
+        w.data.attitude.pitch=0/0;w:tick();check(not model.valid,"VISUAL invalid attitude hides the model")
+        pose(0,0);w.attitudeAt=getTime()+1;w:tick();check(not model.valid,"VISUAL future timestamp cannot prove a live sample")
+        pose(0,0);w:navigate(2);h.resolve(scene.children)
+        check(not model.valid,"VISUAL leaving invalidates the retained model")
+      end
+    end
+  end)
+  case("VISUAL.mode-switch-feedback",function()
+    local w=world();settle(w);w.data.boxids.box_ids={0,53,47};w.step=3;step(w,"modes");w.card=1
+    w.data.mode_ranges.mode_ranges[1]={id=0,auxChannelIndex=0,range={start=1800,["end"]=2100}}
+    w.data.rc={channels={1500,1500,1500,1500,1500,1000}};w.animationFrame=0
+    local scene=h.view.new(w,{w=480,h=272},h.diagrams)
+    while not scene:step() do end
+    local lever
+    for _,item in ipairs(scene.children) do if item.type=="line" and type(item.pts)=="function" then lever=item end end
+    check(lever~=nil,"VISUAL switch feedback has a reactive lever")
+    local off=lever.pts()[2][1]
+    w.data.rc.channels[6]=1900
+    check(lever.pts()[2][1]~=off,"VISUAL mode lever follows actual ARM-switch position")
+    local card=w.cards[1]
+    check(card.switchState()==true,"VISUAL ARM input can be active while arming stays locked")
+    w.data.rc=nil;eq(card.switchState(),nil,"VISUAL absent RC input stays unknown")
+    step(w,"modes");w.card=2
+    local rescue=w.cards[2]
+    w.data.mode_ranges.mode_ranges[2]={id=53,auxChannelIndex=1,range={start=1800,["end"]=2100}}
+    w.data.status.flight_mode_flags=0;eq(rescue.switchState(),false,"VISUAL Rescue reads the FC mode flag")
+    w.data.status.flight_mode_flags=2;eq(rescue.switchState(),true,"VISUAL Rescue follows an active FC flag")
+    w.data.mode_ranges.mode_ranges[2].range["end"]=1800
+    eq(rescue.switchState(),nil,"VISUAL unassigned mode stays neutral")
+  end)
   case("VISUAL.native-background",function()
     local w=world();settle(w)
     local scene=h.view.new(w,{w=480,h=272},h.diagrams)
@@ -866,7 +934,9 @@ return function(h)
     s=scene("servoType");w.data.servo_configurations.servos[0].rate=50;a=signature(s)
     w.data.servo_configurations.servos[0].rate=560
     check(a~=signature(s),"VISUAL selected servo rate changes existing pulses")
-    s=scene("modes");w.animationFrame=0;a=signature(s);w.animationFrame=1
+    s=scene("modes")
+    w.data.mode_ranges.mode_ranges[1]={id=0,auxChannelIndex=0,range={start=1800,["end"]=2100}}
+    w.data.rc={channels={1500,1500,1500,1500,1500,1000}};a=signature(s);w.data.rc.channels[6]=1900
     check(a~=signature(s),"VISUAL switch cue moves without a scene rebuild")
     s=scene("swash");w.data.mixer_config.main_rotor_dir=0;a=signature(s);w.data.mixer_config.main_rotor_dir=1
     check(a~=signature(s),"VISUAL rotor direction changes existing arrow")

@@ -4,6 +4,11 @@ local M = {}
 function M.append(children, w, card, x, y, width, height)
   local ink, accent = COLOR_THEME_PRIMARY1, COLOR_THEME_SECONDARY1
   local kind,L=card.art,w.L
+  if kind=="attitude" then
+    if w.attitudeView then w.attitudeView.valid=false end
+    w.attitudeView=w.newAttitudeView(children,w,x,y,width,height)
+    return
+  end
   local scale = math.min(width / 220, height / 160)
   x, y = x + math.floor((width - 220*scale)/2), y + math.floor((height - 160*scale)/2)
   local function px(v) return math.floor(x + v*scale + 0.5) end
@@ -137,10 +142,13 @@ function M.append(children, w, card, x, y, width, height)
   elseif kind == "switch" then
     text(5,0,210,L.move)
     rect(72,71,75,66);rect(88,86,43,10,accent)
-    local p={points({{109,89},{79,39}}),points({{109,89},{139,39}})}
+    local p={points({{109,89},{79,39}}),points({{109,89},{139,39}}),points({{109,89},{109,34}})}
     local lever=line({{109,89},{79,39}},accent,4)
-    lever.pts=function() return p[(w.animationFrame or 0)+1] end
-    arrow(65,42,145,42);text(5,141,210,L.artExample)
+    lever.pts=function() local v=card.switchState and card.switchState();return p[v==true and 2 or v==false and 1 or 3] end
+    arrow(65,42,145,42);text(5,141,210,function()
+      if not card.switchState then return L.artExample end
+      local v=card.switchState();return v==true and L.switchOn or v==false and L.switchOff or L.unavailable
+    end)
     line({{109,96},{109,123}});line({{92,123},{126,123}})
   elseif kind == "tail" or kind == "tailMotor" or kind == "tail22" then
     text(5,0,210,L.artTop)

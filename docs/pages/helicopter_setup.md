@@ -86,15 +86,34 @@ beside at most four control rows. The 800×480 layout has a separate instruction
 column and a larger sketch. Numbered swash links follow the selected 120/135/140/90L/90V
 geometry without rebuilding the scene; Direct shows each servo function instead.
 Board orientation, servo lift/neutral, roll/pitch/collective response, swash levelling,
-blade-pitch reference and opposing gyro correction have distinct diagrams. These
-are reference sketches, not a live attitude display or a mechanical measurement.
+blade-pitch reference and opposing gyro correction have distinct diagrams.
+The final Board orientation card has its own layout: a live helicopter above the
+confirmation on small screens, and a larger model beside it on 800×480. Tilt the
+real helicopter right/left and nose down/up; the picture must follow. Roll and
+pitch are secondary readouts. The fixed view omits heading and fits the complete
+model into the available space even at steep tilts. No fresh attitude for two
+seconds hides the picture and displays a waiting message. Confirmation remains
+manual; a level picture cannot prove correct mounting.
+
+This view uses the existing MSP attitude read. While checking orientation, reads
+alternate attitude/status/attitude/servo at the existing request cadence, without
+increasing total request frequency. Projection runs once per changed sample in
+wakeup; native getters only read fixed point tables. No reply rebuilds the scene.
+
+The mode-switch drawing follows the actual assigned ARM input range or the FC's
+Rescue/Trainer flag. It shows unavailable input neutrally. ARM feedback describes
+the switch while the wizard inhibits arming. The profile-switch reference stays
+still. Receiver bars and control-command meters already follow live inputs;
+swash diagrams follow the selected geometry. All other mechanical drawings remain
+test references: commanded output or board attitude cannot measure actual servo,
+swash, blade or gyro-correction movement. Verify these on the real helicopter.
 The short instruction area may show only its first lines; **?** opens the full text.
 
 ## Step sequence and settings
 
 | # | Step | Controls and checks |
 | --- | --- | --- |
-| 1 | Board orientation | Confirm servos unplugged and all blades removed. Calibrate the accelerometer with the model level and still. Detect orientation by lifting the tail, or enter roll, pitch and yaw in degrees. After restart, check the live angles and confirm the directions. Automatic alignment requires firmware support. |
+| 1 | Board orientation | Confirm servos unplugged and all blades removed. Calibrate the accelerometer with the model level and still. Detect orientation by lifting the tail, or enter roll, pitch and yaw in degrees. After restart, compare the live helicopter model with real roll/pitch movements and confirm the directions. Automatic alignment requires firmware support. |
 | 2 | Receiver | Choose a free/current receiver UART and serial protocol; use USB Configurator for receiver wiring detection (the trial interrupts the radio MSP link). Save & reboot is available here. Detect roll, pitch, yaw, collective and throttle channel mapping one stick at a time, or select ELRS, FrSky, Futaba/Hitec or DSM/Graupner/JR presets. Check all stick values. Record at least 300 µs throttle travel; Use measured range adds a 20 µs margin at each end. Zero limits select firmware defaults. Throttle is low compares the mapped input with the low threshold; it is not permission to arm. |
 | 3 | Mode switches | Assign ARM, RESCUE and TRAINER when the FC exposes them. Move the switch to its intended ON position; a clear AUX movement and settled position determine the active window. Reassign or Remove an assignment. ARM assignment is required. No unrelated mode slots are overwritten. |
 | 4 | Profiles & gain | Detect a two- or three-position switch; select PID + rate profiles, PID only or None. Visit the positions and Use switch. Optional gain uses a knob, or four trim-button values on one spare channel. Mapped gain is 50–150%; button gain is ±5%, bounded to 25–200%. The trim guide gives MAX mix weights 30/40/50/60%, with 100% at rest. Configure those mixes in EdgeTX; this page does not rewrite the transmitter model. |
@@ -250,6 +269,12 @@ record the function inventory, behavior contracts and independent golden vectors
 
 The preview images are approximate renders of the actual scene definitions, using
 desktop fonts. They are not native EdgeTX screenshots or radio acceptance evidence.
+
+[Compact live orientation](../images/helicopter_setup/01-small-task-3.png) ·
+[Compact roll movement](../images/helicopter_setup/motion-attitude-roll-small.gif) ·
+[Compact pitch movement](../images/helicopter_setup/motion-attitude-pitch-small.gif) ·
+[320×240 roll movement](../images/helicopter_setup/motion-attitude-roll-narrow.gif) ·
+[800×480 orientation](../images/helicopter_setup/01-large-task-3.png)
 
 [320×240 illustrated tasks](../images/helicopter_setup/illustrations-narrow.png) ·
 [480×272 illustrated tasks](../images/helicopter_setup/illustrations-small.png) ·

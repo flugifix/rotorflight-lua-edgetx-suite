@@ -137,6 +137,7 @@ L.steps = { L.sensors,L.receiver,L.modeSwitches,L.profiles,L.rates,L.swash,L.ser
 local function beginWorld()
   q.messages,q.sent = {},{}
   local w = load(PATH .. "controller.lua").new(runtime,load(PATH .. "transport.lua"),H,L)
+  w.newAttitudeView=load(PATH .. "attitude_view.lua").new
   load(PATH .. "forms.lua").attach(w);load(PATH .. "workflow.lua").attach(w);load(PATH .. "navigation.lua").attach(w)
   w.requestRebuild = function() w.rebuilds = (w.rebuilds or 0)+1 end
   w:load()
@@ -258,7 +259,11 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
         check(lines>=4,name.." illustrates the task on "..size[1].."x"..size[2])
       end
       if c==1 then exported[#exported+1] = {step=n,name=name,width=size[1],height=size[2],children=resolve(job.children)} end
-      if (n==6 and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
+      if n==1 and c==3 then
+        w.data.attitude={roll=0,pitch=0,yaw=0};w.attitudeAt=getTime()
+        w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
+      end
+      if (n==1 and c==3) or (n==6 and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
         exported[#exported+1] = {step=n,name=name,task=c,width=size[1],height=size[2],children=resolve(job.children)}
       end
       if n==6 then
@@ -287,7 +292,18 @@ for _,size in ipairs({{320,240},{480,272},{800,480}}) do
     {name="direction",card=1,group="command",values={-500,0,500,0},apply=function(value)
       w.data.rc_command={commands={value,0,0,0,0}}
     end},
-    {name="modes",card=1,group="switch",values={0,1},apply=function(value) w.animationFrame=value end},
+    {name="modes",card=1,group="switch",values={1000,1900,1000},apply=function(value)
+      w.data.mode_ranges.mode_ranges[1]={id=0,auxChannelIndex=0,range={start=1800,["end"]=2100}}
+      w.data.rc={channels={1500,1500,1500,1500,1500,value}}
+    end},
+    {name="sensors",card=3,group="attitude-roll",values={0,30,0,-30,0},apply=function(value)
+      w.data.attitude={roll=value,pitch=0,yaw=0};w.attitudeAt=getTime()
+      w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
+    end},
+    {name="sensors",card=3,group="attitude-pitch",values={0,30,0,-30,0},apply=function(value)
+      w.data.attitude={roll=0,pitch=value,yaw=0};w.attitudeAt=getTime()
+      w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
+    end},
     {name="rates",card=1,group="rates",values={1,2,3},apply=function(value) w.rateStyles[w.rateProfile]=value end},
     {name="servoType",card=1,group="pulses",values={50,333,560},apply=function(value)
       w.data.servo_configurations.servos[0].rate=value

@@ -830,9 +830,10 @@
       ],
       "contracts": [
         "S03.mode-status-versus-switch",
-        "S03.switch-settle"
+        "S03.switch-settle",
+        "VISUAL.mode-switch-feedback"
       ],
-      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises."
+      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises. The drawing follows the assigned ARM channel or actual Rescue/Trainer mode flag; it does not demonstrate arming."
     },
     {
       "source": "tabs/setup_wizard/StepMotor.svelte",
@@ -991,13 +992,15 @@
         "onclick"
       ],
       "targets": [
-        "src/rfsuite/app/pages/helicopter_setup/steps/sensors.lua"
+        "src/rfsuite/app/pages/helicopter_setup/steps/sensors.lua",
+        "src/rfsuite/app/pages/helicopter_setup/attitude_view.lua"
       ],
       "contracts": [
         "S01.calibration-alignment",
-        "S01.manual-alignment-fallback"
+        "S01.manual-alignment-fallback",
+        "VISUAL.live-orientation-model"
       ],
-      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises."
+      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises. The final orientation check uses a cached wireframe driven by fresh MSP attitude, with manual confirmation and separate compact/large layouts."
     },
     {
       "source": "tabs/setup_wizard/StepServoType.svelte",
