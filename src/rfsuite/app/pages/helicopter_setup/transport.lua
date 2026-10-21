@@ -59,7 +59,9 @@ function M.new(runtime, allowed, failed)
     if not j then self.jobs, self.first = {}, 1; return end
     local container = j
     if j.expand then
+      local generation=self.generation
       if not j.current then j.current = j.expand() end
+      if self.generation~=generation then return end
       j = j.current
       if not j then self.first = self.first + 1; return end
     end

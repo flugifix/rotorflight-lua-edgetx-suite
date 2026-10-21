@@ -13,7 +13,7 @@ local keys = { "sensors", "receiver", "modes", "profiles", "rates", "swash", "se
 local function key()
   if not w then return "loading" end
   return tostring(w.step) .. ":" .. tostring(w.card) .. ":" .. tostring(w.cards) .. ":" .. tostring(w.confirmExit)
-    .. ":" .. tostring(w.overview) .. ":" .. tostring(w.historyFailure) .. ":" .. tostring(w.error) .. ":" .. tostring(context.w) .. ":" .. tostring(context.h)
+    .. ":" .. tostring(w.disconnectExit) .. ":" .. tostring(w.overview) .. ":" .. tostring(w.historyFailure) .. ":" .. tostring(w.error) .. ":" .. tostring(context.w) .. ":" .. tostring(context.h)
 end
 local loadingScene
 local function buildLoading(ctx)
@@ -21,17 +21,23 @@ local function buildLoading(ctx)
   loadingPoints[1][2],loadingPoints[2][2]=y+68,y+68
   local children={}
   children[#children+1]={type="rectangle",x=0,y=0,w=ctx.w,h=ctx.h,filled=true,color=COLOR_THEME_PRIMARY2}
-  children[#children+1]={type="label",x=24,y=y-34,w=ctx.w-48,h=28,text="@i18n(helicopter.name)@",font=ctx.w>=700 and MIDSIZE or SMLSIZE,color=COLOR_THEME_PRIMARY1}
+  children[#children+1]={type="label",x=24,y=y-34,w=ctx.w-48,h=28,text="@i18n(app.modules.helicopter_setup.name)@",font=ctx.w>=700 and MIDSIZE or SMLSIZE,color=COLOR_THEME_PRIMARY1}
   children[#children+1]={type="label",x=24,y=y,w=ctx.w-48,h=28,
-      text=function() return w and w.ready and "@i18n(helicopter.preparingView)@" or w and w.loadingText or "@i18n(helicopter.loading)@" end,font=SMLSIZE,color=COLOR_THEME_PRIMARY1}
-  children[#children+1]={type="label",x=24,y=y+30,w=ctx.w-48,h=30,text="@i18n(helicopter.loadingHint)@",font=SMLSIZE,color=COLOR_THEME_PRIMARY1}
+      text=function() return w and w.ready and "@i18n(app.modules.helicopter_setup.preparingView)@" or w and w.loadingText or "@i18n(app.modules.helicopter_setup.loading)@" end,font=SMLSIZE,color=COLOR_THEME_PRIMARY1}
+  children[#children+1]={type="label",x=24,y=y+30,w=ctx.w-48,h=30,text="@i18n(app.modules.helicopter_setup.loadingHint)@",font=SMLSIZE,color=COLOR_THEME_PRIMARY1}
   children[#children+1]={type="line",pts={{24,y+68},{ctx.w-24,y+68}},thickness=3,color=COLOR_THEME_PRIMARY1}
   children[#children+1]={type="line",pts=function() return loadingPoints end,thickness=7,color=COLOR_THEME_PRIMARY3}
-  children[#children+1]={type="button",x=12,y=ctx.h-38,w=math.floor(ctx.w*0.25),h=30,text="@i18n(helicopter.back)@",press=function() M.onBack() end}
+  children[#children+1]={type="button",x=12,y=ctx.h-38,w=math.floor(ctx.w*0.25),h=30,text="@i18n(app.modules.helicopter_setup.back)@",press=function() M.onBack() end}
   return children
 end
 function M.build(ctx)
   context = ctx
+  -- The host's independent ARMED strip stays outside this page's own frame.
+  if (ctx.y or 0)>0 then
+    local body={type="box",x=ctx.x or 0,y=ctx.y,w=ctx.w,h=ctx.h,children={}}
+    ctx.children[#ctx.children+1]=body
+    ctx=setmetatable({children=body.children},{__index=ctx})
+  end
   if w then w.requestClose, w.requestRebuild = ctx.requestClose, ctx.requestRebuild end
   if w then w.openHelp = ctx.openHelp end
   if w and ctx.armed then
@@ -44,7 +50,7 @@ function M.build(ctx)
     table.move(loadingScene,1,#loadingScene,#ctx.children+1,ctx.children)
   else
     ctx.children[#ctx.children+1] = { type="label",x=12,y=30,w=ctx.w-24,
-      text="@i18n(helicopter.loading)@",color=COLOR_THEME_PRIMARY1,font=SMLSIZE }
+      text="@i18n(app.modules.helicopter_setup.loading)@",color=COLOR_THEME_PRIMARY1,font=SMLSIZE }
   end
 end
 function M.wakeup(ctx)
@@ -77,7 +83,7 @@ function M.wakeup(ctx)
     if viewJob:step() then scene, sceneKey = viewJob.children, viewJob.key; viewJob = nil; w:rebuild() end
     return
   end
-  if ((w.ready and (w.cards or w.overview)) or w.error or w.confirmExit or w.historyFailure) and sceneKey ~= key() then
+  if ((w.ready and (w.cards or w.overview)) or w.error or w.confirmExit or w.historyFailure or w.disconnectExit) and sceneKey ~= key() then
     viewJob = modules[8].new(w, context, modules[10]); viewJob.key = key(); return
   end
   w:tick()
@@ -91,11 +97,12 @@ function M.onBack()
 end
 function M.onClose()
   if w then
-    w.bus:cancel(); w:release()
-    local q, api = w.bus:queue(), w.bus.apis.arming_disable
-    if q and api and w:allowed() then
-      q:add({ command = api.writeCommand, payload = api.buildWritePayload({ disabled = false }),
-        isWrite = true, client = "helicopter-cleanup" })
+    w.bus:cancel()
+    if not w.closing or w.active or w.recoveryRequired then w:release(true) end
+    -- Only close() may re-enable arming, after Save/Discard and acknowledged OFFs.
+    -- An external teardown has no confirmed rollback; retain the FC's lock.
+    if not w.closing and not w.cleanPhysicalExit then
+      w:session().helicopterSetupRecovery=w.identity
     end
     w.active = false
   end

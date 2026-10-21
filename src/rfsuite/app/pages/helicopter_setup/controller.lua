@@ -32,7 +32,7 @@ function M.new(runtime, transport, mathModule, labels)
     self.error = api .. ": " .. tostring(reason)
     self.message, self.transition = self.L.failed, nil
     self.closing = nil
-    self:release()
+    if api~="cleanup" then self:release() end
     -- A failed multi-profile transaction must restore the selected profile, too.
     if self.restoreProfile and self:allowed() then
       self.bus:add({ api = "set_pid_profile", write = true, payload = { self.restoreProfile }, optional = true })
@@ -76,7 +76,7 @@ function M.new(runtime, transport, mathModule, labels)
   function w:run(fn) self.bus:add({ run = fn }) end
   function w:rebuild() if self.requestRebuild then self.requestRebuild() end end
   function w:usable()
-    return self.ready and self.locked and not self.error and not self.transition and self:allowed()
+    return self.ready and self.locked and not self.error and not self.transition and (self.cleanupPending or 0)==0 and self:allowed()
       and now() - (self.statusAt or 0) <= 300
   end
   function w:acceptStatus(d)
@@ -100,7 +100,8 @@ function M.new(runtime, transport, mathModule, labels)
     end
   end
   function w:retry()
-    if not self.bus:idle() or not self:allowed() then return end
+    if not self.bus:idle() or not self:allowed() or (self.cleanupPending or 0)>0 then return end
+    if self.cleanupFailed or self.needsRelease then self:release(true) end
     self.error, self.transition, self.locked = nil, true, false
     self.statusWaiting, self.statusQueued, self.beforeStatusWait = nil, nil, nil
     self.canEdit, self.canNext, self.message = false, false, self.L.checkingStatus
@@ -176,29 +177,70 @@ function M.new(runtime, transport, mathModule, labels)
     if not self:allowed() then self.needsRelease = true; return end
     -- These modules are preloaded on entry. The cleanup owner survives the host's page clear.
     local apis = self.bus.apis
-    local function send(api, data)
-      local mod = apis[api]; if not mod then return end
-      q:add({ command = mod.writeCommand, payload = mod.buildWritePayload(data), isWrite = true,
-        client = "helicopter-cleanup", maxRetries = 0 })
+    local jobs={}
+    local full=all or self.needsRelease
+    local function send(api,data)
+      local mod=apis[api]
+      if not mod then self.cleanupFailed,self.needsRelease=true,true;return end
+      jobs[#jobs+1]={command=mod.writeCommand,payload=mod.buildWritePayload(data)}
     end
-    if all or self.needsRelease then
-      for i = 0, 7 do send("servo_override", { servo_id = i, action = 2001 }) end
-      for i = 1, 4 do send("mixer_override", { index = i, value = 2501 }) end
-      for i = 0, 3 do send("motor_override", { index = i, value = 0 }) end
+    if full then
+      for i=0,7 do send("servo_override",{servo_id=i,action=2001}) end
+      for i=1,4 do send("mixer_override",{index=i,value=2501}) end
+      for i=0,3 do send("motor_override",{index=i,value=0}) end
     else
-      for _, h in pairs(held) do
-        if h.kind == "servo" then send("servo_override", { servo_id = h.index, action = 2001 })
-        else send("mixer_override", { index = h.index, value = 2501 }) end
+      for _,h in pairs(held) do
+        if h.kind=="servo" then send("servo_override",{servo_id=h.index,action=2001})
+        else send("mixer_override",{index=h.index,value=2501}) end
       end
-      if motor then send("motor_override", { index = motor.index, value = 0 }) end
+      if motor then send("motor_override",{index=motor.index,value=0}) end
     end
-    self.needsRelease = nil
+    if #jobs==0 then return end
+    local index,failed=1,false
+    self.cleanupPending=(self.cleanupPending or 0)+#jobs
+    self.canEdit,self.canNext=false,false
+    self.needsRelease=nil
+    -- One OFF is in flight at a time. Each callback queues at most one next
+    -- message, so STATUS can run between them and the owner survives page close.
+    local dispatch
+    local function complete(_,reason)
+      self.cleanupPending=self.cleanupPending-1
+      if reason then
+        failed,self.cleanupFailed,self.needsRelease=true,true,true
+      end
+      index=index+1
+      local session=self:session()
+      local armed=self.runtime.armedReading()
+      local connected=session.fblConnected==true and session.mcu_id==self.identity and armed~=true
+      if reason=="cleared" or not connected then
+        self.cleanupPending=self.cleanupPending-(#jobs-index+1)
+        self.cleanupFailed,self.needsRelease=true,true;return
+      end
+      if index<=#jobs then dispatch()
+      elseif full then self.cleanupFailed,self.needsRelease=failed,failed or nil end
+    end
+    dispatch=function()
+      local job=jobs[index]
+      q:add({command=job.command,payload=job.payload,isWrite=true,client="helicopter-cleanup",
+        maxRetries=0,processReply=function(m) complete(m,nil) end,errorHandler=complete})
+    end
+    dispatch()
+  end
+  function w:afterRelease(fn)
+    local done=false
+    self.bus:add({expand=function()
+      if (self.cleanupPending or 0)>0 then return {run=function() end} end
+      if self.cleanupFailed or self.needsRelease then self:fail("cleanup",self.L.cleanupFailed);return end
+      if not done then done=true;return {run=fn} end
+    end})
   end
   function w:hold(kind, index, value)
     if not self:usable() or self.rebootPending then return end
-    self.message = not self.timed and self.L.persistent or value == 0 and self.L.neutralHold or self.L.holding
-    self.legacyHold = not self.timed
-    self.holds[kind .. index] = { kind = kind, index = index, value = value, due = 0 }
+    local timed=self.timedMixer
+    if kind=="servo" then timed=self.timedServo end
+    self.message = not timed and self.L.persistent or value == 0 and self.L.neutralHold or self.L.holding
+    self.legacyHold = not timed
+    self.holds[kind .. index] = { kind = kind, index = index, value = value, due = 0, timed=timed }
   end
   function w:holdAxes(axis, value, passthrough)
     for _, i in ipairs({ 1, 2, 4 }) do self:hold("mixer", i, passthrough and 2502 or (i == axis and value or 0)) end
@@ -268,7 +310,7 @@ function M.new(runtime, transport, mathModule, labels)
     if self.transition or not self.ready then return end
     if self.step >= 10 and step <= 9 then self.checks.unplugged = nil end
     if step ~= self.step then
-      local owned = ({ [1] = {"orientation", "unplugged", "blades"}, [10] = {"connected"}, [11] = {"motorDirection"},
+      local owned = ({ [1] = {"orientation", "unplugged", "blades"}, [10] = {"connected"}, [11] = {"motorDirection", "escBlades"},
         [13] = {"servoUp0", "servoUp1", "servoUp2", "servoCentre0", "servoCentre1", "servoCentre2", "servoCentre3"},
         [14] = {"control1", "control2", "control4"}, [15] = {"level"}, [16] = {"pitch"},
         [17] = {"tailCentre", "tailDirection"}, [18] = {"gyro1", "gyro2", "gyro3"}, [19] = {"finish"} })[step]
@@ -284,6 +326,12 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:next()
     if not self:usable() or not self.cards then return end
+    if self.recoveryCard then
+      if not self:ack("recoveryPowerCycle") then return end
+      self:session().helicopterSetupRecovery=nil
+      self.recoveryRequired,self.recoveryCard,self.cards=nil,nil,nil
+      self.buildRequested=true;self:rebuild();return
+    end
     if self.modelPreparationCard then
       if (self.modelPreparationMethod~=2 and self.modelPreparationMethod~=3) or not self:ack("modelReady") then return end
       self.modelPreparationDone,self.modelPreparationCard=true,nil
@@ -318,9 +366,10 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:back()
     if not self:allowed() then
-      self:release(); self.active = false
-      if self.requestClose then self.requestClose() end
-      return
+      self:release();self.disconnectExit=true;self:rebuild();return
+    end
+    if not self.ready then
+      self.bus:cancel();self.transition=nil;self:close();return
     end
     if self.transition then return end
     if self.historyFailure then
@@ -328,19 +377,33 @@ function M.new(runtime, transport, mathModule, labels)
       self.message = self.L.historyNotSaved
       self:rebuild(); return
     end
-    if self.confirmExit then self.confirmExit, self.exitToSteps = nil, nil; self:rebuild(); return end
+    if self.confirmExit then self.confirmExit, self.exitToSteps, self.backTarget = nil, nil, nil; self:rebuild(); return end
     if self.overview then self.confirmExit = true; self:rebuild(); return end
     if self.requestSteps and self.card == 1 and (self.singleStep or self.step == 1) then self:requestSteps(); return end
     if self.card > 1 then self:navigate(self.step, self.card - 1)
-    elseif self.step > 1 then self:navigate(self.step - 1, 1)
+    elseif self.step > 1 then
+      if next(self.dirty) then
+        self.backTarget,self.confirmExit=self.step-1,true;self:release();self:rebuild()
+      else self:navigate(self.step - 1, 1) end
     else self:release(); self.confirmExit = true; self:rebuild() end
+  end
+  function w:leaveDisconnected()
+    if self:allowed() then self.disconnectExit=nil;self:rebuild();return end
+    self.cleanPhysicalExit,self.active=true,false
+    self:session().helicopterSetupRecovery=nil
+    if self.requestClose then self.requestClose() end
   end
   function w:close()
     if self.closing then return end
-    self.closing, self.transition = true, true
+    self.closing,self.transition=true,true
     self:release()
-    self:write("arming_disable", { disabled = false }, function()
-      self.active = false; if self.requestClose then self.requestClose() end
+    if self.recoveryRequired then
+      self.active=false;if self.requestClose then self.requestClose() end;return
+    end
+    self:afterRelease(function()
+      self:write("arming_disable",{disabled=false},function()
+        self.active=false;if self.requestClose then self.requestClose() end
+      end)
     end)
   end
   function w:discard(after)
@@ -368,6 +431,9 @@ function M.new(runtime, transport, mathModule, labels)
       end
       self:run(function()
         self.dirty, self.live, self.profileOriginal = {}, {}, nil
+        self.pitchFull,self.pitchFullChanged,self.rateProfile,self.rateLoaded=nil,nil,nil,nil
+        self.rateStyles,self.rateTunings,self.rateMatched=nil,nil,nil
+        self.startTail=self.data.mixer_config.tail_rotor_mode
         self.rebootPending, self.transition = self.savedRebootPending, nil
         after()
       end)
@@ -381,7 +447,10 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:load()
     self.ready, self.error, self.progress, self.transition = false, nil, 0, true
+    self.checks,self.card,self.bladesOff,self.calibratedEsc={},1,false,nil
+    self.preparationDone,self.preparationCard=nil,nil
     self.statusQueued, self.statusWaiting, self.beforeStatusWait = nil, nil, nil
+    self.recoveryRequired=self:session().helicopterSetupRecovery==self:session().mcu_id
     self.loadingText, self.loadTotal = self.L.loading, #READS + 66
     self.locked = false
     self:write("arming_disable", { disabled = true })
@@ -405,7 +474,17 @@ function M.new(runtime, transport, mathModule, labels)
       self:run(function() self.bus.apis[name] = assert(loadScript(BASE .. "tasks/msp/api/" .. name .. ".lua", "t"))() end)
     end
     self:run(function() self:release(true) end)
-    self:write("servo_override_all", { value = 2001, timeout = 500 }, function(_, err) self.timed = err == nil end, true)
+    -- Old firmware can acknowledge a five-byte override while ignoring its
+    -- timeout. Probe each parser with OFF only: valid five bytes must succeed
+    -- and invalid four bytes must be explicitly refused, never just time out.
+    local servoCandidate,mixerCandidate=false,false
+    self:write("servo_override",{servo_id=0,action=2001,timeout=500},function(_,err) servoCandidate=err==nil end,true)
+    self:action("servo_override",{0,209,7,0},function(_,err) self.timedServo=servoCandidate and err=="refused" end,true)
+    self:write("mixer_override",{index=0,value=2501,timeout=500},function(_,err) mixerCandidate=err==nil end,true)
+    self:action("mixer_override",{0,197,9,0},function(_,err)
+      self.timedMixer=mixerCandidate and err=="refused"
+      self.timed=self.timedServo and self.timedMixer
+    end,true)
     for _, name in ipairs(READS) do
       local api = name
       -- Bulk adjustment/servo tables can exceed the firmware's 320-byte
@@ -486,7 +565,7 @@ function M.new(runtime, transport, mathModule, labels)
       return
     end
     if self.suspended then
-      self.suspended = nil
+      self.suspended,self.disconnectExit = nil,nil
       if self.rebootPhase then self.rebootPhase = nil; self.rebootPending = nil; self:load()
       else self.error = "link"; self.message = self.L.reload end
       return
@@ -502,6 +581,9 @@ function M.new(runtime, transport, mathModule, labels)
       end
       if not self.bus:idle() then self.bus:tick() end
       return
+    end
+    if self.cleanupFailed and (self.cleanupPending or 0)==0 and not self.error then
+      self:fail("cleanup",self.L.cleanupFailed);return
     end
     -- STATUS preempts long indexed writes and wiring trials. Check expiry before
     -- waiting for the transport, so an unanswered request cannot keep a hold alive.
@@ -545,7 +627,7 @@ function M.new(runtime, transport, mathModule, labels)
       if self.buildPreparation and self:buildPreparation() then self:rebuild();return end
       self.cards = assert(loadScript(BASE .. "app/pages/helicopter_setup/steps/" .. key .. ".lua", "t"))()(self)
       self.card = math.min(self.card, #self.cards)
-      if self.cards[self.card].enter then self.cards[self.card].enter() end
+      if self.cards[self.card].enter then self:afterRelease(self.cards[self.card].enter) end
       self:rebuild(); return
     end
     if not self.ready or self.error or self.transition then return end
@@ -568,7 +650,7 @@ function M.new(runtime, transport, mathModule, labels)
       if now() >= h.due then
         h.due = now() + 100
         local d = h.kind == "servo" and { servo_id = h.index, action = h.value } or { index = h.index, value = h.value }
-        if self.timed then d.timeout = 3000 end
+        if h.timed then d.timeout = 3000 end
         self.bus:add({ api = h.kind .. "_override", write = true, override = true, data = d }); return
       end
     end

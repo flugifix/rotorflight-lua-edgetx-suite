@@ -18,7 +18,7 @@ function M.new(w, ctx, diagrams)
   local rowY = large and 108 or height <= 272 and 76 or 88
   local rowH = large and 52 or math.min(controlH+6, math.floor((height-2*controlH-31-rowY)/3))
   local all = {}
-  local title = w.historyMode and w.L.historyTitle or (w.overview or w.modelPreparationCard) and w.L.name or string.format("%d/19  %s", w.step, w.L.steps[w.step] or w.L.name)
+  local title = w.historyMode and w.L.historyTitle or (w.overview or w.modelPreparationCard or w.recoveryCard) and w.L.name or string.format("%d/19  %s", w.step, w.L.steps[w.step] or w.L.name)
   all[#all + 1] = { type = "rectangle", x = 0, y = 0, w = width, h = height, filled = true, color = COLOR_THEME_PRIMARY2 }
   if w.historyMode or w.overview or w.confirmExit or not w.requestSteps then
     all[#all + 1] = label(10, 4, width - 54, title, large and MIDSIZE or SMLSIZE)
@@ -46,11 +46,15 @@ function M.new(w, ctx, diagrams)
     if w.openHelp then w.openHelp(message, w.L.name) end
   end)
   local card = w.cards and w.cards[w.card]
-  if w.confirmExit then
-    all[#all + 1] = label(12, 48, width-24, w.exitToSteps and w.L.leaveStepHint or w.L.exitHint)
-    button(12, 100, math.floor(width/2)-18, w.exitToSteps and w.L.saveChanges or w.L.saveExit,
+  if w.disconnectExit then
+    all[#all+1]=label(12,48,width-24,w.L.disconnectedExitHint);all[#all].h=100
+    button(12,160,width-24,w.L.powerOffLeave,function() w:leaveDisconnected() end)
+  elseif w.confirmExit then
+    local leavingStep=w.exitToSteps or w.backTarget
+    all[#all + 1] = label(12, 48, width-24, leavingStep and w.L.leaveStepHint or w.L.exitHint)
+    button(12, 100, math.floor(width/2)-18, leavingStep and w.L.saveChanges or w.L.saveExit,
       function() if w.resolveExit then w:resolveExit(true) else w:save(function() w:close() end) end end)
-    button(math.floor(width/2)+6, 100, math.floor(width/2)-18, w.exitToSteps and w.L.discardChanges or w.L.discardExit,
+    button(math.floor(width/2)+6, 100, math.floor(width/2)-18, leavingStep and w.L.discardChanges or w.L.discardExit,
       function() if w.resolveExit then w:resolveExit(false) else w:discard() end end)
   elseif w.error then
     all[#all + 1] = label(12, 48, width-24, w.statusFailure and w.L.statusUnavailable or next(w.dirty) and w.L.failed or w.L.failedClean)
@@ -120,7 +124,7 @@ function M.new(w, ctx, diagrams)
         end
       end
     end
-    local function nextText() return (w.modelPreparationCard or w.preparationCard) and w.L.continue or w.entryRebootGate and w.L.reboot or w.trial and w.trial.success and w.L.saveReboot or w.step == 10 and w.rebootPending and w.L.reboot or w.step == 19 and not w.singleStep and w.L.finish or
+    local function nextText() return (w.modelPreparationCard or w.preparationCard or w.recoveryCard) and w.L.continue or w.entryRebootGate and w.L.reboot or w.trial and w.trial.success and w.L.saveReboot or w.step == 10 and w.rebootPending and w.L.reboot or w.step == 19 and not w.singleStep and w.L.finish or
       w.card == #w.cards and (w.singleStep and (next(w.dirty) and w.L.saveStep or (w.returnToSuite and w.L.backToSuite or w.L.backToSteps)) or w.L.saveNext) or w.L.continue end
     if not w.historyMode then
     button(width-math.floor(width*0.42)-8, height-controlH-6, math.floor(width*0.42), nextText,

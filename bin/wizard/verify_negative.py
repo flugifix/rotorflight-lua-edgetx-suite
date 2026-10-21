@@ -12,7 +12,12 @@ def main():
             ('bulk-read','FAIL CORE paged startup reaches ready on telemetry'),
             ('history-early','FAIL CORE unconfirmed step cannot enter history'),
             ('stale-status','FAIL CORE stale status releases holds before bus wait'),
-            ('retry-stale','FAIL CORE retry requires new arming lock proof')]
+            ('retry-stale','FAIL CORE retry requires new arming lock proof'),
+            ('pitch-discard','FAIL REVIEW discarded pitch draft cannot return'),
+            ('back-commit','FAIL REVIEW Back Save runs the originating commit'),
+            ('stale-blades','FAIL REVIEW ESC calibration requires its own blade confirmation'),
+            ('shared-timeout-probe','FAIL REVIEW servo capability cannot authorize mixer timeouts'),
+            ('cleanup-unlock','FAIL REVIEW failed cleanup never re-enables arming')]
     for mutation,marker in checks:
         command=[args.lua,'bin/wizard/verify.lua']
         if mutation:command+=['--mutation',mutation]

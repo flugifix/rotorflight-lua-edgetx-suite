@@ -17,7 +17,7 @@ return function(h)
   local function drain(w)
     for _=1,1500 do
       h.measure("contract wakeup",function() w:tick() end);h.pump();h.advance(1)
-      if w.error or w.bus:idle() then return end
+      if w.error or (w.bus:idle() and (w.cleanupPending or 0)==0) then return end
     end
     check(false,"contract transport completes")
   end
@@ -500,7 +500,7 @@ return function(h)
     eq(w.motorHold.untilAt-getTime(),1500,"S11 hold bounded to fifteen seconds")
     w:stopMotor();check(w.motorHold==nil,"S11 release stops desired output")
     w.bladesOff=false;w:spin(0,1);check(w.motorHold==nil,"S11 blades acknowledgement required")
-    local c=step(w,"throttle");w.checks.blades=true;c[1].rows[2].press()
+    local c=step(w,"throttle");c[1].rows[1].set(2);c[1].rows[2].press()
     eq(w.motorHold.value,1000,"S11 calibration high command")
     w.data.motor={motor_1=1994};check(not c[1].rows[3].enabled(),"S11 actual high output required")
     w.data.motor.motor_1=2000;check(c[1].rows[3].enabled(),"S11 actual full output enables low transition")
@@ -562,7 +562,7 @@ return function(h)
     c[4].rows[3].set(600);eq(w.data.mixer_input.inputs[3].min,-2500,"S17 clockwise stop units")
     w.data.mixer_input.inputs[3].rate=-250;c[3].rows[3].set(500)
     eq(w.data.mixer_input.inputs[3].rate,-500,"S17 yaw calibration preserves sign")
-    w:release();w.data.mixer_config.tail_rotor_mode=2;c=step(w,"tail")
+    w:release();drain(w);w.data.mixer_config.tail_rotor_mode=2;c=step(w,"tail")
     eq(#c[1].rows,4,"S17 bidirectional reverse hold available")
     w.bladesOff=true;w.data.motor={motor_1=1000,motor_2=1000};c[1].rows[4].press();eq(w.motorHold.value,-100,"S17 reverse motor command")
     c[1].rows[4].release();check(w.motorHold==nil,"S17 reverse release stops")
@@ -600,6 +600,120 @@ return function(h)
       end
       page.onClose()
     end
+  end)
+  case("REVIEW.cleanup-before-unlock",function()
+    local w=world();settle(w)
+    if h.mutation=="cleanup-unlock" then
+      w.close=function(self)
+        self:release()
+        -- Former emergency teardown queued the unlock outside the controller.
+        q:add({command=99,payload={0},client="helicopter-cleanup",isWrite=true,
+          processReply=function() self.active=false end})
+      end
+    end
+    w:hold("servo",0,0);drain(w)
+    h.setFailCommand(193);q.sent={}
+    w:close();drain(w)
+    -- Observe raw emergency messages as well as the controller's own jobs.
+    for _=1,3 do w:tick();h.pump();h.advance(1) end
+    check(w.error and w.cleanupFailed and w.active,"REVIEW failed OFF retains the active lock")
+    for _,m in ipairs(q.sent) do
+      check(m.command~=99 or m.payload[1]~=0,"REVIEW failed cleanup never re-enables arming")
+    end
+    h.setFailCommand(nil);w:retry();drain(w)
+    check(not w.error and w.locked and not w.cleanupFailed,"REVIEW explicit retry confirms all outputs OFF")
+    q.sent={};w:close();drain(w)
+    check(not w.active,"REVIEW successful cleanup permits normal close")
+    eq(q.sent[#q.sent].command,99,"REVIEW lock release follows cleanup")
+    eq(q.sent[#q.sent].payload[1],0,"REVIEW normal close restores arming last")
+  end)
+  case("REVIEW.abnormal-close",function()
+    q.messages,q.sent={},{}
+    local page=load("app/pages/helicopter_setup/page.lua")
+    local ctx={w=480,h=272,children={},menu={getCurrentMenuId=function() return "helicopter_setup_page" end},
+      requestRebuild=function() end}
+    page.build(ctx)
+    for _=1,1000 do page.wakeup(ctx);h.pump();h.advance(1) end
+    local locked=false
+    for _,m in ipairs(q.sent) do if m.command==99 and m.payload[1]==1 then locked=true end end
+    check(locked,"REVIEW abnormal-close control first disables arming")
+    q.sent={};page.onClose()
+    for _=1,30 do h.measure("cleanup reply",h.pump) end
+    for _,m in ipairs(q.sent) do check(m.command~=99,"REVIEW external teardown cannot release the arming lock") end
+    eq(_G.rfsuite.session.helicopterSetupRecovery,"test-board","REVIEW external teardown retains a per-FC recovery marker")
+    local w=world();settle(w)
+    w.modelPreparationRequired=true;w.modelPreparationDone=true;w:buildModelPreparation()
+    check(w.recoveryCard,"REVIEW recovery precedes remembered model preparation")
+    w:next();check(w.recoveryRequired,"REVIEW recovery requires a fresh physical acknowledgement")
+    w.checks.recoveryPowerCycle=true;w:next();w:tick()
+    check(not w.recoveryRequired and not _G.rfsuite.session.helicopterSetupRecovery,"REVIEW confirmed power cycle clears recovery for this FC")
+  end)
+  case("REVIEW.armed-frame",function()
+    local page=load("app/pages/helicopter_setup/page.lua")
+    local banner={type="label",text="ARMED",x=0,y=0,h=24}
+    local ctx={x=0,y=24,w=480,h=248,children={banner},armed=true,requestRebuild=function() end}
+    page.build(ctx);page.wakeup(ctx);ctx.children={banner};page.build(ctx)
+    eq(ctx.children[1],banner,"REVIEW page retains the host ARMED banner")
+    local body=ctx.children[2]
+    eq(body.y,24,"REVIEW owned frame starts below ARMED")
+    eq(body.h,248,"REVIEW frame leaves room for ARMED")
+    check(body.children[1].type=="rectangle","REVIEW page background stays inside its body")
+    page.onClose()
+  end)
+  case("REVIEW.independent-timeout-probes",function()
+    h.setLegacyMixer(true)
+    local w=world();settle(w)
+    if h.mutation=="shared-timeout-probe" then w.timedMixer=w.timedServo end
+    check(w.timedServo and not w.timedMixer,"REVIEW servo capability cannot authorize mixer timeouts")
+    w:hold("mixer",4,0);drain(w)
+    local mixer
+    for _,m in ipairs(q.sent) do if m.command==191 then mixer=m end end
+    eq(#mixer.payload,3,"REVIEW legacy mixer hold stays three bytes")
+    w:release();drain(w);w:hold("servo",0,0);drain(w)
+    local servo
+    for _,m in ipairs(q.sent) do if m.command==193 then servo=m end end
+    eq(#servo.payload,5,"REVIEW independently proven servo uses its timeout")
+    h.setLegacyMixer(false)
+  end)
+  case("REVIEW.pitch-discard",function()
+    local w=world();settle(w);w.step=16
+    w.data.rc_tuning.rates_type=6;w.saved.rc_tuning.rates_type=6
+    local baseline=H.collective(w.saved.rc_tuning)
+    local c=step(w,"pitch");c[4].rows[1].set(150)
+    check(w.pitchFullChanged,"REVIEW collective edit is staged")
+    if h.mutation=="pitch-discard" then
+      local original=w.discard
+      w.discard=function(self,after)
+        local draft=self.pitchFull
+        return original(self,function() self.pitchFull,self.pitchFullChanged=draft,true;after() end)
+      end
+    end
+    w:discard(function() end);drain(w)
+    c=step(w,"pitch")
+    check(not w.pitchFullChanged and w.pitchFull==baseline,"REVIEW discarded pitch draft cannot return")
+  end)
+  case("REVIEW.back-preserves-commit",function()
+    local w=world();settle(w);w.step=16;w.card=1
+    local applied=0
+    w.commit=function() applied=applied+1;w:write("rc_tuning",w.data.rc_tuning) end
+    if h.mutation=="back-commit" then w.back=function(self) self:navigate(self.step-1,1) end end
+    w:touch("rc_tuning");w:back()
+    check(w.step==16 and w.confirmExit,"REVIEW Back asks before leaving a dirty step")
+    w:resolveExit(true);drain(w)
+    check(applied==1 and w.step==15 and w.active,"REVIEW Back Save runs the originating commit")
+    local written=false
+    for _,m in ipairs(q.sent) do if m.command==h.api("rc_tuning").writeCommand then written=true end end
+    check(written,"REVIEW deferred profile changes reach the FC")
+  end)
+  case("REVIEW.fresh-blade-confirmation",function()
+    local w=world();settle(w);w.step=10;w.checks.blades=true
+    w.data.motor_config.motor_pwm_protocol=0;w:navigate(11,1)
+    local c=step(w,"throttle")
+    if h.mutation=="stale-blades" then w.checks.escBlades=w.checks.blades end
+    c[1].rows[2].press()
+    check(not w.motorHold,"REVIEW ESC calibration requires its own blade confirmation")
+    w.checks.blades=true;w:load()
+    check(not w.checks.blades,"REVIEW reload invalidates physical confirmations")
   end)
   case("CORE.status-wait-and-retry",function()
     local w=world();settle(w)
@@ -820,25 +934,25 @@ return function(h)
         h.pump();h.advance(1)
         for _,item in ipairs(ctx.children) do
           if type(item.text)=="string" then
-            if history and item.text=="@i18n(helicopter.historyTitle)@" then found=true end
+            if history and item.text=="@i18n(app.modules.helicopter_setup.historyTitle)@" then found=true end
             if not history and tonumber(string.match(item.text,"^(%d+)/19"))==number then found=true end
           end
         end
         if not found and not history then
           for _,item in ipairs(ctx.children) do
-            if item.text=="@i18n(helicopter.modelPreparationTitle)@" then
+            if item.text=="@i18n(app.modules.helicopter_setup.modelPreparationTitle)@" then
               modelGateSeen=true
               eq(#loaded,0,"CORE model gate precedes step definition loading")
             end
-            if item.type=="choice" and item.values[1]=="@i18n(helicopter.modelNotChecked)@" then
+            if item.type=="choice" and item.values[1]=="@i18n(app.modules.helicopter_setup.modelNotChecked)@" then
               item.set(number%2==0 and 3 or 2)
-            elseif item.type=="choice" and item.values[1]=="@i18n(helicopter.no)@" and item.values[2]=="@i18n(helicopter.yes)@" then
+            elseif item.type=="choice" and item.values[1]=="@i18n(app.modules.helicopter_setup.no)@" and item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@" then
               item.set(2)
             end
           end
           for _,item in ipairs(ctx.children) do
             local caption=type(item.text)=="function" and item.text() or item.text
-            if item.type=="button" and caption=="@i18n(helicopter.continue)@" then item.press() end
+            if item.type=="button" and caption=="@i18n(app.modules.helicopter_setup.continue)@" then item.press() end
           end
         end
         if found then break end
@@ -861,12 +975,12 @@ return function(h)
           if closed then break end
           for _,item in ipairs(ctx.children) do
             local active=type(item.active)~="function" or item.active()
-            if active and item.type=="choice" and item.values[1]=="@i18n(helicopter.no)@" and
-              item.values[2]=="@i18n(helicopter.yes)@" then item.set(2) end
+            if active and item.type=="choice" and item.values[1]=="@i18n(app.modules.helicopter_setup.no)@" and
+              item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@" then item.set(2) end
             local caption=type(item.text)=="function" and item.text() or item.text
-            if active and item.type=="button" and (caption=="@i18n(helicopter.continue)@" or
-              caption=="@i18n(helicopter.saveNext)@" or caption=="@i18n(helicopter.saveStep)@" or
-              caption=="@i18n(helicopter.backToSuite)@") then item.press() end
+            if active and item.type=="button" and (caption=="@i18n(app.modules.helicopter_setup.continue)@" or
+              caption=="@i18n(app.modules.helicopter_setup.saveNext)@" or caption=="@i18n(app.modules.helicopter_setup.saveStep)@" or
+              caption=="@i18n(app.modules.helicopter_setup.backToSuite)@") then item.press() end
           end
         end
         check(closed,"CORE direct Suite step completes back to its menu "..number)
@@ -878,6 +992,11 @@ return function(h)
         check(unlock,"CORE individual Suite completion releases the arming lock")
       end
       page.onClose()
+      if not closed then
+        check(_G.rfsuite.session.helicopterSetupRecovery=="test-board","CORE abandoned visit requires physical recovery")
+        -- The next entry represents a separate, freshly powered fixture.
+        _G.rfsuite.session.helicopterSetupRecovery=nil
+      end
     end
     entry("helicopter_setup_page",1)
     for index=1,19 do entry(string.format("helicopter_setup_step_%02d_page",index),index) end

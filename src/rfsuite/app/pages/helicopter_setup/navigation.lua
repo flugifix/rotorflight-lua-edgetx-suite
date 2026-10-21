@@ -45,6 +45,13 @@ function M.attach(w, ctx)
       (self.step == 17 and not self:motorised()) or self.step == 18
   end
   function w:buildModelPreparation()
+    if self.recoveryRequired then
+      self.cards={self:cardDef(self.L.recoveryTitle,self.L.recoveryHint,{
+        self:check("recoveryPowerCycle",self.L.fcPowerCycled)
+      })}
+      self.cards[1].summary=self.L.recoveryIntro
+      self.card,self.recoveryCard=1,true;return true
+    end
     if not self.modelPreparationRequired or self.modelPreparationDone then return false end
     self.modelPreparationMethod = self.modelPreparationMethod or 1
     self.cards={self:cardDef(self.L.modelPreparationTitle,self.L.modelPreparationIntro.."\n"..self.L.modelPreparationHint.."\n"..
@@ -86,10 +93,11 @@ function M.attach(w, ctx)
   end
   function w:resolveExit(save)
     if self.transition then return end
-    local steps = self.exitToSteps
-    self.confirmExit, self.exitToSteps = nil, nil
-    local after = steps and function() self:showSteps() end or function() self:close() end
-    if save then self:save(after) else self:discard(steps and after or nil) end
+    local steps,target = self.exitToSteps,self.backTarget
+    self.confirmExit, self.exitToSteps,self.backTarget = nil, nil,nil
+    local after = target and function() self:navigate(target,1) end or
+      steps and function() self:showSteps() end or function() self:close() end
+    if save then self:save(after) else self:discard((steps or target) and after or nil) end
   end
 end
 return M

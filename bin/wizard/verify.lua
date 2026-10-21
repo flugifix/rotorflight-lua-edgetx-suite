@@ -62,13 +62,16 @@ for _, name in ipairs({ "status","boxnames","boxids","mode_ranges","mode_ranges_
   "tail_motor_output","governor_profile","rc","attitude","motor","motor_telemetry","rx_channels","rc_command" }) do
   local a = api(name); byCommand[a.command] = a
 end
-local failCommand, legacy = nil, false
+local failCommand, legacy, legacyMixer = nil, false, false
 local function pump()
   local m = table.remove(q.messages,1); if not m then return end
   q.sent[#q.sent+1] = m
   if m.command==99 then lockDisabled=m.payload[1]==1;fixtures[101]=status() end
   if m.command == failCommand or (legacy and m.command == 196 and #m.payload == 4) then
     if m.errorHandler then m.errorHandler(m,"error") end; return
+  end
+  if (m.command==193 or m.command==191) and #m.payload==4 and not legacy and not (m.command==191 and legacyMixer) then
+    if m.errorHandler then m.errorHandler(m,"refused") end;return
   end
   -- Real telemetry cannot serialize the USB-sized adjustment/servo tables.
   if m.command == 52 or m.command == 120 then
@@ -128,7 +131,7 @@ local L = load(PATH .. "labels.lua")
 local locale="en"
 for i=1,#arg do if arg[i]=="--locale" then locale=arg[i+1] end end
 local bundle = load("i18n/"..locale..".lua")
-for k in pairs(L) do if bundle.helicopter[k] then L[k] = bundle.helicopter[k] end end
+for k in pairs(L) do if bundle.app.modules.helicopter_setup[k] then L[k] = bundle.app.modules.helicopter_setup[k] end end
 L.steps = { L.sensors,L.receiver,L.modeSwitches,L.profiles,L.rates,L.swash,L.servoType,L.governor,L.motor,L.connect,
   L.spinTest,L.escTelemetry,L.servoDirectionCentre,L.controlDirections,L.level,L.bladePitch,L.tail,L.gyroCheck,L.finish }
 local function beginWorld()
@@ -149,7 +152,7 @@ local function world()
   return w
 end
 local w = world()
-check(w.timed,"timeout capability proved by 196")
+check(w.timed,"timeout capability proved per override parser")
 eq(q.sent[1].command,99,"arming disabled before configuration writes")
 eq(q.sent[1].payload[1],1,"arming disabled payload")
 local steps = { "sensors","receiver","modes","profiles","rates","swash","servoType","governor","motor","connect",
@@ -187,8 +190,8 @@ for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
   local snapshot=resolve(loadingCtx.children)
   for _,node in ipairs(snapshot) do
     if type(node.text)=="string" then
-      local key=string.match(node.text,"^@i18n%(helicopter%.([%w_]+)%)@$")
-      if key then node.text=bundle.helicopter[key] end
+      local key=string.match(node.text,"^@i18n%(app%.modules%.helicopter_setup%.([%w_]+)%)@$")
+      if key then node.text=bundle.app.modules.helicopter_setup[key] end
     end
   end
   exported[#exported+1]={step=0,name="loading",task="loading",width=size[1],height=size[2],children=snapshot}
@@ -217,6 +220,16 @@ for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
   while not failure.done do failure:step() end
   exported[#exported+1]={step=0,name="status-error",task="status-error",width=size[1],height=size[2],children=resolve(failure.children)}
   historyPreview.error,historyPreview.statusFailure=nil,nil
+  historyPreview.recoveryRequired=true;historyPreview:buildModelPreparation()
+  local recovery=view.new(historyPreview,{w=size[1],h=size[2]},diagrams)
+  while not recovery.done do recovery:step() end
+  exported[#exported+1]={step=0,name="recovery",task="recovery",width=size[1],height=size[2],children=resolve(recovery.children)}
+  historyPreview.recoveryRequired,historyPreview.recoveryCard=nil,nil
+  historyPreview.disconnectExit=true
+  local disconnected=view.new(historyPreview,{w=size[1],h=size[2]},diagrams)
+  while not disconnected.done do disconnected:step() end
+  exported[#exported+1]={step=0,name="disconnected",task="disconnected",width=size[1],height=size[2],children=resolve(disconnected.children)}
+  historyPreview.disconnectExit=nil
 end
 for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
   for n,name in ipairs(steps) do
@@ -304,11 +317,13 @@ eq(w.rebuilds,0,"live replies do not rebuild")
 -- Release queued/in-flight hold writes as well as the locally held state.
 w.holds = {}; w:hold("servo",0,400); w:hold("mixer",1,2502)
 w.bus:add({api="servo_override",write=true,override=true,data={servo_id=0,action=400,timeout=3000}})
+local firstRelease=#q.sent+1
 w:release()
+for _=1,20 do measure("cleanup reply",pump) end
 check(next(w.holds)==nil,"leaving releases held state")
 for _,j in ipairs(w.bus.jobs) do check(not j.override,"leaving drops unsent override job") end
-local releases = {};for _,m in ipairs(q.messages) do releases[m.command] = true end
-check(releases[193] and releases[191],"servo and mixer OFF queued on leave")
+local releases = {};for i=firstRelease,#q.sent do local m=q.sent[i];releases[m.command] = true end
+check(releases[193] and releases[191],"servo and mixer OFF acknowledged on leave")
 -- An API version of 12.10 without #541 must use persistent three-byte writes.
 legacy=true
 local old=world();check(not old.timed,"12.10 without timeouts is detected")
@@ -388,6 +403,8 @@ for _=1,500 do
   measure("page sweep",function() resolve(ctx.children) end)
 end
 page.onClose()
+check(_G.rfsuite.session.helicopterSetupRecovery=="test-board","external teardown retains a recovery requirement")
+_G.rfsuite.session.helicopterSetupRecovery=nil
 -- Walk the actual page through its rendered callbacks. Construction and every
 -- reactive getter share this measured frame, as they do in the dashboard host.
 local frameClosed,frameVisited=false,{}
@@ -409,18 +426,18 @@ for _=1,5000 do
       if number then frameVisited[tonumber(number)]=true end
     end
     if active and item.type=="choice" and item.set and
-      (item.values[1]==L.modelNotChecked or item.values[1]=="@i18n(helicopter.modelNotChecked)@") then
+      (item.values[1]==L.modelNotChecked or item.values[1]=="@i18n(app.modules.helicopter_setup.modelNotChecked)@") then
       if not pausedModelChoice then ticks=ticks+400;pausedModelChoice=true end
       measure("page input",function() item.set(2) end)
     end
     if active and item.type=="choice" and item.set and
-      (item.values[1]==L.no or item.values[1]=="@i18n(helicopter.no)@") and
-      (item.values[2]==L.yes or item.values[2]=="@i18n(helicopter.yes)@") then
+      (item.values[1]==L.no or item.values[1]=="@i18n(app.modules.helicopter_setup.no)@") and
+      (item.values[2]==L.yes or item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@") then
       measure("page input",function() item.set(2) end)
     end
     if active and item.type=="button" and item.press then
       local caption=type(item.text)=="function" and item.text() or item.text
-      local key=type(caption)=="string" and string.match(caption,"^@i18n%(helicopter%.([%w_]+)%)@$")
+      local key=type(caption)=="string" and string.match(caption,"^@i18n%(app%.modules%.helicopter_setup%.([%w_]+)%)@$")
       if key=="continue" or key=="saveNext" or key=="finish" or key=="completeSetup" or
         caption==L.continue or caption==L.saveNext or caption==L.finish or caption==L.completeSetup then
         measure("page input",item.press)
@@ -472,8 +489,10 @@ w.requestClose=function() w.closed=true end
 _G.rfsuite.session.fblConnected=false
 local queuedBefore=#q.messages
 w:back()
-check(w.closed and not w.active,"EXIT remains available after link loss")
+check(not w.closed and w.active and w.disconnectExit,"link loss explains physical cleanup before EXIT")
 eq(#q.messages,queuedBefore,"disconnected exit sends no unguarded MSP")
+w:leaveDisconnected()
+check(w.closed and not w.active,"confirmed physical power-off permits EXIT after link loss")
 _G.rfsuite.session.fblConnected=true
 local mutation
 for i=1,#arg do if arg[i]=="--mutation" then mutation=arg[i+1] end end
@@ -488,7 +507,9 @@ local function contractWorld()
       return entries
     end
   elseif mutation=="mode-flag" then v.modeActive=function() return true end
-  elseif mutation and mutation~="bulk-read" and mutation~="history-early" and mutation~="stale-status" and mutation~="retry-stale" then error("Unknown negative control: "..mutation) end
+  elseif mutation and mutation~="bulk-read" and mutation~="history-early" and mutation~="stale-status" and mutation~="retry-stale"
+    and mutation~="pitch-discard" and mutation~="back-commit" and mutation~="stale-blades"
+    and mutation~="shared-timeout-probe" and mutation~="cleanup-unlock" then error("Unknown negative control: "..mutation) end
   return v
 end
 local contractCases=assert(loadfile("bin/wizard/contracts.lua"))()({
@@ -496,6 +517,8 @@ local contractCases=assert(loadfile("bin/wizard/contracts.lua"))()({
   fixtures=fixtures,advance=function(value) ticks=ticks+value end,
   beginWorld=beginWorld,mutation=mutation,
   setServoCount=function(count) statusServoCount=count end,
+  setLegacyMixer=function(value) legacyMixer=value end,
+  setFailCommand=function(value) failCommand=value end,
   setRecordFault=function(value) recordFault=value end,
   view=view,diagrams=diagrams,resolve=resolve
 })

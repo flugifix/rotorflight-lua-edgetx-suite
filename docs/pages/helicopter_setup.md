@@ -164,14 +164,30 @@ are enabled and checked throughout the visit. Servo, mixer and motor overrides a
 exit and on page teardown. Leaving drops unsent override keepalives. Configuration
 writes are acknowledged before EEPROM and before moving to the next step.
 
-Timeout support is **probed**, not inferred from API 12.10: a harmless four-byte
-MSP_SET_SERVO_OVERRIDE_ALL OFF request distinguishes the timeout extension from
-older firmware, which rejects that length. Only a successful probe permits five-byte
-per-servo/mixer holds with a 3000 ms timeout. Releases always use the legacy payload.
-On older firmware, servo/mixer overrides persist if the link is lost; the warning
-requires keeping the connection, and pending cleanup runs when the same visit is resumed. Reboot
-the FC before flight if cleanup cannot be confirmed. Motor overrides retain the
-firmware's fixed one-second expiry.
+Timeout support is **probed independently** for servo and mixer commands, never
+inferred from API 12.10. An OFF request with a valid five-byte timeout payload must
+succeed and an invalid four-byte OFF payload must be explicitly refused. A timeout
+does not prove support. Firmware that ignores trailing bytes therefore stays on
+legacy three-byte holds. Supported holds use a 3000 ms timeout; releases always
+use the legacy payload. Motor overrides retain the fixed one-second expiry.
+
+Leaving a task waits for OFF acknowledgements before another hold can start.
+Normal exit restores arming availability only after confirmed cleanup and
+Save/Discard. Failed cleanup keeps arming disabled and offers explicit retry.
+On link loss, Back explains that the FC must be powered off before leaving:
+permanent overrides cannot be released over a missing link. Reconnect allows
+cleanup to resume for the same FC.
+
+An externally interrupted visit retains the FC's arming lock. On reopening in the
+same Suite session, a recovery gate asks for an FC power cycle before continuing;
+this clears permanent overrides and unsaved RAM changes. Power-cycle the FC after
+an unexpected tool/widget termination even if the radio has also restarted.
+The Suite's independent ARMED banner remains visible above the wizard's frame.
+
+Back across a dirty step asks to save or discard before loading another step, so
+profile-specific changes retain their originating commit. Discard clears pending
+pitch/rate drafts. ESC calibration has its own fresh blades-removed confirmation;
+reloading configuration invalidates all physical answers.
 
 Do not switch helicopters during a visit. The wizard binds itself to the FC identity.
 An armed transition, lost connection, refused operation or malformed response blocks

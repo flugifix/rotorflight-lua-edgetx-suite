@@ -124,7 +124,9 @@ python bin/wizard/verify_negative.py --lua lua5.3
 
 The negative controls restore oversized USB bulk reads, wrong FBUS ID, false-positive
 mode feedback and stale status hidden behind a busy request, and also inject a
-premature history write before validation. Each
+premature history write before validation. Further mutations restore discarded pitch drafts,
+lose a dirty step commit on Back, reuse the earlier blade confirmation, share the
+servo timeout capability with the mixer, and unlock arming after failed OFF. Each
 must fail its named assertion, alongside a passing positive control in the same run.
 These are additional checks; assertions and budget thresholds are not weakened.
 

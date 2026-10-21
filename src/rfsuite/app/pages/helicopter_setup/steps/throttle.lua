@@ -13,10 +13,10 @@ return function(w)
   local cards = {}
   if w.data.motor_config.motor_pwm_protocol == 0 then
     cards[1] = w:cardDef(L.escCalibration, L.escCalibrationHint, {
-      w:check("blades", L.bladesRemoved),
+      w:check("escBlades", L.bladesRemoved),
       w:button(function() return w.escStage=="full" and L.cancelTest or L.fullThrottle end, function()
         if w.escStage=="full" then w:stopMotor();w.escStage="idle";w.message=L.ready;return end
-        if not w:usable() or w.rebootPending or (w.data.status.motor_count or 0)<1 or not w.checks.blades then w.message = L.confirmCheck; return end
+        if not w:usable() or w.rebootPending or (w.data.status.motor_count or 0)<1 or not w.checks.escBlades then w.message = L.confirmCheck; return end
         w.motorHold = { index = 0, value = 1000, due = 0, untilAt = getTime() + 6000 }; w.escStage = "full"
       end),
       w:button(L.batteryThenLow, function() w:stopMotor(); w.escStage = "low" end,

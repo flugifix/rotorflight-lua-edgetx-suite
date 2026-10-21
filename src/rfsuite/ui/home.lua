@@ -2950,7 +2950,7 @@ local function buildScene()
   local bannerH = isArmed and (profile.armedBannerH or 24) or 0
   local contentY = tileGap + bannerH
   local contentW = LCD_W - contentPad * 2
-  if ownsFrame then contentX, contentY, contentW, bannerH = 0, 0, LCD_W, 0 end
+  if ownsFrame then contentX, contentY, contentW = 0, bannerH, LCD_W end
 
   -- ── Help view (no lvgl.dialog – avoids LVGL lifecycle crashes) ───────────────
   if state.helpContent then
@@ -3084,7 +3084,7 @@ local function buildScene()
       wipeTable(state.cards)
       state.focusIndex = 0
       local pageBodyH = pageBodyHeight() - bannerH
-      if ownsFrame then pageBodyH = LCD_H end
+      if ownsFrame then pageBodyH = LCD_H - bannerH end
       local ok, err = pcall(pageModule.build, {
         children = children,
         x = contentX,

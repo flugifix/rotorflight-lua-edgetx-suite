@@ -1,6 +1,5 @@
 -- Ported MIXER_INPUT -> mixer_input.lua
--- Reference module: no shipped page loads it. It is kept for the developer API tester, which
--- loads a module by its name, and as the starting point for a page that needs this message.
+-- Used by the helicopter wizard and the developer API tester.
 local Api = {
     command = 170,
     writeCommand = 171
@@ -50,7 +49,7 @@ function Api.parse(buf)
     local expected = #INPUT_GROUPS * 6
     if #buf < expected then return nil end
     local out = { inputs = {} }
-    if #buf % 6 ~= 0 or #buf > 29 * 6 then return nil end
+    if #buf % 6 ~= 0 then return nil end
     for pos = 1, #buf, 6 do
         local record = {}
         for n, name in ipairs({ "rate", "min", "max" }) do
