@@ -3,9 +3,9 @@ return function(ctx)
   local line1 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_intro")
     or "Keys: radio-wide shortcuts. On the theme itself, Theme uses its binding; unbound keys do nothing. Nothing disables a key."
   local line2 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_page_down")
-    or "PAGE >: Quick menu by default; it opens and closes the menu. On Theme: the theme's binding; unbound on the theme itself, nothing happens."
+    or "PAGE >: Quick menu by default; it opens and closes the menu. On Theme: the theme's binding, else nothing on the theme itself."
   local line3 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_page_up")
-    or "PAGE <: Quick menu by default; it opens and closes the menu. On Theme: the theme's binding; unbound on the theme itself, nothing happens."
+    or "PAGE <: Quick menu by default; it opens and closes the menu. On Theme: the theme's binding, else nothing on the theme itself."
   local line4 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_mdl")
     or "MDL: Theme by default."
   local line5 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_sys")
