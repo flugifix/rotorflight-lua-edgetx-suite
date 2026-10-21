@@ -17,6 +17,8 @@ bytes(mixer.buildWritePayload({index=0,value=0,timeout=1}),{0,0,0,244,1},"timeou
 bytes(mixer.buildWritePayload({index=0,value=0,timeout=40000}),{0,0,0,48,117},"timeout maximum")
 eq(mixer.buildWritePayload({index=-1}),nil,"negative input refused")
 eq(mixer.buildWritePayload({index=29}),nil,"out of range input refused")
+eq(mixer.buildWritePayload({index=0,value=0,timeout="1000"}),nil,"non-numeric mixer timeout refused")
+bytes(mixer.buildWritePayload({index=1,value=0,timeout=1000.7}),{1,0,0,232,3},"fractional timeout floored")
 local p={};for i=1,29 do p[#p+1],p[#p+2]=i,0 end
 local d=mixer.parse(p);for i=1,29 do eq(d["override_"..i],i,"mixer read order") end
 table.remove(p);eq(mixer.parse(p),nil,"short mixer read refused")
@@ -25,9 +27,14 @@ eq(servo.command,192,"servo read command");eq(servo.writeCommand,193,"servo writ
 bytes(servo.buildWritePayload({servo_id=3,action=1500}),{3,220,5},"legacy servo payload")
 bytes(servo.buildWritePayload({servo_id=3,action=1500,timeout=1000}),{3,220,5,232,3},"explicit timed servo")
 bytes(servo.buildWritePayload({servo_id=0,action=2001}),{0,209,7},"servo release")
+bytes(servo.buildWritePayload(nil),{0,0,0},"servo payload without data keeps its legacy default")
+eq(servo.buildWritePayload({servo_id=0,action=2001,timeout=true}),nil,"non-numeric servo timeout refused")
 local all=api("servo_override_all");eq(all.writeCommand,196,"all-servo command")
 bytes(all.buildWritePayload({value=2001}),{209,7},"legacy all-servo OFF")
 bytes(all.buildWritePayload({value=2001,timeout=1000}),{209,7,232,3},"timed all-servo OFF probe")
 bytes(all.buildWritePayload({value=2001,timeout=0}),{209,7,244,1},"all-servo minimum timeout")
 bytes(all.buildWritePayload({value=2001,timeout=40000}),{209,7,48,117},"all-servo maximum timeout")
+eq(all.buildWritePayload(nil),nil,"all-servo write without data refused")
+eq(all.buildWritePayload({}),nil,"all-servo write without value refused")
+eq(all.buildWritePayload({value=2001,timeout="x"}),nil,"non-numeric all-servo timeout refused")
 print("MSP override payloads: " .. count .. " assertions passed")
