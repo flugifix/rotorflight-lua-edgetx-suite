@@ -7,7 +7,7 @@ return function(ctx)
   local line3 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_page_up")
     or "PAGE <: Theme by default; unbound on the theme itself, nothing happens. Over open views, PAGE opens/closes the Quick menu."
   local line4 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_mdl")
-    or "MDL: Theme by default. RTN keeps Back/Close; long RTN exits."
+    or "MDL: Theme by default."
   local line5 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_sys")
     or "SYS: Main menu by default; it requires a disarmed model."
   local line6 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_tele")

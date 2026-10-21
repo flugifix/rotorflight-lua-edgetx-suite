@@ -2765,7 +2765,7 @@ return {
         help_intro = "Keys: radio-wide shortcuts. On the theme itself, Theme uses its binding; unbound keys do nothing. Nothing disables a key.",
         help_page_down = "PAGE >: Theme by default; unbound on the theme itself, nothing happens. Over open views, PAGE opens/closes the Quick menu.",
         help_page_up = "PAGE <: Theme by default; unbound on the theme itself, nothing happens. Over open views, PAGE opens/closes the Quick menu.",
-        help_mdl = "MDL: Theme by default. RTN keeps Back/Close; long RTN exits.",
+        help_mdl = "MDL: Theme by default.",
         help_sys = "SYS: Main menu by default; it requires a disarmed model.",
         help_tele = "TELE: Quick menu by default. Flight log requires its preview switch.",
       },

@@ -2793,7 +2793,7 @@ return {
         help_intro = "Tasten: senderweite Belegung. Auf der Theme-Ansicht nutzt Theme die Belegung; unbelegt passiert dort nichts. Nichts deaktiviert eine Taste.",
         help_page_down = "PAGE >: standardmäßig Theme; auf der Theme-Ansicht unbelegt ohne Aktion. Über offenen Ansichten öffnet/schließt PAGE das Schnellmenü.",
         help_page_up = "PAGE <: standardmäßig Theme; auf der Theme-Ansicht unbelegt ohne Aktion. Über offenen Ansichten öffnet/schließt PAGE das Schnellmenü.",
-        help_mdl = "MDL: standardmäßig Theme. RTN bleibt Zurück/Schließen; langes RTN beendet das Vollbild.",
+        help_mdl = "MDL: standardmäßig Theme.",
         help_sys = "SYS: standardmäßig Hauptmenü; es erfordert ein nicht scharfgeschaltetes Modell.",
         help_tele = "TELE: standardmäßig Schnellmenü. Das Flugbuch erfordert seinen Vorschau-Schalter.",
       },

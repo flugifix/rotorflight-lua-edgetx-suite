@@ -188,8 +188,9 @@ battery profile's press queues nothing while the model is armed.
 | --- | --- |
 | `previewInflightTuning` | the in-flight tuning preview switch is on and the widget carries the overlay's state for this model |
 | `batteryPickHasPacks` | the model is disarmed and the battery registry has a pack for it |
-| `modelDisarmed` | the model is not armed (`state.armed`); MAIN MENU and ERASE BLACKBOX ask it |
-| `batteryProfileOffered` | the model is not armed and the flight controller's battery configuration (`state.battery_config`) has a capacity above zero for at least one of the six profiles; the BATTERY PROFILE row asks it |
+| `modelDisarmed` | the model is not armed (`state.armed`); MAIN MENU asks it |
+| `connectionReadyDisarmed` | the connection is ready (`connectionReady`) and the model is not armed; ERASE BLACKBOX asks it, so a menu a key opens before the connection is ready offers no write |
+| `batteryProfileOffered` | `connectionReadyDisarmed`, and the flight controller's battery configuration (`state.battery_config`) has a capacity above zero for at least one of the six profiles; the BATTERY PROFILE row asks it |
 | `flightLogOffered` | the *Flight Log* preview switch is on (`preferences.general.preview_flight_log`, the switch the tool's own menu asks) and the model is not armed |
 | `batteryPickPending` | the battery prompt is waiting for an answer (`state.batteryPick.pending`) and no pick has been recorded yet |
 

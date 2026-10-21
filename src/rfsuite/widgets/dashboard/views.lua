@@ -143,8 +143,8 @@ function CONDITIONS.modelDisarmed(widget)
   return not (widget.state and widget.state.armed == true)
 end
 
--- Fullscreen shortcuts can open the menu before the connection chain finishes.
--- FC writes remain unavailable until that chain has supplied the current model.
+-- Fullscreen shortcuts can open the menu before the connection is ready. The rows that write to
+-- the flight controller stay hidden until it is, as they do while the model is armed.
 function CONDITIONS.connectionReadyDisarmed(widget)
   return widget.connectionReady == true and CONDITIONS.modelDisarmed(widget)
 end

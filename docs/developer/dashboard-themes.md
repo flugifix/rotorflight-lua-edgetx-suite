@@ -58,7 +58,7 @@ the widget to find the module for the phase it is in.
 | `pages` | table | Optional. Splits the theme's settings into pages, one tile each. See [Splitting the settings into pages](#splitting-the-settings-into-pages). |
 | `standalone` | boolean | `true` keeps the theme off the *Dashboard* → *Settings* page even if it declares `configure`. |
 | `fullscreen` | string | Optional. `"theme"` makes fullscreen show this theme at the fullscreen size instead of the quick menu. See [A theme that takes fullscreen](#a-theme-that-takes-fullscreen). Omit it and fullscreen is what it has always been. |
-| `keys` | table | Optional fullscreen bindings for `pageDown`, `pageUp`, `mdl`, `sys`, `tele`. Host shortcut actions (`widgets/dashboard/keys.lua`): `"none"`, `"openView:menu"`, `"openTool"`, `"openTool:tools_flight_log_page"`, `"exitFullscreen"`; theme views can use `"openView:<id>"` (see [actions](dashboard-views.md#what-follows-a-press)). A non-Theme choice on the global Keys page wins, including SYS/TELE defaults; on Theme, base-layer resolution is `ctx.keys[key]`, then `init.keys[key]`, then nothing. No shipped theme declares this table. |
+| `keys` | table | Optional fullscreen bindings for `pageDown`, `pageUp`, `mdl`, `sys`, `tele`, and `exit` (short RTN with the theme itself showing). Host shortcut actions (`widgets/dashboard/keys.lua`): `"none"`, `"openView:menu"`, `"openTool"`, `"openTool:tools_flight_log_page"`, `"exitFullscreen"`; theme views can use `"openView:<id>"` (see [actions](dashboard-views.md#what-follows-a-press)). A non-Theme choice on the global Keys page wins, including SYS/TELE defaults; on Theme, base-layer resolution is `ctx.keys[key]`, then `init.keys[key]`, then nothing. No shipped theme declares this table. |
 | `fullscreenExit` | string | Optional, read only by `bin/themes/validate.lua`. `"longRtn"` declares that the theme binds no control that leaves fullscreen and relies on a long press on RTN. |
 | `views` | table | Optional, for a free-form theme. Views of the theme's own, and looks for the widget's: see [Views of a theme's own](#views-of-a-themes-own). |
 
@@ -944,7 +944,7 @@ resolution. The table is what a key on **Theme** does:
 | Key | With a view on top | With the theme showing |
 | --- | --- | --- |
 | PAGE down, PAGE up | the quick menu on top: close it; any other view: open the menu over it | `ctx.keys.pageDown` / `ctx.keys.pageUp`, then `init.keys` for that key, else nothing |
-| RTN, short | the view's `back` — the picker: its close box; the battery profile page: its back box, back to the menu; the menu: close it | `ctx.keys.exit` if set, else nothing |
+| RTN, short | the view's `back` — the picker: its close box; the battery profile page: its back box, back to the menu; the menu: close it | `ctx.keys.exit`, then `init.keys.exit`, else nothing |
 | RTN, long | leaves fullscreen, in the firmware | leaves fullscreen, in the firmware |
 | MDL, SYS, TELE, short | nothing, unless bound to the view on top (see below) | `ctx.keys.mdl` / `ctx.keys.sys` / `ctx.keys.tele`, then `init.keys` for that key, else nothing |
 
