@@ -1,5 +1,5 @@
 -- Ported MIXER_INPUT -> mixer_input.lua
--- Used by the helicopter wizard and the developer API tester.
+-- Exposes signed indexed records alongside the legacy flat fields.
 local Api = {
     command = 170,
     writeCommand = 171
