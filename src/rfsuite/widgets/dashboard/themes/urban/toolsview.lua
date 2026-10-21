@@ -55,9 +55,15 @@ function M.build(children, zone, state, ctx)
   local cols = (#options > 4 and w >= 400) and 3 or 2
   local naturals, fixed = {}, 0
   if tuning ~= nil then naturals[1] = tuningOn and f.lineH or f.rowH end
+  -- A profile's button carries the host's `detail` under its capacity where the board reports
+  -- the cells and the warning voltage, so its rows need the height of two lines then.
+  local profileH = f.lineH
+  for i = 1, #options do
+    if options[i].detail ~= nil then profileH = f.rowH end
+  end
   if profile ~= nil then
     fixed = fixed + f.nameH + g.gap
-    for _ = 1, math.ceil(#options / cols) do naturals[#naturals + 1] = f.lineH end
+    for _ = 1, math.ceil(#options / cols) do naturals[#naturals + 1] = profileH end
   end
   fixed = fixed + math.max(0, #naturals - 1) * g.gap
   local heights = K.stretch(g, bottom - contentY, fixed, naturals)
@@ -94,13 +100,13 @@ function M.build(children, zone, state, ctx)
   contentY = contentY + lineH + g.gap
 
   local btnW = math.floor((w - (cols - 1) * g.gap) / cols)
-  local btnH = heights[#heights] or f.lineH
+  local btnH = heights[#heights] or profileH
   for i = 1, #options do
     local option = options[i]
     local by = contentY + math.floor((i - 1) / cols) * (btnH + g.gap)
     if by + btnH > bottom then break end
     local bx = x + ((i - 1) % cols) * (btnW + g.gap)
-    K.button(children, g, f, bx, by, btnW, btnH, option.label, nil, option.current == true,
+    K.button(children, g, f, bx, by, btnW, btnH, option.label, option.detail, option.current == true,
       function() ctx.run(profile, option, "none") end)
   end
   return children

@@ -116,19 +116,28 @@ function K.outline(nodes, x, y, w, h, color, thickness)
   line(nodes, x1, y, x1, y1, color, th)
 end
 
+-- The host's quick menu numbers (widgets/dashboard/fullscreen_menu.lua, M.PLACES and
+-- M.TWO_COLUMNS_FROM): the pilot's entries on a fixed raster of six places, in two columns from
+-- this width up, and the BATTERY PROFILE row on the row after the raster's last. The mark after a
+-- row's value that says the row opens a page is the host's as well (M.OPENS_MARK, U+203A).
+K.PLACES = 6
+K.TWO_COLUMNS_FROM = 300
+K.OPENS_MARK = " \226\128\186"
+
 -- The background, the header, its title and -- where `closePress` is given -- the close box.
 -- `aside` is an optional second text after the title, in the label colour, which the link view
--- uses for the air rate. Answers the y the content starts at.
+-- uses for the air rate. `backPress`, where given, puts a back box left of the title: the close
+-- box's shape with a `<` drawn in it. Answers the y the content starts at.
 --
 -- No strip: the header stands on the page's own background and a 1 px line closes it, inset by
 -- the padding, as the flight view separates its groups. The close box takes the menu glyph's
 -- shape: an outlined square with the X drawn as two lines, in the line colour. The header is as
 -- tall as the box needs; a header without one (the link view in the widget zone) is as tall as
 -- its title.
-function K.header(nodes, g, title, closePress, aside)
+function K.header(nodes, g, title, closePress, aside, backPress)
   local C = UD.C
   local headerH = g.fontH + 2 * g.textPad
-  if closePress ~= nil then headerH = g.closeSize + 2 * g.closeMargin end
+  if closePress ~= nil or backPress ~= nil then headerH = g.closeSize + 2 * g.closeMargin end
 
   UD.rect(nodes, g.x, g.y, g.w, g.h, C.bg, true)
   UD.hline(nodes, g.x + g.pad, g.y + headerH - 1, g.w - 2 * g.pad)
@@ -149,20 +158,36 @@ function K.header(nodes, g, title, closePress, aside)
     right = closeX - g.pad
   end
 
+  local left = g.x + g.pad
+  if backPress ~= nil then
+    local size = g.closeSize
+    local backY = g.y + g.closeMargin
+    UD.button(nodes, left, backY, size, size, C.bg, backPress)
+    K.outline(nodes, left, backY, size, size, C.line, 2)
+    local inset = math.floor(size * 0.3)
+    local th = math.max(2, math.floor(size * 0.09))
+    local tipX, tailX = left + inset, left + size - 1 - inset
+    local midY = backY + math.floor(size / 2)
+    local reach = math.floor((size - 2 * inset) / 2)
+    line(nodes, tailX, midY - reach, tipX, midY, C.line, th)
+    line(nodes, tipX, midY, tailX, midY + reach, C.line, th)
+    left = left + size + g.pad
+  end
+
   -- The title on one line, in the largest face up to 1.4 times the flight view's that fits the
   -- room beside the close box: a face above the flight view's header's where this header has the
   -- height, that header's own where it has not (a header without a close box is exactly as tall as that).
-  local titleW = math.max(10, right - (g.x + g.pad))
+  local titleW = math.max(10, right - left)
   local titleFont = UD.selectFont(math.min(headerH - 2 * g.textPad, math.floor(g.fontH * 1.4)), titleW, title)
   local titleH = UD.measure(titleFont, title)
   local titleY = g.y + math.floor((headerH - titleH) / 2)
   local shown = UD.fit(titleFont, title, titleW)
-  UD.label(nodes, g.x + g.pad, titleY, titleW, titleH, shown, titleFont, C.text, LEFT)
+  UD.label(nodes, left, titleY, titleW, titleH, shown, titleFont, C.text, LEFT)
   if aside ~= nil then
     local used = UD.textWidth(titleFont, shown) + 2 * g.pad
     local asideW = titleW - used
     if asideW > 10 then
-      UD.label(nodes, g.x + g.pad + used, g.y + math.floor((headerH - g.fontH) / 2), asideW, g.fontH,
+      UD.label(nodes, left + used, g.y + math.floor((headerH - g.fontH) / 2), asideW, g.fontH,
         aside, g.font, C.label, LEFT)
     end
   end
@@ -218,6 +243,50 @@ function K.button(nodes, g, f, x, y, w, h, name, sub, selected, press)
   UD.label(nodes, x + g.textPad, top, inner, f.nameH, UD.fit(f.name, name, inner), f.name, ink, CENTER)
   if hasSub then
     UD.label(nodes, x + g.textPad, top + f.nameH, inner, f.subH, UD.fit(f.sub, sub, inner), f.sub, subInk, CENTER)
+  end
+end
+
+-- A row with a name on the left and a value on the right, the whole row one press: the BATTERY
+-- PROFILE row of the quick menu. `values` are the host's texts for the value, longest first, each
+-- a shortening of the one before; the longest that fits is shown, with the mark that the row opens
+-- a page after it, and the last where none fits.
+function K.valueRow(nodes, g, f, x, y, w, h, name, values, press)
+  local C = UD.C
+  UD.button(nodes, x, y, w, h, C.bg, press)
+  K.outline(nodes, x, y, w, h, C.line, 2)
+  local top = y + math.max(0, math.floor((h - f.nameH) / 2))
+  local inner = w - 2 * g.textPad - 2 * g.pad
+  local nameW = math.min(UD.textWidth(f.name, name), math.floor(inner / 2))
+  UD.label(nodes, x + g.textPad + g.pad, top, nameW, f.nameH, UD.fit(f.name, name, nameW), f.name, C.text, LEFT)
+  local valueW = inner - nameW - g.pad
+  local value = K.OPENS_MARK
+  if type(values) == "table" and #values > 0 then
+    value = values[#values] .. K.OPENS_MARK
+    for i = 1, #values do
+      local text = values[i] .. K.OPENS_MARK
+      if UD.textWidth(f.name, text) <= valueW then
+        value = text
+        break
+      end
+    end
+  end
+  UD.label(nodes, x + w - g.textPad - g.pad - valueW, top, valueW, f.nameH, value, f.name, C.text, RIGHT)
+end
+
+-- A button that cannot be pressed now: drawn as K.button draws it -- `selected` filled in the ok
+-- colour -- but as an outline in the track colour, with labels in the label colour, and no press.
+function K.inert(nodes, g, f, x, y, w, h, name, sub, selected)
+  local C = UD.C
+  if selected then UD.rect(nodes, x, y, w, h, C.ok, true) end
+  UD.rect(nodes, x, y, w, h, selected and C.ok or C.track, false, 0, 2)
+  local ink = selected and C.ink or C.label
+  local inner = w - 2 * g.textPad
+  local hasSub = sub ~= nil and sub ~= ""
+  local blockH = f.nameH + (hasSub and f.subH or 0)
+  local top = y + math.max(0, math.floor((h - blockH) / 2))
+  UD.label(nodes, x + g.textPad, top, inner, f.nameH, UD.fit(f.name, name, inner), f.name, ink, CENTER)
+  if hasSub then
+    UD.label(nodes, x + g.textPad, top + f.nameH, inner, f.subH, UD.fit(f.sub, sub, inner), f.sub, ink, CENTER)
   end
 end
 
