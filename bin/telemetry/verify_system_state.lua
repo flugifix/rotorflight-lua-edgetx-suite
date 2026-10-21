@@ -121,10 +121,25 @@ debug.sethook()
 eq(received.rx_link_up,true,"measured read positive control")
 assert(instructions < 2000, "live packed read exceeds 2000 instructions: " .. instructions)
 print(string.format("Packed state: %d assertions, read %d instructions (<2000)",count,instructions))
+-- Largest supported table, with the live duplicate deliberately last.
+model.getSensor=function(index) if index < 99 then return {name="STAT"} end end
+for index=1,99 do
+  values["telem"..index], live["telem"..index] = 8, index == 99
+end
+reset(); Sensors.getLiveValue("system_status");clock=clock+250
+instructions=0
+debug.sethook(function() instructions=instructions+1 end,"",1)
+received=State.read(Sensors,"system_status")
+debug.sethook()
+eq(received.rx_link_up,true,"last of 99 duplicate sensors is live")
+assert(instructions < 7000,"largest sensor table exceeds 7000 instructions: " .. instructions)
+print(string.format("Largest table: %d instructions (<7000)",instructions))
 if arg[1] == "--self-test" then
+  for index=1,99 do live["telem"..index]=false end
+  live.STAT=false
+  eq(State.read(Sensors,"system_status"),nil,"negative-control fixture is stale")
   local original = Sensors.getLiveValue
   Sensors.getLiveValue = Sensors.getValue
-  live.STAT = false
   local ok = pcall(function() eq(State.read(Sensors,"system_status"),nil,"held-value negative control") end)
   Sensors.getLiveValue = original
   assert(not ok,"negative control failed to reject a held reading")
