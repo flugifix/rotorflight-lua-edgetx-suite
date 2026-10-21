@@ -1,8 +1,8 @@
 local source = string.sub(debug.getinfo(1, "S").source, 2)
 local root = string.match(source, "^(.*)[/\\]bin[/\\]tests[/\\]") or "."
-local now, armChanges, pushes, invalidations, configLoads = 0, 0, {}, 0, 0
+local now, armChanges, pushes, invalidations, configLoads, releases = 0, 0, {}, 0, 0, 0
 local provider = {
-  acquire = function() return true end, release = function() end,
+  acquire = function() return true end, release = function() releases = releases + 1 end,
   drain = function() return true end, invalidate = function() invalidations = invalidations + 1 end,
   publish = function() end, currentIdentity = function() return "model" end,
 }
@@ -52,12 +52,16 @@ armChanges = 1
 Task.wakeup()
 assert(#pushes == 0 and not Task.isRunning(), "arming transition did not stop the sync before a write")
 assert(configLoads == 1, "diagnostics completion loaded the provider a second time")
+assert(releases == 1, "a stopped sync did not release its ELRS reader lease: " .. tostring(releases))
 
 armChanges, pushes = 0, {}
 Task.start(Task.MODE_PROBE)
 assert(invalidations == 2, "read-only diagnostics did not preempt the paused parameter reader")
+local releasesAtProbe = releases
 for i = 1, 4 do now = i; Task.wakeup() end
 assert(not Task.isRunning() and Task.getRateField(), "simulated read-only probe did not finish")
+assert(releases == releasesAtProbe + 1, "a finished probe did not release its ELRS reader lease: "
+  .. tostring(releases - releasesAtProbe))
 for i = 1, #pushes do assert(pushes[i].kind ~= 0x2D, "read-only simulated probe emitted a parameter write") end
 pushes = {}
 assert(Task.selectOption("rate", 0))
