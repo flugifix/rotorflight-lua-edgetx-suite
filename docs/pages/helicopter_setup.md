@@ -240,6 +240,11 @@ controls from a replaced card cannot edit the new step. Regression checks retain
 every old card across these transitions at all four supported preview sizes.
 Consumed MSP batches are released when a new idle batch starts, keeping completed
 polling jobs from accumulating throughout a visit.
+Completion history uses a separate versioned Lua data file per FC under
+`rfsuite.user/wizard-history/`. Each record is read directly within 64 bytes;
+compiled overlays are ignored. Existing text records are read until the next
+explicit save creates the Lua record. The original text record is preserved, and
+an existing Lua record takes precedence even after resetting its completion bits.
 
 [Source-to-port coverage and deliberate adaptations](../reference/helicopter-wizard-source-coverage.md)
 record the function inventory, behavior contracts and independent golden vectors.

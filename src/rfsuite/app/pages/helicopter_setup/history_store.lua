@@ -2,12 +2,15 @@
 -- One bounded record per MCU. No saved bit can satisfy a physical check.
 local M = {}
 local MAX = (1 << 19) - 1
-local function read(path)
+local function read(path, legacy)
   local file = io.open(path, "r")
   if not file then return nil, false end
   local text = io.read(file, 64)
   io.close(file)
-  local value = type(text) == "string" and tonumber(string.match(text, "^RFW1 (%d+)\r?\n$"))
+  -- This is a fixed Lua data record, read without compiling or running card code.
+  -- A bounded read also rejects truncated, oversized and unsupported records.
+  local pattern = legacy and "^RFW1 (%d+)\r?\n$" or "^return { version = 1, completed = (%d+) }\r?\n$"
+  local value = type(text) == "string" and tonumber(string.match(text, pattern))
   if value and value >= 0 and value <= MAX and value % 1 == 0 then return value, true end
   return nil, true
 end
@@ -16,7 +19,8 @@ function M.new(identity, modelFile)
   if type(identity) == "string" and #identity <= 64 and string.match(identity, "^[%w_-]+$") then
     local root = type(modelFile) == "string" and string.match(modelFile, "^(.*)/[^/]+$")
     h.directory = (root or "/SCRIPTS/TOOLS/rfsuite.user") .. "/wizard-history"
-    h.path = h.directory .. "/" .. identity .. ".txt"
+    h.path = h.directory .. "/" .. identity .. ".lua"
+    h.legacyPath = h.directory .. "/" .. identity .. ".txt"
   end
   function h:publish(mask)
     self.mask, self.count = mask, 0
@@ -26,6 +30,8 @@ function M.new(identity, modelFile)
     if not self.path then self.invalid = true; return end
     local mask, found = read(self.path)
     if not found then mask, found = read(self.path .. ".tmp") end
+    if not found then mask, found = read(self.legacyPath, true) end
+    if not found then mask, found = read(self.legacyPath .. ".tmp", true) end
     self.invalid = found and mask == nil
     self:publish(mask or 0)
   end
@@ -38,7 +44,7 @@ function M.new(identity, modelFile)
     local temporary = self.path .. ".tmp"
     local file = io.open(temporary, "w")
     if not file then return false end
-    local wrote = io.write(file, "RFW1 " .. mask .. "\n")
+    local wrote = io.write(file, "return { version = 1, completed = " .. mask .. " }\n")
     io.close(file)
     if not wrote or read(temporary) ~= mask then return false end
     local _, exists = read(self.path)
