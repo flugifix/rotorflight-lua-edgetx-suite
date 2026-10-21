@@ -61,7 +61,7 @@ return {
     -- under-measurement (1 826). Counts-only, the loop runs to its poll caps, which
     -- is what a pass on the radio could always cost.
     ["pass.splash"] = { target = 7100, measured = 2439 },
-    ["pass.standby.build"] = { target = 14000, measured = 11907 },
+    ["pass.standby.build"] = { target = 14000, measured = 12004 },
     ["pass.standby.state"] = { target = 12000, measured = 8809 },
     ["sweep.standby"] = { target = 950, measured = 935 },
 
