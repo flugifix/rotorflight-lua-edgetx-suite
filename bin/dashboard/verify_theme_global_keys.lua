@@ -33,7 +33,8 @@ local THEMES = { "urban", "grid", "deck" }
 -- The fields an earlier build of the theme Keys pages stored; they must stay as they are and be
 -- read by nothing.
 local OLD_FIELDS = { "key_page_down", "key_page_up", "key_mdl", "key_sys", "key_tele" }
-local NEW_FIELD = { pageDown = "theme_key_page_down", pageUp = "theme_key_page_up", sys = "theme_key_sys" }
+local NEW_FIELD = { pageDown = "theme_key_page_down", pageUp = "theme_key_page_up", mdl = "theme_key_mdl",
+  sys = "theme_key_sys" }
 local GLOBAL_TAG = "@i18n(app.pages.settings_dashboard_settings.urban_key_global)@"
 
 local function readFile(path)
@@ -126,10 +127,12 @@ local function hasTag(row)
   return string.find(row.label or "", GLOBAL_TAG, 1, true) ~= nil
 end
 
--- Open the real Keys page over old stored choices in either preference scope.
-local function openPage(theme, scope)
+-- Open the real Keys page over old stored choices in either preference scope. `globalKeys`, where
+-- given, are radio-wide key choices stored beside them (Settings > Dashboard > Keys).
+local function openPage(theme, scope, globalKeys)
   local DashboardLib = loadRel("app/pages/settings/dashboard/lib.lua")()
   local radio = seedOld(theme)
+  for k, v in pairs(globalKeys or {}) do radio[k] = v end
   local model = seedOld(theme)
   local modelPrefs = { dashboard = model }
   _G.rfsuite = { session = { mcu_id = "0123456789ABCDEF01234567", modelPreferences = modelPrefs } }
@@ -160,23 +163,24 @@ local function pageCase(theme, scope)
       return "row " .. i .. " starts on " .. tostring(rows[i].selected) .. ", expected " .. unbound[i]
     end
   end
-  -- As the radio comes, SYS (row 4) and TELE (row 5) are held; the page keys and MDL are not.
+  -- As the radio comes, PAGE > and PAGE < (rows 1 and 2, quick menu), SYS (row 4) and TELE (row 5)
+  -- are held; MDL (row 3) is not.
   for i = 1, 5 do
-    local want = (i >= 4)
+    local want = (i ~= 3)
     if isHeld(rows[i]) ~= want or hasTag(rows[i]) ~= want then
       return "row " .. i .. (want and " is not marked held" or " is marked held") .. " with no global choice"
     end
   end
-  rows[1].onSelect("battery")
+  rows[3].onSelect("battery")
   page.onSave(ctx)
   if #reports ~= 1 or reports[1].ok ~= true then return "save did not report success" end
   local bad = checkOld(theme, radio, "radio store") or checkOld(theme, model, "model store")
   if bad then return bad end
   local target = scope == "model" and model or radio
   local other = scope == "model" and radio or model
-  local newKey = configKey(theme, NEW_FIELD.pageDown)
-  if target[newKey] ~= "battery" then return "PAGE > was not stored in " .. newKey end
-  if other[newKey] ~= nil then return "PAGE > leaked into the other scope" end
+  local newKey = configKey(theme, NEW_FIELD.mdl)
+  if target[newKey] ~= "battery" then return "MDL was not stored in " .. newKey end
+  if other[newKey] ~= nil then return "MDL leaked into the other scope" end
   if type(page.onClose) == "function" then page.onClose() end
 
   -- SYS put on Theme radio-wide: its row is the theme's again.
@@ -188,9 +192,10 @@ local function pageCase(theme, scope)
   if not isHeld(rows[5]) then return "TELE lost its mark when only SYS changed" end
   if type(page.onClose) == "function" then page.onClose() end
 
-  -- A page key held radio-wide (Nothing is a choice there, not Theme) is marked; TELE put back on
-  -- Theme is the theme's again.
+  -- A page key held radio-wide (Nothing is a choice there, not Theme) is marked; PAGE < and TELE
+  -- put on Theme are the theme's again.
   radio.key_page_down = "none"
+  radio.key_page_up = "theme"
   radio.key_tele = "theme"
   rows = {}
   page.onReload(ctx)
@@ -202,9 +207,11 @@ local function pageCase(theme, scope)
 end
 
 -- PAGE must distinguish an untouched row from a deliberate Quick menu choice, through the
--- actual page callback, preference store, layout and global resolver in both scopes.
+-- actual page callback, preference store, layout and global resolver in both scopes. The page
+-- keys are put on Theme radio-wide first, as a pilot must before the theme's binding acts.
 local function pageMenuCase(theme, scope)
-  local page, ctx, radio, model, reports, DashboardLib = openPage(theme, scope)
+  local page, ctx, radio, model, reports, DashboardLib =
+    openPage(theme, scope, { key_page_down = "theme", key_page_up = "theme" })
   if #rows ~= 5 then return "the Keys page drew " .. #rows .. " rows, expected 5" end
   local layout = loadRel("widgets/dashboard/themes/" .. theme .. "/layout.lua")()
   local Keys = loadRel("widgets/dashboard/keys.lua")()
@@ -282,6 +289,14 @@ local function bindingCase(theme)
   if action ~= "openTool" or global ~= true then return "the radio-wide SYS default did not hold the key" end
   action, global = Keys.resolve({ key_sys = "theme" }, "sys", ctx.keys)
   if action ~= own or global ~= false then return "SYS on Theme radio-wide did not take the theme's binding" end
+
+  -- The same for a page key: the radio-wide Quick menu holds it until the pilot puts it on Theme.
+  layout.bindKeys({ themeConfig = { [NEW_FIELD.pageDown] = "link" } }, ctx)
+  if ctx.keys.pageDown ~= own then return "a stored PAGE > choice bound " .. tostring(ctx.keys.pageDown) end
+  action, global = Keys.resolve({}, "pageDown", ctx.keys)
+  if action ~= "openView:menu" or global ~= true then return "the radio-wide PAGE > default did not hold the key" end
+  action, global = Keys.resolve({ key_page_down = "theme" }, "pageDown", ctx.keys)
+  if action ~= own or global ~= false then return "PAGE > on Theme radio-wide did not take the theme's binding" end
 
   local views = {}
   for i = 1, #(init.views or {}) do views[init.views[i].id] = true end
