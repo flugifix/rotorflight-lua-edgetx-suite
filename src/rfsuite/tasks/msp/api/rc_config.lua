@@ -27,7 +27,7 @@ end
 
 function Api.parse(buf)
   if type(buf) ~= "table" then return nil end
-  if #buf < 7 then return nil end
+  if #buf < 12 then return nil end
   local i = 1
   local out = {}
   out.rc_center = u16_from_bytes(buf[i], buf[i+1]); i = i + 2
