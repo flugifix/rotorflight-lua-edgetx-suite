@@ -1,1 +1,0 @@
-- Keep Helicopter Setup reactive properties valid while the next screen is prepared, reject input from replaced cards, release completed MSP polling batches, save per-FC history as versioned Lua data and explain the manual fallback when automatic board alignment is unavailable (`helicopter_setup`).

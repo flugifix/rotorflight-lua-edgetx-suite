@@ -1,1 +1,0 @@
-- Show a live helicopter for Board orientation checks, with a dedicated compact layout, cached projection and stale-data feedback. Mode-switch drawings follow actual switch/mode input; mechanical reference drawings remain explicit test instructions (`helicopter_setup`).

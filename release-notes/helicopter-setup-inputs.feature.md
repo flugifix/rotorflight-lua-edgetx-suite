@@ -1,1 +1,0 @@
-- Learn receiver, mode and profile controls from fresh FC channel snapshots captured when detection starts, include the current throttle-switch endpoint, omit receiver UART selection on the radio, clarify input directions and mechanical drawings, and offer custom cyclic/tail servo Hz while preserving pulse calibration (`helicopter_setup`).
