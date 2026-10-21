@@ -383,7 +383,7 @@ return {
     controlDirections = "Control directions",
     bladePitch = "Blade pitch",
     gyroCheck = "Gyro check",
-    help = "Back: previous task or return to the Suite; pending changes offer Save/Discard.\nContinue: next task; remove all blades and follow the task instructions.\nSave & next: store acknowledged changes and complete this step.\n?: full task instructions, earlier completion and missing prerequisites. Check again on every visit.",
+    help = "Back: previous task or return to the Suite; pending changes offer Save/Discard.\nContinue: next task; remove all blades and follow the task instructions.\nSave & next: store acknowledged changes and complete this step.",
     help_title = "Helicopter Setup",
     calibrated = "Calibration complete",
     centreDegrees = "Centre trim (deg)",

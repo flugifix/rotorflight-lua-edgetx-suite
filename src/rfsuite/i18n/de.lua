@@ -383,7 +383,7 @@ return {
     controlDirections = "Steuerrichtungen",
     bladePitch = "Blattpitch",
     gyroCheck = "Kreiselprüfung",
-    help = "Zurück: vorherige Aufgabe oder Suite-Menü; bei Änderungen Speichern/Verwerfen wählen.\nWeiter: nächste Aufgabe; alle Blätter abnehmen und die Aufgabenhinweise beachten.\nSpeichern & weiter: bestätigte Änderungen speichern und diesen Schritt abschließen.\n?: vollständige Aufgabenhinweise, frühere Abschlüsse und fehlende Vorarbeiten. Bei jedem Besuch erneut prüfen.",
+    help = "Zurück: vorherige Aufgabe oder Suite-Menü; bei Änderungen Speichern/Verwerfen wählen.\nWeiter: nächste Aufgabe; alle Blätter abnehmen und die Aufgabenhinweise beachten.\nSpeichern & weiter: bestätigte Änderungen speichern und diesen Schritt abschließen.",
     help_title = "Helikopter einrichten",
     calibrated = "Kalibrierung abgeschlossen",
     centreDegrees = "Mittentrimmung (Grad)",
