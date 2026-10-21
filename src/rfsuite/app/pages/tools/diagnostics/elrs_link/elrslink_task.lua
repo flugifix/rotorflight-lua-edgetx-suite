@@ -112,13 +112,9 @@ local statusDetail = nil
 -- The ELRS provider is looked up in its registry on every use, never kept here: the dashboard
 -- unloads it when its last consumer lets go, and a copy kept in this file would then be a second
 -- instance beside the one the next consumer loads.
-local function registeredProvider()
-    local rf = _G.rfsuite
-    return type(rf) == "table" and rf.elrs_config or nil
-end
-
 local function configProvider()
-    return registeredProvider() or loadModule("lib/elrs_config.lua")
+    local rf = _G.rfsuite
+    return rf and rf.elrs_config or loadModule("lib/elrs_config.lua")
 end
 
 -- Every status this task reports, as a key and fallback pair in the form the packager
@@ -477,7 +473,8 @@ local function completeTask()
     local wrote = state == "write" or state == "write_rf"
     state = "done"
     taskComplete = true
-    local provider = registeredProvider()
+    local rf = _G.rfsuite
+    local provider = rf and rf.elrs_config
     if provider then
         if wrote then provider.invalidate(nil) end
         provider.release("diagnostics", dirty)
@@ -640,7 +637,8 @@ end
 function M.reset()
     -- A page build resets an unstarted task. Do not load the provider just to release a lease this
     -- task cannot yet own; start/wakeup loads it when a parameter conversation can actually run.
-    local provider = registeredProvider()
+    local rf = _G.rfsuite
+    local provider = rf and rf.elrs_config
     if provider then provider.release("diagnostics", state == "ping" or state == "read" or state == "write") end
     taskComplete = false
     configWaitStartedAt = 0

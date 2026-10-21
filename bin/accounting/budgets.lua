@@ -339,7 +339,7 @@ return {
     ["page.developer_msp_experiments_page.build"] = { target = 5600, measured = 4448 },
     ["page.developer_msp_speed_page.build"] = { target = 4150, measured = 3318 },
     ["page.developer_settings_page.build"] = { target = 3250, measured = 2593 },
-    ["page.diagnostics_elrs_link_page.build"] = { target = 4400, measured = 4388 },
+    ["page.diagnostics_elrs_link_page.build"] = { target = 4400, measured = 4391 },
     ["page.diagnostics_fblstatus_page.build"] = { target = 6300, measured = 5023 },
     ["page.diagnostics_info_page.build"] = { target = 7250, measured = 5783 },
     ["page.diagnostics_rfstatus_page.build"] = { target = 7750, measured = 6162 },
