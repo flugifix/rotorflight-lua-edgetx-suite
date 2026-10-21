@@ -19,14 +19,6 @@ on:
   workflow_call:
 
 jobs:
-  msp-override-payloads:
-    name: MSP override payloads
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y lua5.3
-      - run: lua5.3 bin/msp/verify_msp_override_payloads.lua
-
   instruction-budget:
     name: Instruction budget
     runs-on: ubuntu-latest
@@ -169,3 +161,11 @@ jobs:
 
       - name: Check the pending release notes
         run: python bin/release/collect_release_notes.py --check
+
+  msp-override-payloads:
+    name: MSP override payloads
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/msp/verify_msp_override_payloads.lua

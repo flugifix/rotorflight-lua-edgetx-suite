@@ -5,14 +5,6 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  msp-override-payloads:
-    name: MSP override payloads
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y lua5.3
-      - run: lua5.3 bin/msp/verify_msp_override_payloads.lua
-
   create-zip:
     name: Build PR ZIP (${{ matrix.lang }})
     runs-on: ubuntu-latest
@@ -241,3 +233,11 @@ jobs:
           python bin/release/verify_release_notes_rule.py \
             --base '${{ github.event.pull_request.base.sha }}' \
             --body-file pr-body.txt
+
+  msp-override-payloads:
+    name: MSP override payloads
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/msp/verify_msp_override_payloads.lua
