@@ -70,6 +70,34 @@ return function(w)
       cards[#cards+1]=card
     end
   end
+  -- Geometry correction is bit 1 of each servo's flags (bit 0 is reverse). The firmware reads it
+  -- on every servo update, so it needs no restart. It is offered for the cyclic servos only.
+  local cyclic={}
+  for _,index in ipairs(w:servos()) do if index~=3 then cyclic[#cyclic+1]=index end end
+  if #cyclic>0 then
+    local card=w:cardDef(L.geometryCorrection,L.geometryHint,{
+      {kind="choice",label=L.geometryCorrection,values={L.off,L.on},
+        get=function()
+          local result
+          for _,index in ipairs(cyclic) do
+            local on=(w.data.servo_configurations.servos[index].flags & 2)~=0 and 2 or 1
+            if result and result~=on then return 0 end
+            result=on
+          end
+          return result or 0
+        end,
+        set=function(v)
+          if v~=1 and v~=2 then return end
+          for _,index in ipairs(cyclic) do
+            local s=w.data.servo_configurations.servos[index]
+            s.flags=v==2 and (s.flags | 2) or (s.flags & ~2)
+          end
+          w:touch("servo_configurations",false,true)
+        end}
+    })
+    card.summary=L.geometryQuick
+    cards[#cards+1]=card
+  end
   if #cards==0 then cards[1]=w:cardDef(L.servoType,L.servoTypeHint,{w:value(L.servo,function() return L.unavailable end)}) end
   return cards
 end

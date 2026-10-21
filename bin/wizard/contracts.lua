@@ -647,6 +647,21 @@ return function(h)
     rate.set(200);check(wave.visible(),"REVIEW supported timing restores the same waveform")
     eq(c[1].rows[4].get(),L.uniform,"REVIEW group Hz edit resolves mixed rates explicitly")
   end)
+  case("S07.geometry-correction",function()
+    local w=world();local c=step(w,"servoType");local card=c[#c]
+    eq(card.title,L.geometryCorrection,"S07 geometry correction has a card of its own")
+    local row=card.rows[1];local servos=w.data.servo_configurations.servos
+    servos[0].flags=1;servos[1].flags=0;servos[2].flags=0;servos[3].flags=0
+    eq(row.get(),1,"S07 geometry correction reads off")
+    row.set(2)
+    eq(servos[0].flags,3,"S07 geometry correction keeps the reverse bit")
+    eq(servos[1].flags,2,"S07 geometry correction sets every cyclic servo")
+    eq(servos[3].flags,0,"S07 geometry correction leaves the tail servo alone")
+    check(w.dirty.servo_configurations and not w.rebootPending,"S07 geometry correction is written without a restart")
+    servos[2].flags=0;eq(row.get(),0,"S07 differing geometry flags read as mixed")
+    row.set(1);eq(servos[0].flags,1,"S07 clearing geometry correction keeps the reverse bit")
+    eq(row.get(),1,"S07 geometry correction reads off again")
+  end)
   case("S07.servo-bands-and-reboot",function()
     local w=world();w.checks.unplugged=true
     local c=step(w,"servoType");c[1].rows[2].set(3)
