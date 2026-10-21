@@ -72,7 +72,7 @@ With *Urban* selected, full screen shows the theme itself rather than the quick 
 draws no close button: a **long press on RTN** leaves full screen, which the radio always
 allows. Six places on the screen open a page over it, and a seventh opens the suite's tool:
 
-- **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so does
+- **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so do
   TELE and the page keys by default.
 - **The tool button** beside it opens the suite's tool inside the widget, as the quick menu's
   *MAIN MENU* does; so does SYS, as it comes. The tool opens only while the model is
