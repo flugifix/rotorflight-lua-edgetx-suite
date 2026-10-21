@@ -105,7 +105,21 @@ local function releaseStandby(self, reason)
   self._standbyElrsIdentityAt = nil
   self._standbyElrsConfig = nil
   self._standbyCrsf = nil
-  if module and type(module.release) == "function" then module.release(self._standbyModuleOwner) end
+  if module and type(module.release) == "function" then
+    module.release(self._standbyModuleOwner)
+    -- The ELRS provider is loaded for standby and for the TX power alert. When the last standby
+    -- screen closes and the alert is off, it is unloaded with its power decoder; lib/crsf.lua
+    -- stays, since the MSP transport and the telemetry drain share that one frame multiplexer.
+    local rf = _G.rfsuite
+    if type(module.consumerCount) == "function" and module.consumerCount() == 0 and type(rf) == "table"
+        and type(rf.clearModule) == "function" and DashboardAudio
+        and type(DashboardAudio.releaseElrsConfig) == "function"
+        and DashboardAudio.releaseElrsConfig(self.preferences and self.preferences.audio_events) then
+      rf.clearModule("lib/elrs_config.lua")
+      rf.clearModule("lib/elrs_power.lua")
+      rf.elrs_config = nil
+    end
+  end
 end
 local MspRuntime = requireModule("tasks/msp/runtime.lua")
 local I18nModule = requireModule("i18n/init.lua")

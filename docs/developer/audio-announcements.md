@@ -74,11 +74,15 @@ push attempts across discovery and parameter reads, 48 fields, eight chunks per 
 bytes per field. The alert cancels its owned read while armed or before the connection sequence is
 complete, and starts a fresh owned read after those conditions clear.
 
-The provider is one intentionally retained shared singleton, separate from the standby display
-module that is unloaded when the surface closes. Other consumers keep local references to the
-provider, so the standby exit cannot evict it from the module registry. Its retained protocol
-state is bounded to at most one active transaction and one last snapshot containing the four
-matched fields; its heap cost has not been measured.
+The provider is one shared singleton, and it stays loaded only while the standby screen or the
+TX power alert uses it. When the last standby screen closes with the alert off, the dashboard
+unloads it from the module registry together with `lib/elrs_power.lua`; `Audio.releaseElrsConfig`
+first drops the alert's own reference, so the next user loads one fresh instance rather than a
+second one beside the old. With the alert on, the provider stays. `lib/crsf.lua` stays loaded in
+either case: the MSP transport and the telemetry drain share that one frame multiplexer. Its
+retained protocol state is bounded to at most one active transaction and one last snapshot
+containing the four matched fields. On desktop Lua 5.3 with the accounting stubs, the heap after
+leaving standby is 9.2 KiB above the level before it with the alert off, and 37.2 KiB with it on.
 **An announcement measured against the air rate** -- the RSSI and Downlink headroom alerts -- needs
 the row of `lib/link_rates.lua` for the rate the link runs. `linkRateRow` in `lib/audio.lua` resolves
 it from the `RFMD` reading on the state and the transmitter module's ExpressLRS generation, which

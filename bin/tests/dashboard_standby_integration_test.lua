@@ -287,6 +287,15 @@ do
     calls.cancel = calls.cancel + 1
     calls.cancelOwners[#calls.cancelOwners + 1] = owner
   end
+  -- A standby exit with the TX power alert off unloads the provider; a reload here hands the
+  -- observed instance back, so the calls below stay counted. The unloading itself is checked in
+  -- the lifetime block further down.
+  local configPath = "/SCRIPTS/TOOLS/rfsuite-core/lib/elrs_config.lua"
+  local loadScriptBeforeSpy = loadScript
+  _G.loadScript = function(path, mode)
+    if path == configPath then return function() _G.rfsuite.elrs_config = Config; return Config end end
+    return loadScriptBeforeSpy(path, mode)
+  end
 
   local Runtime = assert(loadfile(runtimePath))()
   local MspRuntime = assert(_G.__rfsuite_msp_runtime_module
@@ -922,16 +931,19 @@ do
   if _G.rfsuite.session then _G.rfsuite.session.modelPreferencesResolved = savedResolved end
 
   for key, value in pairs(original) do Config[key] = value end
+  _G.loadScript = loadScriptBeforeSpy
   MspRuntime.getState = originalMspState
 end
 
 -- Standby is a display-only module. Exercise its lifetime through the actual loader and runtime:
 -- disabled widgets must not load it, active widgets share one instance, and the last exit must
--- release every widget-held reference without evicting the shared ELRS provider.
+-- release every widget-held reference. The shared ELRS provider goes with it while the TX power
+-- alert is off and stays while the alert is on.
 install()
 do
   local standbyPath = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/standby.lua"
   local configPath = "/SCRIPTS/TOOLS/rfsuite-core/lib/elrs_config.lua"
+  local powerPath = "/SCRIPTS/TOOLS/rfsuite-core/lib/elrs_power.lua"
   _G.rfsuite.clearModule("widgets/dashboard/standby.lua")
   local sharedConfig = assert(_G.rfsuite.require("lib/elrs_config.lua"))
   local originalLoadScript = loadScript
@@ -976,6 +988,19 @@ do
     and firstModule.consumerCount() == 1)
   check("standby entry holds the shared ELRS provider", first._standbyElrsConfig == sharedConfig)
 
+  -- The alert was on earlier in this session and kept its own reference: with the alert off, the
+  -- exit must make it let go too, or a later alert and a later standby would talk to the module
+  -- through two providers.
+  local Audio = assert(_G.rfsuite.require("lib/audio.lua"))
+  local function audioProviderSlot()
+    for index = 1, 64 do
+      local name = debug.getupvalue(Audio.releaseElrsConfig, index)
+      if name == "elrsConfigModule" then return index end
+      if name == nil then return nil end
+    end
+  end
+  local slot = assert(audioProviderSlot(), "the audio module's provider reference was not found")
+  debug.setupvalue(Audio.releaseElrsConfig, slot, sharedConfig)
   local releasedCache = first._standbyCache
   first.preferences.dashboard.standby_enabled = false
   first._job = nil
@@ -983,7 +1008,12 @@ do
   check("disabled exit evicts last standby display module", first._standbyModule == nil
     and first._standbyCache == nil and first._standbyElrsConfig == nil and first._standbyCrsf == nil
     and _G.rfsuite.modules[standbyPath] == nil)
-  check("standby exit retains shared ELRS provider", _G.rfsuite.modules[configPath] == sharedConfig)
+  check("standby exit with the TX power alert off releases the shared ELRS provider",
+    _G.rfsuite.modules[configPath] == nil and _G.rfsuite.elrs_config == nil
+      and _G.rfsuite.modules[powerPath] == nil
+      and select(2, debug.getupvalue(Audio.releaseElrsConfig, slot)) == nil)
+  check("standby exit releases the radio status helper it loaded",
+    _G.rfsuite.modules["/SCRIPTS/TOOLS/rfsuite-core/lib/radio_status.lua"] == nil)
 
   first.preferences.dashboard.standby_enabled = true
   first._job = nil
@@ -995,8 +1025,14 @@ do
     and first._standbyCache ~= nil and first._standbyCache ~= releasedCache)
 
   local second = newWidget(true)
+  second.preferences.audio_events.tpwr_alert = true
   second:refresh(0, nil)
   second:refresh(0, nil)
+  for _ = 1, 4 do first:refresh(0, nil); second:refresh(0, nil) end
+  local reloadedConfig = second._standbyElrsConfig
+  check("standby re-entry after a release loads one fresh shared ELRS provider", reloadedConfig ~= nil
+    and reloadedConfig ~= sharedConfig and first._standbyElrsConfig == reloadedConfig
+    and _G.rfsuite.elrs_config == reloadedConfig)
   check("two widgets share one loaded standby display module", standbyLoads == 2
     and second._standbyModule == reloadedModule and reloadedModule.consumerCount() == 2)
   first:background()
@@ -1007,7 +1043,8 @@ do
   second:background()
   check("last widget exit evicts shared standby display module", second._standbyModule == nil
     and _G.rfsuite.modules[standbyPath] == nil and reloadedModule.consumerCount() == 0)
-  check("two-widget exit still retains shared ELRS provider", _G.rfsuite.modules[configPath] == sharedConfig)
+  check("last exit with the TX power alert on keeps the shared ELRS provider",
+    _G.rfsuite.modules[configPath] == reloadedConfig and _G.rfsuite.elrs_config == reloadedConfig)
 
   first._foreground = true
   first._job = nil

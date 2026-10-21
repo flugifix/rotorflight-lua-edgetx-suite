@@ -2003,6 +2003,17 @@ local function cancelTxPowerRead(audioState, reason)
   audioState.txPowerRequested = nil
 end
 
+--- Lets go of the ELRS configuration provider unless the TX power alert is on, and says whether
+--- it did. The dashboard asks when its standby screen closes: with the alert off nothing in this
+--- Lua state needs the provider any more, so it can be unloaded, and the alert loads it afresh
+--- when it is switched on. With the alert on, the provider stays, and the one instance stays
+--- shared, because parameter replies carry no transaction id.
+function Audio.releaseElrsConfig(events)
+  if prefEnabled(events, "tpwr_alert", false) then return false end
+  elrsConfigModule = nil
+  return true
+end
+
 --- The transmitter module's maximum power and dynamic-power state for this connection, copied
 --- from the shared ELRS configuration snapshot; `done` is set once it has answered or given up.
 ---

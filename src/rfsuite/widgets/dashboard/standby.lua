@@ -11,6 +11,9 @@ function M.release(owner)
   if next(consumers) == nil and type(_G) == "table" and type(_G.rfsuite) == "table"
       and type(_G.rfsuite.clearModule) == "function" then
     _G.rfsuite.clearModule(MODULE_PATH)
+    -- Loaded by this module for the TX battery field. It holds no state, so a theme that keeps
+    -- its own reference loses nothing.
+    _G.rfsuite.clearModule("lib/radio_status.lua")
   end
 end
 
