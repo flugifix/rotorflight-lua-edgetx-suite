@@ -74,8 +74,9 @@ skipped frames follow the link; both hold for Grid's screen too.
 With *Grid* selected, full screen shows the theme itself rather than the quick menu. The theme
 draws no close button: a **long press on RTN** leaves full screen. What opens where:
 
-- **The menu button** opens the [quick menu](quick-menu.md); so does TELE by default. Unbound
-  PAGE keys do nothing while the theme itself is showing.
+- **The menu button** opens the [quick menu](quick-menu.md); so does TELE by default. PAGE
+  keys left on *Theme* radio-wide and unbound on Grid's *Keys* page do nothing while the theme
+  itself is showing.
 - **The tool button** opens the suite's tool, only while the model is disarmed; so does SYS, as it
   comes.
 - **The link bars** open the *ELRS* link page.

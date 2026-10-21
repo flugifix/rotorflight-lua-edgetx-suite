@@ -73,7 +73,8 @@ draws no close button: a **long press on RTN** leaves full screen, which the rad
 allows. Six places on the screen open a page over it, and a seventh opens the suite's tool:
 
 - **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so does
-  TELE by default. Unbound PAGE keys do nothing while the theme itself is showing.
+  TELE by default. PAGE keys left on *Theme* radio-wide and unbound on Urban's *Keys* page do
+  nothing while the theme itself is showing.
 - **The tool button** beside it opens the suite's tool inside the widget, as the quick menu's
   *MAIN MENU* does; so does SYS, as it comes. The tool opens only while the model is
   disarmed: while it is armed the button is drawn grey and a press does nothing.
@@ -153,14 +154,15 @@ encoder, which moves from pack to pack -- while *NO BATTERY* stays at the foot, 
 be picked. RTN closes a page as well.
 
 What the page keys, MDL, SYS and TELE do in full screen is chosen at two levels. The radio-wide
-choice at *System* → *Settings* → *Dashboard* → [*Keys*](../pages/settings/dashboard/keys.md) comes first and holds for every theme: as it comes, SYS opens the
-suite's tool and TELE the quick menu there, and the page keys and MDL are left on *Theme*. A key
+choice at *System* → *Settings* → *Dashboard* → [*Keys*](../pages/settings/dashboard/keys.md)
+comes first and holds for every theme: as it comes, SYS opens the suite's tool and TELE the quick
+menu there, and the page keys and MDL are left on *Theme*. A key
 left on *Theme* does what Urban's own *Keys* page binds it to, which is where a key can open one of
 Urban's pages; a key held radio-wide is marked *(global)* on Urban's page and cannot be changed
 there. Urban binds nothing until the pilot does: with the theme itself showing, every unbound
 key on *Theme*, including PAGE > and PAGE <, does nothing. Outside full screen MDL, SYS and TELE
-open the radio's own menus as always. A key set to open a page closes that page again when pressed while it is showing, so a
-second TELE closes the quick menu. A key set to the tool does nothing while the model is armed.
+open the radio's own menus as always. A key set to open a page closes that page again when
+pressed while it is showing, so a second TELE closes the quick menu. A key set to the tool does nothing while the model is armed.
 MDL, SYS or TELE bound on Urban's page does nothing while a different page is on top. PAGE keys
 on *Theme* close the quick menu or open it over another page, unless bound to the page on top,
 which they close instead. A radio without one of these keys simply never uses its setting.

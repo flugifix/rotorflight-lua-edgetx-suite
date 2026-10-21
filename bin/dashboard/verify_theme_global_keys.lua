@@ -187,6 +187,18 @@ local function pageCase(theme, scope)
   if isHeld(rows[4]) or hasTag(rows[4]) then return "SYS on Theme radio-wide is still marked held" end
   if not isHeld(rows[5]) then return "TELE lost its mark when only SYS changed" end
   if type(page.onClose) == "function" then page.onClose() end
+
+  -- A page key held radio-wide (Nothing is a choice there, not Theme) is marked; TELE put back on
+  -- Theme is the theme's again.
+  radio.key_page_down = "none"
+  radio.key_tele = "theme"
+  rows = {}
+  page.onReload(ctx)
+  page.build(ctx)
+  if not isHeld(rows[1]) or not hasTag(rows[1]) then return "PAGE > held radio-wide is not marked held" end
+  if isHeld(rows[2]) or hasTag(rows[2]) then return "PAGE < on Theme is marked held" end
+  if isHeld(rows[5]) or hasTag(rows[5]) then return "TELE on Theme radio-wide is still marked held" end
+  if type(page.onClose) == "function" then page.onClose() end
 end
 
 -- PAGE must distinguish an untouched row from a deliberate Quick menu choice, through the
