@@ -415,19 +415,21 @@ end
 check("two-column detailed GPS text rectangles do not overlap", gpsNoOverlap)
 -- The screen skips a saved row the zone cannot carry and draws the GPS row after it; the
 -- snapshot has to prepare the details for the rows the screen keeps, not stop at the skipped one.
-local skippedGpsItems = standby.decode("clock+clock+clock/tx_gps")
-local skippedGpsCache = { text = text }
-local skippedGpsValues = standby.snapshot(skippedGpsItems, skippedGpsCache, { w = 480, h = 480 })
-local skippedGpsScene = standby.build({ w = 480, h = 480 }, "Waiting", text,
-  skippedGpsItems, skippedGpsValues, skippedGpsCache)
-local skippedDetails = 0
-for i = 1, #skippedGpsScene do
-  local value = rendered(skippedGpsScene[i])
-  if type(value) == "string" and (string.find(value, "Latitude: ", 1, true)
-      or string.find(value, "HDOP: ", 1, true)) then skippedDetails = skippedDetails + 1 end
+do
+  local skippedGpsItems = standby.decode("clock+clock+clock/tx_gps")
+  local skippedGpsCache = { text = text }
+  local skippedGpsValues = standby.snapshot(skippedGpsItems, skippedGpsCache, { w = 480, h = 480 })
+  local skippedGpsScene = standby.build({ w = 480, h = 480 }, "Waiting", text,
+    skippedGpsItems, skippedGpsValues, skippedGpsCache)
+  local skippedDetails = 0
+  for i = 1, #skippedGpsScene do
+    local value = rendered(skippedGpsScene[i])
+    if type(value) == "string" and (string.find(value, "Latitude: ", 1, true)
+        or string.find(value, "HDOP: ", 1, true)) then skippedDetails = skippedDetails + 1 end
+  end
+  check("a GPS row after a skipped row shows its details", #rectangles(skippedGpsScene, 7) == 1
+    and skippedDetails == 2)
 end
-check("a GPS row after a skipped row shows its details", #rectangles(skippedGpsScene, 7) == 1
-  and skippedDetails == 2)
 local callsAfterGps = gpsCalls
 tick = 1150
 local cachedGpsValues = standby.snapshot(gpsItems, gpsCache)
@@ -618,6 +620,30 @@ do
     check(name .. " an unchanged name is not measured again", measured == before)
     nameCache.snapshotValues = { model = "Gaui X3" }
     check(name .. " a name that fits is drawn whole", nameNode.text() == "Gaui X3")
+    do
+      -- The firmware string is the other radio-supplied name and is shortened the same way.
+      local longFirmware, firmwareCache = string.rep("W", 20), {}
+      local firmwareScene = standby.build({ w = case[2], h = case[3] }, "Waiting", text,
+        standby.decode(case[2] >= 700 and "clock+tx_battery+firmware" or "firmware+clock"),
+        { firmware = longFirmware }, firmwareCache)
+      local firmwareNode
+      for i = 1, #firmwareScene do
+        local node = firmwareScene[i]
+        if node.type == "label" and type(node.text) == "function" and string.sub(node.text(), 1, 1) == "W" then
+          firmwareNode = node
+        end
+      end
+      local firmwareShown = firmwareNode and firmwareNode.text() or ""
+      check(name .. " a firmware string wider than its field is shortened with ... to the field width",
+        firmwareNode ~= nil and string.sub(firmwareShown, -3) == "..." and #firmwareShown < #longFirmware + 3
+          and lcd.sizeText(firmwareShown, firmwareNode.font) <= firmwareNode.w)
+      before = measured
+      firmwareNode.text(); firmwareNode.text()
+      check(name .. " an unchanged firmware string is not measured again", measured == before)
+      firmwareCache.snapshotValues = { firmware = "EdgeTX 2.12.2" }
+      check(name .. " a changed firmware string is measured again and drawn whole when it fits",
+        firmwareNode.text() == "EdgeTX 2.12.2" and measured > before)
+    end
     -- Detailed GPS needs three detail columns and the row height of four text lines: a full-width
     -- field on an 800x480 screen has both; 480x320 shows the compact presentation.
     local savedGps = getTxGPS
