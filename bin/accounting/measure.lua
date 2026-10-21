@@ -1186,31 +1186,6 @@ addRow("pass.swap", base.worst.swap or 0)
 -- the startup window. A row measured on a window where the class never occurs would be a
 -- zero that reads as free.
 addRow("pass.splash", base.startupWorst.splash or base.worst.splash or 0)
-do
-  local largest = runStandbyScenario("clock+date+tx_battery+model/"
-    .. "timer1+timer2+timer3+uptime/tx_battery+model+timer1+timer2", nil, true, 12)
-  local composite = runStandbyScenario("elrs+elrs/elrs+elrs/elrs+elrs", nil, true, 6)
-  local gps = runStandbyScenario("clock+date+tx_battery+model/"
-    .. "timer1+timer2+timer3+uptime/tx_gps", {
-    fix = true, numsat = 12, lat = 52.12345, lon = 13.54321,
-    alt = 1234, speed = 56, heading = 2712, hdop = 85,
-  }, false, 9)
-  local elrsNoReply = runStandbyScenario("elrs", nil, false, 1)
-  local elrsReady = runStandbyScenario("elrs", nil, true, 1)
-  local batteries = runStandbyScenario("tx_battery+tx_battery+tx_battery+tx_battery/"
-    .. "tx_battery+tx_battery+tx_battery+tx_battery/"
-    .. "tx_battery+tx_battery+tx_battery+tx_battery", nil, false, 12)
-  local runs = { largest, composite, gps, elrsNoReply, elrsReady, batteries }
-  local build, state, sweep, refs = 0, 0, 0, 0
-  for i = 1, #runs do
-    build = math.max(build, runs[i].worst.standby or 0); state = math.max(state, runs[i].worst.state or 0)
-    sweep = math.max(sweep, runs[i].sweep); refs = math.max(refs, runs[i].refs)
-  end
-  addRow("pass.standby.build", build,
-    "12-field simple and repeated layouts, six ELRS fields, detailed GPS, ELRS ready and no-response states")
-  addRow("pass.standby.state", state, "cached no-FC snapshot and provider step")
-  addRow("sweep.standby", sweep, refs .. " reactive references")
-end
 addRow("pass.startup.worst", base.coldWorst, base.settlePasses .. " passes to settle")
 
 -- The background half of a STATE pass, as the widget calls it: the onconnect runner, the
@@ -1361,6 +1336,34 @@ for _, file in ipairs(objectFiles) do
   end
 end
 table.sort(boxTypes)
+
+-- The standby screen: no flight controller, each composition on a fresh world. Placed after
+-- every row that is measured on the world the reference scenario left standing.
+do
+  local largest = runStandbyScenario("clock+date+tx_battery+model/"
+    .. "timer1+timer2+timer3+uptime/tx_battery+model+timer1+timer2", nil, true, 12)
+  local composite = runStandbyScenario("elrs+elrs/elrs+elrs/elrs+elrs", nil, true, 6)
+  local gps = runStandbyScenario("clock+date+tx_battery+model/"
+    .. "timer1+timer2+timer3+uptime/tx_gps", {
+    fix = true, numsat = 12, lat = 52.12345, lon = 13.54321,
+    alt = 1234, speed = 56, heading = 2712, hdop = 85,
+  }, false, 9)
+  local elrsNoReply = runStandbyScenario("elrs", nil, false, 1)
+  local elrsReady = runStandbyScenario("elrs", nil, true, 1)
+  local batteries = runStandbyScenario("tx_battery+tx_battery+tx_battery+tx_battery/"
+    .. "tx_battery+tx_battery+tx_battery+tx_battery/"
+    .. "tx_battery+tx_battery+tx_battery+tx_battery", nil, false, 12)
+  local runs = { largest, composite, gps, elrsNoReply, elrsReady, batteries }
+  local build, state, sweep, refs = 0, 0, 0, 0
+  for i = 1, #runs do
+    build = math.max(build, runs[i].worst.standby or 0); state = math.max(state, runs[i].worst.state or 0)
+    sweep = math.max(sweep, runs[i].sweep); refs = math.max(refs, runs[i].refs)
+  end
+  addRow("pass.standby.build", build,
+    "12-field simple and repeated layouts, six ELRS fields, detailed GPS, ELRS ready and no-response states")
+  addRow("pass.standby.state", state, "cached no-FC snapshot and provider step")
+  addRow("sweep.standby", sweep, refs .. " reactive references")
+end
 
 ------------------------------------------------------------------------------
 -- Per box type: one render, and one sweep of what that render collected.
