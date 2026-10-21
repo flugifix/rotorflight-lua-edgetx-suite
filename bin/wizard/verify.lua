@@ -584,5 +584,15 @@ if arg[1]=="--export" then
   end
   local file=assert(io.open(arg[2],"w"));file:write(json(exported));file:close()
 end
+-- The radio fonts have no em dash or ellipsis glyph: such a character draws as a gap.
+for _,locale in ipairs({"en","de"}) do
+  local file=assert(io.open("src/rfsuite/i18n/"..locale..".lua","rb"));local text=file:read("a");file:close()
+  local first,_,indent=string.find(text,"\n([ ]*)helicopter_setup = {")
+  local last=first and string.find(text,"\n"..(indent or "").."}",first+1,true)
+  local block=last and string.sub(text,first,last) or ""
+  check(#block>1000,"I18N "..locale.." wizard strings found")
+  check(not string.find(block,"\226\128\148",1,true) and not string.find(block,"\226\128\166",1,true),
+    "I18N "..locale.." wizard strings use glyphs the radio fonts have")
+end
 print(string.format("Wizard: %d assertions, %d failures",assertions,failures))
 if failures>0 then os.exit(1) end
