@@ -7,6 +7,10 @@ sidebar_label: Standby screen
 
 When enabled, the dashboard uses one configurable standby surface while it waits for the flight controller. The header keeps the Rotorflight logo and, in fullscreen mode, the standard Suite tool entry where the zone height allows it; there is no separate Standby title. Radio information appears in rows below the header, while the current connection reason remains available at the bottom.
 
+![The standby screen with no layout saved on an 800x480 radio without an ELRS module: clock, TX battery and the selected model above the ELRS row](../images/dashboard/standby/standby-800x480.png)
+
+![The same on a 480x320 radio: clock and TX battery above the ELRS row](../images/dashboard/standby/standby-480x320.png)
+
 The editor builds the layout row by row. Every filled field in a row gets an equal share of its width, and no empty gap is stored. *+ Row* is offered only while another row fits the radio screen. *+ Field* is offered only when the existing modules and every choice offered for the new field fit at the narrower width. Each *Field* list is filtered to the modules that fit there. There are no manual size or move controls. A value too wide for its field at the normal size is drawn in the small font, and a model name or firmware string longer than its field is shortened with "...".
 
 Until a layout is saved, a zone narrower than 700 pixels shows Clock and TX battery in the first row and a full-width ELRS row below it; a zone at least 700 pixels wide, such as the full screen of an 800x480 radio, shows Clock, TX battery and the selected model in the first row above the same ELRS row, and leaves the third row free. The ELRS row stays in the default on a radio without an ELRS module and then reads *No ELRS module*; replace it with another module to use the space.
