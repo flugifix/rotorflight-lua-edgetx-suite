@@ -400,6 +400,8 @@ return function(h)
     local found
     for _,r in ipairs(w.data.mode_ranges.mode_ranges) do if r.id==0 and r.range.start<r.range["end"] then found=r end end
     check(found and found.auxChannelIndex==0,"REVIEW learned mode uses the FC AUX index after five controls")
+    eq(w.message,string.format(L.switchDetected,w:channelNumber(0),found.range.start,found.range["end"]),
+      "REVIEW detection message names the stored range, not the raw samples")
     local copy=w:channelSnapshot("rc");w.data.rc.channels[6]=1000
     eq(copy[6],2000,"REVIEW click baseline is a snapshot, not a mutable packet alias")
     w.rcAt=nil;w.rxChannelsAt=getTime();cards[1].rows[2].press()

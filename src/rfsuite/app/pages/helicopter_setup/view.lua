@@ -24,7 +24,9 @@ function M.new(w, ctx, diagrams)
   local rowH = large and 52 or math.min(controlH+6, math.floor((height-2*controlH-31-rowY)/3))
   local all = {}
   local title = w.historyMode and w.L.historyTitle or (w.overview or w.modelPreparationCard or w.recoveryCard) and w.L.name or string.format("%d/19  %s", w.step, w.L.steps[w.step] or w.L.name)
-  if attitudeCard then title=string.format("%d/19  %s",w.step,card.title) end
+  if attitudeCard and not (w.historyMode or w.overview or w.confirmExit or w.modelPreparationCard or w.recoveryCard) then
+    title=string.format("%d/19  %s",w.step,card.title)
+  end
   all[#all + 1] = { type = "rectangle", x = 0, y = 0, w = width, h = height, filled = true, color = COLOR_THEME_PRIMARY2 }
   if w.historyMode or w.overview or w.confirmExit or not w.requestSteps then
     all[#all + 1] = label(10, 4, width - 54, title, large and MIDSIZE or SMLSIZE)

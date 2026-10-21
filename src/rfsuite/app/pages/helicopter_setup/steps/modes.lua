@@ -34,7 +34,7 @@ return function(w)
     local lo, hi = H.switchRange(s.base[aux + 5], value)
     w.data.mode_ranges.mode_ranges[i] = { id = s.id, auxChannelIndex = aux - 1, range = { start = lo, ["end"] = hi } }
     send(i); s.id = nil
-    w.message = string.format(L.switchDetected,w:channelNumber(aux-1),s.base[aux+5],value)
+    w.message = string.format(L.switchDetected,w:channelNumber(aux-1),lo,hi)
   end
   w.validate = function() if not assigned(0) then w.message = L.armRequired; return false end; return true end
   local cards = {}

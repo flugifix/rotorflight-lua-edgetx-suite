@@ -3,7 +3,7 @@ return function(w)
   local function apply(tail, kind)
     if not w.checks.unplugged then w.message = L.confirmCheck; return end
     local rate = ({50,333,560})[kind]
-    if not rate then w.message=L.servoHzHint;return end
+    if not rate then w.message=L.servoHzQuick;return end
     for _, index in ipairs(w:servos()) do
       if (index == 3) == tail then
         local servo = w.data.servo_configurations.servos[index]
