@@ -164,7 +164,7 @@ check("default snapshot reads only selected sources", values.clock == "12:34" an
 local selected = standby.snapshot(standby.decode("firmware+timer1/tx_gps"), { text = text },
   { w = 800, h = 480 })
 check("selected sources retain bounded values", selected.firmware == "2.12.0"
-  and selected.timer1 == ">999:59" and selected.tx_gps == "Fix · 7" and gpsCalls == 1)
+  and selected.timer1 == ">999:59" and selected.tx_gps == "Fix | 7" and gpsCalls == 1)
 check("detailed GPS values remain available for adaptive rendering", selected._gpsLines
   and selected._gpsLines[1] == "Latitude: 52.12345°"
   and selected._gpsLines[6] == "HDOP: 0.85")
@@ -349,7 +349,7 @@ getTxGPS = function()
 end
 tick = 1108
 local compactGpsValues = standby.snapshot(gpsItems, { text = text }, { w = 480, h = 320 })
-check("compact GPS does not format hidden detail fields", compactGpsValues.tx_gps == "Fix · 7"
+check("compact GPS does not format hidden detail fields", compactGpsValues.tx_gps == "Fix | 7"
   and compactGpsValues._gpsLines == nil)
 fontWidths[SMLSIZE], fontHeights[SMLSIZE] = 8, 18
 local portraitGpsCache = { text = text }
@@ -375,7 +375,7 @@ local enGpsValues = standby.snapshot(localeGpsItems, localeGpsCache, { w = 774, 
 check("GPS detail demand is recomputed when localized caption widths change",
   deGpsValues._gpsLines == nil and enGpsValues._gpsLines ~= nil)
 local gpsValues = standby.snapshot(gpsItems, gpsCache, { w = 800, h = 480 })
-check("selected GPS reads and formats transmitter fix", gpsValues.tx_gps == "Fix · 7")
+check("selected GPS reads and formats transmitter fix", gpsValues.tx_gps == "Fix | 7")
 check("GPS formats all detailed units", gpsValues._gpsLines
   and gpsValues._gpsLines[1] == "Latitude: 52.12345°"
   and gpsValues._gpsLines[3] == "Altitude: 123.4 m"
@@ -435,11 +435,11 @@ check("selected GPS snapshot respects one-second cache", gpsCalls == callsAfterG
 tick = 1209
 local refreshedGpsValues = standby.snapshot(gpsItems, gpsCache)
 check("selected GPS refreshes after bounded cadence", gpsCalls == callsAfterGps + 1
-  and refreshedGpsValues.tx_gps == "Fix · 7")
+  and refreshedGpsValues.tx_gps == "Fix | 7")
 getTxGPS = function() gpsCalls = gpsCalls + 1; return { fix = false, numsat = 3 } end
 tick = 1310
 local noFixGpsValues = standby.snapshot(gpsItems, gpsCache)
-check("selected GPS without fix still shows satellites", noFixGpsValues.tx_gps == "No fix · Sat 3"
+check("selected GPS without fix still shows satellites", noFixGpsValues.tx_gps == "No fix | Sat 3"
   and noFixGpsValues._gpsLines == nil)
 getTxGPS = function() gpsCalls = gpsCalls + 1; return { fix = nil } end
 tick = 1411
@@ -542,14 +542,27 @@ do
   local Widths = assert(loadfile(root .. "/bin/dashboard/edgetx_font_widths.lua"))()
   local savedSizeText, savedW, savedH = lcd.sizeText, LCD_W, LCD_H
   local measured = 0
+  -- A font or a character the tables do not hold is recorded, never stood in for, and checked
+  -- after each case: standby measures inside pcall, so an error raised here would only make it
+  -- fall back to its own estimate.
+  local unknownFonts, missingGlyphs = {}, {}
   local function useFonts(set)
     local byFont = { [SMLSIZE] = set.XS, [MIDSIZE] = set.L, [DBLSIZE] = set.bold_XL }
     lcd.sizeText = function(value, font)
       measured = measured + 1
-      local widths, width = byFont[font] or set.XS, 0
-      for _, code in utf8.codes(tostring(value)) do width = width + (widths[code] or widths[87]) end
-      return width, (byFont[font] or set.XS).line
+      local widths, width = byFont[font], 0
+      if widths == nil then unknownFonts[#unknownFonts + 1] = tostring(font); return 0, 0 end
+      for _, code in utf8.codes(tostring(value)) do
+        if widths[code] == nil then missingGlyphs[#missingGlyphs + 1] = string.format("U+%04X", code)
+        else width = width + widths[code] end
+      end
+      return width, widths.line
     end
+  end
+  local function sum(widths, value)
+    local width = 0
+    for _, code in utf8.codes(value) do width = width + widths[code] end
+    return width
   end
   local function has(list, kind)
     for i = 1, #list do if list[i] == kind then return true end end
@@ -566,6 +579,11 @@ do
       { Widths.std, 480, 320, "clock+clock+clock/elrs" } }) do
     useFonts(case[1]); LCD_W, LCD_H = case[2], case[3]
     local name = case[2] .. "x" .. case[3]
+    check(name .. " the stand-in measures each Lua font with its own EdgeTX table",
+      lcd.sizeText("23:59", SMLSIZE) == sum(case[1].XS, "23:59")
+        and lcd.sizeText("23:59", MIDSIZE) == sum(case[1].L, "23:59")
+        and lcd.sizeText("23:59", DBLSIZE) == sum(case[1].bold_XL, "23:59")
+        and select(2, lcd.sizeText("Ag", DBLSIZE)) == case[1].bold_XL.line)
     check(name .. " small-screen default draws its three tiles with the radio's fonts",
       tiles(standby.build({ w = case[2], h = case[3] }, "Waiting", text, standby.decode("clock+tx_battery/elrs"),
         {}, {})) == 3)
@@ -625,6 +643,9 @@ do
         detailLines == (case[2] >= 700 and 6 or 0) and allFit)
     end
     getTxGPS = savedGps
+    check(name .. " every measured font and character is in the radio's font tables: "
+      .. table.concat(unknownFonts, ",") .. table.concat(missingGlyphs, ","),
+      #unknownFonts == 0 and #missingGlyphs == 0)
   end
   lcd.sizeText, LCD_W, LCD_H = savedSizeText, savedW, savedH
 end

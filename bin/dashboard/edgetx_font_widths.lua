@@ -3,7 +3,8 @@
 -- lv_font_en_<name>.c, the advance width of each glyph descriptor rounded to whole pixels as LVGL
 -- draws it. <set> is lrg for 800x480 and std for 480x272/480x320 (radio/src/fonts/CMakeLists.txt);
 -- the Lua constants are SMLSIZE = XS, MIDSIZE = L, DBLSIZE = bold_XL (radio/src/lua/api_general.cpp).
--- Kerning is not applied. Printable ASCII plus the degree sign, the middle dot and the German letters.
+-- Kerning is not applied. Printable ASCII plus the degree sign and the German letters; these
+-- fonts have no middle dot (U+00B7), so standby does not draw one.
 return {
   lrg = {
     XS = { line = 23,

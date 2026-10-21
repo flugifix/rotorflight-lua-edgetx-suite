@@ -139,7 +139,7 @@ local SHORTENED = { model = true, firmware = true }
 local SHORTENED_WORST = string.rep("W", 8) .. "..."
 local WORST = {
   clock = "23:59", date = "2099-12-31", tx_battery = "12.0 V  100%", model = "WWWWWWWWWWWWWWW",
-  timer1 = "<-999:59", timer2 = "<-999:59", timer3 = "<-999:59", tx_gps = "No fix · Sat 99+",
+  timer1 = "<-999:59", timer2 = "<-999:59", timer3 = "<-999:59", tx_gps = "No fix | Sat 99+",
   uptime = ">999:59", firmware = "WWWWWWWWWWWWWWWWWWWW",
 }
 local ELRS_WORST = {
@@ -279,7 +279,7 @@ local function moduleFits(kind, boxW, height, labels, knownGeometry, measureCach
   if measure(label, SMLSIZE, measureCache) > headerWidth then return false end
   local worstValue = SHORTENED[kind] and SHORTENED_WORST or WORST[kind] or "-"
   if kind == "tx_gps" then
-    worstValue = string.format("%s · %s 99+", labels and labels.gps_no_fix or "No fix",
+    worstValue = string.format("%s | %s 99+", labels and labels.gps_no_fix or "No fix",
       labels and labels.gps_satellites or "Sat")
   end
   if kind == "elrs" then
@@ -508,7 +508,7 @@ local function readValues(cache, items, wantsGpsDetails)
     if gps.fix == true or gps.fix == 1 then
       local fix = cache.text and cache.text("gps_fix", "Fix") or "Fix"
       values.tx_gps = type(gps.numsat) == "number"
-        and string.format("%s · %s", fix, gps.numsat > 99 and "99+" or tostring(math.max(0, math.floor(gps.numsat)))) or fix
+        and string.format("%s | %s", fix, gps.numsat > 99 and "99+" or tostring(math.max(0, math.floor(gps.numsat)))) or fix
       if wantsGpsDetails then
         local gpsValues = {
           usableGps(gps.lat, -90, 90) and string.format("%.5f°", gps.lat) or "-",
@@ -528,7 +528,7 @@ local function readValues(cache, items, wantsGpsDetails)
       local noFix = cache.text and cache.text("gps_no_fix", "No fix") or "No fix"
       local sat = cache.text and cache.text("gps_satellites", "Sat") or "Sat"
       values.tx_gps = type(gps.numsat) == "number"
-        and string.format("%s · %s %s", noFix, sat, gps.numsat > 99 and "99+"
+        and string.format("%s | %s %s", noFix, sat, gps.numsat > 99 and "99+"
           or tostring(math.max(0, math.floor(gps.numsat)))) or noFix
     else
       values.tx_gps = "-"
