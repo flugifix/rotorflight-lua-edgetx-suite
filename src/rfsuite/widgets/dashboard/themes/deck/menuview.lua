@@ -7,9 +7,10 @@
 -- the tuning surface) is the host's. No row is added and none is left out that the host offers.
 -- The close box does what the host menu's own does: `done`.
 --
--- A row is a button; a choice without a view of its own -- the battery profiles -- is its title
--- over a grid of its options, the one in force in the ok colour. What the theme shows beside a row
--- is state the host hands out: how full the blackbox is (`ctx.info`).
+-- The rows are laid out on the host's raster (viewkit.lua, K.PLACES): a button per place, in two
+-- columns or one, and under them the host's BATTERY PROFILE row, which opens the host's page of
+-- profiles. What the theme shows on a row is state the host hands out: how full the blackbox is
+-- (`ctx.info`), and the profile in force (the record's `values`).
 
 local function requireModule(path)
   if _G.rfsuite and type(_G.rfsuite.require) == "function" then
@@ -37,30 +38,6 @@ local function blackboxLine(info)
   return string.format("%s %d%%", K.T.blackbox, math.floor(used * 100 / total + 0.5))
 end
 
--- How many columns a choice's options take in `w`.
-local function gridCols(count, w)
-  if w < 200 then return 1 end
-  return (count > 4 and w >= 400) and 3 or 2
-end
-
--- A choice's options as a grid under its title, the rows `btnH` tall; answers the y below it.
-local function optionGrid(nodes, g, f, x, y, w, bottom, item, btnH, run)
-  local UD, C = K.UD, K.C
-  local entry, options, cols = item.entry, item.options, item.cols
-  UD.label(nodes, x, y, w, f.nameH, UD.fit(f.name, entry.title or "", w), f.name, C.label, LEFT)
-  y = y + f.nameH + g.gap
-  local btnW = math.floor((w - (cols - 1) * g.gap) / cols)
-  for i = 1, #options do
-    local option = options[i]
-    local by = y + math.floor((i - 1) / cols) * (btnH + g.gap)
-    if by + btnH > bottom then break end
-    local bx = x + ((i - 1) % cols) * (btnW + g.gap)
-    K.button(nodes, g, f, bx, by, btnW, btnH, option.label, nil, option.current == true,
-      function() run(entry, option) end)
-  end
-  return y + math.ceil(#options / cols) * (btnH + g.gap)
-end
-
 function M.build(children, zone, state, ctx)
   if type(K.begin) ~= "function" then return children end
   local g = K.begin(zone, state or {})
@@ -75,50 +52,45 @@ function M.build(children, zone, state, ctx)
   local bottom = g.y + g.h - g.pad
   local f = K.rowFonts(g)
 
-  -- What is drawn first, so the rows can share the room there is (K.stretch); then the drawing.
-  -- A grid's rows are rows of the stack as well, and its title is room the rows cannot have.
-  local items, naturals, fixed = {}, {}, 0
+  -- The host's raster: K.PLACES places in two columns or one, rows of one height, and the
+  -- BATTERY PROFILE row on the row after the raster's last.
+  local cols = (g.w >= K.TWO_COLUMNS_FROM) and 2 or 1
+  local rows = math.ceil(K.PLACES / cols)
+  local rowH = math.floor((bottom - contentY - rows * g.gap) / (rows + 1))
+  local cellW = math.floor((w - (cols - 1) * g.gap) / cols)
+
   local list = ctx.list("quick")
+  local place = 0
   for i = 1, #list do
     local entry = list[i]
-    if visible(entry) then
-      local item = { entry = entry, first = #naturals + 1 }
-      if entry.kind == "choice" and entry.view == nil then
-        item.options = type(entry.options) == "function" and entry.options() or {}
-        item.cols = gridCols(#item.options, w)
-        fixed = fixed + f.nameH + g.gap
-        for _ = 1, math.ceil(#item.options / item.cols) do naturals[#naturals + 1] = f.lineH end
-      else
-        if entry.id == "erase_blackbox" and type(ctx.info) == "function" then item.sub = blackboxLine(ctx.info(entry)) end
-        naturals[#naturals + 1] = item.sub and f.rowH or f.lineH
-      end
-      items[#items + 1] = item
+    if entry.id ~= "battery_profile" and visible(entry) then
+      place = place + 1
+      if place > K.PLACES then break end
+      local sub = nil
+      if entry.id == "erase_blackbox" and type(ctx.info) == "function" then sub = blackboxLine(ctx.info(entry)) end
+      local bx = x + ((place - 1) % cols) * (cellW + g.gap)
+      local by = contentY + math.floor((place - 1) / cols) * (rowH + g.gap)
+      K.button(children, g, f, bx, by, cellW, rowH, entry.title or "", sub, false,
+        function() run(entry) end)
     end
   end
-  fixed = fixed + math.max(0, #naturals - 1) * g.gap
-  local heights = K.stretch(g, bottom - contentY, fixed, naturals)
 
-  for i = 1, #items do
-    local item = items[i]
-    local entry = item.entry
-    local rowH = heights[item.first] or f.lineH
-    if item.options then
-      if contentY + f.nameH > bottom then break end
-      contentY = optionGrid(children, g, f, x, contentY, w, bottom, item, rowH, run)
-    else
-      if contentY + rowH > bottom then break end
-      K.button(children, g, f, x, contentY, w, rowH, entry.title or "", item.sub, false,
-        function() run(entry) end)
-      contentY = contentY + rowH + g.gap
-    end
+  local profile = type(ctx.entry) == "function" and ctx.entry("battery_profile") or nil
+  if profile ~= nil and visible(profile) then
+    local values = type(profile.values) == "function" and profile.values() or {}
+    K.valueRow(children, g, f, x, contentY + rows * (rowH + g.gap), w, rowH, profile.title or "", values,
+      function() run(profile) end)
   end
   return children
 end
 
--- Rebuilt when the profile in force moves, which the grid marks. The blackbox fill is read on the
--- build only: the host re-reads it after an erase, and an erase from this menu closes it.
+-- Rebuilt when the profile in force moves, which the BATTERY PROFILE row names, and when the
+-- board's battery configuration arrives or goes, which decides whether the row is there. The
+-- blackbox fill is read on the build only: the host re-reads it after an erase, and an erase from
+-- this menu closes it.
 function M.renderKey(_, state)
-  return tostring(state and state.batteryProfile or "")
+  if state == nil then return "" end
+  return tostring(state.batteryProfile) .. (state.battery_config ~= nil and "|c" or "|")
 end
 
 return M

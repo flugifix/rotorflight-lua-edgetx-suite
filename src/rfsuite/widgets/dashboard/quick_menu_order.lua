@@ -10,12 +10,16 @@
 --
 --   absent, or not a string   the default list below, in its order
 --   ""                        nothing: the pilot has taken every entry out
---   "tool,battery_profile"    those entries, in that order
+--   "tool,erase_blackbox"     those entries, in that order
 --
 -- A string is read leniently: an id this build does not offer is dropped, and an id that occurs
 -- twice counts at its first position only. A string that names something but nothing this build
 -- offers -- a hand edit, or a card written by a build with entries this one lacks -- is not a
 -- choice this build can honour, and reads as the default rather than as an empty menu.
+--
+-- BATTERY PROFILE is not one of the entries: the menu draws it as a row of its own under the
+-- pilot's entries, whatever they are (fullscreen_menu.lua). A list saved when it was one still
+-- reads -- the id is dropped like any other this build does not offer.
 
 local M = {}
 
@@ -24,10 +28,10 @@ M.KEY = "quick_menu"
 
 -- Every entry the pilot may put in the menu, in the order the settings page lists them. Each one
 -- is an entry fullscreen_menu.lua builds under the same id.
-M.OFFERED = { "erase_blackbox", "inflight_tuning", "battery_pick", "tool", "flight_log", "battery_profile" }
+M.OFFERED = { "erase_blackbox", "inflight_tuning", "battery_pick", "tool", "flight_log" }
 
 -- What the menu shows until the pilot chooses: what it has always shown, in that order.
-M.DEFAULT = { "erase_blackbox", "inflight_tuning", "battery_pick", "tool", "battery_profile" }
+M.DEFAULT = { "erase_blackbox", "inflight_tuning", "battery_pick", "tool" }
 
 -- The title of each offered entry, for the settings page: the keys the menu draws its rows with,
 -- so the page names an entry exactly as the menu does.
@@ -37,7 +41,6 @@ M.TITLES = {
   battery_pick = "@i18n(widgets.dashboard.battery_pick_open)@",
   tool = "@i18n(widgets.dashboard.tool_open)@",
   flight_log = "@i18n(widgets.dashboard.flight_log_open)@",
-  battery_profile = "@i18n(widgets.dashboard.battery_profile)@",
 }
 
 local OFFERED_SET = {}

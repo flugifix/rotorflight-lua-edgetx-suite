@@ -17,7 +17,11 @@ local EscSensorConfigApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local ApiVersion = nil
+local EscSensorTrialApi = nil
+local Armed = nil
 local t = nil
+local buildSessionSignature
+local loadFromSession
 
 local ui = {
   loaded = false,
@@ -38,7 +42,10 @@ local ui = {
     readPending = false,
     requestRebuild = nil,
     lastSessionSignature = nil,
-    syncHeaderTitle = nil
+    syncHeaderTitle = nil,
+    visitGeneration = 0,
+    trial = { supported = nil, active = false, pending = false, cancelRequested = false, armedEpoch = nil, state = 0,
+      status = nil, nextPollAt = 0, generation = 0, mustRead = false }
   }
 }
 
@@ -55,7 +62,187 @@ local function ensureDeps()
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
+  if not EscSensorTrialApi then EscSensorTrialApi = loadModule("tasks/msp/api/esc_sensor_trial.lua") end
+  -- The shared copy: lib/armed.lua counts arm/disarm changes per Lua state, and only the copy
+  -- the tool asks on every pass sees them. A private copy would not, so where the tool's
+  -- loader exists there is no fallback; a failed load is remembered as false (no retry per pass).
+  if Armed == nil then
+    if _G.rfsuite and _G.rfsuite.require then
+      Armed = _G.rfsuite.require("lib/armed.lua") or false
+    else
+      Armed = loadModule("lib/armed.lua") or false
+    end
+  end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
+end
+
+local function trialBusy()
+  local trial = ui.runtime and ui.runtime.trial
+  return trial and (trial.active or trial.pending) or false
+end
+
+-- What the page draws from a trial reply: a reply that changes none of it needs no rebuild.
+local function drawnState()
+  local trial = ui.runtime.trial
+  return table.concat({ tostring(trial.status), tostring(trial.active), tostring(trialBusy()),
+    tostring(trial.supported), tostring(trial.mustRead), tostring(ui.dirty),
+    tostring(ui.config.half_duplex), tostring(ui.config.pin_swap) }, "|")
+end
+
+local function trialAvailable()
+  local session = getSession()
+  local api = session and session.apiVersion
+  return session and session.isConnected == true and session.fblConnected == true
+    and ApiVersion and ApiVersion.isAtLeast(api, { 12, 0, 10 })
+end
+
+local function queueTrial(action, quiet)
+  local trial = ui.runtime.trial
+  if trial.pending or not MspRuntime or not EscSensorTrialApi then return false end
+  local state = MspRuntime.getState and MspRuntime.getState()
+  local queue = state and state.queue
+  if not queue or type(queue.add) ~= "function" then return false end
+  local session = getSession()
+  local signature = buildSessionSignature()
+  local generation = trial.generation
+  local runtime = ui.runtime
+  local armedEpoch = trial.armedEpoch
+  trial.pending = true
+  local message = {
+    command = EscSensorTrialApi.command,
+    payload = EscSensorTrialApi.buildPayload(action),
+    isWrite = action ~= EscSensorTrialApi.ACTION_POLL,
+    client = "setup_esc_wiring_trial",
+    processReply = function(_, buf)
+      if ui.runtime ~= runtime or ui.runtime.trial ~= trial then return end
+      local current = ui.runtime.trial
+      if current.generation ~= generation or getSession() ~= session
+        or buildSessionSignature() ~= signature then return end
+      if armedEpoch ~= nil and Armed and Armed.changeCount and Armed.changeCount() ~= armedEpoch then return end
+      local wasActive = current.active == true
+      -- What the page draws from this reply. A poll that only says "still running" changes none
+      -- of it, and a rebuild for it would put the focus back on the first control every 0.5 s.
+      local before = drawnState()
+      current.pending = false
+      local result = EscSensorTrialApi.parse(buf)
+      if not result then
+        if quiet then current.supported = false else current.status = "invalid" end
+        current.active = false
+        current.mustRead = current.mustRead or wasActive or action ~= EscSensorTrialApi.ACTION_POLL
+      elseif quiet and result.state ~= 1 then
+        -- The opening poll only learns that the command is supported. A finished state is
+        -- kept by the flight controller until the next START or Cancel, so it belongs to an
+        -- earlier run (another visit, another tool) and is not this page's result.
+        current.supported = true
+      else
+        current.supported = true
+        current.state = result.state
+        current.active = result.state == 1
+        if result.state == 1 then
+          current.status = "running"
+          current.nextPollAt = (type(getTime) == "function" and getTime() or 0) + 50
+        elseif result.state == 2 then
+          ui.config.half_duplex = result.half_duplex
+          ui.config.pin_swap = result.pin_swap
+          ui.dirty = true
+          current.status = "success"
+          current.mustRead = false
+        elseif result.state == 3 then
+          current.status = "failed"
+          current.mustRead = true
+        elseif result.state == 4 then
+          current.status = "rejected"
+        elseif result.state == 0 then
+          if action == EscSensorTrialApi.ACTION_CANCEL then
+            current.status = "cancelled"
+            current.mustRead = true
+            ui.dirty = false
+            loadFromSession()
+          elseif wasActive then
+            current.status = "interrupted"
+            current.mustRead = true
+          end
+        else
+          current.status = "invalid"
+          current.mustRead = current.mustRead or wasActive or action ~= EscSensorTrialApi.ACTION_POLL
+        end
+      end
+      if current.cancelRequested then
+        current.cancelRequested = false
+        current.active = false
+        current.status = "cancelling"
+        current.mustRead = true
+        queueTrial(EscSensorTrialApi.ACTION_CANCEL, false)
+      end
+      local after = drawnState()
+      if after ~= before and type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
+    end,
+    errorHandler = function()
+      if ui.runtime ~= runtime or ui.runtime.trial ~= trial or getSession() ~= session
+        or buildSessionSignature() ~= signature then return end
+      local current = ui.runtime.trial
+      if current.generation ~= generation then return end
+      if armedEpoch ~= nil and Armed and Armed.changeCount and Armed.changeCount() ~= armedEpoch then return end
+      current.pending = false
+      current.active = false
+      if current.cancelRequested then
+        current.cancelRequested = false
+        current.status = "cancelling"
+        current.mustRead = true
+        if not queueTrial(EscSensorTrialApi.ACTION_CANCEL, false) then
+          current.status = "interrupted"
+        end
+      elseif action == EscSensorTrialApi.ACTION_POLL and quiet then
+        current.supported = false
+      else
+        current.status = "interrupted"
+        current.mustRead = true
+      end
+      if type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
+    end
+  }
+  if action ~= EscSensorTrialApi.ACTION_POLL then message.maxRetries = 0 end
+  queue:add(message)
+  return true
+end
+
+local function requestPageRebuild()
+  if ui.runtime and type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
+end
+
+local function startTrial()
+  local trial = ui.runtime.trial
+  local known = type(Armed) == "table" and type(Armed.isArmed) == "function"
+    and type(Armed.changeCount) == "function"
+  local armed = known and Armed.isArmed()
+  local uncertain = known and type(Armed.isUncertain) == "function" and Armed.isUncertain()
+  if not known or not trialAvailable() or armed or uncertain then trial.status = "unsafe"; requestPageRebuild(); return end
+  if ui.dirty or ui.runtime.readComplete ~= true or ui.config.protocol == 0 then
+    trial.status = "save_first"; requestPageRebuild(); return
+  end
+  trial.armedEpoch = Armed and Armed.changeCount and Armed.changeCount() or nil
+  trial.status = "starting"
+  if not queueTrial(EscSensorTrialApi.ACTION_START, false) then
+    trial.status = "interrupted"
+    trial.mustRead = true
+  end
+  requestPageRebuild()
+end
+
+local function cancelTrial()
+  local trial = ui.runtime.trial
+  if not trialBusy() then return end
+  trial.status = "cancelling"
+  if trial.pending then
+    trial.cancelRequested = true
+  else
+    trial.active = false
+    if not queueTrial(EscSensorTrialApi.ACTION_CANCEL, false) then
+      trial.status = "interrupted"
+      trial.mustRead = true
+    end
+  end
+  requestPageRebuild()
 end
 
 local function pageText(i18n, key, fallback)
@@ -68,12 +255,12 @@ local function pageText(i18n, key, fallback)
   return fallback
 end
 
-local function buildSessionSignature()
+buildSessionSignature = function()
   local session = getSession()
   return session and session.signature or "1"
 end
 
-local function loadFromSession()
+loadFromSession = function()
   local session = getSession()
   if not session or type(session.setup_esc_motors_telemetry) ~= "table" then return end
   local cached = session.setup_esc_motors_telemetry
@@ -100,6 +287,8 @@ local function queueTelemetryRead(isAutoReload)
   end
 
   local readValid = type(getSession()) == "table"
+  local runtime = ui.runtime
+  local generation = runtime.visitGeneration
   ui.runtime.readPending = true
   if not isAutoReload then
     ui.loading = true
@@ -113,6 +302,7 @@ local function queueTelemetryRead(isAutoReload)
     command = EscSensorConfigApi.command,
     simulatorResponse = EscSensorConfigApi.simulatorResponse,
     processReply = function(self, buf)
+      if ui.runtime ~= runtime or runtime.visitGeneration ~= generation then return end
       local parsed = EscSensorConfigApi.parse(buf)
       if type(parsed) ~= "table" then return Common.failPageRead(ui) end
       if parsed then
@@ -144,11 +334,16 @@ local function queueTelemetryRead(isAutoReload)
       ui.dirty = false
       ui.progress = 100
       ui.runtime.readComplete = readValid
+      ui.runtime.trial.mustRead = false
+      ui.runtime.trial.status = nil
+      ui.runtime.trial.state = 0
+      ui.runtime.trial.armedEpoch = nil
       if type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
     end,
     errorHandler = function()
+      if ui.runtime ~= runtime or runtime.visitGeneration ~= generation then return end
       readValid = false
       ui.runtime.readPending = false
       ui.loading = false
@@ -228,7 +423,10 @@ local function ensureLoaded()
       readPending = false,
       requestRebuild = nil,
       lastSessionSignature = nil,
-      syncHeaderTitle = nil
+      syncHeaderTitle = nil,
+      visitGeneration = 0,
+      trial = { supported = nil, active = false, pending = false, cancelRequested = false, armedEpoch = nil, state = 0,
+        status = nil, nextPollAt = 0, generation = 0, mustRead = false }
     }
   end
 
@@ -266,10 +464,52 @@ function M.wakeup(ctx)
 
   local signature = buildSessionSignature()
   if signature ~= ui.runtime.lastSessionSignature then
+    ui.runtime.visitGeneration = ui.runtime.visitGeneration + 1
+    ui.runtime.trial.generation = ui.runtime.trial.generation + 1
+    ui.runtime.trial.active = false
+    ui.runtime.trial.pending = false
+    ui.runtime.trial.mustRead = true
+    ui.runtime.trial.supported = nil
+    ui.runtime.trial.cancelRequested = false
+    ui.runtime.readPending = false
     ui.runtime.lastSessionSignature = signature
     ui.loaded = false
     ensureLoaded()
   end
+
+  local trial = ui.runtime.trial
+  local session = getSession()
+  local armedChanged = trial.armedEpoch ~= nil and Armed and Armed.changeCount
+    and Armed.changeCount() ~= trial.armedEpoch
+  if trialBusy() and (armedChanged or not session or session.isConnected ~= true or session.fblConnected ~= true) then
+    trial.generation = trial.generation + 1
+    trial.active = false
+    trial.pending = false
+    trial.status = "interrupted"
+    trial.mustRead = true
+    requestPageRebuild()
+  elseif trial.active and not trial.pending then
+    local now = type(getTime) == "function" and getTime() or 0
+    if now >= (trial.nextPollAt or 0) then queueTrial(EscSensorTrialApi.ACTION_POLL, false) end
+  elseif ui.runtime.readComplete == true and trial.supported == nil and not trial.pending
+    and trialAvailable() then
+    queueTrial(EscSensorTrialApi.ACTION_POLL, true)
+  end
+end
+
+local function trialStatusText(i18n, status)
+  if status == "starting" then return pageText(i18n, "detect_starting", "Starting wiring detection...") end
+  if status == "running" then return pageText(i18n, "detect_running", "Testing ESC telemetry wiring...") end
+  if status == "success" then return pageText(i18n, "detect_success", "Wiring detected. Save to store it.") end
+  if status == "failed" then return pageText(i18n, "detect_failed", "No working wiring was detected.") end
+  if status == "rejected" then return pageText(i18n, "detect_rejected", "Detection was rejected by the flight controller.") end
+  if status == "cancelled" then return pageText(i18n, "detect_cancelled", "Detection cancelled. Reload before saving.") end
+  if status == "cancelling" then return pageText(i18n, "detect_cancelling", "Cancelling wiring detection...") end
+  if status == "interrupted" then return pageText(i18n, "detect_interrupted", "Detection interrupted. Reload before saving.") end
+  if status == "invalid" then return pageText(i18n, "detect_invalid", "The flight controller returned an invalid result.") end
+  if status == "unsafe" then return pageText(i18n, "detect_unsafe", "Detection needs a live connection and a disarmed model.") end
+  if status == "save_first" then return pageText(i18n, "detect_save_first", "Save the selected telemetry protocol before detection.") end
+  return nil
 end
 
 function M.getHeaderActions()
@@ -278,8 +518,8 @@ function M.getHeaderActions()
   local isSupported = rawApiVersion and ApiVersion and ApiVersion.isAtLeast(rawApiVersion, {12, 0, 6})
 
   return {
-    save = isSupported == true,
-    reload = isSupported == true,
+    save = isSupported == true and not trialBusy() and not ui.runtime.trial.mustRead,
+    reload = isSupported == true and not trialBusy(),
     help = true,
     menu = true
   }
@@ -374,6 +614,7 @@ function M.build(ctx)
   appendProtocol("RECORD")
 
   local proto = ui.config.protocol
+  local function fieldsActive() return not trialBusy() and not ui.runtime.trial.mustRead end
 
   -- 1. Telemetry Protocol
   cursorY = cursorY + Controls.appendComboSelect(
@@ -390,7 +631,8 @@ function M.build(ctx)
           ui.runtime.requestRebuild()
         end
       end
-    end
+    end,
+    { active = fieldsActive }
   )
 
   -- 2. Half Duplex
@@ -402,7 +644,7 @@ function M.build(ctx)
       ui.config.half_duplex = nextBool and 1 or 0
       ui.dirty = true
     end,
-    function() return proto ~= 0 end
+    function() return proto ~= 0 and fieldsActive() end
   )
 
   -- 3. Pin Swap (if apiVersion >= 12.0.7)
@@ -415,7 +657,7 @@ function M.build(ctx)
         ui.config.pin_swap = nextBool and 1 or 0
         ui.dirty = true
       end,
-      function() return proto ~= 0 end
+      function() return proto ~= 0 and fieldsActive() end
     )
   end
 
@@ -428,7 +670,7 @@ function M.build(ctx)
         min = -99,
         max = 125,
         suffix = "%",
-        active = function() return proto ~= 0 end,
+        active = function() return proto ~= 0 and fieldsActive() end,
         get = function() return ui.config.voltage_correction end,
         set = function(v)
           ui.config.voltage_correction = tonumber(v) or 0
@@ -445,7 +687,7 @@ function M.build(ctx)
         min = -99,
         max = 125,
         suffix = "%",
-        active = function() return proto ~= 0 end,
+        active = function() return proto ~= 0 and fieldsActive() end,
         get = function() return ui.config.current_correction end,
         set = function(v)
           ui.config.current_correction = tonumber(v) or 0
@@ -462,7 +704,7 @@ function M.build(ctx)
         min = -99,
         max = 125,
         suffix = "%",
-        active = function() return proto ~= 0 end,
+        active = function() return proto ~= 0 and fieldsActive() end,
         get = function() return ui.config.consumption_correction end,
         set = function(v)
           ui.config.consumption_correction = tonumber(v) or 0
@@ -470,6 +712,29 @@ function M.build(ctx)
         end
       }
     )
+  end
+
+
+  if trialAvailable() and ui.runtime.trial.supported == true then
+    local trial = ui.runtime.trial
+    local statusText = trialStatusText(i18n, trial.status)
+    if statusText then
+      children[#children + 1] = { type = "label", x = x + 10, y = cursorY + 5,
+        w = w - 20, text = statusText, color = COLOR_THEME_SECONDARY1, font = SMLSIZE }
+      cursorY = cursorY + 30
+    end
+    children[#children + 1] = {
+      type = "button", x = x + 10, y = cursorY + 2, w = math.floor((w - 30) / 2),
+      text = pageText(i18n, "detect_wiring", "Detect wiring"),
+      active = function() return not trialBusy() and not trial.mustRead end,
+      press = startTrial
+    }
+    children[#children + 1] = {
+      type = "button", x = x + 20 + math.floor((w - 30) / 2), y = cursorY + 2,
+      w = math.floor((w - 30) / 2), text = pageText(i18n, "detect_cancel", "Cancel"),
+      active = function() return trialBusy() end, press = cancelTrial
+    }
+    cursorY = cursorY + 38
   end
 
   if ui.dirty then
@@ -485,6 +750,7 @@ end
 
 function M.canSave()
   return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+    and not trialBusy() and not ui.runtime.trial.mustRead
 end
 
 function M.onSave(ctx)
@@ -503,9 +769,13 @@ function M.onSave(ctx)
 end
 
 function M.onReload(ctx)
+  if trialBusy() then return false end
   local session = getSession()
   if session then
     ui.dirty = false
+    -- Ask again after the read: a capability poll that was lost does not hide the action for the
+    -- rest of the visit.
+    ui.runtime.trial.supported = nil
     loadFromSession()
     queueTelemetryRead(false)
   end
@@ -522,6 +792,12 @@ end
 
 
 function M.onClose()
+  if ui.runtime then ui.runtime.visitGeneration = (ui.runtime.visitGeneration or 0) + 1 end
+  if ui.runtime and ui.runtime.trial then
+    ui.runtime.trial.generation = ui.runtime.trial.generation + 1
+    ui.runtime.trial.active = false
+    ui.runtime.trial.pending = false
+  end
   if Common and type(Common.resetPageState) == "function" then
     Common.resetPageState(ui, {
       resetLoaded = true,
@@ -535,12 +811,14 @@ function M.onClose()
   LoadingOverlay = nil
   ConfirmDialog = nil
   ApiVersion = nil
+  EscSensorTrialApi = nil
+  Armed = nil
   t = nil
 end
 
 -- Asked before the page is left (ui/home.lua): true while an edit here is not saved.
 function M.hasUnsavedChanges()
-  return ui.dirty == true
+  return ui.dirty == true or trialBusy()
 end
 
 return M
