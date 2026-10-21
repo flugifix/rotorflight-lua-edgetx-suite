@@ -1008,6 +1008,10 @@ do
   check("disabled exit evicts last standby display module", first._standbyModule == nil
     and first._standbyCache == nil and first._standbyElrsConfig == nil and first._standbyCrsf == nil
     and _G.rfsuite.modules[standbyPath] == nil)
+  -- Standby's entry read starts with a drain of late replies, and the clock has not moved: the
+  -- provider is not idle yet, so it stays loaded until later passes have drained it.
+  check("standby exit keeps the provider while its drain is pending", _G.rfsuite.elrs_config == sharedConfig)
+  for _ = 1, 8 do Stubs.tick(); first:refresh(0, nil) end
   check("standby exit with the TX power alert off releases the shared ELRS provider",
     _G.rfsuite.modules[configPath] == nil and _G.rfsuite.elrs_config == nil
       and _G.rfsuite.modules[powerPath] == nil
@@ -1060,6 +1064,139 @@ do
 
   MspRuntime.getState = originalMspState
   _G.loadScript = originalLoadScript
+end
+
+-- The ELRS provider is unloaded only while it is idle. CRSF parameter replies carry no transaction
+-- id, so a conversation cut short leaves the provider in quarantine until the late replies are
+-- drained; unloading it then would forget that, and the next instance would take those replies
+-- for its own. A lease another consumer holds keeps it loaded as well.
+local function standbyElrsScenario()
+  install()
+  local rf = _G.rfsuite
+  rf.clearModule("widgets/dashboard/standby.lua")
+  rf.clearModule("lib/elrs_config.lua")
+  rf.clearModule("lib/elrs_power.lua")
+  rf.clearModule("lib/crsf.lua")
+  rf.elrs_config, rf.crsf_manager = nil, nil
+  local Runtime = assert(loadfile(runtimePath))()
+  local MspRuntime = assert(_G.__rfsuite_msp_runtime_module or rf.require("tasks/msp/runtime.lua"))
+  local originalMspState = MspRuntime.getState
+  MspRuntime.getState = function() return { lastConnected = false, versionReadCompleted = false } end
+  local sent = {}
+  local originalOnPush = Stubs.onPush
+  Stubs.onPush = function(command, data) sent[#sent + 1] = command; return true end
+  local widget = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
+  widget.preferences.dashboard = widget.preferences.dashboard or {}
+  widget.preferences.dashboard.standby_enabled = true
+  widget.preferences.dashboard.standby_layout = "elrs"
+  widget.preferences.audio_events = widget.preferences.audio_events or {}
+  widget.preferences.audio_events.tpwr_alert = false
+  widget.state.fblConnected, widget.state.armed = false, false
+  widget.state.hadInflightFlight, widget.flightMode = false, "preflight"
+  local s = { widget = widget }
+  function s.passes(n) for _ = 1, n do Stubs.tick(); widget:refresh(0, nil) end end
+  function s.sent(kind)
+    local count = 0
+    for i = 1, #sent do if sent[i] == kind then count = count + 1 end end
+    return count
+  end
+  function s.leave()
+    widget.preferences.dashboard.standby_enabled = false
+    widget._job = nil
+    s.passes(1)
+  end
+  function s.restore()
+    MspRuntime.getState = originalMspState
+    Stubs.onPush = originalOnPush
+  end
+  return s
+end
+local function elrsBytes(value)
+  local out = {}
+  for i = 1, #value do out[#out + 1] = string.byte(value, i) end
+  out[#out + 1] = 0
+  return out
+end
+local function elrsInfo(fieldCount)
+  local out = { 0xEA, 0xEE }
+  for _, b in ipairs(elrsBytes("ELRS TX")) do out[#out + 1] = b end
+  for _, b in ipairs({ 0x45, 0x4C, 0x52, 0x53, 0, 0, 0, 1, 0, 4, 1, 0, fieldCount }) do out[#out + 1] = b end
+  return out
+end
+local function elrsRateEntry(selected)
+  local out = { 0xEA, 0xEE, 1, 0, 0, 9 }
+  for _, b in ipairs(elrsBytes("Packet Rate")) do out[#out + 1] = b end
+  for _, b in ipairs(elrsBytes("250Hz;500Hz")) do out[#out + 1] = b end
+  for _, b in ipairs({ selected, 0, 1, 0 }) do out[#out + 1] = b end
+  for _, b in ipairs(elrsBytes("")) do out[#out + 1] = b end
+  return out
+end
+
+-- Standby closes while its read of the module waits for a parameter reply, with the TX power alert
+-- off; the replies arrive afterwards and the ELRS Link page opens in the same Lua state. It has to
+-- drain them and accept only the answer to its own request.
+do
+  local s = standbyElrsScenario()
+  s.passes(12)
+  check("standby read pinged the module", s.sent(0x28) >= 1)
+  Stubs.pushFrame(0x29, elrsInfo(1))
+  s.passes(2)
+  check("standby read asked for the first parameter", s.sent(0x2C) >= 1)
+  local provider = _G.rfsuite.elrs_config
+  s.leave()
+  check("standby exit evicts the display module", s.widget._standbyModule == nil)
+  Stubs.pushFrame(0x29, elrsInfo(1))
+  Stubs.pushFrame(0x2B, elrsRateEntry(0))
+
+  local savedSession = _G.rfsuite.session
+  _G.rfsuite.session = { isConnected = true, telemetryType = "crsf",
+    crsfTelemetryConfig = { linkRate = 500, linkRatio = 4 } }
+  local Task = assert(loadfile(root .. "/src/rfsuite/app/pages/tools/diagnostics/elrs_link/elrslink_task.lua"))()
+  Task.reset()
+  Task.start(Task.MODE_PROBE)
+  local readsBefore = s.sent(0x2C)
+  for _ = 1, 10 do
+    Stubs.tick(); Task.wakeup()
+    local field = Task.getRateField()
+    check("diagnostics took the standby read's late reply as its own: " .. tostring(field and field.selectedLabel)
+      .. " with " .. tostring(s.sent(0x2C) - readsBefore) .. " requests of its own; provider "
+      .. (_G.rfsuite.elrs_config == provider and "kept" or "replaced"), field == nil)
+  end
+  check("diagnostics asked for the parameter itself after the drain", s.sent(0x2C) > readsBefore)
+  Stubs.pushFrame(0x2B, elrsRateEntry(1))
+  Stubs.tick(); Task.wakeup()
+  local field = Task.getRateField()
+  check("diagnostics accepted the answer to its own request", field ~= nil and field.selectedLabel == "500Hz")
+  Task.reset()
+  _G.rfsuite.session = savedSession
+  s.restore()
+end
+
+-- Standby closes while the ELRS Link page holds the provider's lease. The registry keeps that
+-- instance, so a second consumer cannot load another and talk to the module beside it; once the
+-- lease is let go, a later pass unloads it.
+do
+  local s = standbyElrsScenario()
+  s.passes(12)
+  Stubs.pushFrame(0x29, elrsInfo(1))
+  s.passes(2)
+  Stubs.pushFrame(0x2B, elrsRateEntry(1))
+  s.passes(2)
+  local provider = _G.rfsuite.elrs_config
+  check("standby read completed", provider ~= nil and provider.snapshot().status == "ready")
+  check("diagnostics takes the provider's lease", provider.acquire("diagnostics"))
+  s.leave()
+  local loaded = _G.rfsuite.require("lib/elrs_config.lua")
+  check("standby exit kept the provider diagnostics holds: registry "
+    .. (_G.rfsuite.elrs_config == provider and "kept" or "dropped") .. ", a later load "
+    .. (loaded == provider and "shares it" or "made another instance"),
+    _G.rfsuite.elrs_config == provider and loaded == provider)
+  check("a second owner is refused while diagnostics holds the lease", not provider.acquire("audio:test"))
+  provider.release("diagnostics")
+  s.widget:background()
+  check("a later pass unloads the provider once the lease is let go", _G.rfsuite.elrs_config == nil
+    and _G.rfsuite.modules["/SCRIPTS/TOOLS/rfsuite-core/lib/elrs_config.lua"] == nil)
+  s.restore()
 end
 
 Stubs.releaseCard()

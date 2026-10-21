@@ -57,8 +57,11 @@ local PreferencesModule = requireModule("lib/preferences.lua")
 local ModelPreferences = requireModule("lib/model_preferences.lua")
 local DashboardAudio = requireModule("lib/audio.lua")
 local DashboardSplash = requireModule("widgets/dashboard/splash.lua")
+-- Set while the ELRS provider is due to be unloaded but is not idle yet; see releaseElrsProvider.
+local elrsReleasePending = false
 local function standbyModule(self)
   if self._standbyModule then return self._standbyModule end
+  elrsReleasePending = false
   local module = requireModule("widgets/dashboard/standby.lua")
   if module and type(module.acquire) == "function" then module.acquire(self._standbyModuleOwner) end
   self._standbyModule = module
@@ -81,6 +84,34 @@ local function cancelStandbyElrs(self, reason)
   end
   self._standbyElrsActive = false
   self._standbyActive = false
+end
+-- The ELRS provider is loaded for standby and for the TX power alert. When the last standby screen
+-- closes and the alert is off, it is unloaded with its power decoder; lib/crsf.lua stays, since the
+-- MSP transport and the telemetry drain share that one frame multiplexer. Only an idle provider is
+-- unloaded: a lease means another consumer still talks to the module through it, and a pending
+-- drain means late replies of a cut-short conversation may still be queued, which a fresh instance
+-- would take for its own. Until then the release is retried on later passes, draining as it goes.
+local function releaseElrsProvider(self)
+  local rf = _G.rfsuite
+  local config = type(rf) == "table" and rf.elrs_config or nil
+  if type(config) == "table" and type(config.idle) == "function" then
+    local idle, held = config.idle()
+    if not idle then
+      elrsReleasePending = true
+      if not held and type(config.drain) == "function" then
+        config.drain({ crsf = rf.crsf_manager, now = type(getTime) == "function" and getTime() / 100 or 0 })
+      end
+      return
+    end
+  end
+  elrsReleasePending = false
+  if type(rf) == "table" and type(rf.clearModule) == "function" and DashboardAudio
+      and type(DashboardAudio.releaseElrsConfig) == "function"
+      and DashboardAudio.releaseElrsConfig(self.preferences and self.preferences.audio_events) then
+    rf.clearModule("lib/elrs_config.lua")
+    rf.clearModule("lib/elrs_power.lua")
+    rf.elrs_config = nil
+  end
 end
 local function releaseStandby(self, reason)
   cancelStandbyElrs(self, reason)
@@ -107,18 +138,9 @@ local function releaseStandby(self, reason)
   self._standbyCrsf = nil
   if module and type(module.release) == "function" then
     module.release(self._standbyModuleOwner)
-    -- The ELRS provider is loaded for standby and for the TX power alert. When the last standby
-    -- screen closes and the alert is off, it is unloaded with its power decoder; lib/crsf.lua
-    -- stays, since the MSP transport and the telemetry drain share that one frame multiplexer.
-    local rf = _G.rfsuite
-    if type(module.consumerCount) == "function" and module.consumerCount() == 0 and type(rf) == "table"
-        and type(rf.clearModule) == "function" and DashboardAudio
-        and type(DashboardAudio.releaseElrsConfig) == "function"
-        and DashboardAudio.releaseElrsConfig(self.preferences and self.preferences.audio_events) then
-      rf.clearModule("lib/elrs_config.lua")
-      rf.clearModule("lib/elrs_power.lua")
-      rf.elrs_config = nil
-    end
+    if type(module.consumerCount) == "function" and module.consumerCount() == 0 then releaseElrsProvider(self) end
+  elseif elrsReleasePending then
+    releaseElrsProvider(self)
   end
 end
 local MspRuntime = requireModule("tasks/msp/runtime.lua")
@@ -4680,6 +4702,8 @@ function Runtime.new(zone, options)
       end
     elseif self._standbyModule then
       releaseStandby(self, "standby_left")
+    elseif elrsReleasePending then
+      releaseElrsProvider(self)
     end
     self._standbyActive = standbyProbeActive
 

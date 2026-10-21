@@ -211,6 +211,13 @@ function M.release(owner, dirty)
   end
 end
 
+-- Whether this instance may be unloaded: nobody holds it and no late replies are left to drain.
+-- The second value says whether an owner holds it, which is when nobody else may drain.
+function M.idle()
+  local held = lease ~= nil or active ~= nil
+  return not held and not quarantine, held
+end
+
 function M.request(identityKey, context)
   context = context or {}
   local owner = context.owner or "standby"
