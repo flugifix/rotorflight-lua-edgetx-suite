@@ -42,6 +42,17 @@ local function navigate(widget, after)
   if Views and type(Views.navigate) == "function" then Views.navigate(widget, after) end
 end
 
+-- The height the firmware lays a line of `font` out in, or `fallback` where it cannot say. The
+-- layout profile's `fontH` is a placement figure, not the face's height: MIDSIZE on an 800x480
+-- radio is taller than it, and a line placed `fontH` under a capacity runs into it there.
+local function lineHeight(font, fallback)
+  if lcd and type(lcd.sizeText) == "function" then
+    local ok, _, h = pcall(lcd.sizeText, "Ag", font)
+    if ok and type(h) == "number" and h > 0 then return h end
+  end
+  return fallback
+end
+
 --- What RTN does while the page is on top: what its back box does.
 function M.back(widget)
   navigate(widget, "closeView")
@@ -170,6 +181,7 @@ function M.build(children, widget)
   if dW < 200 then cols = 1 end
   if #options > 4 and dW >= 400 then cols = 3 end
   local rows = math.ceil(#options / cols)
+  local labelH = lineHeight(rowFont, fontH)
   local listY = dY + headerH + contentGap
   local btnW = math.floor((dW - paddingX * (cols + 1)) / cols)
   local btnH = math.floor((footY - gapY - listY - (rows - 1) * gapY) / rows)
@@ -196,7 +208,7 @@ function M.build(children, widget)
     end
 
     local hasDetail = option.detail ~= nil and option.detail ~= ""
-    local blockH = fontH + (hasDetail and smallH or 0)
+    local blockH = labelH + (hasDetail and smallH or 0)
     local top = y + math.max(0, math.floor((btnH - blockH) / 2))
     children[#children+1] = {
       type = "label", x=x, y=top + headTextOffY, w=btnW,
@@ -204,7 +216,7 @@ function M.build(children, widget)
     }
     if hasDetail then
       children[#children+1] = {
-        type = "label", x=x, y=top + fontH, w=btnW,
+        type = "label", x=x, y=top + labelH, w=btnW,
         text=option.detail, color=tColor, align=CENTER, font=SMLSIZE
       }
     end
