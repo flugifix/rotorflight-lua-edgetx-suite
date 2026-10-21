@@ -7,9 +7,9 @@
 --   U8 result: 0 ok, 1 custom wiring left alone, 2 no main motor, 3 no timer, 4 timer shared,
 --              5 invalid action, 6 no DMA
 --
--- A read is sent with NO payload: the queue takes any other command that carries a payload for a
--- write. Only firmware that implements the command answers it; an error reply or a short reply
--- means it is not there.
+-- A read carries no payload, or action 0 with the message marked isWrite = false: the queue takes
+-- any other payload on this command for a write. Only firmware that implements the command
+-- answers it; an error reply or a short reply means it is not there.
 
 local Api = {
   command = 0x5F14,
