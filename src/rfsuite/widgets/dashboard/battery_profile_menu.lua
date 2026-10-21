@@ -68,7 +68,7 @@ function M.build(children, widget)
   end
   local btn_color = COLOR_THEME_PRIMARY1 or BLACK
   local accent_color = COLOR_THEME_SECONDARY1 or WHITE
-  local off_color = (lcd and type(lcd.RGB) == "function") and lcd.RGB(90, 90, 90) or DARKGREY
+  local off_color = (lcd and type(lcd.RGB) == "function") and lcd.RGB(90, 90, 90) or btn_color
 
   children[#children+1] = {
     type = "rectangle", x=dX, y=dY, w=dW, h=dH, color=bg_color, filled=true
