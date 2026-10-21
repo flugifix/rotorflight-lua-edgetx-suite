@@ -1,6 +1,5 @@
 -- EdgeTX MSP API: SERVO_OVERRIDE (ported)
--- Reference module: no shipped page loads it. It is kept for the developer API tester, which
--- loads a module by its name, and as the starting point for a page that needs this message.
+-- Optional timeouts must only be used after a firmware capability probe.
 
 local Api = {
   command = 192,
@@ -43,7 +42,12 @@ function Api.buildWritePayload(data)
   local action = tonumber(data and data.action) or 0
   local lo = action % 256
   local hi = math.floor(action / 256) % 256
-  return { id, lo, hi }
+  local p = { id, lo, hi }
+  if data.timeout ~= nil then
+    local timeout = math.floor(math.max(500, math.min(30000, data.timeout)))
+    p[4], p[5] = timeout % 256, math.floor(timeout / 256) % 256
+  end
+  return p
 end
 
 return Api
