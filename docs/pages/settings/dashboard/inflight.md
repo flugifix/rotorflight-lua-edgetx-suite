@@ -37,6 +37,8 @@ Hidden until *System* → *Settings* → *General* → *Preview* → *In-flight 
 *Set up the model* is a comparator, not a rewrite. A channel that already carries nothing but
 the line the overlay needs is left alone; a variable whose name, range, precision and unit are
 already right is not written; a flight mode whose claimed trims are already off is not touched.
+A flight mode that uses another mode's trim counts as off when that mode's trim is off, so it
+keeps its link.
 So the button is only ever offered work that is left, and on a model that is fully set up it
 reports *The model already carries this setup; nothing to write.*
 
@@ -81,9 +83,12 @@ the pilot's business.
 
 ## Notes
 
-- A trim that drives a row has to be switched off as a trim in the active flight mode, or the
-  same press also moves that stick's neutral. *Set up the model* does this, and the setup
-  check reports it when it has not been done.
+- A trim that drives a row has to be switched off as a trim in every flight mode, or the same
+  press also moves that stick's neutral in the mode where it is still on. A flight mode that
+  uses another mode's trim (EdgeTX's default for FM1 to FM8, which follow FM0) counts as that
+  mode; one with a trim or an offset of its own counts on its own. *Set up the model* does
+  this, and the setup check reports *Trim still active in a flight mode* when it has not been
+  done.
 - On an ExpressLRS link use the *Wide* switch mode or a full-resolution packet rate. In
   *Hybrid* mode the value and bank channels carry 16 and 6 positions, so several rows and two
   banks miss the windows the flight controller decodes.

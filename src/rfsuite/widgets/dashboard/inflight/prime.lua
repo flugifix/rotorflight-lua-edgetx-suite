@@ -157,6 +157,28 @@ local function mspState()
   return state
 end
 
+--- The flight controller on this link, or nil while it has not said which one it is.
+--
+-- The name is `session.signature`, which tasks/msp/runtime.lua builds from the API version and the
+-- MCU id and which the tool pages already keep their reads by. It is answered only while the
+-- runtime holds an MCU id for THIS link: the runtime drops the id on every disconnect and sets it
+-- again when the UID read answers, while the signature stays at the previous board's name across
+-- the drop, so the signature alone would name the old board for the whole of that window. One form
+-- only: the runtime builds the signature in the same publish that takes the id in, so an id with no
+-- signature beside it is a moment that has not been published yet, and is answered as unknown.
+-- The UID reply sets the id first and publishes only after the model preferences are read, so a
+-- pass stopped in between leaves the new id beside the old board's signature; the id the
+-- signature was last built from (`signatureMcuId`) tells the two apart.
+local function boardOnLink()
+  local state = mspState()
+  local values = state and state.values
+  if type(values) ~= "table" or values.mcuId == nil then return nil end
+  if state.signatureMcuId ~= values.mcuId then return nil end
+  local session = _G.rfsuite and _G.rfsuite.session or nil
+  local signature = (type(session) == "table") and session.signature or nil
+  return signature
+end
+
 local function queueOf()
   local state = mspState()
   if state == nil or type(state.queue) ~= "table" or type(state.queue.add) ~= "function" then return nil end
@@ -423,8 +445,9 @@ function M.newDerivation(records, map, bankChannel, valueChannel)
     records = records, map = map,
     bankCh = bankChannel, valueCh = valueChannel,
     phase = "scan", at = 0,
-    usable = {}, skipped = {},
+    usable = {}, usableSlot = {}, skipped = {},
     bands = {}, bandSeen = {}, rows = {}, rowSeen = {},
+    enableWindows = {}, enableSeen = {}, refusedBank = {},
     set = {}, rowValues = {}, cellRecord = {}, bankWindows = {}, cells = {}, placed = 0
   }
 end
@@ -450,8 +473,25 @@ function M.deriveStep(work, budget)
         local enableCh = M.auxToWireChannel(record.enaChannel, work.map)
         local valueCh = M.auxToWireChannel(record.adjChannel, work.map)
         if enableCh == work.bankCh and valueCh == work.valueCh then
+          -- Every enable window of the pair, stepped or continuous: the board runs each slot
+          -- whose window holds the bank channel (fc/rc_adjustments.c), and a continuous one then
+          -- sets its parameter from the value channel, so a parked bank value inside its window
+          -- reaches it too. The id is not checked against this build's table on purpose: a newer
+          -- firmware can carry a function the table does not name yet, and it still fires.
+          local enableKey = windowKey(record.enaRange)
+          local continuous = (tonumber(record.adjStep) or 0) <= 0
+          local seen = enableKey ~= nil and work.enableSeen[enableKey] or nil
+          if seen ~= nil then
+            if continuous then seen.continuous = true end
+          elseif enableKey ~= nil then
+            local low, high = Functions.windowBounds(record.enaRange)
+            local window = { key = enableKey, low = low, high = high, continuous = continuous }
+            work.enableSeen[enableKey] = window
+            if low ~= nil then work.enableWindows[#work.enableWindows + 1] = window end
+          end
           if (tonumber(record.adjStep) or 0) > 0 then
             work.usable[#work.usable + 1] = record
+            work.usableSlot[#work.usable] = slot
             local bandKey, bandFrom, bandTo = windowKey(record.enaRange)
             if bandKey ~= nil and work.bandSeen[bandKey] == nil then
               work.bandSeen[bandKey] = true
@@ -500,6 +540,52 @@ function M.deriveStep(work, budget)
       if i > Functions.ROW_COUNT then break end
       work.rowIndex[work.rows[i].key] = i
     end
+    work.phase = "park"
+    work.at = 0
+    return false, nil, nil
+  end
+
+  if work.phase == "park" then
+    -- A bank is offered only when the value that parks it enables that bank and no other. The
+    -- middle of a window is clamped to the channel's travel (functions.lua, bandMidGv), so a
+    -- window that starts past 2012 us is parked inside whichever window holds 2012 us, and two
+    -- overlapping windows can share their middle. Either way every press would step a slot of the
+    -- OTHER window while the screen names this bank's parameters. The test is the firmware's own,
+    -- start inclusive and end exclusive (isRangeActive, fc/rc_modes.h), against every enable
+    -- window of the pair; a continuous slot on the bank's OWN window fails it as well, since every
+    -- pulse in that bank would also move the continuous parameter. A bank that fails it is refused
+    -- rather than moved: its slots are counted as skipped and its cells stay empty, so no step can
+    -- be aimed at it.
+    --
+    -- One bank is one unit of the budget although it walks every window of the pair. Counted on a
+    -- desktop Lua, a full table of 42 distinct windows puts its worst slice at 2 680 instructions,
+    -- below the 2 830 of the place slice on the documented 36-slot board.
+    while work.at < #work.outBands do
+      if budget ~= nil and taken >= budget then return false, nil, nil end
+      work.at = work.at + 1
+      taken = taken + 1
+      local bank = work.at
+      local band = work.bands[bank]
+      local value = work.bankValues[bank]
+      local us = value ~= nil and Functions.gvarToUs(value) or nil
+      local low, high = Functions.windowBounds({ start = band.min, ["end"] = band.max })
+      local ok = us ~= nil and low ~= nil and us >= low and us < high
+      if ok then
+        for i = 1, #work.enableWindows do
+          local window = work.enableWindows[i]
+          if (window.key ~= band.key or window.continuous) and us >= window.low and us < window.high then
+            ok = false
+            break
+          end
+        end
+      end
+      if not ok then
+        work.bankValues[bank] = nil
+        work.refusedBank[bank] = true
+        logPrime("bank %d refused: its parked value does not enable window %s..%s alone",
+          bank, tostring(band.min), tostring(band.max))
+      end
+    end
     work.phase = "place"
     work.at = 0
     return false, nil, nil
@@ -513,6 +599,11 @@ function M.deriveStep(work, budget)
       local record = work.usable[work.at]
       local bank = work.bandIndex[windowKey(record.enaRange) or ""]
       local row = work.rowIndex[windowKey(record.adjRange2) or ""]
+      if bank ~= nil and work.refusedBank[bank] then
+        -- A refused bank's slot is one the overlay cannot drive, which is what `skipped` counts.
+        work.skipped[#work.skipped + 1] = work.usableSlot[work.at]
+        bank = nil
+      end
       if bank ~= nil then
         -- Both windows of every usable slot of the bank, placed or not, as the board reads them:
         -- the cross-check below has to see them all, because the board fires every slot whose
@@ -1313,6 +1404,14 @@ function M.transferRefusal(widget, drive)
   -- commit, and it would leave the pilot believing an undo exists where none does.
   if (backup - 1) == active0 then return "same" end
   if queueOf() == nil then return "no_link" end
+  -- The session belongs to the flight controller it was read from (see M.tick), and after a
+  -- reconnect the board on the link says which one it is only once the UID read has answered. Until
+  -- then a restore would copy a spare profile of a board nobody has identified, and a backup would
+  -- lay down an undo no board can be named for, so both transfers wait, with the line that says the
+  -- board is being read. That holds for the first board as well: an undo taken there would be
+  -- inherited by whichever board identified itself first.
+  local onLink = boardOnLink()
+  if onLink == nil or (drive.board ~= nil and onLink ~= drive.board) then return "reading" end
   return nil
 end
 
@@ -1591,6 +1690,42 @@ function M.passHasRoom(widget, drive)
   return false
 end
 
+--- Another flight controller has answered, and the tuning session is not carried over to it.
+--
+-- The undo record, the comparison snapshot and the board read behind them all describe the board
+-- they were taken from. Kept for another one, the automatic backup found a record whose profile
+-- NUMBER matched and made none, the comparison after the flight measured the new board against the
+-- old one's snapshot, and the restore copied the new board's spare profile over the one it flies.
+--
+-- So the session ends as it does when the interlock is released on the ground (inflight/drive.lua,
+-- Drive:endSession), and more goes with it, because a closed interlock keeps the board and this
+-- does not. The run that read the slot table goes, so no value re-read can be made against the old
+-- board's table, and the automatic run is armed again, which reads the new board in full. The set
+-- goes back to what this build knows (Drive:seedSet): a set derived from the old board's windows
+-- would step the new board's slots by the old board's table. The profiles last seen are the old
+-- board's too, so the first reading of the new one seeds them rather than announcing a change. The
+-- per-link latches are the ones M.tick clears when it sees the link down, cleared here as well
+-- because a widget in the background never ran that pass. The automatic backup is not asked for
+-- here: the link drop took the surface off the ground (Drive:setPhase(nil) through M.cleanup), and
+-- its return to the ground with the interlock on raises that request, which waits for the new read.
+local function boardChanged(drive, board)
+  drive:endSession()
+  drive.prime = nil
+  drive.readAgain = nil
+  drive.primeInterrupted = nil
+  drive:seedSet()
+  drive.profile = nil
+  drive.rateProfile = nil
+  drive.profileChanged = nil
+  drive.profileSettleAt = nil
+  drive.profileBannerUntil = nil
+  drive._primeAutoDone = false
+  drive._primeLinkSince = nil
+  drive._primeFails = nil
+  drive.board = board
+  logPrime("another flight controller answered: the tuning session ended, the board is read again")
+end
+
 --- One pass of the ground half.
 --
 -- Costs two table reads while armed or disconnected, which is what it does for the whole of a
@@ -1613,6 +1748,23 @@ function M.tick(widget, drive)
     -- to the question of whether it can be read at all.
     drive._primeFails = nil
     return
+  end
+
+  -- Which flight controller the session belongs to. The first one to identify itself is recorded,
+  -- and the session ends only when a DIFFERENT one does. A reconnect to the same board -- after a
+  -- battery change, a short fade on the ground, or a link lost in the air, which comes back after
+  -- the landing because nothing is asked of an armed board -- ends nothing, so the undo laid down
+  -- before the flight is still the one the restore puts back. A board that has not identified
+  -- itself on this link ends nothing either: nothing is known to have changed, and the automatic
+  -- run and the automatic backup below wait for the identity anyway (`tasksDone` holds until the
+  -- MSP runtime holds an MCU id for this link).
+  local board = boardOnLink()
+  if board ~= nil and board ~= drive.board then
+    if drive.board == nil then
+      drive.board = board
+    else
+      boardChanged(drive, board)
+    end
   end
 
   -- Neither the parse below nor the derivation slice after it may go on a pass that is already

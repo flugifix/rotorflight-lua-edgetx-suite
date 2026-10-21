@@ -433,8 +433,8 @@ end
 --
 -- Refused, silently, while a value stands on the wire: moving the enable channel under a
 -- magnitude that sits inside a step window is how one press ends up counted against another
--- parameter. That is the same refusal the chip and the bank trim make, and the write lands on the
--- first pass after the pulse has gone.
+-- parameter. The chip and the bank trim are refused for the same reason (the bank trim says so
+-- on the screen, see walkTrim), and this write lands on the first pass after the pulse has gone.
 function Drive:ensureBankArmed()
   local settings = self.settings
   if not settings or (settings.bank_gvar or 0) <= 0 then return false, "no_gvar" end
@@ -504,10 +504,17 @@ end
 --- A press on the minus or plus control. Refused inside the cool-down, which is one pulse long:
 -- the flight controller needs REPEAT_DELAY between steps, and two taps closer together than that
 -- would look like one held position rather than two steps.
+--
+-- Refused just the same while a TRIM pulse or the cool-down after it is running. Both paths drive
+-- the one value variable, so a tap inside a trim's pulse either replaces its magnitude before the
+-- board has counted it -- the trim's step is lost -- or, in the same direction, stretches the
+-- plateau past REPEAT_DELAY into a second step. The trim path refuses a touch pulse the same way
+-- (Drive:pollTrimStep).
 function Drive:press(row, up)
   if not self:tuning() then return false, "not_live" end
   local now = self.radio.now()
-  if self.pulseUntil ~= nil or now < (self.coolUntil or 0) then
+  if self.pulseUntil ~= nil or now < (self.coolUntil or 0)
+    or self.trimPulseUntil ~= nil or now < (self.trimCoolUntil or 0) then
     -- Said on the screen rather than returned to a caller that drops it. The pilot's own report
     -- after three rounds is "sometimes no step at all", and his card log shows what that is: a
     -- tap inside the cool-down writes nothing, logs nothing and looks exactly like a control that
@@ -534,7 +541,17 @@ end
 
 --- The release of a held control. The value falls away at the end of the pulse rather than here,
 -- so a control tapped faster than the flight controller's own trigger delay still produces a step.
+--
+-- A hold outlasts its pulse, and the cool-down the pulse's end set runs out under the finger. So
+-- the release of a hold starts one of its own: without it the next press -- a tap, or a trim on
+-- the next pass -- would put its magnitude straight onto the hold's, with no 0 between them for
+-- the flight controller to see. For a tap, and a hold let go inside its pulse, the pulse's own end
+-- sets the later cool-down and this changes nothing.
 function Drive:release()
+  if self.holdRow ~= nil then
+    local cool = self.radio.now() + self:pulseTicks()
+    if cool > (self.coolUntil or 0) then self.coolUntil = cool end
+  end
   self.holdRow = nil
   self.holdUp = nil
   self.holdSince = nil
@@ -605,6 +622,17 @@ function Drive:cleanup(force, keepBank)
   self.trimCoolUntil = 0
 end
 
+--- The verdict while the trim block is still being walked: a fault list of one, so that every
+-- gate that refuses on a fault refuses on it too, and a code of its own for the sentence.
+M.TRIMS_PENDING = { "trims_pending" }
+
+--- Whether the setup check still waits for the trim block. Only a configuration that drives rows
+-- from the trims needs it; one that does not has nothing to wait for.
+local function trimsPending(drive)
+  local settings = drive.settings
+  return type(settings) == "table" and settings.trims == true and drive.trimsResolved ~= true
+end
+
 --- The cached setup verdict: a list of fault codes, the string "ok", or nil for "nothing about
 -- this model could be looked at".
 --
@@ -615,12 +643,31 @@ end
 --
 -- The screen reads this same cache -- see inflight/screen.lua M.checkVerdict -- so the sentence
 -- on the ground surface and the refusal below are one answer and not two walks.
+--
+-- Not taken at all while the trims are still being resolved. Without the resolved block a trim
+-- stored as a switch position cannot be turned into the number the trim-mode table is indexed by,
+-- so the trim half of the check is simply not made -- and a verdict cached then let the first
+-- closing after every start through on a trim that still trims. The answer in that state is
+-- M.TRIMS_PENDING while the interlock is closed, which refuses like a fault and says why, and
+-- "not checked" while it is open; neither is cached, so the pass that completes the walk is the
+-- one after which the real verdict is taken. A drive that is still live when its trims go back to
+-- unresolved -- the settings moved under an open surface on the ground -- answers what it has
+-- (nothing, after the forget that came with them) and takes nothing either: the new settings close
+-- the surface by themselves (M.get drops `seeded`), and the next closing waits for the walk.
 function M.verdict(drive)
   if type(drive) ~= "table" then return nil end
   if drive.phase == M.PHASE_LIVE then return drive._checkResult end
+  if trimsPending(drive) then
+    if drive.live == true then return drive._checkResult end
+    return (drive.rawSwitch == true) and M.TRIMS_PENDING or nil
+  end
   if drive._checkedAt == nil then
     drive._checkedAt = drive.radio.now()
     drive._checkResult = Setup.check(drive)
+    -- What the surface shows, kept apart from the cache: a forget (the switch let go, the settings
+    -- moved) empties the cache for the next pass to fill, and the published refusal stands until a
+    -- verdict has actually been taken again -- rather than dropping to the theme for that one pass.
+    drive._checkFault = type(drive._checkResult) == "table"
   end
   return drive._checkResult
 end
@@ -631,7 +678,9 @@ function Drive:forgetVerdict()
   self._checkResult = nil
 end
 
---- The tuning session is over: the pilot has closed the feature while standing on the ground.
+--- The tuning session is over: the pilot has closed the feature while standing on the ground, or
+-- a different flight controller has identified itself on the link (inflight/prime.lua,
+-- boardChanged, which also lets go of the board read below).
 --
 -- His ruling after the fourth radio round is that closing it on the ground or after the flight
 -- starts everything fresh, so the next opening of the interlock is a NEW session and not a
@@ -653,7 +702,9 @@ end
 --
 -- NOT reached when the widget goes to the background, nor when the feature is switched off in the
 -- settings. Neither of those is the pilot closing the overlay on the flight line, and a theme
--- reload or a tool session would otherwise throw his undo away between two flights.
+-- reload or a tool session would otherwise throw his undo away between two flights. Nor when the
+-- link drops and comes back to the same board: a battery change, a fade on the ground and a link
+-- lost in the air all come back to the board the undo was taken from.
 function Drive:endSession()
   self.backup = nil
   self.primedValues = nil
@@ -697,12 +748,37 @@ function Drive:evaluateInterlock(now)
 
   local raw = (self.radio.switchValue(settings.switch) == true)
 
+  -- The trim block, resolved on the ground before the first closing is let through. Until it is,
+  -- the setup check cannot see the trim half (see M.verdict), so the closing is refused and the
+  -- surface says the trims are being checked. The walk is the one ensureTrims takes in the air,
+  -- one slice per pass, and it is only taken while the interlock is closed: the overlay's surface
+  -- is up then in place of the theme, and the pass that completes the walk analyses the whole
+  -- switch list, which is not work to put on a pass the theme -- or the widget's cold start --
+  -- already fills. The switch is tracked meanwhile exactly as the fault gate below tracks it, and
+  -- the first reading seeds, so a widget started with the switch on opens as soon as the walk is
+  -- done and the setup check passes, and not before. The pass that completes the walk returns here
+  -- as well: the check is taken on the next one, not on top of the analysis.
+  if not self.live and self.phase ~= M.PHASE_LIVE and trimsPending(self) then
+    if raw then
+      self:ensureTrims()
+      if not trimsPending(self) then
+        logDrive("trims resolved on the ground: %d trim(s)", type(self.trims) == "table" and #self.trims or 0)
+      end
+    end
+    self.seeded = true
+    if raw ~= self.rawSwitch then
+      self.rawSwitch = raw
+      self.rawSince = now
+    end
+    return false
+  end
+
   -- The setup check, as a gate rather than as a sentence. What it names are the conditions under
   -- which a press would move something other than the parameter on the screen: a bank and a value
   -- pointed at one variable or one channel, so the board reads a step as a bank change and a bank
   -- change as a step; a mixer line that is not there or carries the wrong weight, so the code
   -- never reaches the board; a global variable whose range or precision cannot express the codes;
-  -- a trim the active flight mode still moves the stick neutral with. A FAULT therefore refuses.
+  -- a trim that still moves a stick neutral in a flight mode. A FAULT therefore refuses.
   --
   -- An UNKNOWN does not. The walk answers nil when the radio's seam offered nothing to look at --
   -- no mixer reader, no flight mode data -- and a check that could not run is not a check that
@@ -908,7 +984,12 @@ local function walkTrim(self, now, trim, dirKey, nextKey, step)
   if direction ~= self[dirKey] then
     self[dirKey] = direction
     if direction ~= 0 then
-      step(self, direction > 0)
+      -- A walk or bank step is refused while a value stands on the wire ("busy"), and the edge is
+      -- booked either way, so the press is spent. Said on the screen with the line every other
+      -- step that comes too soon gets, rather than looking like a trim that is not wired up. Once,
+      -- at the press: a held trim's repeats do not move the refusal's deadline.
+      local _, reason = step(self, direction > 0)
+      if reason == "busy" then self:refuseStep("cooling", now) end
       self[nextKey] = now + NAV_REPEAT_DELAY_TICKS
     else
       self[nextKey] = nil
@@ -917,7 +998,12 @@ local function walkTrim(self, now, trim, dirKey, nextKey, step)
   end
 
   if direction ~= 0 and self[nextKey] ~= nil and now >= self[nextKey] then
-    step(self, direction > 0)
+    -- A trim refused at the press and held on walks here once the step is off the wire, which can
+    -- be before the refusal's line has run out: the line goes with the step it no longer describes.
+    local ok = step(self, direction > 0)
+    if ok == true and self.stepRefusedReason == "cooling" then
+      self.stepRefusedUntil, self.stepRefusedReason = nil, nil
+    end
     self[nextKey] = now + NAV_REPEAT_INTERVAL_TICKS
   end
 end
@@ -1022,7 +1108,7 @@ end
 -- stood on the wire for seconds and stepped many times more often than the trim was pressed.
 -- Ending the pulse on its own clock bounds what one press can do whatever the pass rate. Holding
 -- to repeat stays with the touch controls, whose release is reported by an event rather than
--- sampled.
+-- sampled. Nor does a held trim step again when the selection moves under it (see the edge below).
 --
 -- The pulse is the trim's OWN, deliberately not the touch control's. A held touch button is
 -- published as `holding` and freezes the widget's render key, because a rebuild would delete the
@@ -1042,12 +1128,31 @@ function Drive:pollTrimStep(now)
 
   -- Everything happens at an edge. A trim that reads the same as on the last pass -- held, or let
   -- go and pressed again between two passes -- has had its answer already.
-  if row == self.trimRow and up == self.trimUp then return end
-  self.trimRow, self.trimUp = row, up
+  --
+  -- The edge is the TRIM's, not the row it lands on. In `rows` mode the two are one thing, each row
+  -- having a trim of its own. In `navigate` mode the one adjust trim answers whichever row is
+  -- selected, and the selection can move while it is held -- a walk or bank trim step, a tap on the
+  -- row list or a bank chip -- so an edge keyed on the row read each of those as a new press and
+  -- stepped the new row without the trim coming up. There `trimRow` holds 0 for "the adjust trim"
+  -- instead, never a row number.
+  local key = row
+  if row ~= nil and self:navigateMode() then key = 0 end
+  if key == self.trimRow and up == self.trimUp then return end
+  self.trimRow, self.trimUp = key, up
 
   -- Let go. The magnitude does not fall away here: a pulse still running owns it until its own
   -- clock says otherwise, and that is the whole of what makes a short press step at all.
   if row == nil then return end
+
+  -- A press while the TOUCH control owns the value variable -- its pulse, its hold, or the
+  -- cool-down after them. The same refusal Drive:press makes for a trim pulse, with the same line,
+  -- and like it this press starts nothing later: a trim held until the touch is done is still this
+  -- press. Ahead of the row change below, so a trim refused here selects nothing -- above all not
+  -- under a held button, whose surface must not be rebuilt.
+  if self.pulseUntil ~= nil or self.holdRow ~= nil or now < (self.coolUntil or 0) then
+    self:refuseStep("cooling", now)
+    return
+  end
 
   self.row = row
   -- A press while a trim pulse or the cool-down after it is still running -- this trim's again, or
@@ -1162,10 +1267,16 @@ function Drive:fastTick(now)
     return
   end
 
-  -- A running touch pulse suspends both trim paths: the pilot's thumb and the pilot's finger must
-  -- not both be writing the same variable.
-  local pulsing = (self.pulseUntil ~= nil) or (self.holdRow ~= nil)
-  if self:tuning() and not pulsing then
+  -- The pilot's thumb and the pilot's finger must not both be writing the same variable, and the
+  -- trims are read through a touch pulse rather than suspended by it: a trim press nobody read was
+  -- lost without a word, and one held across the pulse was first seen after it and stepped inside
+  -- the touch's cool-down. Each trim path refuses for itself instead -- the adjust trim while the
+  -- touch control owns the variable (Drive:pollTrimStep), the walk and bank trims while any value
+  -- stands on it (walkTrim). Only once the trim block is resolved, though: until then no trim can
+  -- be read at all, and the walk that resolves it is kept off while a touch pulse or hold owns the
+  -- variable, as it always was.
+  local touching = (self.pulseUntil ~= nil) or (self.holdRow ~= nil)
+  if self:tuning() and (self.trimsResolved or not touching) then
     self:pollNavigate(now)
     self:pollTrimStep(now)
   end
@@ -1175,9 +1286,9 @@ function Drive:fastTick(now)
     self.pulseCode = nil
     self.coolUntil = now + self:pulseTicks()
   end
-  -- The trim's pulse ends on its own clock, and it ends on every pass -- including one the touch
-  -- path took over above. A magnitude left standing by a pulse nothing is looking at any more is
-  -- precisely the state this module exists to make impossible.
+  -- The trim's pulse ends on its own clock, and it ends on every pass, whatever the trims were
+  -- doing on it. A magnitude left standing by a pulse nothing is looking at any more is precisely
+  -- the state this module exists to make impossible.
   if self.trimPulseUntil ~= nil and now >= self.trimPulseUntil then
     self.trimPulseUntil = nil
     self.trimCode = nil
@@ -1532,6 +1643,9 @@ function M.get(widget)
     -- and the setup verdict with it: a changed channel, variable or trim is a different question
     -- for the walk, and the answer gates the drive as well as filling the line on the screen.
     drive:forgetVerdict()
+    -- The refusal shown goes too: with the trims to walk again the next verdict can be a while
+    -- coming, and the old one describes settings that are gone.
+    drive._checkFault = nil
     drive.trimsResolved = false
     -- and with it whatever a walk in progress had collected: a half-read list belongs to the
     -- settings it was started under.
@@ -1579,8 +1693,21 @@ local function publish(widget, drive)
   local prime = drive.prime
   local primePhase, primeDone = nil, nil
   if type(prime) == "table" then primePhase, primeDone = prime.phase, prime.done end
+  -- Whether the interlock is closed and refused because the trims are still being walked -- or have
+  -- just been, and the verdict they wait for is taken on the next pass (Drive:evaluateInterlock), so
+  -- the surface does not drop to the theme for the one pass in between. Read off the drive rather
+  -- than through M.verdict, which would take the check on this very pass.
+  local trimsChecking = drive.live ~= true and drive.phase ~= M.PHASE_LIVE
+    and drive.rawSwitch == true and type(drive.settings) == "table" and drive.settings.trims == true
+    and (trimsPending(drive) or drive._checkedAt == nil)
+  -- and whether the surface has a refusal to show. Neither the switch closing nor a verdict being
+  -- taken moves an epoch -- the first verdict after the walk is taken on a pass after the snapshot
+  -- was built -- so the guard below watches the answer itself.
+  local setupFault = drive._checkFault == true or trimsChecking
   if type(snapshot) == "table" and snapshot.epoch == epoch
     and snapshot.reportEpoch == reportEpoch
+    and snapshot.setupFault == setupFault
+    and snapshot.trimsChecking == trimsChecking
     and snapshot.spokenId == drive.spokenId
     and snapshot.live == drive.live
     and snapshot.bank == drive.bank and snapshot.row == drive.row
@@ -1668,16 +1795,20 @@ local function publish(widget, drive)
     transferState = { kind = transfer.kind, state = transfer.state, reason = transfer.reason }
   end
 
-  -- What the board's own slot table said when it was held against the standard set. Only the
-  -- verdict and the count travel: the list of slots behind it is the ground half's own table and
-  -- goes on being appended to, and the screen has room for a sentence rather than for a list.
+  -- What the board's own slot table said when it was held against the standard set. The verdict,
+  -- the count and the cells named below travel; the full list of slots behind them stays the ground
+  -- half's own, and the screen has room for a sentence rather than for a list.
   local compare = drive.compare
   local compareState = nil
   if type(compare) == "table" then
     compareState = { verdict = compare.verdict, count = compare.count,
       -- Whether the step is the whole of the difference. It travels because the pilot can fix
       -- that one on the radio, in one field, and the sentence on screen is a different sentence.
-      stepOnly = compare.stepOnly }
+      stepOnly = compare.stepOnly,
+      -- The cells whose slot holds another function, and which one: a step there moves that
+      -- function rather than the parameter the row names, so the sentence names them. It is the
+      -- finished comparison's own list, complete when the verdict is, and read and never written.
+      named = compare.named }
   end
 
   local activeId = drive:functionId(drive.bank, drive.row)
@@ -1692,8 +1823,10 @@ local function publish(widget, drive)
     active = drive.settings.active == true,
     -- and the third reason nothing is happening: the model's own setup check refused. It is on
     -- the snapshot because the widget decides from the snapshot alone which surface a pass
-    -- belongs to, and a refusal has to reach a surface that can say so.
-    setupFault = type(drive._checkResult) == "table",
+    -- belongs to, and a refusal has to reach a surface that can say so. A closing refused while
+    -- the trims are being walked is that refusal too: its surface says the trims are being checked.
+    setupFault = setupFault,
+    trimsChecking = trimsChecking,
     radioEnabled = drive.settings.radio_enabled == true,
     modelEnabled = drive.settings.model_enabled == true,
     live = drive.live,
