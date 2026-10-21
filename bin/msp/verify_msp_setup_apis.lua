@@ -15,6 +15,7 @@ for _,entry in ipairs({{"servo",103},{"attitude",108},{"rc_command",113},{"rx_ch
   {"motor_telemetry",139},{"rx_serial_trial",0x5F12},{"tail_motor_output",0x5F14}}) do
   local m=api(entry[1]);eq(m.command,entry[2],entry[1] .. " command")
   eq(m.parse(nil),nil,entry[1] .. " rejects missing buffer")
+  eq(type(m.parse(m.simulatorResponse)),"table",entry[1] .. " parses its simulator response")
 end
 local servo=api("servo")
 local p={};for i=1,32 do u16(p,1000+i) end
@@ -27,6 +28,7 @@ d=rx.parse(p);eq(d.channel_count,18,"18 raw receiver channels")
 for i=1,18 do eq(d.channels[i],980+i*31,"raw channel order") end
 u16(p,1500);eq(rx.parse(p),nil,"too many receiver channels refused")
 eq(rx.parse({1}),nil,"short receiver channel refused")
+eq(rx.parse({}).channel_count,0,"no active receiver channel is a valid reply")
 local rc=api("rc_command");p={};for _,v in ipairs({-500,500,-1,0,1000}) do u16(p,v) end
 d=rc.parse(p)
 for i,v in ipairs({-500,500,-1,0,1000}) do eq(d.commands[i],v,"signed function order") end
@@ -48,12 +50,16 @@ bytes(lock.buildWritePayload({disabled=true}),{1},"disable arming")
 bytes(lock.buildWritePayload({disabled=false}),{0},"release arming inhibit")
 local calibration=api("acc_calibration");eq(calibration.writeCommand,205,"accelerometer command")
 bytes(calibration.buildWritePayload(),{},"accelerometer payload")
-local trial=api("rx_serial_trial")
-bytes(trial.buildPayload(1),{1},"receiver trial start")
-eq(trial.parse({1,2,1,0,1,232,3}).elapsedMs,1000,"receiver trial elapsed")
+local trial=api("rx_serial_trial");eq(trial.writeCommand,0x5F12,"trial write command")
+bytes(trial.buildWritePayload({action=1}),{1},"receiver trial start")
+bytes(trial.buildWritePayload({action=2}),{2},"receiver trial stop")
+eq(trial.buildWritePayload({action=0}),nil,"trial poll is a read, not a write")
+eq(trial.parse({1,2,1,0,1,232,3}).elapsed_ms,1000,"receiver trial elapsed")
+eq(trial.parse({1,2,1,0,1,232,3}).combo_index,2,"receiver trial combination")
 eq(trial.parse({1,2}),nil,"short trial reply refused")
 local tail=api("tail_motor_output");eq(tail.writeCommand,0x5F14,"tail write command")
-for i=0,2 do bytes(tail.buildWritePayload({action=i}),{i},"tail action") end
+for i=1,2 do bytes(tail.buildWritePayload({action=i}),{i},"tail action") end
+eq(tail.buildWritePayload({action=0}),nil,"tail read is a read, not a write")
 eq(tail.buildWritePayload({action=3}),nil,"invalid tail action refused")
 eq(tail.parse({3,6}).result,6,"tail result retained")
 eq(tail.parse({4,0}),nil,"unknown tail output refused")
@@ -69,6 +75,9 @@ eq(d.rate_aileron,64536,"legacy unsigned flat rate preserved")
 table.remove(p);eq(mixer.parse(p),nil,"partial indexed mixer record refused")
 local configs=api("servo_configurations");d=configs.parse(configs.simulatorResponse)
 eq(configs.writeCommand,212,"servo configuration write command")
+local partial={};for k,v in pairs(d.servos[0]) do partial[k]=v end;partial.rpos=nil
+eq(configs.buildWritePayload({index=0,servo=partial}),nil,"incomplete servo record refused")
+eq(configs.buildWritePayload({servo=d.servos[0]}),nil,"servo write without index refused")
 for i=0,d.servo_count-1 do
   local s=d.servos[i];local out=configs.buildWritePayload({index=i,servo=s})
   eq(out[1],i,"servo write index");eq(#out,17,"complete servo write")

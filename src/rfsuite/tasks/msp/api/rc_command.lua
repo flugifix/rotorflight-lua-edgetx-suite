@@ -1,5 +1,10 @@
--- MSP_RC_COMMAND: signed roll, pitch, yaw, collective and throttle commands.
-local Api = { command = 113, simulatorResponse = {0,0,0,0,0,0,0,0,0,0} }
+-- EdgeTX MSP API: RC_COMMAND (MSP_RC_COMMAND, 113, read only)
+--
+-- One signed S16 per control function after the channel map: roll, pitch, yaw, collective and
+-- throttle. These are function commands, not receiver channels (see rx_channels.lua).
+
+local Api = { command = 113, simulatorResponse = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }
+
 function Api.parse(buf)
   if type(buf) ~= "table" or #buf < 10 or #buf % 2 ~= 0 or #buf > 36 then return nil end
   local values = {}
@@ -10,4 +15,5 @@ function Api.parse(buf)
   end
   return { commands = values }
 end
+
 return Api
