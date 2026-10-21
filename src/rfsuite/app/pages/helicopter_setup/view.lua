@@ -86,6 +86,16 @@ function M.new(w, ctx, diagrams)
       function() return w.canEdit == true and w.rebootPending == true end)
     all[#all].visible=function() return w.rebootPending == true end
   elseif card then
+    -- Native LVGL keeps sweeping this tree while its replacement is staged.
+    -- Navigation clears w.cards before the next scene can be published.
+    local cards, cardIndex, step = w.cards, w.card, w.step
+    local finalCard = cardIndex == #cards
+    local simpleNext = w.modelPreparationCard or w.preparationCard or w.recoveryCard
+    local restartNext = w.entryRebootGate
+    local function current()
+      return w.cards == cards and w.card == cardIndex and not w.confirmExit and not w.overview
+        and not w.historyFailure and not w.error and not w.disconnectExit
+    end
     local illustrated = card.art ~= nil
     local formX = large and math.floor(width * 0.43) or illustrated and math.floor(width * 0.35)+4 or 10
     local formW = width-formX-(large and 16 or 10)
@@ -99,7 +109,7 @@ function M.new(w, ctx, diagrams)
     end
     for i, r in ipairs(card.rows) do
       local y = rowY + (i-1)*rowH
-      local function enabled() return w.canEdit == true and (not r.enabled or r.enabled()) end
+      local function enabled() return w.canEdit == true and current() and (not r.enabled or r.enabled()) end
       if r.kind == "button" or r.kind == "hold" then
         button(formX, y, formW, r.label, function() if enabled() and w:usable() then r.press() end end, enabled,
           r.kind == "hold" and "momentaryButton" or "button", r.release)
@@ -124,11 +134,11 @@ function M.new(w, ctx, diagrams)
         end
       end
     end
-    local function nextText() return (w.modelPreparationCard or w.preparationCard or w.recoveryCard) and w.L.continue or w.entryRebootGate and w.L.reboot or w.trial and w.trial.success and w.L.saveReboot or w.step == 10 and w.rebootPending and w.L.reboot or w.step == 19 and not w.singleStep and w.L.finish or
-      w.card == #w.cards and (w.singleStep and (next(w.dirty) and w.L.saveStep or (w.returnToSuite and w.L.backToSuite or w.L.backToSteps)) or w.L.saveNext) or w.L.continue end
+    local function nextText() return simpleNext and w.L.continue or restartNext and w.L.reboot or w.trial and w.trial.success and w.L.saveReboot or step == 10 and w.rebootPending and w.L.reboot or step == 19 and not w.singleStep and w.L.finish or
+      finalCard and (w.singleStep and (next(w.dirty) and w.L.saveStep or (w.returnToSuite and w.L.backToSuite or w.L.backToSteps)) or w.L.saveNext) or w.L.continue end
     if not w.historyMode then
     button(width-math.floor(width*0.42)-8, height-controlH-6, math.floor(width*0.42), nextText,
-      function() w:next() end, function() return w.canNext == true end)
+      function() if current() then w:next() end end, function() return w.canNext == true and current() end)
     all[#all + 1] = label(math.floor(width*0.27)+8, height-controlH, math.floor(width*0.28)-20,
       string.format("%d/%d", w.card, #w.cards))
     end

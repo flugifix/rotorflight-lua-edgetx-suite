@@ -251,6 +251,7 @@ return {
         calibrating = "Helikopter still und waagerecht halten.",
         alignHint = "Waagerecht halten, Erkennung starten, Heck etwa 20 Grad anheben.",
         autoAlign = "Einbaulage erkennen",
+        manualAlign = "Keine Auto-Erkennung. Winkel manuell einstellen.",
         roll = "Roll",
         pitch = "Nick",
         yaw = "Gier",

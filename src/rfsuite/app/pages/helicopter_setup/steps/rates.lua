@@ -35,7 +35,7 @@ return function(w)
       get=function() for i,id in ipairs(profiles) do if id==w.rateProfile then return i end end; return 1 end,
       set=function(v) w.rateProfile=profiles[v] or profiles[1] end },
     { kind="choice",label=L.flyingStyle,values={L.keep,L.trainerRates,L.sportRates,L.threeDRates},
-      get=function() return (w.rateStyles[w.rateProfile] or (w.rateMatched or {})[w.rateProfile] or 0)+1 end,
+      get=function() return (w.rateStyles and w.rateStyles[w.rateProfile] or w.rateMatched and w.rateMatched[w.rateProfile] or 0)+1 end,
       set=function(v) w.rateStyles[w.rateProfile]=v>1 and v-1 or nil;w:touch("rc_tuning") end },
     w:button(L.suggest,function()
       for i,id in ipairs(profiles) do w.rateStyles[id]=i end;w:touch("rc_tuning")

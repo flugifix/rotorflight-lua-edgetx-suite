@@ -30,6 +30,9 @@ maintainer action against an explicit source snapshot, never a package build inp
 Contract prefixes below refer to `bin/wizard/contracts.lua`. All step definitions,
 including their conditional cards, also pass through the geometry/reactive-property
 sweep in `verify.lua` at 320×240, 480×272, 480×320 and 800×480.
+The same cards are retained after navigation, cleanup, reload and teardown to
+exercise the native LVGL sweep before a staged replacement is published. Rate
+draft discard is also checked with the old curve and choices still present.
 
 | # | Source step | Read/write/check coverage | Contract prefix |
 | --- | --- | --- | --- |

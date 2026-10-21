@@ -149,6 +149,72 @@ return function(h)
     check(not w.error and not w.transition,"CORE long indexed save keeps status fresh")
     check(statusReads>5,"CORE STATUS preempts a long save")
   end)
+  case("VISUAL.retained-scene-transitions",function()
+    -- EdgeTX sweeps the published tree after refresh(), even when a replacement
+    -- is still being prepared. Keep that exact old tree through the transition.
+    local function sweep(scene,phase)
+      local ok,err=pcall(h.resolve,scene.children)
+      check(ok,"VISUAL retained scene survives "..phase..(ok and "" or ": "..tostring(err)))
+    end
+    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+      for index,name in ipairs(h.stepNames) do
+        local w=world();settle(w);w.step=index;step(w,name)
+        local scenes={}
+        for card=1,#w.cards do
+          w.card=card
+          local scene=h.view.new(w,{w=size[1],h=size[2]},h.diagrams)
+          while not scene:step() do end
+          scenes[#scenes+1]=scene;sweep(scene,name.." initial")
+        end
+        w:navigate(index%19+1)
+        for _,scene in ipairs(scenes) do
+          sweep(scene,name.." navigation")
+          for _,item in ipairs(scene.children) do
+            if item.type=="numberEdit" or item.type=="choice" or type(item.text)=="function" and item.press then
+              check(not item.active(),"VISUAL replaced card cannot accept stale input")
+            end
+          end
+        end
+        w.buildRequested=nil;drain(w)
+        for _,scene in ipairs(scenes) do sweep(scene,name.." cleanup") end
+        w.ready=false
+        for _,scene in ipairs(scenes) do sweep(scene,name.." reload") end
+        w.active=false
+        for _,scene in ipairs(scenes) do sweep(scene,name.." teardown") end
+      end
+      local w=world();settle(w);w.step=5;step(w,"rates");w.card=1
+      local scene=h.view.new(w,{w=size[1],h=size[2]},h.diagrams)
+      while not scene:step() do end
+      sweep(scene,"rates before discard")
+      w:discard(function() w:navigate(6) end)
+      for _=1,1500 do
+        w:tick();h.pump();h.advance(1)
+        sweep(scene,"rates discard")
+        if w.error or (w.bus:idle() and not w.transition) then break end
+      end
+      check(not w.error,"VISUAL retained rates discard completes")
+    end
+  end)
+  case("CORE.completed-transport-retention",function()
+    local w=world();settle(w)
+    local sent=#q.sent
+    for _=1,101 do h.advance(25);w:poll();drain(w) end
+    check(#q.sent>sent+100,"CORE retention control completed real polling jobs")
+    check(w.bus:idle() and not w.error,"CORE retention polling remains ready")
+    check(#w.bus.jobs<=8,"CORE completed transport jobs stay bounded: "..#w.bus.jobs)
+    print("TRANSPORT retained jobs: "..#w.bus.jobs.." after "..(#q.sent-sent).." completed polling messages")
+  end)
+  case("S01.manual-alignment-fallback",function()
+    local w=world();settle(w);w.step=1;step(w,"sensors");w.card=2
+    local before=w.data.board_alignment_config.yaw_degrees
+    h.setFailCommand(0x5F13);w:startTrial("board_auto_align");drain(w);h.setFailCommand(nil)
+    check(not w.error and not w.trial,"S01 unsupported auto alignment preserves manual setup")
+    eq(w.message,L.manualAlign,"S01 unsupported detection explains the manual alternative")
+    eq(w.data.board_alignment_config.yaw_degrees,before,"S01 refused detection preserves current angles")
+    w.cards[2].rows[4].set(45)
+    eq(w.data.board_alignment_config.yaw_degrees,45,"S01 manual angle remains editable after refusal")
+    check(w.dirty.board_alignment_config and w.rebootPending,"S01 manual fallback retains save/reboot semantics")
+  end)
   case("VISUAL.native-background",function()
     local w=world();settle(w)
     local scene=h.view.new(w,{w=480,h=272},h.diagrams)

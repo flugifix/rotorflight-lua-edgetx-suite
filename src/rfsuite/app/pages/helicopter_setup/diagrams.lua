@@ -97,7 +97,7 @@ function M.append(children, w, card, x, y, width, height)
     end
     local curve=line({{22,128},{207,28}},accent,3)
     curve.pts=function()
-      local style=w.rateStyles[w.rateProfile] or (w.rateMatched or {})[w.rateProfile]
+      local style=w.rateStyles and w.rateStyles[w.rateProfile] or w.rateMatched and w.rateMatched[w.rateProfile]
       return prepared[style or 2]
     end
     text(5,140,210,L.artExample)

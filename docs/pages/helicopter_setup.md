@@ -197,6 +197,8 @@ Returning to a physical-check step requires fresh answers.
 The connection gate batches the initial restart. Receiver wiring and later ESC
 telemetry can need their own restart, as in the Configurator sequence. Unsupported
 automatic wiring/alignment commands do not prevent using the manual settings.
+If automatic board alignment is refused, the status line explicitly asks for the
+angles to be entered manually; that refusal does not change the current angles.
 
 ## Feedback and detailed settings
 
@@ -232,6 +234,12 @@ are resumed across calls. MSP replies update cached values; they do not rebuild 
 Reactive properties read cached page state. `bin/wizard/verify.lua` exercises the
 protocol, failure paths, lifecycle, geometry and per-call instruction costs without
 starting an EdgeTX or flight-controller simulator.
+The previously published native tree remains valid while a replacement scene is
+staged. Its getters tolerate navigation, reload, discarded rate drafts and teardown;
+controls from a replaced card cannot edit the new step. Regression checks retain
+every old card across these transitions at all four supported preview sizes.
+Consumed MSP batches are released when a new idle batch starts, keeping completed
+polling jobs from accumulating throughout a visit.
 
 [Source-to-port coverage and deliberate adaptations](../reference/helicopter-wizard-source-coverage.md)
 record the function inventory, behavior contracts and independent golden vectors.

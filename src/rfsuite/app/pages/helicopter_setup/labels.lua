@@ -169,6 +169,7 @@ local L = {
   calibrating = "@i18n(app.modules.helicopter_setup.calibrating)@",
   alignHint = "@i18n(app.modules.helicopter_setup.alignHint)@",
   autoAlign = "@i18n(app.modules.helicopter_setup.autoAlign)@",
+  manualAlign = "@i18n(app.modules.helicopter_setup.manualAlign)@",
   roll = "@i18n(app.modules.helicopter_setup.roll)@",
   pitch = "@i18n(app.modules.helicopter_setup.pitch)@",
   yaw = "@i18n(app.modules.helicopter_setup.yaw)@",

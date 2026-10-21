@@ -251,6 +251,7 @@ return {
         calibrating = "Keep the helicopter still and level.",
         alignHint = "Keep level, start detection, then lift the tail about 20 degrees.",
         autoAlign = "Detect board orientation",
+        manualAlign = "Auto alignment unavailable. Enter angles manually.",
         roll = "Roll",
         pitch = "Pitch",
         yaw = "Yaw",

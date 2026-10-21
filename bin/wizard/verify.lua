@@ -444,6 +444,9 @@ for _=1,5000 do
       end
     end
   end
+  -- Input/continuations can invalidate the model before EdgeTX releases the old
+  -- native tree. Sweep it before allowing the next page build to replace it.
+  measure("retained page sweep",function() resolve(frameCtx.children) end)
 end
 check(pausedModelChoice,"actual page includes a four-second input pause")
 check(frameClosed,"actual rendered page completes the whole wizard")

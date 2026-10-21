@@ -73,7 +73,9 @@ function M.attach(w)
       for _,key in ipairs(keys) do self.trial.before[key]=self.data[name][key] end
     end
     self:trialRequest(api,1,function(d,error)
-      if error then self:stopTrial(); self.message = self.L.unsupported
+      if error then
+        self:stopTrial()
+        self.message = api == "board_auto_align" and self.L.manualAlign or self.L.unsupported
       else self:trialReply(d) end
     end)
   end

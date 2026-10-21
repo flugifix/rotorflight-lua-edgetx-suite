@@ -3,8 +3,16 @@ local M = {}
 local ROOT = "/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/api/"
 function M.new(runtime, allowed, failed)
   local b = { apis = {}, jobs = {}, first = 1, generation = 0 }
-  function b:add(job) self.jobs[#self.jobs + 1] = job end
-  function b:urgent(job) table.insert(self.jobs, self.first, job) end
+  function b:add(job)
+    -- The controller does not tick an idle bus. Drop consumed batches before
+    -- enqueueing again so a long polling visit cannot retain every old reply.
+    if self:idle() then self.jobs, self.first = {}, 1 end
+    self.jobs[#self.jobs + 1] = job
+  end
+  function b:urgent(job)
+    if self:idle() then self.jobs, self.first = {}, 1 end
+    table.insert(self.jobs, self.first, job)
+  end
   function b:idle() return not self.pending and self.first > #self.jobs end
   function b:readOnly()
     if self.pending and self.pending.job.write then return false end

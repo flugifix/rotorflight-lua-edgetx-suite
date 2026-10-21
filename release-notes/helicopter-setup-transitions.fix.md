@@ -1,0 +1,1 @@
+- Keep Helicopter Setup reactive properties valid while the next screen is prepared, reject input from replaced cards, release completed MSP polling batches and explain the manual fallback when automatic board alignment is unavailable (`helicopter_setup`).
