@@ -215,6 +215,21 @@ return function(h)
     eq(w.data.board_alignment_config.yaw_degrees,45,"S01 manual angle remains editable after refusal")
     check(w.dirty.board_alignment_config and w.rebootPending,"S01 manual fallback retains save/reboot semantics")
   end)
+  case("VISUAL.rotor-direction-arrow",function()
+    local w=world();settle(w);local c=step(w,"swash");w.card=1;w.data.mixer_config.swash_type=2
+    local scene=h.view.new(w,{w=800,h=480},h.diagrams);while not scene:step() do end
+    local arrow
+    for _,item in ipairs(scene.children) do
+      if item.type=="line" and type(item.pts)=="function" and #item.pts()>=9 and item.thickness==2 then arrow=item end
+    end
+    check(arrow~=nil,"VISUAL swash shows a rotor direction arrow")
+    if arrow then
+      w.data.mixer_config.main_rotor_dir=0;local p=arrow.pts()
+      check(p[#p-1][2]>p[1][2],"VISUAL clockwise arrow points from the front round to the right")
+      w.data.mixer_config.main_rotor_dir=1;p=arrow.pts()
+      check(p[#p-1][2]<p[1][2],"VISUAL counter-clockwise arrow points round towards the front")
+    end
+  end)
   case("VISUAL.live-orientation-model",function()
     for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
       local w=world();settle(w);step(w,"sensors");w.card=3

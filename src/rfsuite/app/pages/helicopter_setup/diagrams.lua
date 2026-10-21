@@ -220,10 +220,21 @@ function M.append(children, w, card, x, y, width, height)
       text(88,41+(i-1)*30,130,({L.pitch,L.roll,L.collective})[i]).visible=function() return mode()==1 end
     end
     text(5,138,210,function() return captions[mode()] end)
-    local cw=points({{170,111},{194,111},{194,93},{188,99},{194,93},{200,99}})
-    local ccw=points({{194,111},{170,111},{170,93},{164,99},{170,93},{176,99}})
+    -- Rotor direction as an arc around the swashplate with its arrowhead at the end the
+    -- blades travel to, seen from above: clockwise runs right-down, counter-clockwise up.
+    local function arc(from,to)
+      local p,step={},from<to and 10 or -10
+      for d=from,to,step do local r=d*math.pi/180;p[#p+1]={108+math.sin(r)*58,83-math.cos(r)*58} end
+      local e,q=p[#p],p[#p-1]
+      local dx,dy=e[1]-q[1],e[2]-q[2];local n=math.sqrt(dx*dx+dy*dy)
+      dx,dy=dx/n*9,dy/n*9
+      p[#p+1]={e[1]-dx-dy*0.6,e[2]-dy+dx*0.6};p[#p+1]=e;p[#p+1]={e[1]-dx+dy*0.6,e[2]-dy-dx*0.6}
+      return points(p)
+    end
+    local cw,ccw=arc(40,100),arc(100,40)
     local rotation=line({{170,111},{194,111}},accent,2)
     rotation.pts=function() return w.data.mixer_config.main_rotor_dir==0 and cw or ccw end
+    rotation.visible=geometric
   elseif kind == "swashRoll" or kind == "swashPitch" or kind == "swashLift" or kind == "level" then
     local tilt = (kind=="swashRoll" or kind=="swashPitch") and 13 or 0
     local lift = kind=="swashLift" and 17 or 0
