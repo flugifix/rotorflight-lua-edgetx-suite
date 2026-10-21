@@ -121,7 +121,7 @@ debug.sethook()
 eq(received.rx_link_up,true,"measured read positive control")
 assert(instructions < 2000, "live packed read exceeds 2000 instructions: " .. instructions)
 print(string.format("Packed state: %d assertions, read %d instructions (<2000)",count,instructions))
--- Largest supported table, with the live duplicate deliberately last.
+-- Stress beyond EdgeTX 2.12's 75-slot maximum, with the live duplicate last.
 model.getSensor=function(index) if index < 99 then return {name="STAT"} end end
 for index=1,99 do
   values["telem"..index], live["telem"..index] = 8, index == 99
@@ -132,8 +132,8 @@ debug.sethook(function() instructions=instructions+1 end,"",1)
 received=State.read(Sensors,"system_status")
 debug.sethook()
 eq(received.rx_link_up,true,"last of 99 duplicate sensors is live")
-assert(instructions < 7000,"largest sensor table exceeds 7000 instructions: " .. instructions)
-print(string.format("Largest table: %d instructions (<7000)",instructions))
+assert(instructions < 7000,"99-slot stress table exceeds 7000 instructions: " .. instructions)
+print(string.format("99-slot stress table: %d instructions (<7000)",instructions))
 if arg[1] == "--self-test" then
   for index=1,99 do live["telem"..index]=false end
   live.STAT=false
