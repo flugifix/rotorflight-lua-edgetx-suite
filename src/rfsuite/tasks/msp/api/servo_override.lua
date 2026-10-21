@@ -1,6 +1,9 @@
 -- EdgeTX MSP API: SERVO_OVERRIDE (ported)
 -- Reference module: no shipped page loads it. It is kept for the developer API tester, which
 -- loads a module by its name, and as the starting point for a page that needs this message.
+-- The write is U8 servo id and U16 action and, only when the caller supplies `timeout`, a U16
+-- timeout in ms. Use a timeout only after a firmware capability probe; a timeout that is not a
+-- number is refused rather than dropped, because the untimed form is a persistent override.
 
 local Api = {
   command = 192,
@@ -39,11 +42,18 @@ function Api.parse(buf)
 end
 
 function Api.buildWritePayload(data)
+  local timeout = data and data.timeout
+  if timeout ~= nil and type(timeout) ~= "number" then return nil end
   local id = tonumber(data and data.servo_id) or 0
   local action = tonumber(data and data.action) or 0
   local lo = action % 256
   local hi = math.floor(action / 256) % 256
-  return { id, lo, hi }
+  local p = { id, lo, hi }
+  if timeout ~= nil then
+    timeout = math.floor(math.max(500, math.min(30000, timeout)))
+    p[4], p[5] = timeout % 256, math.floor(timeout / 256) % 256
+  end
+  return p
 end
 
 return Api
