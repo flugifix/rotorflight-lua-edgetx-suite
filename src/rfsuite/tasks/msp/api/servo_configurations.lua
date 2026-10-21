@@ -1,7 +1,8 @@
 -- EdgeTX MSP API: SERVO_CONFIGURATIONS (ported)
 
 local Api = {
-  command = 120
+  command = 120,
+  writeCommand = 212
 }
 
 local SERVO_FIELDS = {
@@ -75,5 +76,22 @@ function Api.parse(buf)
 end
 
 Api.simulatorResponse = SIM_RESPONSE
+
+-- MSP_SET_SERVO_CONFIGURATION: U8 index, then the complete 16-byte record. A record with a field
+-- missing is refused rather than sent with a zero in it -- mid 0, min 0, max 0 is a servo that
+-- cannot move.
+function Api.buildWritePayload(data)
+  local index = data and tonumber(data.index)
+  if not index or index < 0 or index > 255 or type(data.servo) ~= "table" then return nil end
+  for _, field in ipairs(SERVO_FIELDS) do
+    if type(data.servo[field[1]]) ~= "number" then return nil end
+  end
+  local p = { math.floor(index) }
+  for _, field in ipairs(SERVO_FIELDS) do
+    local v = math.floor(data.servo[field[1]]) & 0xFFFF
+    p[#p + 1], p[#p + 2] = v & 255, (v >> 8) & 255
+  end
+  return p
+end
 
 return Api
