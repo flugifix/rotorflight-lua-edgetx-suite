@@ -134,6 +134,57 @@ debug.sethook()
 eq(received.rx_link_up,true,"last of 99 duplicate sensors is live")
 assert(instructions < 7000,"99-slot stress table exceeds 7000 instructions: " .. instructions)
 print(string.format("99-slot stress table: %d instructions (<7000)",instructions))
+-- The existing diagnostic page consumes the same decoder, while comparing
+-- independent dedicated sensor readings rather than their packed fallback.
+local decodeCalls=0
+local previousValues,previousLive=values,live
+local realDecode=State.decode
+State.decode=function(...) decodeCalls=decodeCalls+1;return realDecode(...) end
+function loadScript(path)
+  if string.find(path,"/lib/system_state.lua",1,true) then return function() return State end end
+  if string.find(path,"/settings/common.lua",1,true) then
+    return function() return {
+      t=function(_,_,_,fallback) return fallback end,
+      pageT=function() return function(_,_,fallback) return fallback end end
+    } end
+  end
+  local relative=string.match(path,"/rfsuite%-core/(.+)$")
+  return assert(loadfile("src/rfsuite/"..relative))
+end
+SMLSIZE,COLOR_THEME_PRIMARY1,COLOR_THEME_SECONDARY1,COLOR_THEME_PRIMARY2=0,1,2,3
+values={STAT=1 | (9<<25),SCFG=1 | (2<<3) | (3<<6),["PID#"]=4}
+live={STAT=true,SCFG=true,["PID#"]=true}
+local Page=assert(loadfile("src/rfsuite/app/pages/tools/diagnostics/system_status/page.lua"))()
+local rebuilds=0
+local ctx={x=0,y=0,w=800,h=480,children={},requestRebuild=function() rebuilds=rebuilds+1 end}
+Page.build(ctx);Page.wakeup();Page.wakeup()
+eq(decodeCalls,2,"diagnostic decodes each packed word once")
+ctx.children={};Page.build(ctx)
+local function row(label)
+  for i,node in ipairs(ctx.children) do
+    if node.text==label then
+      local value=ctx.children[i+1].text
+      return type(value)=="function" and value() or value
+    end
+  end
+end
+eq(row("Armed"),"Yes","diagnostic uses shared boolean decode")
+eq(row("Airborne"),"No","diagnostic zero flag stays false")
+eq(row("PID profile"),"1","diagnostic retains packed low bits")
+eq(row("Rate profile"),"2","diagnostic profile decode")
+eq(row("Battery profile"),"3","diagnostic battery profile decode")
+local difference=false
+for _,node in ipairs(ctx.children) do
+  if type(node.text)=="function" and node.text()=="4 (differs)" then difference=true end
+end
+eq(difference,true,"diagnostic dedicated profile remains independent")
+local previous=rebuilds
+values.STAT=0;clock=clock+100;Page.wakeup();Page.wakeup()
+eq(row("Armed"),"No","diagnostic reactive value updates without scene rebuild")
+eq(rebuilds,previous,"diagnostic value-only change preserves scene")
+Page.closePage();State.decode=realDecode
+values,live=previousValues,previousLive
+print(string.format("Diagnostic reuse: %d cumulative assertions",count))
 if arg[1] == "--self-test" then
   for index=1,99 do live["telem"..index]=false end
   live.STAT=false
