@@ -178,6 +178,7 @@ local L = {
   switchOff = "@i18n(app.modules.helicopter_setup.switchOff)@",
   waitChannels = "@i18n(app.modules.helicopter_setup.waitChannels)@",
   toggleThrottle = "@i18n(app.modules.helicopter_setup.toggleThrottle)@",
+  flipArm = "@i18n(app.modules.helicopter_setup.flipArm)@",
   channelDetected = "@i18n(app.modules.helicopter_setup.channelDetected)@",
   switchDetected = "@i18n(app.modules.helicopter_setup.switchDetected)@",
   throttleSwitchRange = "@i18n(app.modules.helicopter_setup.throttleSwitchRange)@",

@@ -6,10 +6,13 @@ return function(w)
   w.rx = w.rx or { low = 3000, high = 0 }
   local r = w.rx
   local keys = { "aileron", "elevator", "rudder", "collective", "throttle", "aux1", "aux2", "aux3" }
-  local order = { 4, 1, 2, 3, 5 }
+  -- Collective first as in the Configurator, then the arm switch as well, so the arm
+  -- channel is learned like the others instead of being filled in.
+  local order = { 4, 1, 2, 3, 5, 6 }
   local names = { L.roll, L.pitch, L.yaw, L.collective, L.throttle }
   local function prompt()
-    return order[r.detect.index]==5 and L.toggleThrottle or L.move.." "..names[order[r.detect.index]]
+    local f=order[r.detect.index]
+    return f==5 and L.toggleThrottle or f==6 and L.flipArm or L.move.." "..names[f]
   end
   local function detect()
     if r.detect then r.detect=nil;w.message=L.ready;return end
@@ -33,7 +36,7 @@ return function(w)
     if not i then return end
     s.found[order[s.index]], s.exclude[i] = i - 1, true
     s.index, s.baseline, s.peaks = s.index + 1, d.channels, {}
-    if s.index <= 5 then
+    if s.index <= #order then
       w.message = string.format(L.channelDetected,i).."  "..prompt();return
     end
     local used = {}; for _, c in pairs(s.found) do used[c] = true end

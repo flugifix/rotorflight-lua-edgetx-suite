@@ -382,7 +382,7 @@ return function(h)
     cards[2].rows[1].press()
     values[4]=2000;h.measure("RX learning",function() w.onLive("rx_channels",raw()) end)
     check(w.rx.detect and w.rx.detect.index==2,"REVIEW first movement after Detect uses the pre-click FC baseline")
-    for _,channel in ipairs({1,2,3,5}) do values[channel]=2000;h.measure("RX learning",function() w.onLive("rx_channels",raw()) end) end
+    for _,channel in ipairs({1,2,3,5,7}) do values[channel]=2000;h.measure("RX learning",function() w.onLive("rx_channels",raw()) end) end
     check(w.rx.detect==nil and w.data.rx_map.throttle==4,"REVIEW subsequent controls need no extra baseline reply")
     w.data.rx_map.throttle=4;values[5]=1000;raw()
     cards[4].rows[2].press();values[5]=2000;w.onLive("rx_channels",raw());cards[4].rows[4].press()
@@ -465,8 +465,11 @@ return function(h)
     end
     reply()
     c[2].rows[1].press()
-    -- Collective, roll, pitch, yaw, throttle; a used channel is never reused.
-    for _,channel in ipairs({3,2,4,1,5}) do
+    -- Collective, roll, pitch, yaw, throttle, arm; a used channel is never reused.
+    for n,channel in ipairs({3,2,4,1,5,7}) do
+      if n==6 then
+        check(w.rx.detect~=nil and string.find(w.message,L.flipArm,1,true)~=nil,"S02 detection asks for the arm switch last")
+      end
       values[channel]=2000;reply();reply()
     end
     eq(w.data.rx_map.collective,2,"S02 collective detected first")
@@ -474,6 +477,7 @@ return function(h)
     eq(w.data.rx_map.elevator,3,"S02 pitch detected")
     eq(w.data.rx_map.rudder,0,"S02 yaw detected")
     eq(w.data.rx_map.throttle,4,"S02 throttle detected")
+    eq(w.data.rx_map.aux1,6,"S02 arm switch detected as AUX1")
     check(w.rx.detect==nil and w.dirty.rx_map,"S02 permutation completes")
     values[5]=1100;reply();c[4].rows[2].press();values[5]=1399;reply();c[4].rows[4].press()
     check(w.message==L.travelShort,"S02 travel below 300 rejected")

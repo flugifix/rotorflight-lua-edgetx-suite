@@ -89,7 +89,7 @@ function M.protocols(w)
       set = function(v) if entries[v] then self:field(api, key, entries[v][1], reboot) end end }
   end
   function w:receiverProtocols()
-    local e = {{9,"CRSF"},{2,"S.BUS"},{0,"DSM/1024"},{1,"DSM/2048"},{10,"SRXL"},{13,"SRXL2"},
+    local e = {{9,"CRSF / ELRS"},{2,"S.BUS"},{0,"DSM/1024"},{1,"DSM/2048"},{10,"SRXL"},{13,"SRXL2"},
       {14,"GHOST"},{3,"SUMD"},{4,"SUMH"},{7,"IBUS"},{5,"XBUS B"},{6,"XBUS RJ01"},{8,"Jeti EXBUS"},{12,"F.PORT"}}
     if self:apiAtLeast(7) then
       e[#e+1]={15,"S.BUS2"}; e[#e+1]={16,"F.PORT2"}; e[#e+1]={17,"FBUS"}
