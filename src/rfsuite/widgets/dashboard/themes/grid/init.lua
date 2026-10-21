@@ -55,8 +55,8 @@ local init = {
     { id = "telemetry", title = "@i18n(app.pages.settings_dashboard_settings.urban_page_telemetry)@", icon = "icons/telemetry.png" },
   },
   -- The full screen views, on a host that has theme views; any other host ignores the key and
-  -- draws its own menu and picker. `menu` and `battery_pick` are the host's own two, drawn in this
-  -- theme's look: what they offer and what their presses do stay the host's. `grid_menu` is this
+  -- draws its own menu and picker. `menu`, `battery_pick` and `battery_profile` are the host's own,
+  -- drawn in this theme's look: what they offer and what their presses do stay the host's. `grid_menu` is this
   -- theme's own menu (the battery profiles and the tuning surface, opened by a tap on the flight
   -- view's extra tile), `grid_link` its ELRS link page (opened by a tap on the link bars),
   -- `grid_telemetry` its telemetry page (opened by a tap on a value tile; its tiles are chosen
@@ -72,6 +72,7 @@ local init = {
   views = {
     { id = "menu",         module = "menuview.lua" },
     { id = "battery_pick", module = "pickview.lua" },
+    { id = "battery_profile", module = "profileview.lua" },
     { id = "grid_menu",    module = "toolsview.lua" },
     { id = "grid_link",    module = "linkview.lua", where = "both",
       openWhen = { switch = { pref = "link_switch", default = 0 } } },

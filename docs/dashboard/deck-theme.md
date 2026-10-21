@@ -99,9 +99,11 @@ draws no close button: a **long press on RTN** leaves full screen. What opens wh
   way, the governor, the throttle, the speed controller's live verdict and the event log.
 - **The battery card and the battery strip** open the *Battery* page.
 - **The model image card** opens *Profile & Tuning*: the in-flight tuning surface and, while the
-  model is disarmed, the battery profiles.
+  model is disarmed, the battery profiles, each with its cell count and warning voltage under
+  its capacity where the flight controller reports them.
 
-These pages, the quick menu and the battery picker are the ones Urban draws, in Deck's colours;
+These pages, the quick menu, the battery picker and the battery profile page are the ones
+Urban draws, in Deck's colours;
 the [Urban page](urban-theme.md#full-screen) describes each of them, the *Link view switch* that
 opens the *ELRS* page on a switch, and what the keys do. Every place that takes a press has the
 radio's frame around it while *Frames on tap areas* is on.

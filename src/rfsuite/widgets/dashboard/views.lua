@@ -69,6 +69,7 @@ local CONFIRM_VIEW = "confirm"
 local CORE_VIEWS = {
   { id = "battery_pick", module = "widgets/dashboard/battery_pick_menu.lua", openWhen = "batteryPickPending" },
   { id = CONFIRM_VIEW, module = "widgets/dashboard/confirm_menu.lua" },
+  { id = "battery_profile", module = "widgets/dashboard/battery_profile_menu.lua" },
   { id = "menu", module = "widgets/dashboard/fullscreen_menu.lua" },
 }
 
@@ -135,10 +136,24 @@ function CONDITIONS.batteryPickPending(widget)
 end
 
 -- The suite's tool, which is opened only while the model is disarmed (tool_host.lua says why),
--- and the quick menu's two writes, ERASE BLACKBOX and BATTERY PROFILE, which the MSP runtime
--- would drop while the model is armed.
+-- and the quick menu's two writes, ERASE BLACKBOX and BATTERY PROFILE (below), which the MSP
+-- runtime would drop while the model is armed.
 function CONDITIONS.modelDisarmed(widget)
   return not (widget.state and widget.state.armed == true)
+end
+
+-- The BATTERY PROFILE row: while the model is disarmed, like the write it leads to, and only where
+-- the flight controller has reported at least one profile with a capacity -- a row that opens a
+-- page with nothing to choose on it is not offered.
+function CONDITIONS.batteryProfileOffered(widget)
+  if not CONDITIONS.modelDisarmed(widget) then return false end
+  local config = widget.state and widget.state.battery_config or nil
+  if type(config) ~= "table" then return false end
+  for i = 0, 5 do
+    local cap = tonumber(config["batteryCapacity_" .. i])
+    if cap ~= nil and cap > 0 then return true end
+  end
+  return false
 end
 
 -- The tool opened on its Flight Log page: only while the page is in the tool at all -- the same
