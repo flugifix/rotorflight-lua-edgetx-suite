@@ -189,6 +189,64 @@ local function loadKeysPage(keysSrc, pageSrc)
   return page, rows, err
 end
 
+-- The shipped themes that bind keys of their own (Urban, Grid, Deck): their real layout binds the
+-- keys from a stored theme configuration, and the real resolver answers with what it bound. With
+-- no host fallback left for an unbound PAGE key, a choice the theme page offers as the quick menu
+-- has to arrive in `ctx.keys` as that binding, and Nothing as no binding at all.
+local SHIPPED_KEY_THEMES = { "urban", "grid", "deck" }
+
+local function themePageKeysCase(Keys)
+  local savedRfsuite, savedLoadScript = _G.rfsuite, _G.loadScript
+  local function restore()
+    _G.rfsuite, _G.loadScript = savedRfsuite, savedLoadScript
+    for k in pairs(_G) do
+      if type(k) == "string" and string.match(k, "^__rfsuiteTheme") then _G[k] = nil end
+    end
+  end
+  local function loader(path)
+    local rel = string.match(path, "rfsuite%-core/(.+)$")
+    local src = rel and readFile(SRC .. rel)
+    if src == nil then return nil end
+    return load(src, "@" .. rel)
+  end
+  local ok, bad = pcall(function()
+    for _, theme in ipairs(SHIPPED_KEY_THEMES) do
+      restore()
+      _G.rfsuite, _G.loadScript = {}, loader
+      local rel = "widgets/dashboard/themes/" .. theme .. "/layout.lua"
+      local layout = assert(load(assert(readFile(SRC .. rel)), "@" .. rel))()
+      local function bind(config)
+        local ctx = { keys = {}, action = function() end, entry = function() end }
+        layout.bindKeys({ themeConfig = config }, ctx)
+        return ctx.keys
+      end
+      local menuChoice = {}
+      for i = 1, #(layout.KEYS or {}) do
+        local entry = layout.KEYS[i]
+        if entry.key == "pageDown" or entry.key == "pageUp" then menuChoice[entry.pref] = "menu" end
+      end
+      local stored = bind(menuChoice)
+      local action = Keys.resolve({}, "pageDown", stored)
+      if action ~= "openView:menu" then
+        return theme .. ": PAGE > set to the quick menu on the theme page resolves to " .. tostring(action)
+      end
+      action = Keys.resolve({}, "pageUp", stored)
+      if action ~= "openView:menu" then
+        return theme .. ": PAGE < set to the quick menu on the theme page resolves to " .. tostring(action)
+      end
+      local nothing = {}
+      for pref in pairs(menuChoice) do nothing[pref] = "none" end
+      local unbound = bind(nothing)
+      if unbound.pageDown ~= nil or unbound.pageUp ~= nil then
+        return theme .. ": PAGE set to Nothing on the theme page is still bound"
+      end
+    end
+  end)
+  restore()
+  if not ok then return "raised: " .. tostring(bad) end
+  return bad
+end
+
 local function keysPageCase(keysSrc, pageSrc)
   local page, rows, err = loadKeysPage(keysSrc, pageSrc)
   if page == nil then return "the Keys page did not load: " .. tostring(err) end
@@ -497,6 +555,12 @@ local CASES = {
     id = "the Keys page shows defaults and stores only deviations",
     fn = function(Keys)
       return keysPageCase(Keys.__source, pageSource)
+    end,
+  },
+  {
+    id = "a theme's PAGE choice of the quick menu is a binding",
+    fn = function(Keys)
+      return themePageKeysCase(Keys)
     end,
   },
   {

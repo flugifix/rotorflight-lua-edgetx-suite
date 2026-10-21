@@ -178,7 +178,7 @@ local CARD_PAD = 4
 -- at the left end of the header, before the model name: this one opens the quick menu, the one beside
 -- it the suite's tool (L.toolControl). There is no close control -- a long press on RTN leaves
 -- full screen in the firmware, and init.lua declares that (`fullscreenExit`), which is what the
--- host's theme check reads. The page keys open the menu by the host's default.
+-- host's theme check reads. The page keys open the menu by the binding L.KEYS gives them.
 --
 -- The press is a `button`, and everything drawn over it is a LINE: on the full screen surface a
 -- rectangle takes a press and hands it to its PARENT, so a rectangle over the button would
@@ -316,16 +316,16 @@ L.KEY_ACTIONS = {
 }
 
 -- The keys the pilot can bind: the host's name in `ctx.keys`, the stored key, the theme's default
--- and `host`, what the host does with the key when the theme binds nothing -- the page keys open
--- the quick menu, MDL, SYS and TELE do nothing. The defaults are the host's answer for the page
--- keys and MDL; SYS opens the suite's tool and TELE the quick menu, the two places a pilot on
--- the full screen goes most.
+-- and `host`, what the host does with the key when the theme binds nothing -- nothing, for every
+-- key, so the page keys' quick menu is bound here rather than left to the host. SYS opens the
+-- suite's tool and TELE the quick menu by default, the two places a pilot on the full screen goes
+-- most.
 --
 -- Not rows of L.SETTINGS: those are what the drawing reads, and the page probe holds each of them
 -- to a change in the picture. A key binding draws nothing.
 L.KEYS = {
-  { key = "pageDown", pref = "key_page_down", default = "menu",       host = "menu" },
-  { key = "pageUp",   pref = "key_page_up",   default = "menu",       host = "menu" },
+  { key = "pageDown", pref = "key_page_down", default = "menu",       host = "none" },
+  { key = "pageUp",   pref = "key_page_up",   default = "menu",       host = "none" },
   { key = "mdl",      pref = "key_mdl",       default = "none",       host = "none" },
   { key = "sys",      pref = "key_sys",       default = "suite_tool", host = "none" },
   { key = "tele",     pref = "key_tele",      default = "menu",       host = "none" },
@@ -339,8 +339,8 @@ for i = 1, #L.KEY_ACTIONS do
 end
 L.KEY_ACTION_IDS = KEY_ACTION_IDS
 
--- Fill `ctx.keys` from the pilot's choices, on a host with theme views. A key whose choice is what
--- the host does with it anyway is left unbound, so the host's own answer stands. Every key is
+-- Fill `ctx.keys` from the pilot's choices, on a host with theme views. A key set to `host`
+-- (Nothing) is left unbound, and the host then does nothing with it either. Every key is
 -- written on every build, an unbound one as nil: the host keeps one `ctx` for the whole visit to
 -- full screen, so a binding cleared on the page has to be cleared here as well. A build-time read
 -- like every other setting -- the host reloads the theme when its preferences change.
