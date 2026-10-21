@@ -335,8 +335,9 @@ function M.step(context)
     end
     if st.phase == "ping" and (st.pingAt == nil or now - st.pingAt >= PING_RETRY) then
       -- No device information after every discovery ping: no ELRS module answers on this radio.
+      -- A send budget spent on a full output buffer says nothing about the module.
       if st.pings >= MAX_PINGS then finish(st, "unavailable", "no_answer", now); return last end
-      if st.sent >= MAX_SENDS then finish(st, "unavailable", "no_answer", now); return last end
+      if st.sent >= MAX_SENDS then finish(st, "unavailable", "timeout", now); return last end
       st.sent = st.sent + 1
       local ok, queued = pcall(push, DEVICE_PING, { MODULE, RADIO })
       if ok and queued == nil then finish(st, "unavailable", "no_crsf", now); return last end

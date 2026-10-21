@@ -244,6 +244,18 @@ do
   assert(Config.snapshot("timeout").reason == "no_answer", "unanswered discovery did not report no_answer")
 end
 do
+  -- A full output buffer refuses every push: that spends the send budget, not the ping budget,
+  -- and ends as a timeout rather than as a missing module.
+  Config.invalidate(nil); local crsf = transport(); drain(crsf)
+  local refused = 0
+  local full = function() refused = refused + 1; return false end
+  assert(Config.request("full", { owner = "test" }))
+  for i = 1, Config.limits.sends + 2 do Config.step({ owner = "test", identity = "full", crsf = crsf, push = full, now = i * 0.05 }) end
+  local got = Config.snapshot("full")
+  assert(refused == Config.limits.sends and got.status == "unavailable" and got.reason == "timeout",
+    "refused pushes ended as " .. tostring(got.reason) .. " after " .. refused)
+end
+do
   Config.invalidate(nil); local crsf, push = transport(); drain(crsf)
   currentFilename = "model01.yml"
   local oldIdentity = Config.currentIdentity()
