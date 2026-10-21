@@ -170,7 +170,7 @@ full screen — a long press on the return key — works as it does anywhere els
 
 Over a theme that takes full screen, the same X, entries and picker answers close what is open
 and show the theme again instead; the theme's own close control, or a long press on the return
-key, leaves full screen. With a view open, PAGE keys left on **Theme** close the quick menu or
+key, leaves full screen. With a view open, the page keys close the quick menu or
 open it over another view. A key bound to the quick menu also opens and closes it, and a short
 press on the return key closes the menu or the picker, and on the battery
 profile page does what its **<** does.

@@ -241,18 +241,24 @@ local function themePageKeysCase(Keys, transform)
       restore()
       local layout
       layout, restore = loadThemeLayout(theme, transform)
-      -- The PAGE rows start on Nothing for this case, so a stored Quick menu differs from the
-      -- row's default: a binding that ignored the stored choice would leave the key unbound
-      -- rather than pass by answering with a default that happens to be the same choice.
-      local menuChoice = {}
+      -- Each half sets the PAGE rows' default to the choice it does NOT store, so a binding that
+      -- ignored the stored choice and answered with the row's default cannot pass: Quick menu is
+      -- checked over a Nothing default, Nothing over a Quick menu default.
+      local pageRows = {}
       for i = 1, #(layout.KEYS or {}) do
         local entry = layout.KEYS[i]
-        if entry.key == "pageDown" or entry.key == "pageUp" then
-          entry.default = "none"
-          menuChoice[entry.pref] = "menu"
-        end
+        if entry.key == "pageDown" or entry.key == "pageUp" then pageRows[#pageRows + 1] = entry end
       end
-      if next(menuChoice) == nil then return theme .. ": the layout has no PAGE rows" end
+      if #pageRows ~= 2 then return theme .. ": the layout has " .. #pageRows .. " PAGE rows, expected 2" end
+      local function storeAll(value, default)
+        local config = {}
+        for i = 1, #pageRows do
+          pageRows[i].default = default
+          config[pageRows[i].pref] = value
+        end
+        return config
+      end
+      local menuChoice = storeAll("menu", "none")
       local fresh = bindThemeKeys(layout, {})
       if fresh.pageDown ~= nil or fresh.pageUp ~= nil then
         return theme .. ": PAGE rows on Nothing are bound with no stored choice"
@@ -266,9 +272,7 @@ local function themePageKeysCase(Keys, transform)
       if action ~= "openView:menu" then
         return theme .. ": PAGE < set to the quick menu on the theme page resolves to " .. tostring(action)
       end
-      local nothing = {}
-      for pref in pairs(menuChoice) do nothing[pref] = "none" end
-      local unbound = bindThemeKeys(layout, nothing)
+      local unbound = bindThemeKeys(layout, storeAll("none", "menu"))
       if unbound.pageDown ~= nil or unbound.pageUp ~= nil then
         return theme .. ": PAGE set to Nothing on the theme page is still bound"
       end
@@ -279,14 +283,23 @@ local function themePageKeysCase(Keys, transform)
   return bad
 end
 
--- As the radio comes, both page keys open the quick menu over the theme itself, on a theme that
--- binds its own keys (Urban), on one that binds none (Default) and on a theme whose full screen is
--- the quick menu (no base layer). The choice is the radio's, so it holds whatever the theme binds.
+-- As the radio comes, both page keys open the quick menu over the theme itself: on Urban with its
+-- page keys bound to one of its own pages (the real layout binds them), on a base layer that binds
+-- nothing (as Default) and without a base layer (as a theme whose full screen is the quick menu).
+-- The choice is the radio's, so it holds whatever the theme binds.
 local function freshPageKeysCase(Keys, Views)
   local events = { pageDown = _G.EVT_VIRTUAL_NEXT_PAGE, pageUp = _G.EVT_VIRTUAL_PREV_PAGE }
   local layout, restore = loadThemeLayout("urban")
-  local urbanKeys = bindThemeKeys(layout, {})
+  local linkChoice = {}
+  for i = 1, #(layout.KEYS or {}) do
+    local entry = layout.KEYS[i]
+    if entry.key == "pageDown" or entry.key == "pageUp" then linkChoice[entry.pref] = "link" end
+  end
+  local urbanKeys = bindThemeKeys(layout, linkChoice)
   restore()
+  if urbanKeys.pageDown ~= "openView:urban_link" or urbanKeys.pageUp ~= "openView:urban_link" then
+    return "urban: the PAGE keys bound to its link page are not bound (" .. tostring(urbanKeys.pageDown) .. ")"
+  end
   local bad = {}
   for _, name in ipairs({ "pageDown", "pageUp" }) do
     for _, spec in ipairs({

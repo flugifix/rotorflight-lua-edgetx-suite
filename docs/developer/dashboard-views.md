@@ -352,7 +352,7 @@ without a base layer, so LVGL can handle them. With the base showing and no view
 ahead of the job the pass may run, so a key is not lost to a build. It acts on the release edge
 of six keys, read from the firmware's `EVT_VIRTUAL_NEXT_PAGE`, `EVT_VIRTUAL_PREV_PAGE`,
 `EVT_VIRTUAL_EXIT`, `EVT_MODEL_BREAK`, `EVT_SYS_BREAK` and `EVT_TELEM_BREAK` where the radio
-defines them, and on nothing else. For keys left on **Theme**:
+defines them, and on nothing else. For keys on **Theme**:
 
 | Key | A view on top | The base layer showing |
 | --- | --- | --- |

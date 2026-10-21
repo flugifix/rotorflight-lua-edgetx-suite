@@ -246,7 +246,7 @@ lua5.3 bin/dashboard/verify_fullscreen_keys.lua
 ```
 
 It loads the real key resolver and view router, then checks the PAGE, SYS and TELE defaults (the
-page keys on Urban, on Default and on a quick-menu theme), that a key on Theme does only what the
+page keys on Urban, on a base layer that binds nothing as Default's, and without a base layer), that a key on Theme does only what the
 theme binds, the PAGE navigation over open views, radio-wide choices on top of a view, Nothing
 consumption and operation before a theme base exists. It loads the real Urban, Grid and Deck
 layouts and checks that a stored PAGE choice is what they bind. It loads the real Keys page and
