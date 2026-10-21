@@ -20,10 +20,10 @@ Always available.
 
 | Setting | What it does |
 | --- | --- |
-| Position 1, Position 2, … | The entry in that place of the quick menu, counted from the top. Each row offers every entry the menu has — *ERASE BLACKBOX*, *IN-FLIGHT TUNING*, *BATTERY*, *MAIN MENU*, *FLIGHT LOG*, *BATTERY PROFILE* — and a dash, which leaves the place empty. There is one row per entry, so every entry can be placed. Default: *ERASE BLACKBOX*, *IN-FLIGHT TUNING*, *BATTERY*, *MAIN MENU*, *BATTERY PROFILE*, which is the menu as it has always been; *FLIGHT LOG* is not in it until it is chosen here. |
+| Position 1 … Position 5 | The entry in that place of the quick menu, counted row by row, left to right. Each row offers every entry that can be placed — *ERASE BLACKBOX*, *IN-FLIGHT TUNING*, *BATTERY*, *MAIN MENU*, *FLIGHT LOG* — and a dash, which leaves the place empty. There is one row per entry, so every entry can be placed. Default: *ERASE BLACKBOX*, *IN-FLIGHT TUNING*, *BATTERY*, *MAIN MENU*; *FLIGHT LOG* is not in it until it is chosen here. |
 
 Empty places are skipped, so the menu has no gaps: a dash in *Position 1* and *BATTERY* in
-*Position 2* puts *BATTERY* at the top.
+*Position 2* puts *BATTERY* in the first place.
 
 ## Notes
 
@@ -33,10 +33,15 @@ Empty places are skipped, so the menu has no gaps: a dash in *Position 1* and *B
 - **An entry chosen twice counts at its first place.** After a save the page shows it there only.
 - **A chosen entry still hides where it does not apply.** The menu asks each entry's own
   condition on top of this list: *IN-FLIGHT TUNING* only while its preview is on, *BATTERY* only
-  with a pack for this model while disarmed, *ERASE BLACKBOX*, *MAIN MENU* and
-  *BATTERY PROFILE* only while disarmed, *FLIGHT LOG*
+  with a pack for this model while disarmed, *ERASE BLACKBOX* and *MAIN MENU* only while
+  disarmed, *FLIGHT LOG*
   only while the *Flight Log* preview is on and the model is disarmed. Taking an entry
   out here hides it always.
+- **BATTERY PROFILE is not a position.** The menu always draws it as its last row, under the
+  entries chosen here, while the model is disarmed and the flight controller has reported a
+  battery profile with a capacity.
+- **A list saved by an earlier version that names BATTERY PROFILE** reads without it. One that
+  named BATTERY PROFILE alone names nothing that can be placed, and reads as the default.
 - **A dash in every place empties the menu.** The header and its close box stay, so full screen
   can still be left.
 - **A save the card refuses** shows *Save failed: the settings file could not be written to the

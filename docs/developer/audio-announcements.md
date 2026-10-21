@@ -160,6 +160,15 @@ Announcements play through `Audio.playEventFile(path)` or, inside the engine,
 `tryPlayEventFile(audioState, now, path, opts)`. The path is relative to the pack root:
 `evt/…`, `gov/…`, `adj/…`, `stat/alerts/…`.
 
+`tryPlayEventFile` returns `true` when the file was handed to `playFile`, otherwise `false` and the
+reason: `"cooldown"` (the quarter second after the previous file still runs), `"nofile"` (the pack
+has no such file) or `"failed"` (`playFile` is missing or raised). An alert that repeats books its
+announcement with `announcementDone(played, why)`: yes when it played, yes when the file is missing
+-- nothing will ever play, and an unbooked alert would be tried again on every pass -- and no on a
+cooldown or a failed hand-over, which are tried again on the next pass. Speak a trailing number only
+when the file played. Keep the call in a tail position or in its own `local played, why = ...`;
+behind `and` or in parentheses the reason is lost.
+
 `resolveEventPath` looks for `/SOUNDS/rf/<language>/<path>` first and `/SOUNDS/<language>/<path>`
 second, and caches the answer — including a miss, so a probe for a file that is not there costs
 one open per session. That makes an optional file cheap:

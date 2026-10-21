@@ -43,10 +43,10 @@ end
 -- the arm was asked before it. The work would come to nothing anyway: the MSP runtime clears its
 -- queue on every pass while the model is armed (tasks/msp/runtime.lua).
 --
--- What is checked is the row itself: an action, the button that opens a view, or an option of a
--- grid the menu draws. The options of a `choice` that names a `view` are pressed in that view,
--- which keeps its own rules -- the runtime refuses a battery pick made while armed -- and its
--- close has to work whatever the state.
+-- What is checked is the row itself: an action, or the button that opens a view. The options of a
+-- `choice` that names a `view` are pressed in that view, which keeps its own rules -- the runtime
+-- refuses a battery pick made while armed, and a battery profile's press queues nothing while
+-- armed -- and its close has to work whatever the state.
 local function refused(widget, entry, option)
   if option ~= nil and entry.view ~= nil then return false end
   if isEntryVisible(entry, widget) then return false end
@@ -363,14 +363,60 @@ function BUILD.flight_log(widget, t)
   }
 end
 
--- Offered only while the model is disarmed, like ERASE BLACKBOX: a profile write pressed in the
--- air is dropped with the rest of the MSP queue.
+-- The facts a battery profile carries beside its capacity, as the flight controller reported them:
+-- its cell count and its warning voltage per cell, in centivolts. Only firmware that reports
+-- them per profile has them (tasks/msp/api/battery_config.lua, `hasProfileCells`); elsewhere both
+-- are nil, and what is shown is the capacity alone.
+local function profileFacts(config, i)
+  if type(config) ~= "table" or config.hasProfileCells ~= true then return nil, nil end
+  local cells = tonumber(config["batteryCellCount_" .. i])
+  local warn = tonumber(config["vbatwarningcellvoltage_" .. i])
+  if cells ~= nil and cells <= 0 then cells = nil end
+  if warn ~= nil and warn <= 0 then warn = nil end
+  return cells, warn
+end
+
+-- The separator between the facts of a profile. Plain ASCII: the radio's LVGL fonts carry ASCII,
+-- Latin-1 letters and a few symbols only, and draw a character outside them as nothing.
+local FACT_SEPARATOR = " / "
+
+-- The facts of one profile as text, from the parts that are present, in the order cells,
+-- capacity, warning voltage: `6S`, `2000mAh`, `Warn 3.50V`.
+local function joinFacts(parts)
+  return table.concat(parts, FACT_SEPARATOR)
+end
+
+local function cellsText(cells) return string.format("%dS", math.floor(cells)) end
+local function capacityText(cap) return string.format("%dmAh", math.floor(cap)) end
+local function warnText(warnWord, warn) return string.format("%s %.2fV", warnWord, warn / 100) end
+
+-- BATTERY PROFILE: a choice whose options are pressed on a page of their own (the view
+-- `battery_profile`, battery_profile_menu.lua), so in a menu it is the one row that opens that
+-- page. It is not one of the pilot's entries: the menu draws it under them, always in the same
+-- place (M.build). Offered while the model is disarmed and the board has reported a profile
+-- (`batteryProfileOffered`).
+--
+-- A profile write pressed in the air is dropped with the rest of the MSP queue, and the options of
+-- a choice that has a view are not refused by the menu's own test (`refused` above): the page
+-- stays up when the model arms. So each option's press asks the arm state itself and queues
+-- nothing while the model is armed.
+--
+-- Every string is built here, once per call. An option carries the capacity as `label` and, where
+-- the board reports them, the cell count and the warning voltage as `detail`. `values(w)` answers
+-- the profile in force as up to three texts, longest first, each a shortening of the one before
+-- -- all its facts, then without the warning voltage, then the capacity alone -- for a row that
+-- shows the longest one that fits; an empty list where no profile is known to be in force.
 function BUILD.battery_profile(widget, t)
+  local warnWord = t("widgets.dashboard.battery_profile_warn", "Warn")
   return {
     id = "battery_profile",
     kind = "choice",
+    view = "battery_profile",
     title = t("widgets.dashboard.battery_profile", "BATTERY PROFILE"),
-    visibleWhen = "modelDisarmed",
+    visibleWhen = "batteryProfileOffered",
+    after = "openView:battery_profile",
+    -- What a page of profiles says while the model is armed and nothing on it can be pressed.
+    armedNote = t("widgets.dashboard.battery_profile_armed", "CHANGEABLE ONLY WHEN DISARMED"),
     -- One option per capacity the flight controller carries, resolved when the row is drawn
     -- rather than when the list is made, so an entry stays a description of what it offers. The
     -- widget is the one this list was made for where the caller passes none.
@@ -383,14 +429,19 @@ function BUILD.battery_profile(widget, t)
         for i=0,5 do
           local cap = config["batteryCapacity_"..i] or 0
           if cap > 0 then
+            local cells, warn = profileFacts(config, i)
+            local detailParts = {}
+            if cells ~= nil then detailParts[#detailParts + 1] = cellsText(cells) end
+            if warn ~= nil then detailParts[#detailParts + 1] = warnText(warnWord, warn) end
             options[#options+1] = {
               -- The profile the pilot reads, 1 to 6, by which a run is matched to this option.
               id = i + 1,
               label = tostring(cap).." mAh",
-              -- Highlight active battery profile
-              -- FIX: Telemetry sensor BatP is 1-based (1 to 6)
+              detail = (#detailParts > 0) and joinFacts(detailParts) or nil,
+              -- The profile in force: the battery_profile sensor (BatP) is 1-based.
               current = (state.batteryProfile == (i + 1)),
               press = function(report)
+                if w.state and w.state.armed == true then return end
                 local mspModule = requireModule("tasks/msp/runtime.lua")
                 if mspModule and mspModule.getState then
                   local mState = mspModule.getState()
@@ -424,25 +475,44 @@ function BUILD.battery_profile(widget, t)
                   end
                 end
               end,
-              -- Close after selection
-              after = "done"
+              -- The page stays up, so the pilot sees how the write went.
+              after = "none"
             }
           end
         end
       end
       return options
+    end,
+    values = function(w)
+      w = w or widget
+      local state = w and w.state or {}
+      local config = state.battery_config
+      local profile = tonumber(state.batteryProfile)
+      if type(config) ~= "table" or profile == nil then return {} end
+      local i = math.floor(profile) - 1
+      local cap = tonumber(config["batteryCapacity_" .. i])
+      if cap == nil or cap <= 0 then return {} end
+      local cells, warn = profileFacts(config, i)
+      local capPart = capacityText(cap)
+      local out = {}
+      if cells ~= nil and warn ~= nil then
+        out[#out + 1] = joinFacts({ cellsText(cells), capPart, warnText(warnWord, warn) })
+      elseif warn ~= nil then
+        out[#out + 1] = joinFacts({ capPart, warnText(warnWord, warn) })
+      end
+      if cells ~= nil then out[#out + 1] = joinFacts({ cellsText(cells), capPart }) end
+      out[#out + 1] = capPart
+      return out
     end
   }
 end
 
 --- What the menu offers, as a list rather than as drawing code.
 --
--- One entry per row, in the order they are drawn, carrying the manifest's own vocabulary:
--- `id`, `title`, `kind`, `visibleWhen` and `press`. `kind` is what the builder makes of the
--- row -- `action` is a single button, `choice` is a title over a grid of options -- so the
--- battery-profile grid is a row of this list rather than a special case inside the builder. A
--- `choice` whose options belong to a view of their own names it in `view`, and the menu draws it
--- as the single button that opens that view.
+-- One entry per button, in the order they are drawn, carrying the manifest's own vocabulary:
+-- `id`, `title`, `kind`, `visibleWhen` and `press`. `kind` says what the entry is -- `action` is
+-- one press, `choice` a set of options. Every `choice` names in `view` the page its options are
+-- pressed on, so in the menu it is the single button that opens that view.
 --
 -- `press` does the row's work and nothing else. What follows it -- leaving fullscreen, opening
 -- another view, or nothing -- is the row's `after`, an action views.lua performs; an option of a
@@ -590,27 +660,74 @@ function M.run(widget, entry, option, after, report)
   perform(widget, entry, option, after, report)
 end
 
+-- The places the pilot's entries are laid out on: a fixed raster of six, in two columns where the
+-- zone is wide enough and in one where it is not. The raster does not shrink or grow with the
+-- number of entries shown, so a button keeps its size and its place whatever is hidden at the
+-- moment; places with nothing in them stay empty. Under the raster, always on the row after its
+-- last, is the BATTERY PROFILE row, the width of the zone. The themes with views of their own lay
+-- their menus out by the same numbers.
+M.PLACES = 6
+M.TWO_COLUMNS_FROM = 300
+
+-- The mark after a row's value that says the row opens a page. ASCII, for the reason given
+-- at FACT_SEPARATOR.
+M.OPENS_MARK = " >"
+
+-- The width `text` takes in `font`, or nil where the firmware cannot say.
+local function textWidth(text, font)
+  if lcd and type(lcd.sizeText) == "function" then
+    local ok, w = pcall(lcd.sizeText, text, font)
+    if ok and type(w) == "number" then return w end
+  end
+  return nil
+end
+
+--- The longest of `texts` -- longest first, each a shortening of the one before -- that fits
+--- `maxW` in `font`; the last where none fits, and the first where nothing can be measured.
+function M.fitFirst(texts, font, maxW, measure)
+  measure = measure or textWidth
+  if type(texts) ~= "table" or #texts == 0 then return nil end
+  for i = 1, #texts do
+    local w = measure(texts[i], font)
+    if w == nil then return texts[1] end
+    if w <= maxW then return texts[i] end
+  end
+  return texts[#texts]
+end
+
+--- Rebuilt when the profile in force moves, which the BATTERY PROFILE row names, and when the
+--- board's battery configuration arrives or goes, which decides whether the row is there.
+function M.renderKey(widget)
+  local state = widget and widget.state or nil
+  if state == nil then return "" end
+  return tostring(state.batteryProfile) .. (state.battery_config ~= nil and "|c" or "|")
+end
+
 --- Draw the menu.
 --
 -- `entries` is the list to draw; omitted, the menu draws its own, which is what the runtime
 -- asks for. Taking the list as an argument is the point of the split: the same drawing code
 -- can serve a list assembled somewhere else.
+--
+-- Every entry is one button on a place of the raster (M.PLACES), in the order of the list; an
+-- entry that is not offered now takes no place, and an entry past the last place is not drawn.
+-- BATTERY PROFILE is drawn on its own row under the raster and never on a place, so a list that
+-- names it does not draw it twice.
 function M.build(children, widget, entries)
   entries = entries or M.entries(widget)
   local dW = widget.zone.w
   local dH = widget.zone.h
   local dX = 0
   local dY = 0
-  
+
   local t = translator(widget)
 
   local bg_color = COLOR_THEME_PRIMARY3 or BLACK
   if bg_color == BLACK and lcd and type(lcd.RGB) == "function" then
      bg_color = lcd.RGB(40, 40, 40)
   end
-  local accent_color = COLOR_THEME_SECONDARY1 or WHITE
   local btn_color = COLOR_THEME_PRIMARY1 or DARKGREY
-  
+
   -- 1. Full Background
   children[#children+1] = {
     type = "rectangle", x=dX, y=dY, w=dW, h=dH, color=bg_color, filled=true
@@ -620,8 +737,8 @@ function M.build(children, widget, entries)
   -- TX16S MK3 is 800x480 (dH ~480)
   -- Standard TX16S is 480x272 (dH ~272)
   local isLarge = dH > 350
-  
-  local headerH, titleFont, fontH, closeSize, contentGap, titleGap, btnH, gapY, paddingX
+
+  local headerH, titleFont, fontH, closeSize, contentGap, gapY, paddingX
   local headTextOffY, closeTextOffY, btnTextOffY
 
   if isLarge then
@@ -631,8 +748,6 @@ function M.build(children, widget, entries)
     fontH = 24
     closeSize = 44
     contentGap = 20
-    titleGap = fontH + 30
-    btnH = 50
     gapY = 10
     paddingX = 15
     headTextOffY = -6
@@ -645,8 +760,6 @@ function M.build(children, widget, entries)
     fontH = 12
     closeSize = 20
     contentGap = 5
-    titleGap = fontH + 10
-    btnH = 28
     gapY = 8
     paddingX = 5
     headTextOffY = -2
@@ -658,94 +771,79 @@ function M.build(children, widget, entries)
   children[#children+1] = {
     type = "rectangle", x=dX, y=dY, w=dW, h=headerH, color=btn_color, filled=true
   }
-  
+
   children[#children+1] = {
-    type = "label", x=dX + paddingX, y=dY + math.floor((headerH - fontH)/2) + headTextOffY, w=dW-60, 
+    type = "label", x=dX + paddingX, y=dY + math.floor((headerH - fontH)/2) + headTextOffY, w=dW-60,
     text=t("widgets.dashboard.quick_settings", "QUICK SETTINGS"), color=WHITE, align=LEFT, font=titleFont
   }
-  
+
   -- 3. Close Button (X)
   local cx = dX + dW - closeSize - (isLarge and 8 or 1)
   local cy = dY + math.floor((headerH - closeSize)/2)
-  
+
   children[#children+1] = {
     type = "button", x=cx, y=cy, w=closeSize, h=closeSize, color=COLOR_THEME_SECONDARY1 or RED,
     press = pressFor(widget, nil, "done")
   }
-  
+
   children[#children+1] = {
     type = "label", x=cx, y=cy + math.floor((closeSize - fontH)/2) + closeTextOffY, w=closeSize, text="X", color=WHITE, align=CENTER, font=titleFont
   }
-  
-  -- 4. Content Area
+
+  -- 4. The raster, then the BATTERY PROFILE row: rows of one height, the raster's and the
+  -- battery row's alike.
   local contentY = dY + headerH + contentGap
-  local entryW = math.floor(dW - paddingX * 2)
+  local bottom = dY + dH - gapY
+  local cols = (dW >= M.TWO_COLUMNS_FROM) and 2 or 1
+  local rows = math.ceil(M.PLACES / cols)
+  local rowH = math.floor((bottom - contentY - rows * gapY) / (rows + 1))
+  local cellW = math.floor((dW - paddingX * (cols + 1)) / cols)
 
+  local place = 0
   for _, entry in ipairs(entries) do
-    if isEntryVisible(entry, widget) then
-      if entry.kind == "choice" and entry.view == nil then
-        -- 4b. A title over a grid of options.
-        contentY = contentY + titleGap - gapY
-
-        children[#children+1] = {
-          type = "label", x=dX + paddingX, y=contentY, w=dW-(paddingX*2),
-          text=entry.title, color=WHITE, align=LEFT, font=titleFont
-        }
-
-        local listY = contentY + titleGap
-
-        local options = entry.options
-        if type(options) == "function" then options = options(widget) end
-        options = options or {}
-
-        -- Every action row above the grid pushes it down, and an option whose button would
-        -- cross the bottom edge is not drawn. Three columns on a wide zone keep six options to
-        -- two rows, so they still fit below a longer list of actions.
-        local cols = 2
-        if dW < 200 then cols = 1 end
-        if #options > 4 and dW >= 400 then cols = 3 end
-        local btnW = math.floor((dW - paddingX*(cols+1)) / cols)
-
-        for i, option in ipairs(options) do
-           local row = math.floor((i-1)/cols)
-           local col = (i-1)%cols
-           local bx = dX + paddingX + col*(btnW+paddingX)
-           local by = listY + row*(btnH+gapY)
-
-           if by + btnH > dY + dH then break end
-
-           local isCurrent = option.current == true
-           local bColor = isCurrent and accent_color or btn_color
-           local tColor = isCurrent and BLACK or WHITE
-
-           -- Button (Interactive layer)
-           children[#children+1] = {
-             type = "button", x=bx, y=by, w=btnW, h=btnH, color=bColor,
-             press = function() M.run(widget, entry, option) end
-           }
-
-           -- Label (visual only)
-           local textY = by + math.floor((btnH - fontH)/2) + btnTextOffY
-           children[#children+1] = {
-             type = "label", x=bx, y=textY, w=btnW, text=option.label, color=tColor, align=CENTER, font=titleFont
-           }
-        end
-
-        -- The next row starts below the whole grid, the way an action row leaves room for itself.
-        contentY = listY + math.ceil(#options / cols) * (btnH + gapY)
-      else
-        -- 4a. A single button: an action, or the way into the view a choice is drawn in.
-        children[#children+1] = {
-          type = "button", x=dX + paddingX, y=contentY, w=entryW, h=btnH, color=btn_color,
-          press = function() M.run(widget, entry) end
-        }
-        children[#children+1] = {
-          type = "label", x=dX + paddingX, y=contentY + math.floor((btnH - fontH)/2) + btnTextOffY, w=entryW,
-          text=entry.title, color=WHITE, align=CENTER, font=titleFont
-        }
-        contentY = contentY + btnH + gapY
-      end
+    if entry.id ~= "battery_profile" and isEntryVisible(entry, widget) then
+      place = place + 1
+      if place > M.PLACES then break end
+      local bx = dX + paddingX + ((place - 1) % cols) * (cellW + paddingX)
+      local by = contentY + math.floor((place - 1) / cols) * (rowH + gapY)
+      children[#children+1] = {
+        type = "button", x=bx, y=by, w=cellW, h=rowH, color=btn_color,
+        press = function() M.run(widget, entry) end
+      }
+      children[#children+1] = {
+        type = "label", x=bx, y=by + math.floor((rowH - fontH)/2) + btnTextOffY, w=cellW,
+        text=entry.title, color=WHITE, align=CENTER, font=titleFont
+      }
     end
+  end
+
+  -- 5. BATTERY PROFILE, on the row after the raster's last: its title on the left, the profile in
+  -- force on the right, as long as it fits, and the mark that it opens a page.
+  local profile = M.entry(widget, "battery_profile")
+  if profile ~= nil and isEntryVisible(profile, widget) then
+    local rowW = dW - paddingX * 2
+    local bx = dX + paddingX
+    local by = contentY + rows * (rowH + gapY)
+    local textY = by + math.floor((rowH - fontH)/2) + btnTextOffY
+    children[#children+1] = {
+      type = "button", x=bx, y=by, w=rowW, h=rowH, color=btn_color,
+      press = function() M.run(widget, profile) end
+    }
+    local title = profile.title or ""
+    local titleW = textWidth(title, titleFont) or math.floor(rowW / 3)
+    children[#children+1] = {
+      type = "label", x=bx + paddingX, y=textY, w=titleW + paddingX,
+      text=title, color=WHITE, align=LEFT, font=titleFont
+    }
+    local valueW = rowW - titleW - 4 * paddingX
+    local marks = {}
+    local values = type(profile.values) == "function" and profile.values(widget) or {}
+    for i = 1, #values do marks[i] = values[i] .. M.OPENS_MARK end
+    local value = M.fitFirst(marks, titleFont, valueW) or M.OPENS_MARK
+    children[#children+1] = {
+      type = "label", x=bx + rowW - paddingX - valueW, y=textY, w=valueW,
+      text=value, color=WHITE, align=RIGHT, font=titleFont
+    }
   end
 end
 

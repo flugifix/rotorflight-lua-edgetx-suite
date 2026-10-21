@@ -189,7 +189,7 @@ end
 -- The recording ctx, and the actions it accepts
 -- ---------------------------------------------------------------------------
 
-local VIEWS = { menu = true, battery_pick = true }
+local VIEWS = { menu = true, battery_pick = true, battery_profile = true }
 local SIMPLE = { closeView = true, done = true, exitFullscreen = true, openTool = true, none = true }
 -- The tool pages `openTool:<menuId>` may open on (TOOL_LANDINGS in widgets/dashboard/views.lua).
 local TOOL_PAGES = { tools_flight_log_page = true }
@@ -521,7 +521,7 @@ local function checkOpenWhen(label, spec)
 end
 
 local PLACES = { fullscreen = { fullscreen = true }, zone = { zone = true }, both = { fullscreen = true, zone = true } }
-local WIDGET_VIEWS = { menu = true, battery_pick = true }
+local WIDGET_VIEWS = { menu = true, battery_pick = true, battery_profile = true }
 
 local themeViews = {}
 if init.views ~= nil then
@@ -579,6 +579,11 @@ for _, view in ipairs(themeViews) do
       if view.id == "battery_pick" then
         state.batteryPick = { loaded = true, pending = true, dismissed = false,
           candidates = { { id = "pack1", name = "Pack 1", cap = 2200, targetProfile = 0 } } }
+      elseif view.id == "battery_profile" then
+        state.battery_config = { hasProfileCells = true,
+          batteryCapacity_0 = 2200, batteryCellCount_0 = 6, vbatwarningcellvoltage_0 = 350,
+          batteryCapacity_1 = 3300, batteryCellCount_1 = 6, vbatwarningcellvoltage_1 = 350 }
+        state.batteryProfile = 1
       end
       local ctx = newCtx(log, state)
       local children = {}

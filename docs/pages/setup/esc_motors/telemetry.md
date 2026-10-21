@@ -26,6 +26,7 @@ gets a message instead of the settings.
 | Voltage Correction | Scales the voltage the speed controller reports. -99 to 125 %, default 0. MSP API 12.08 and later. |
 | Current Correction | Scales the current the speed controller reports. -99 to 125 %, default 0. MSP API 12.08 and later. |
 | Consumption Correction | Scales the consumed capacity the speed controller reports. -99 to 125 %, default 0. MSP API 12.08 and later. |
+| Detect wiring | On MSP API 12.10 and later, tries the valid *Half Duplex* and *Pin Swap* combinations for the saved telemetry protocol. It requires a live, disarmed connection. Save protocol changes before starting detection. |
 
 ## Notes
 
@@ -39,6 +40,15 @@ gets a message instead of the settings.
   and cannot be selected; that is a flight controller newer than the suite.
 - The telemetry wire itself is assigned on *Setup* → *Ports*; this page only says what is
   expected on it.
+- Detection polls the flight controller while it works. The fields, Save and Reload remain
+  locked until it finishes. **Cancel** restores the wiring that was active before detection.
+  A successful result fills *Half Duplex* and *Pin Swap* as unsaved changes; use **Save** to
+  store them and perform the normal reboot. If the connection is lost or the result is unknown,
+  reload the page before saving. Leaving the page does not cancel a completed detection result;
+  an unfinished firmware trial expires and restores its previous wiring automatically.
+  A finished detection is reported only on the visit that followed it. Opened again before a
+  reboot, the page shows the wiring the flight controller uses at that moment; a detected wiring
+  that was not saved is live there but is lost at the next reboot unless Save stores it.
 - Saving reboots the flight controller. Once the settings are stored the notice can be closed
   and the page left; the outcome is then shown the next time the page is opened. The page also
   reads again if a different flight controller answers while it is open. Both are described in
