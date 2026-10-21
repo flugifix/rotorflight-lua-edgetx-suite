@@ -144,9 +144,9 @@ do
   local numbered = 0
   for _, menu in pairs(manifest.menus or {}) do
     for _, entry in ipairs(menu.pages or {}) do
-      local n = tonumber((entry.id or ""):match("^step_(%d%d)$") or "")
+      local n = tonumber(string.match(entry.id or "", "^step_(%d%d)$") or "")
       if n and menu.title == "@i18n(app.modules.helicopter_setup.name)@" then
-        check(entry.title:sub(1, #(n .. ". @i18n(")) == n .. ". @i18n(", "menu entry " .. n .. " is numbered")
+        check(string.sub(entry.title, 1, #(n .. ". @i18n(")) == n .. ". @i18n(", "menu entry " .. n .. " is numbered")
         numbered = numbered + 1
       end
     end
