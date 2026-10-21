@@ -5,14 +5,6 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  msp-override-payloads:
-    name: MSP override payloads
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y lua5.3
-      - run: lua5.3 bin/msp/verify_msp_override_payloads.lua
-
   msp-setup-apis:
     name: MSP setup APIs
     runs-on: ubuntu-latest
@@ -270,3 +262,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lua5.3
       - name: Check fields, freshness and negative control
         run: lua5.3 bin/telemetry/verify_system_state.lua --self-test
+
+  msp-override-payloads:
+    name: MSP override payloads
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/msp/verify_msp_override_payloads.lua

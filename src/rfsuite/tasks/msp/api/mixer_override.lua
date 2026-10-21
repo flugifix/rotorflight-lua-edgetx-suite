@@ -1,5 +1,9 @@
 -- EdgeTX MSP API: mixer_override (ported from Ethos)
--- Reads all inputs; writes exactly one input, optionally with a proven timeout capability.
+-- Reference module: no shipped page loads it. It is kept for the developer API tester, which
+-- loads a module by its name, and as the starting point for a page that needs this message.
+-- Reads all 29 inputs (190); writes exactly one input (191): U8 index, U16 value and, only when
+-- the caller supplies `timeout`, a U16 timeout in ms. A timeout that is not a number is refused
+-- rather than dropped, because the untimed form is a persistent override.
 
 local Api = {
   command = 190,
@@ -37,10 +41,12 @@ function Api.buildWritePayload(data)
   data = data or {}
   local index = tonumber(data.index)
   if not index or index < 0 or index > 28 then return nil end
+  local timeout = data.timeout
+  if timeout ~= nil and type(timeout) ~= "number" then return nil end
   local lo, hi = bytes_from_u16(data.value or 2501)
   local p = { math.floor(index), lo, hi }
-  if data.timeout ~= nil then
-    lo, hi = bytes_from_u16(math.max(500, math.min(30000, data.timeout)))
+  if timeout ~= nil then
+    lo, hi = bytes_from_u16(math.max(500, math.min(30000, timeout)))
     p[4], p[5] = lo, hi
   end
   return p

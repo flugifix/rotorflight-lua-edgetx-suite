@@ -1,5 +1,8 @@
 -- Ported MIXER_INPUT -> mixer_input.lua
--- Exposes signed indexed records alongside the legacy flat fields.
+-- Reference module: no shipped page loads it. It is kept for the developer API tester, which
+-- loads a module by its name, and as the starting point for a page that needs this message.
+-- `inputs[index]` holds every record the firmware sends, zero-based and signed; the flat
+-- `rate_*`/`min_*`/`max_*` fields are the first eight records, unsigned, as before.
 local Api = {
     command = 170,
     writeCommand = 171
@@ -47,9 +50,8 @@ Api.simulatorResponse = build_sim_response()
 function Api.parse(buf)
     if type(buf) ~= "table" then return nil end
     local expected = #INPUT_GROUPS * 6
-    if #buf < expected then return nil end
+    if #buf < expected or #buf % 6 ~= 0 then return nil end
     local out = { inputs = {} }
-    if #buf % 6 ~= 0 then return nil end
     for pos = 1, #buf, 6 do
         local record = {}
         for n, name in ipairs({ "rate", "min", "max" }) do

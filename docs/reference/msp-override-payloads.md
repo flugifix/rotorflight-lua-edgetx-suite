@@ -14,7 +14,8 @@ The caller must supply an index from 0 through 28. OFF is 2501; passthrough is 2
 command 196 with a single U16 `value`.
 
 All three builders append an optional U16 timeout, in milliseconds, **only when
-the caller supplies `timeout`**. It is clamped to 500–30000 ms. Without that field
+the caller supplies `timeout`**. It is clamped to 500–30000 ms; a `timeout` that is not a number makes the
+builder return `nil` instead of the untimed, persistent form. Without that field
 the legacy payload length is unchanged: three bytes per input/servo, two bytes
 for the all-servo command. A serializer does not prove that firmware honors expiry.
 

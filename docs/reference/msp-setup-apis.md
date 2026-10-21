@@ -11,18 +11,23 @@ No page or menu entry is added.
 
 | Module | Command | Contract |
 | --- | --- | --- |
-| `servo` | 103 | U16 live outputs, 1–32 entries. |
+| `servo` | 103 | U16 live outputs in microseconds, in the order `servo_configurations` lists the servos (up to 26 on current firmware). `servos[1]` is the servo at configuration index 0. |
 | `attitude` | 108 | Three signed S16 values; roll/pitch in tenths of degrees, yaw in degrees. |
 | `rc_command` | 113 | Signed function commands, at least roll, pitch, yaw, collective and throttle. |
-| `rx_channels` | 114 | 1–18 raw receiver channels before RX_MAP. These differ from mapped MSP_RC functions. |
+| `rx_channels` | 114 | 0–18 raw receiver channels before RX_MAP. These differ from mapped MSP_RC functions. An empty reply is zero channels. |
 | `motor_telemetry` | 139 | Count followed by 16-byte records: U32 RPM, four U16 fields and two S16 temperatures. Up to four motors; zero is valid. |
 | `arming_disable` | 99 | U8 inhibit 1/release 0, scoped by firmware to the MSP connection. The caller owns entry, readback and cleanup. |
-| `acc_calibration` | 205 | Empty write payload. The caller owns calibration preconditions and completion checks. |
-| `rx_serial_trial` | `0x5F12` | Trial action and seven-byte state. Receiver UART reinitialization can interrupt a radio MSP link; this codec does not make radio-side START safe. |
-| `tail_motor_output` | `0x5F14` | Actions 0/read, 1/SERVO 4, 2/MOTOR 2. Reply: output and result. Requires firmware implementing the extension. |
-| `servo_configurations` | 120/212 | Existing count/table decoder plus U8 index and a complete 16-byte configuration write. Retains all calibration fields. |
+| `acc_calibration` | 205 | Empty write payload; the caller marks the message `isWrite = true`, since a message without a payload is otherwise queued as a read. The caller owns calibration preconditions and completion checks. |
+| `rx_serial_trial` | `0x5F12` | `buildPayload(action)` like `esc_sensor_trial`: 0 polls, 1 starts, 2 stops. Seven-byte state reply. Receiver UART reinitialization can interrupt a radio MSP link; this codec does not make radio-side START safe. |
+| `tail_motor_output` | `0x5F14` | Read without payload or with action 0; write action 1 selects SERVO 4, 2 selects MOTOR 2. Reply: output and result. Requires firmware implementing the extension. |
+| `servo_configurations` | 120/212 | Existing count/table decoder plus U8 index and a complete 16-byte configuration write. Retains all calibration fields; a record with a field missing is refused. |
 | `mixer_input` | 170/171 | Adds zero-based signed `inputs[index]` records alongside the existing unsigned flat fields. |
 | `rc_config` | 66/67 | Refuses replies shorter than the complete 12-byte configuration. |
+
+The MSP queue takes a message with a payload on `0x5F12` or `0x5F14` for a write unless the
+message says otherwise, and a write clears the response cache. A poll that carries an action
+byte is therefore queued with `isWrite = false`; a start, stop or tail selection with
+`isWrite = true`.
 
 The optional `0x5F12`/`0x5F14` commands are protocol codecs, not a claim that an
 API-version number proves support. Their callers must establish support from an
