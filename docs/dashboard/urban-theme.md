@@ -81,7 +81,7 @@ allows. Six places on the screen open a page over it, and a seventh opens the su
   the in-flight tuning surface, or a note that it is not available now, and, only while the
   model is disarmed, the model's battery
   profiles, the one in force in green, each with its capacity and, where the flight controller
-  reports them, its cell count and warning voltage under it (*6S · Warn 3.50V*). Pressing a profile makes it the one in force and the page
+  reports them, its cell count and warning voltage under it (*6S / Warn 3.50V*). Pressing a profile makes it the one in force and the page
   stays open, showing whether the change is being sent, was done or failed.
 - **The link bars** in the top bar open the *ELRS* link page: beside the title the air rate and
   its modulation (*500Hz (LORA)*), then one row per reading, each a bar with its figure -- the link

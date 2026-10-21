@@ -119,10 +119,10 @@ end
 -- The host's quick menu numbers (widgets/dashboard/fullscreen_menu.lua, M.PLACES and
 -- M.TWO_COLUMNS_FROM): the pilot's entries on a fixed raster of six places, in two columns from
 -- this width up, and the BATTERY PROFILE row on the row after the raster's last. The mark after a
--- row's value that says the row opens a page is the host's as well (M.OPENS_MARK, U+203A).
+-- row's value that says the row opens a page is the host's as well (M.OPENS_MARK).
 K.PLACES = 6
 K.TWO_COLUMNS_FROM = 300
-K.OPENS_MARK = " \226\128\186"
+K.OPENS_MARK = " >"
 
 -- The background, the header, its title and -- where `closePress` is given -- the close box.
 -- `aside` is an optional second text after the title, in the label colour, which the link view

@@ -376,9 +376,9 @@ local function profileFacts(config, i)
   return cells, warn
 end
 
--- The separator between the facts of a profile: a middle dot (U+00B7, written as its UTF-8
--- bytes) between two spaces.
-local FACT_SEPARATOR = " \194\183 "
+-- The separator between the facts of a profile. Plain ASCII: the radio's LVGL fonts carry ASCII,
+-- Latin-1 letters and a few symbols only, and draw a character outside them as nothing.
+local FACT_SEPARATOR = " / "
 
 -- The facts of one profile as text, from the parts that are present, in the order cells,
 -- capacity, warning voltage: `6S`, `2000mAh`, `Warn 3.50V`.
@@ -669,9 +669,9 @@ end
 M.PLACES = 6
 M.TWO_COLUMNS_FROM = 300
 
--- The mark after a row's value that says the row opens a page: a single right-pointing
--- angle quotation mark (U+203A), written as its UTF-8 bytes.
-M.OPENS_MARK = " \226\128\186"
+-- The mark after a row's value that says the row opens a page. ASCII, for the reason given
+-- at FACT_SEPARATOR.
+M.OPENS_MARK = " >"
 
 -- The width `text` takes in `font`, or nil where the firmware cannot say.
 local function textWidth(text, font)

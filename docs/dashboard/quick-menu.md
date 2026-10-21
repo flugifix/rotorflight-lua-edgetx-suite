@@ -73,15 +73,15 @@ stays empty. The places keep their size whatever is shown, so with fewer entries
 them stays free. An entry past the sixth place is not drawn.
 
 BATTERY PROFILE is always on the row after the last row of places, across the whole width and as
-tall as one of them. Its title is on the left; on the right is the profile in force, with a `›`
+tall as one of them. Its title is on the left; on the right is the profile in force, with a `>`
 to say the row opens a page:
 
-`6S · 2000mAh · Warn 3.50V ›`
+`6S / 2000mAh / Warn 3.50V >`
 
 — the cell count, the capacity and the warning voltage per cell. Where that does not fit, the
 warning voltage is left out first, then the cell count; the capacity always stays. On firmware
 that does not report a cell count and cell voltages per battery profile, the row shows the
-capacity alone. With no profile known to be in force, it shows the title and the `›` only.
+capacity alone. With no profile known to be in force, it shows the title and the `>` only.
 
 ## The erase confirmation
 
@@ -132,7 +132,7 @@ Tapping the BATTERY PROFILE row opens a page with one button per battery profile
 controller carries a capacity for — profiles 1 to 6, and a profile whose capacity is zero is left
 out rather than shown as an empty one. Each button is labelled with that profile's capacity in
 mAh and, in smaller letters under it where the firmware reports them, its cell count and warning
-voltage per cell (`6S · Warn 3.50V`). The profile the flight controller reports is highlighted.
+voltage per cell (`6S / Warn 3.50V`). The profile the flight controller reports is highlighted.
 Which one that is comes from the *BatP* telemetry sensor; a model that is not sending it keeps
 the last profile that was read, and none is highlighted until one has been read at all.
 
@@ -187,7 +187,7 @@ menus:
 | `after` | What follows the press, as data: `done`, `openView:<id>`, `closeView`, `exitFullscreen`, `openTool` or `none`. Missing means `none`. The actions are described in [dashboard views](../developer/dashboard-views.md). |
 | `confirm` | Optional, the question the row asks before its press is performed: a table of already-translated strings — `title`, `message`, the optional `detail`, and the labels `confirmLabel` and `cancelLabel`. Present, the press is held until the pilot answers — see [the erase confirmation](#the-erase-confirmation). |
 | `options` | For a `choice`: a list, or a function returning one, of `{ id, label, detail, current, press, after }`. `id` is what a run is matched by: a battery profile's number, 1 to 6, and a pack's registry id. `detail` is an optional second, smaller line under the label. The battery profiles are one, and the battery picker's packs are the other. |
-| `values` | Optional, a function `values(w)` returning texts for a row that shows a value beside its title, longest first, each a shortening of the one before. BATTERY PROFILE has one: the profile in force as `6S · 2000mAh · Warn 3.50V`, then `6S · 2000mAh`, then `2000mAh`, from the parts the flight controller reports; an empty list where no profile is known to be in force. |
+| `values` | Optional, a function `values(w)` returning texts for a row that shows a value beside its title, longest first, each a shortening of the one before. BATTERY PROFILE has one: the profile in force as `6S / 2000mAh / Warn 3.50V`, then `6S / 2000mAh`, then `2000mAh`, from the parts the flight controller reports; an empty list where no profile is known to be in force. |
 | `armedNote` | Optional, already translated: what a page of the entry's options says while the model is armed and none of them can be pressed. BATTERY PROFILE has one. |
 | `close` | Optional, `{ press, after }`: what closing the surface that draws the options does. |
 | `info` | Optional, a function returning what the entry knows about the state it acts on, read when it is called. ERASE BLACKBOX has one: `{ used, total }` of the blackbox, from the summary the flight controller last sent. |
@@ -231,7 +231,7 @@ pixels wide and in one below that, filled row by row and left to right; an entry
 not drawn on a place: `M.build` skips `battery_profile` in any list it is given and draws the
 entry itself, with `M.entry(widget, "battery_profile")`, on the row after the last row of places.
 The value on that row is the longest of the entry's `values` that fits, chosen by
-`M.fitFirst(texts, font, maxW)`, followed by `M.OPENS_MARK` (` ›`). `M.renderKey(widget)`
+`M.fitFirst(texts, font, maxW)`, followed by `M.OPENS_MARK` (` >`). `M.renderKey(widget)`
 rebuilds the menu when the profile in force changes and when the flight controller's battery
 configuration arrives or goes.
 
