@@ -24,9 +24,9 @@ Read-only while the model is armed.
 | Pitch | Board pitch offset, in degrees, from -180 to 360. Disabled while Live View runs. |
 | Yaw | Board yaw offset, in degrees, from -180 to 360. Disabled while Live View runs. |
 | Mag | Magnetometer orientation: Default, CW 0/90/180/270 deg, the same four flipped, or Custom. Disabled while Live View runs. |
-| Auto-align | On firmware API 12.10 or later, detects the board mounting angle from a level pose followed by lifting the tail at least 20 degrees. The action appears only when the flight controller confirms command support. The flight controller applies a successful result at once and the page loads it into Roll, Pitch and Yaw; Save stores it now, and otherwise the flight controller stores it itself the next time the model is disarmed. |
 | Live View | Shows the board's attitude for 60 seconds, four readings a second; the button counts down and ends Live View early when pressed again. |
 | Refresh | Reads the attitude once and redraws the picture. Disabled while Live View runs. |
+| Auto-align | On firmware API 12.10 or later, detects the board mounting angle from a level pose followed by lifting the tail at least 20 degrees. The action appears only when the flight controller confirms command support. The flight controller applies a successful result at once and the page loads it into Roll, Pitch and Yaw; Save stores it now, and otherwise the flight controller stores it itself the next time the model is disarmed. |
 | Save | Writes the offsets and the magnetometer orientation, then restarts the flight controller. |
 | Reload | Reads the alignment from the flight controller again. |
 | Star | Turns the view so the tail faces you, after a confirmation. |
