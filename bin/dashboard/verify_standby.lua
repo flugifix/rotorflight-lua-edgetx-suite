@@ -413,6 +413,21 @@ for i = 1, #gpsRects do
   end
 end
 check("two-column detailed GPS text rectangles do not overlap", gpsNoOverlap)
+-- The screen skips a saved row the zone cannot carry and draws the GPS row after it; the
+-- snapshot has to prepare the details for the rows the screen keeps, not stop at the skipped one.
+local skippedGpsItems = standby.decode("clock+clock+clock/tx_gps")
+local skippedGpsCache = { text = text }
+local skippedGpsValues = standby.snapshot(skippedGpsItems, skippedGpsCache, { w = 480, h = 480 })
+local skippedGpsScene = standby.build({ w = 480, h = 480 }, "Waiting", text,
+  skippedGpsItems, skippedGpsValues, skippedGpsCache)
+local skippedDetails = 0
+for i = 1, #skippedGpsScene do
+  local value = rendered(skippedGpsScene[i])
+  if type(value) == "string" and (string.find(value, "Latitude: ", 1, true)
+      or string.find(value, "HDOP: ", 1, true)) then skippedDetails = skippedDetails + 1 end
+end
+check("a GPS row after a skipped row shows its details", #rectangles(skippedGpsScene, 7) == 1
+  and skippedDetails == 2)
 local callsAfterGps = gpsCalls
 tick = 1150
 local cachedGpsValues = standby.snapshot(gpsItems, gpsCache)

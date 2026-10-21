@@ -341,20 +341,6 @@ function M.canAddField(row, width, height, labels)
   return true, types
 end
 
-function M.needsGpsDetails(items, width, height, labels)
-  local rows, geometry = M.toRows(items), M.geometry(width, height)
-  for rowNumber = 1, math.min(#rows, geometry.maxRows) do
-    local row = rows[rowNumber]
-    if #row > geometry.maxFields then break end
-    local hasGps = false
-    for field = 1, #row do if row[field].type == "tx_gps" then hasGps = true; break end end
-    if hasGps and gpsDetailed(fieldWidth(width, geometry, #row), height, labels, nil, geometry) then
-      return true
-    end
-  end
-  return false
-end
-
 local function layout(items, width, height, labels, crop)
   local sourceRows, geometry = M.toRows(items), M.geometry(width, height)
   if #sourceRows == 0 then return nil, "empty", 1 end
@@ -405,6 +391,16 @@ local function layout(items, width, height, labels, crop)
   end
   if #rows == 0 then return crop and {} or nil, "fit", 1 end
   return rows, #rows < #sourceRows and "cropped" or nil
+end
+
+-- Whether the screen draws a detailed GPS field: asked of the same rows the screen keeps.
+function M.needsGpsDetails(items, width, height, labels)
+  local rows = layout(items, width, height, labels, true) or {}
+  for r = 1, #rows do
+    local boxes = rows[r].items
+    for i = 1, #boxes do if boxes[i].detailedGps then return true end end
+  end
+  return false
 end
 
 function M.validate(items, width, height, labels)
@@ -614,12 +610,38 @@ local function prepareElrsDisplay(cache, values, width)
   values._elrsDisplays[width] = lines
 end
 
+-- The captions and worst-case texts a layout is fitted with, in the screen's language. The
+-- snapshot fits with the same table as the screen, so both keep the same rows.
+local function screenLabels(i18n, items)
+  local labels, hasElrs, hasGps = {}, false, false
+  for i = 1, #items do
+    local id = items[i].type
+    if labels[id] == nil then labels[id] = i18n(TYPE_KEYS[id], id) end
+    if id == "elrs" then hasElrs = true end
+    if id == "tx_gps" then hasGps = true end
+  end
+  if hasElrs then
+    for i = 1, #ELRS_WORST do labels[ELRS_WORST[i][1]] = i18n(ELRS_WORST[i][1], ELRS_WORST[i][2]) end
+    for i = 1, #ELRS_COMPACT_WORST do
+      labels[ELRS_COMPACT_WORST[i][1]] = i18n(ELRS_COMPACT_WORST[i][1], ELRS_COMPACT_WORST[i][2])
+      labels[ELRS_COMPACT_WORST[i][4]] = i18n(ELRS_COMPACT_WORST[i][4], ELRS_COMPACT_WORST[i][5])
+    end
+  end
+  if hasGps then
+    for i = 1, #GPS_WORST do labels[GPS_WORST[i][1]] = i18n(GPS_WORST[i][1], GPS_WORST[i][2]) end
+    labels.gps_no_fix = i18n("gps_no_fix", "No fix")
+    labels.gps_satellites = i18n("gps_satellites", "Sat")
+    labels.gps_time_unavailable = i18n("gps_time_unavailable", "Time status unknown")
+  end
+  return labels
+end
+
 function M.snapshot(items, cache, zone)
   cache = cache or {}
   local now = type(getTime) == "function" and getTime() or 0
   local zoneW = type(zone) == "table" and (zone.w or LCD_W) or cache.zoneW or LCD_W
   local zoneH = type(zone) == "table" and (zone.h or LCD_H) or cache.zoneH or LCD_H
-  local gpsLabels, hasGps, hasElrs = nil, false, false
+  local hasGps, hasElrs = false, false
   for i = 1, #items do
     local itemType = items[i].type
     if itemType == "tx_gps" then hasGps = true end
@@ -630,13 +652,8 @@ function M.snapshot(items, cache, zone)
       and cache.gpsDetailText == cache.text then
     wantsGpsDetails = cache.gpsDetailNeeded
   else
-    if hasGps and cache.text then
-      gpsLabels = {}
-      for i = 1, #GPS_WORST do
-        gpsLabels[GPS_WORST[i][1]] = cache.text(GPS_WORST[i][1], GPS_WORST[i][2])
-      end
-    end
-    wantsGpsDetails = M.needsGpsDetails(items, zoneW, zoneH, gpsLabels)
+    wantsGpsDetails = hasGps and M.needsGpsDetails(items, zoneW, zoneH,
+      cache.text and screenLabels(cache.text, items) or nil)
     cache.gpsDetailItems, cache.gpsDetailW, cache.gpsDetailH = items, zoneW, zoneH
     cache.gpsDetailText = cache.text
     cache.gpsDetailNeeded = wantsGpsDetails
@@ -660,36 +677,12 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
   cache = cache or {}
   cache.text = i18n
   local w, h = zone.w or LCD_W, zone.h or LCD_H
-  local labels, fittedDetails = {}, {}
+  local labels, fittedDetails = screenLabels(i18n, items), {}
   local function fittedDetail(value, width)
     local key = tostring(value) .. ":" .. tostring(width)
     local fitted = fittedDetails[key]
     if fitted == nil then fitted = fitLine(value, width, SMLSIZE); fittedDetails[key] = fitted end
     return fitted
-  end
-  local hasElrs, hasGps = false, false
-  for i = 1, #items do
-    local id = items[i].type
-    if labels[id] == nil then labels[id] = i18n(TYPE_KEYS[id], id) end
-    if id == "elrs" then hasElrs = true end
-    if id == "tx_gps" then
-      hasGps = true
-    end
-  end
-  if hasElrs then
-    for i = 1, #ELRS_WORST do labels[ELRS_WORST[i][1]] = i18n(ELRS_WORST[i][1], ELRS_WORST[i][2]) end
-    for i = 1, #ELRS_COMPACT_WORST do
-      labels[ELRS_COMPACT_WORST[i][1]] = i18n(ELRS_COMPACT_WORST[i][1], ELRS_COMPACT_WORST[i][2])
-      labels[ELRS_COMPACT_WORST[i][4]] = i18n(ELRS_COMPACT_WORST[i][4], ELRS_COMPACT_WORST[i][5])
-    end
-  end
-  if hasGps then
-    for i = 1, #GPS_WORST do labels[GPS_WORST[i][1]] = i18n(GPS_WORST[i][1], GPS_WORST[i][2]) end
-  end
-  if hasGps then
-    labels.gps_no_fix = i18n("gps_no_fix", "No fix")
-    labels.gps_satellites = i18n("gps_satellites", "Sat")
-    labels.gps_time_unavailable = i18n("gps_time_unavailable", "Time status unknown")
   end
   cache.zoneW, cache.zoneH, cache.labels = w, h, labels
   local rows = layout(items, w, h, labels, true) or {}
