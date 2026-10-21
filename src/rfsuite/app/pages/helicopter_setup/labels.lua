@@ -196,6 +196,7 @@ local L = {
   rightMark = "@i18n(app.modules.helicopter_setup.rightMark)@",
   receiverQuick = "@i18n(app.modules.helicopter_setup.receiverQuick)@",
   channelQuick = "@i18n(app.modules.helicopter_setup.channelQuick)@",
+  modeQuick = "@i18n(app.modules.helicopter_setup.modeQuick)@",
   sticksQuick = "@i18n(app.modules.helicopter_setup.sticksQuick)@",
   throttleQuick = "@i18n(app.modules.helicopter_setup.throttleQuick)@",
   servoHz = "@i18n(app.modules.helicopter_setup.servoHz)@",

@@ -278,6 +278,7 @@ return {
         rightMark = "R",
         receiverQuick = "Verbindung steht. Hilfe: ?",
         channelQuick = "Nur angeforderten Geber bewegen.",
+        modeQuick = "Zuweisen drücken, dann Schalter auf EIN. Hilfe: ?",
         sticksQuick = "Genannte Richtung: Wert steigt.",
         throttleQuick = "Gas-Schalter: AUS/EIN, wieder AUS.",
         servoHz = "Hz",

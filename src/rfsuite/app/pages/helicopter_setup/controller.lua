@@ -348,6 +348,13 @@ function M.new(runtime, transport, mathModule, labels)
       if step == 5 then self.rateStyles, self.rateLoaded = {}, nil end
     end
     self:release()
+    -- A result reported on one card (a learned switch, a calibration) is not about the next one;
+    -- only the unsaved-change reminder and a pending status check carry over.
+    local L = self.L
+    if not self.statusWaiting and self.message ~= L.pendingSave and self.message ~= L.liveApplied
+      and self.message ~= L.pendingReboot then
+      self.message = L.ready
+    end
     self.step, self.card, self.commit, self.cards, self.enter, self.onLive = step, card or 1, nil, nil, nil, nil
     if self.attitudeView then self.attitudeView.valid=false;self.attitudeView=nil end
     if self.updateHistoryHints then self:updateHistoryHints() end

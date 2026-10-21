@@ -72,6 +72,7 @@ return function(w)
         end)
       }, nil, "switch")
       cards[#cards].switchState=state
+      cards[#cards].summary=L.modeQuick
     end
   end
   return cards

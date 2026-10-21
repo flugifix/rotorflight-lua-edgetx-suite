@@ -278,6 +278,7 @@ return {
         rightMark = "R",
         receiverQuick = "Receiver link connected. See ?.",
         channelQuick = "Move only the requested control.",
+        modeQuick = "Press Assign, then move the switch to ON. See ?.",
         sticksQuick = "Named direction: value must rise.",
         throttleQuick = "Throttle switch: OFF/ON, then OFF.",
         servoHz = "Hz",
