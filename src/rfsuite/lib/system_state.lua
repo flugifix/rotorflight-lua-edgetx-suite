@@ -17,6 +17,8 @@ local fields = {
     {"blackbox_full",21}, {"rpm_source_active",22}, {"governor_mode",23,7}
   }
 }
+-- Ordered definitions are shared with the diagnostic presentation.
+M.fields = fields
 function M.decode(source, word)
   local definitions = fields[source]
   if not definitions or type(word) ~= "number" or word < 0 or word > 0x7fffffff or word % 1 ~= 0 then return nil end
