@@ -652,7 +652,9 @@
         "CORE.history-store",
         "CORE.history-guidance-and-reset",
         "CORE.history-failure-actions",
-        "CORE.radio-model-preparation"
+        "CORE.radio-model-preparation",
+        "CORE.status-wait-and-retry",
+        "CORE.loading-scene"
       ],
       "adaptation": "The complete path keeps all 19 source steps. Suite entries share one lazy page and load only the selected step, with preparation before holds, save/discard, and return to the Suite. Informational per-FC history has explicit reset and advisory prerequisites; no saved bit replaces fresh physical answers. Telemetry-sized indexed startup replaces USB bulk reads. Cached packed-state hints never replace MSP acknowledgements or lock readbacks. Native light palette and responsive diagrams replace browser scenes. An unnumbered current-radio-model confirmation precedes new setup visits; template use alone does not pass it and history cannot retain it."
     },

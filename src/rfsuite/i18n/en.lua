@@ -1,5 +1,13 @@
 return {
   helicopter = {
+    statusUnavailable = "FC status could not be confirmed.",
+    statusWaitHint = "Controls are paused. Check the receiver link, then try again.",
+    failedClean = "Operation failed.",
+
+    checkingStatus = "Checking current FC status; controls paused.",
+    preparingView = "Preparing the next task...",
+    loadingHint = "Keep the radio and flight controller powered.",
+
     historyIntro = "Past completion always needs a fresh check.",
     modelPreparationIntro = "Use the template or check the model yourself.",
     modelPreparationTitle = "Prepare the radio model",

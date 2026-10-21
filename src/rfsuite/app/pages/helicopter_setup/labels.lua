@@ -1,4 +1,9 @@
 local L = {
+  statusUnavailable = "@i18n(helicopter.statusUnavailable)@",
+  statusWaitHint = "@i18n(helicopter.statusWaitHint)@",
+  failedClean = "@i18n(helicopter.failedClean)@",
+
+  checkingStatus = "@i18n(helicopter.checkingStatus)@",
   historyIntro = "@i18n(helicopter.historyIntro)@",
   modelPreparationIntro = "@i18n(helicopter.modelPreparationIntro)@",
   modelPreparationTitle = "@i18n(helicopter.modelPreparationTitle)@",

@@ -1,5 +1,13 @@
 return {
   helicopter = {
+    statusUnavailable = "FC-Status nicht bestätigt.",
+    statusWaitHint = "Eingaben gesperrt. Empfängerverbindung prüfen, dann erneut versuchen.",
+    failedClean = "Vorgang fehlgeschlagen.",
+
+    checkingStatus = "Prüfe FC-Status; Eingaben gesperrt.",
+    preparingView = "Nächste Aufgabe wird vorbereitet...",
+    loadingHint = "Sender und Flugregler eingeschaltet lassen.",
+
     historyIntro = "Frühere Abschlüsse immer erneut prüfen.",
     modelPreparationIntro = "Template nutzen oder Modell selbst prüfen.",
     modelPreparationTitle = "Sendermodell vorbereiten",

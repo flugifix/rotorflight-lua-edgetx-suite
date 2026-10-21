@@ -53,10 +53,13 @@ function M.new(w, ctx, diagrams)
     button(math.floor(width/2)+6, 100, math.floor(width/2)-18, w.exitToSteps and w.L.discardChanges or w.L.discardExit,
       function() if w.resolveExit then w:resolveExit(false) else w:discard() end end)
   elseif w.error then
-    all[#all + 1] = label(12, 48, width-24, w.L.failed)
+    all[#all + 1] = label(12, 48, width-24, w.statusFailure and w.L.statusUnavailable or next(w.dirty) and w.L.failed or w.L.failedClean)
     all[#all].h=36
     all[#all + 1] = label(12, 88, width-24, w.error)
-    button(12, 132, width-24, w.L.retry, function() w:retry() end)
+    if w.statusFailure then
+      all[#all+1]=label(12,116,width-24,w.L.statusWaitHint);all[#all].h=50
+    end
+    button(12, w.statusFailure and 172 or 132, width-24, w.L.retry, function() w:retry() end)
   elseif w.historyFailure then
     all[#all+1]=label(12,48,width-24,w.L.historySaveFailed)
     button(12,100,width-24,w.L.retry,function() w.historyRetry() end)
@@ -83,7 +86,7 @@ function M.new(w, ctx, diagrams)
     local formX = large and math.floor(width * 0.43) or illustrated and math.floor(width * 0.35)+4 or 10
     local formW = width-formX-(large and 16 or 10)
     all[#all + 1] = label(10, large and 50 or 27, large and formX-24 or width-20, card.title, large and MIDSIZE or SMLSIZE)
-    all[#all + 1] = label(10, large and 94 or 48, large and formX-30 or width-20, card.detail)
+    all[#all + 1] = label(10, large and 94 or 48, large and formX-30 or width-20, card.summary or card.detail)
     all[#all].h = large and (illustrated and 98 or height-controlH-154) or rowY-52
     if illustrated then
       local artY = large and 204 or rowY+4

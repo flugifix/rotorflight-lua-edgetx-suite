@@ -24,6 +24,21 @@ receiver wiring detection in USB Configurator: that test reinitializes the same
 UART that carries the radio link. ESC wiring detection and board auto-alignment
 remain available on the radio when supported by firmware.
 
+## Loading and fresh status
+
+A dedicated loading view shows bounded-read progress, a power reminder and Back.
+Its progress updates in the existing scene. The model-preparation card shows a
+short instruction; **?** retains the complete model checklist and active name.
+
+A status older than three seconds immediately blocks editing. Active tests and
+pending writes still fail closed and release overrides. During an idle read-only
+visit, the page displays **Checking current FC status; controls paused** while the
+fresh STATUS request completes. It does not extend the safety window. A failed
+request displays an error and a receiver-link hint. **Try again** starts a new
+arming-disable/readback handshake; the expired timestamp cannot abort that handshake.
+Status processing continues during resumable scene assembly. Legacy override
+warnings appear when a legacy hold is actually used, rather than during model preparation.
+
 ## Before the 19 steps
 
 Every new setup visit first shows **Prepare the radio model**, outside the numbered

@@ -6,12 +6,29 @@ local modules, stage, w, context, viewJob, scene, sceneKey = {}, 1
 local deps = { "tasks/msp/runtime.lua", PATH .. "transport.lua", PATH .. "math.lua", PATH .. "labels.lua",
   PATH .. "controller.lua", PATH .. "forms.lua", PATH .. "workflow.lua", PATH .. "view.lua", "lib/armed.lua", PATH .. "diagrams.lua", PATH .. "navigation.lua",
   "lib/system_state.lua", "lib/sensors.lua", PATH .. "feedback.lua", PATH .. "history_store.lua", PATH .. "history.lua" }
+local loadingPoints = {{24,0},{24,0}}
+local loadingFraction = 0
 local keys = { "sensors", "receiver", "modes", "profiles", "rates", "swash", "servoType", "governor", "motor",
   "connect", "throttle", "escTelemetry", "servos", "direction", "level", "pitch", "tail", "gyro", "finish" }
 local function key()
   if not w then return "loading" end
   return tostring(w.step) .. ":" .. tostring(w.card) .. ":" .. tostring(w.cards) .. ":" .. tostring(w.confirmExit)
     .. ":" .. tostring(w.overview) .. ":" .. tostring(w.historyFailure) .. ":" .. tostring(w.error) .. ":" .. tostring(context.w) .. ":" .. tostring(context.h)
+end
+local loadingScene
+local function buildLoading(ctx)
+  local y=math.floor(ctx.h*0.38)
+  loadingPoints[1][2],loadingPoints[2][2]=y+68,y+68
+  local children={}
+  children[#children+1]={type="rectangle",x=0,y=0,w=ctx.w,h=ctx.h,filled=true,color=COLOR_THEME_PRIMARY2}
+  children[#children+1]={type="label",x=24,y=y-34,w=ctx.w-48,h=28,text="@i18n(helicopter.name)@",font=ctx.w>=700 and MIDSIZE or SMLSIZE,color=COLOR_THEME_PRIMARY1}
+  children[#children+1]={type="label",x=24,y=y,w=ctx.w-48,h=28,
+      text=function() return w and w.ready and "@i18n(helicopter.preparingView)@" or w and w.loadingText or "@i18n(helicopter.loading)@" end,font=SMLSIZE,color=COLOR_THEME_PRIMARY1}
+  children[#children+1]={type="label",x=24,y=y+30,w=ctx.w-48,h=30,text="@i18n(helicopter.loadingHint)@",font=SMLSIZE,color=COLOR_THEME_PRIMARY1}
+  children[#children+1]={type="line",pts={{24,y+68},{ctx.w-24,y+68}},thickness=3,color=COLOR_THEME_PRIMARY1}
+  children[#children+1]={type="line",pts=function() return loadingPoints end,thickness=7,color=COLOR_THEME_PRIMARY3}
+  children[#children+1]={type="button",x=12,y=ctx.h-38,w=math.floor(ctx.w*0.25),h=30,text="@i18n(helicopter.back)@",press=function() M.onBack() end}
+  return children
 end
 function M.build(ctx)
   context = ctx
@@ -23,14 +40,21 @@ function M.build(ctx)
   end
   if scene and sceneKey == key() then
     table.move(scene, 1, #scene, #ctx.children+1, ctx.children)
+  elseif loadingScene then
+    table.move(loadingScene,1,#loadingScene,#ctx.children+1,ctx.children)
   else
-    ctx.children[#ctx.children+1] = { type = "label", x = 12, y = 30, w = ctx.w-24,
-      text = function() return w and w.loadingText or "@i18n(helicopter.loading)@" end, color = COLOR_THEME_PRIMARY1, font = SMLSIZE }
+    ctx.children[#ctx.children+1] = { type="label",x=12,y=30,w=ctx.w-24,
+      text="@i18n(helicopter.loading)@",color=COLOR_THEME_PRIMARY1,font=SMLSIZE }
   end
 end
 function M.wakeup(ctx)
   if not context then return end
   if ctx and ctx.requestRebuild then context.requestRebuild = ctx.requestRebuild end
+  loadingFraction = w and (w.ready and 1 or 0.2+0.8*(w.progress or 0)/math.max(1,w.loadTotal or 1)) or 0.2*(stage-1)/#deps
+  loadingPoints[2][1]=24+math.floor((context.w-48)*math.min(1,loadingFraction))
+  if not loadingScene then
+    loadingScene=buildLoading(context);context.requestRebuild();return
+  end
   if deps[stage] then
     modules[stage] = assert(loadScript(BASE .. deps[stage], "t"))(); stage = stage + 1; return
   end
@@ -48,6 +72,8 @@ function M.wakeup(ctx)
   end
   w.stepKey = keys[w.step]
   if viewJob then
+    w:tick()
+    w.canEdit=w:usable()
     if viewJob:step() then scene, sceneKey = viewJob.children, viewJob.key; viewJob = nil; w:rebuild() end
     return
   end
@@ -74,6 +100,7 @@ function M.onClose()
     w.active = false
   end
   modules, stage, w, context, viewJob, scene, sceneKey = {}, 1, nil, nil, nil, nil, nil
+  loadingScene,loadingFraction,loadingPoints[2][1]=nil,0,24
 end
 function M.getHeaderActions() return { save = false, reload = false, help = false } end
 return M

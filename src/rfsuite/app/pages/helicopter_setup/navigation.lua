@@ -54,6 +54,7 @@ function M.attach(w, ctx)
         get=function() return self.modelPreparationMethod end,set=function(value) self.modelPreparationMethod=value end},
       self:check("modelReady",self.L.modelChecked)
     })}
+    self.cards[1].summary=self.L.modelPreparationIntro
     self.card,self.modelPreparationCard=1,true
     return true
   end

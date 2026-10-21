@@ -581,9 +581,61 @@ return function(h)
     check(type(c[1].rows[1].get())=="string","S19 swash summary is readable")
     check(not w.validate(),"S19 final physical acknowledgement required")
   end)
+  case("CORE.loading-scene",function()
+    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+      local page=load("app/pages/helicopter_setup/page.lua")
+      local builds=0
+      local ctx={w=size[1],h=size[2],children={},requestRebuild=function() builds=builds+1 end}
+      page.build(ctx);page.wakeup(ctx)
+      ctx.children={};page.build(ctx)
+      eq(#ctx.children,7,"CORE loading has title hint progress and Back")
+      local bar=ctx.children[6];check(type(bar.pts)=="function","CORE loading progress is reactive")
+      local before=bar.pts()[2][1]
+      page.wakeup(ctx);page.wakeup(ctx)
+      check(bar.pts()[2][1]>before,"CORE loading progress moves without a rebuild")
+      eq(builds,1,"CORE loading scene is published once")
+      check(ctx.children[7].press~=nil,"CORE loading can return to Suite")
+      for _,node in ipairs(ctx.children) do
+        if node.y then check(node.y>=0 and node.y+(node.h or 0)<=ctx.h,"CORE loading nodes fit screen") end
+      end
+      page.onClose()
+    end
+  end)
+  case("CORE.status-wait-and-retry",function()
+    local w=world();settle(w)
+    w.statusAt=getTime()-301;w:tick()
+    check(not w.error and w.statusWaiting,"CORE idle expiry waits for fresh status")
+    check(not w:usable(),"CORE waiting status blocks all edits")
+    drain(w)
+    check(not w.error and w:usable() and not w.statusWaiting,"CORE idle status reacquisition completes")
+    w.statusAt=getTime()-301;w:fail("status",L.stale)
+    w:retry()
+    if h.mutation=="retry-stale" then w.locked=true end
+    check(not w.locked and not w:usable(),"CORE retry requires new arming lock proof")
+    drain(w)
+    check(not w.error and w.locked and w:usable(),"CORE retry escapes stale timestamp")
+    w=world();settle(w)
+    w.statusAt=getTime()-301;w:tick()
+    local message=q.messages[#q.messages]
+    check(message and message.command==101,"CORE waiting requests actual STATUS")
+    message.errorHandler(message,"timeout");w:tick()
+    check(w.error and not w:usable(),"CORE actual STATUS timeout remains an error")
+    w:retry();drain(w)
+    check(not w.error and w:usable(),"CORE timeout retry reacquires the lock")
+    w.statusAt=getTime()-301;w:write("board_alignment_config",w.data.board_alignment_config)
+    w:tick()
+    check(w.error~=nil,"CORE expiry during pending mutation still fails closed")
+  end)
   case("CORE.status-expiry-during-pending-request",function()
     local w=world();settle(w);w:hold("servo",0,400)
     w.bus:add({api="rc"});w.bus:tick()
+    if h.mutation=="stale-status" then
+      local original=w.tick
+      w.tick=function(self)
+        if self.ready and getTime()-(self.statusAt or 0)>300 then return end
+        return original(self)
+      end
+    end
     -- A live pending transaction cannot hide an expired arming status.
     w.statusAt=getTime()-301;w:tick()
     check(w.error~=nil and next(w.holds)==nil,"CORE stale status releases holds before bus wait")

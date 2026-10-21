@@ -166,7 +166,8 @@ local function resolve(t)
         local x,y=v()
         assert(type(x)=="number" and type(y)=="number" and x>=0 and y>=0,"LVGL pos returns two coordinates")
         out[k]={x,y}
-      elseif k=="text" or k=="get" or k=="active" or k=="pts" or k=="visible" or k=="color" then out[k] = v()
+      elseif k=="pts" then out[k]=resolve(v())
+      elseif k=="text" or k=="get" or k=="active" or k=="visible" or k=="color" then out[k] = v()
       elseif k=="display" and t.get then out[k] = v(t.get()) end
     elseif type(v)=="table" then out[k] = resolve(v)
     else out[k] = v end
@@ -178,6 +179,21 @@ load(PATH.."history.lua").attach(historyPreview,load(PATH.."history_store.lua"))
 load(PATH.."feedback.lua").attach(historyPreview,load("lib/system_state.lua"),{})
 historyPreview.history:publish(1)
 for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+  local loadingPage=load(PATH.."page.lua")
+  local loadingCtx={w=size[1],h=size[2],children={},requestRebuild=function() end}
+  loadingPage.build(loadingCtx)
+  for _=1,12 do loadingPage.wakeup(loadingCtx) end
+  loadingCtx.children={};loadingPage.build(loadingCtx)
+  local snapshot=resolve(loadingCtx.children)
+  for _,node in ipairs(snapshot) do
+    if type(node.text)=="string" then
+      local key=string.match(node.text,"^@i18n%(helicopter%.([%w_]+)%)@$")
+      if key then node.text=bundle.helicopter[key] end
+    end
+  end
+  exported[#exported+1]={step=0,name="loading",task="loading",width=size[1],height=size[2],children=snapshot}
+  loadingPage.onClose()
+  historyPreview.error,historyPreview.statusFailure=nil,nil
   historyPreview.overview,historyPreview.historyMode=nil,nil
   historyPreview.activeModelName="Model01"
   historyPreview.modelPreparationRequired,historyPreview.modelPreparationDone=true,nil
@@ -196,6 +212,11 @@ for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
   local preparation=view.new(historyPreview,{w=size[1],h=size[2]},diagrams)
   while not preparation.done do preparation:step() end
   exported[#exported+1]={step=0,name="preparation",task="prepare",width=size[1],height=size[2],children=resolve(preparation.children)}
+  historyPreview.error,historyPreview.statusFailure="status: timeout",true
+  local failure=view.new(historyPreview,{w=size[1],h=size[2]},diagrams)
+  while not failure.done do failure:step() end
+  exported[#exported+1]={step=0,name="status-error",task="status-error",width=size[1],height=size[2],children=resolve(failure.children)}
+  historyPreview.error,historyPreview.statusFailure=nil,nil
 end
 for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
   for n,name in ipairs(steps) do
@@ -370,6 +391,7 @@ page.onClose()
 -- Walk the actual page through its rendered callbacks. Construction and every
 -- reactive getter share this measured frame, as they do in the dashboard host.
 local frameClosed,frameVisited=false,{}
+local pausedModelChoice=false
 local frameCtx={children={},x=0,y=0,w=480,h=272,menu={getCurrentMenuId=function() return "helicopter_setup_page" end},requestRebuild=function() end,
   requestClose=function() frameClosed=true end}
 page.build(frameCtx)
@@ -388,6 +410,7 @@ for _=1,5000 do
     end
     if active and item.type=="choice" and item.set and
       (item.values[1]==L.modelNotChecked or item.values[1]=="@i18n(helicopter.modelNotChecked)@") then
+      if not pausedModelChoice then ticks=ticks+400;pausedModelChoice=true end
       measure("page input",function() item.set(2) end)
     end
     if active and item.type=="choice" and item.set and
@@ -405,6 +428,7 @@ for _=1,5000 do
     end
   end
 end
+check(pausedModelChoice,"actual page includes a four-second input pause")
 check(frameClosed,"actual rendered page completes the whole wizard")
 local frameCount=0;for _ in pairs(frameVisited) do frameCount=frameCount+1 end
 eq(frameCount,19,"actual page callbacks visit all nineteen steps")
@@ -464,13 +488,7 @@ local function contractWorld()
       return entries
     end
   elseif mutation=="mode-flag" then v.modeActive=function() return true end
-  elseif mutation=="stale-status" then
-    local original=v.tick
-    v.tick=function(self)
-      if self.ready and getTime()-(self.statusAt or 0)>300 then return end
-      return original(self)
-    end
-  elseif mutation and mutation~="bulk-read" and mutation~="history-early" then error("Unknown negative control: "..mutation) end
+  elseif mutation and mutation~="bulk-read" and mutation~="history-early" and mutation~="stale-status" and mutation~="retry-stale" then error("Unknown negative control: "..mutation) end
   return v
 end
 local contractCases=assert(loadfile("bin/wizard/contracts.lua"))()({

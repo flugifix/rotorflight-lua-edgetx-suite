@@ -28,6 +28,7 @@ function M.new(runtime, transport, mathModule, labels)
   function w:fail(api, reason)
     self.bus:cancel()
     self.statusQueued = nil
+    self.statusFailure = api == "status" or api == "arming_disable"
     self.error = api .. ": " .. tostring(reason)
     self.message, self.transition = self.L.failed, nil
     self.closing = nil
@@ -80,6 +81,10 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:acceptStatus(d)
     self.data.status, self.statusAt = d, now()
+    if self.statusWaiting then
+      self.statusWaiting, self.message = nil, self.beforeStatusWait or self.L.ready
+      self.beforeStatusWait = nil
+    end
     if (d.reboot_required or 0) ~= 0 then self.rebootPending = true end
     if self.locked and (d.arming_disable_flags & (1 << 16)) == 0 then
       self.locked = false; self:fail("arming_disable", "lock lost"); return
@@ -96,7 +101,9 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:retry()
     if not self.bus:idle() or not self:allowed() then return end
-    self.error, self.transition = nil, true
+    self.error, self.transition, self.locked = nil, true, false
+    self.statusWaiting, self.statusQueued, self.beforeStatusWait = nil, nil, nil
+    self.canEdit, self.canNext, self.message = false, false, self.L.checkingStatus
     self:write("arming_disable", { disabled = true })
     self:read("status", function(d)
       if (d.arming_disable_flags & (1 << 16)) == 0 then self:fail("arming_disable", "not active"); return end
@@ -374,7 +381,7 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:load()
     self.ready, self.error, self.progress, self.transition = false, nil, 0, true
-    self.statusQueued = nil
+    self.statusQueued, self.statusWaiting, self.beforeStatusWait = nil, nil, nil
     self.loadingText, self.loadTotal = self.L.loading, #READS + 66
     self.locked = false
     self:write("arming_disable", { disabled = true })
@@ -431,12 +438,12 @@ function M.new(runtime, transport, mathModule, labels)
       self.startTail = self.data.mixer_config.tail_rotor_mode
       self.savedRebootPending = self.rebootPending
       self.ready, self.transition, self.buildRequested = true, nil, true
-      self.message = self.timed and self.L.ready or self.L.persistent
+      self.message = self.L.ready
       self:rebuild()
     end)
   end
   function w:poll()
-    if self.historyMode then return end
+    if self.historyMode or self.modelPreparationCard then return end
     local time = now()
     if time - (self.lastPoll or 0) < 20 then return end
     self.lastPoll = time
@@ -501,7 +508,17 @@ function M.new(runtime, transport, mathModule, labels)
     if self.ready and self.locked and not self.error and not self.rebootPhase then
       local age = now() - (self.statusAt or 0)
       if age > 300 then
-        self:fail("status", self.L.stale); self.message = self.L.stale; return
+        -- No stale status may authorize an edit or keep a test running. An idle
+        -- read-only visit can await its outstanding fresh reply without claiming
+        -- that configuration was lost. Mutations and tests still fail closed.
+        if self.transition or self.motorHold or next(self.holds) or self.trial or self.calibrationAt or not self.bus:readOnly() then
+          self:fail("status", self.L.stale); self.message = self.L.stale; return
+        end
+        if not self.statusWaiting then
+          self.beforeStatusWait, self.statusWaiting = self.message, true
+          self.canEdit, self.canNext, self.message = false, false, self.L.checkingStatus
+          self:release()
+        end
       end
       if age > 100 and not self.statusQueued then
         self.statusQueued = true

@@ -11,13 +11,14 @@ def main():
             ('mode-flag','FAIL S03 rescue requires actual mode flag'),
             ('bulk-read','FAIL CORE paged startup reaches ready on telemetry'),
             ('history-early','FAIL CORE unconfirmed step cannot enter history'),
-            ('stale-status','FAIL CORE stale status releases holds before bus wait')]
+            ('stale-status','FAIL CORE stale status releases holds before bus wait'),
+            ('retry-stale','FAIL CORE retry requires new arming lock proof')]
     for mutation,marker in checks:
         command=[args.lua,'bin/wizard/verify.lua']
         if mutation:command+=['--mutation',mutation]
         result=subprocess.run(command,text=True,capture_output=True,encoding='utf-8')
         expected=1 if mutation else 0
-        if result.returncode!=expected or marker not in result.stdout:
+        if result.returncode!=expected or marker not in result.stdout or 'Wizard:' not in result.stdout:
             raise AssertionError(f'{mutation or "positive control"}: exit={result.returncode}\n{result.stdout}\n{result.stderr}')
         print(f'{mutation or "positive control"}: expected exit {expected}, named assertion observed')
 

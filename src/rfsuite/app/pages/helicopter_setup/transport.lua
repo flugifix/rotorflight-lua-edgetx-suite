@@ -6,6 +6,15 @@ function M.new(runtime, allowed, failed)
   function b:add(job) self.jobs[#self.jobs + 1] = job end
   function b:urgent(job) table.insert(self.jobs, self.first, job) end
   function b:idle() return not self.pending and self.first > #self.jobs end
+  function b:readOnly()
+    if self.pending and self.pending.job.write then return false end
+    if #self.jobs-self.first > 4 then return false end
+    for i=self.first,#self.jobs do
+      local j=self.jobs[i]
+      if j.write or j.run or j.expand then return false end
+    end
+    return true
+  end
   function b:queue() local s = runtime.getState(); return s and s.queue end
   function b:dropOverrides()
     local jobs = {}
