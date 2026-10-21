@@ -153,7 +153,7 @@ The Rotorflight model template includes `STAT` and `SCFG` as raw integer sensors
 with IDs `0x1230` and `0x1231`, zero decimal places and logging enabled. They retain
 all packed bits for the suite's System Status diagnostics and other consumers.
 The template now defines 51 sensors, including its existing individual sensors;
-it fits the 60-sensor limit of supported color radios (99 on STM32H7 targets).
+it fits the 60-sensor limit of supported color radios (75 on STM32H7 in EdgeTX 2.12).
 
 Creating a model from the updated template adds the two rows. Installing a suite
 update does not modify an existing model's sensor table: discover the sensors or
