@@ -91,8 +91,15 @@ end
 -- unloaded: a lease means another consumer still talks to the module through it, and a pending
 -- drain means late replies of a cut-short conversation may still be queued, which a fresh instance
 -- would take for its own. Until then the release is retried on later passes, draining as it goes.
+-- Every dashboard widget runs its own copy of this file, so a standby screen another widget opened
+-- since is seen by its display module in the shared registry, and leaves the release to that one.
 local function releaseElrsProvider(self)
   local rf = _G.rfsuite
+  local modules = type(rf) == "table" and rf.modules or nil
+  if type(modules) == "table" and modules["/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/standby.lua"] ~= nil then
+    elrsReleasePending = false
+    return
+  end
   local config = type(rf) == "table" and rf.elrs_config or nil
   if type(config) == "table" and type(config.idle) == "function" then
     local idle, held = config.idle()

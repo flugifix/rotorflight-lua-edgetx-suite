@@ -1199,5 +1199,40 @@ do
   s.restore()
 end
 
+-- Every dashboard widget loads its own copy of the runtime (src/widgets/rfsuite/main.lua), so a
+-- release one widget has deferred must not go ahead while another widget's standby screen uses the
+-- provider: that screen keeps its reference, and the next consumer would load a second instance.
+do
+  local s = standbyElrsScenario()
+  s.passes(12)
+  s.leave()
+  local provider = _G.rfsuite.elrs_config
+  check("first widget's exit during discovery defers the release", provider ~= nil)
+  local Other = assert(loadfile(runtimePath))()
+  local other = Other.new({ x = 0, y = 0, w = 800, h = 480 }, {})
+  other.preferences.dashboard = other.preferences.dashboard or {}
+  other.preferences.dashboard.standby_enabled = true
+  other.preferences.dashboard.standby_layout = "elrs"
+  other.preferences.audio_events = other.preferences.audio_events or {}
+  other.preferences.audio_events.tpwr_alert = false
+  other.state.fblConnected, other.state.armed = false, false
+  other.state.hadInflightFlight, other.flightMode = false, "preflight"
+  for _ = 1, 12 do Stubs.tick(); other:refresh(0, nil) end
+  Stubs.pushFrame(0x29, elrsInfo(1))
+  for _ = 1, 2 do Stubs.tick(); other:refresh(0, nil) end
+  Stubs.pushFrame(0x2B, elrsRateEntry(1))
+  for _ = 1, 2 do Stubs.tick(); other:refresh(0, nil) end
+  check("second widget's standby read completed on the shared provider", other._standbyElrsConfig == provider
+    and provider.snapshot().status == "ready")
+  for _ = 1, 3 do Stubs.tick(); s.widget:background() end
+  check("first widget's deferred release left the provider the second widget's standby uses: registry "
+    .. (_G.rfsuite.elrs_config == provider and "kept" or "dropped"), _G.rfsuite.elrs_config == provider)
+  other.preferences.dashboard.standby_enabled = false
+  other._job = nil
+  for _ = 1, 2 do Stubs.tick(); other:refresh(0, nil) end
+  check("the last standby exit unloads the idle provider", _G.rfsuite.elrs_config == nil)
+  s.restore()
+end
+
 Stubs.releaseCard()
 print(string.format("dashboard_standby_integration_test: %d checks passed", passed))
