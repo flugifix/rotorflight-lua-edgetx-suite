@@ -3,6 +3,7 @@ return function(w)
   local function apply(tail, kind)
     if not w.checks.unplugged then w.message = L.confirmCheck; return end
     local rate = ({50,333,560})[kind]
+    if not rate then w.message=L.servoHzHint;return end
     for _, index in ipairs(w:servos()) do
       if (index == 3) == tail then
         local servo = w.data.servo_configurations.servos[index]
@@ -16,6 +17,7 @@ return function(w)
       end
     end
     w:touch("servo_configurations", false, true)
+    if w.refreshPulse then w.refreshPulse() end
   end
   local function current(tail)
     local result
@@ -31,10 +33,43 @@ return function(w)
     return result or 0
   end
   local function row(tail, label)
-    return { kind = "choice", label = label, values = { L.analog, L.digital, L.narrow },
-      get = function() return current(tail) end, set = function(v) apply(tail, v) end }
+    return { kind = "choice", label = label, values = { L.analog, L.digital, L.narrow,L.customServo },
+      get = function() local v=current(tail);return v==0 and 4 or v end, set = function(v) apply(tail, v) end }
   end
-  local rows = { w:check("unplugged", L.servosUnplugged), row(false, L.cyclicServos) }
-  if not w:motorised() then rows[#rows + 1] = row(true, L.tailServo) end
-  return { w:cardDef(L.servoType, L.servoTypeHint, rows, nil, "pulses") }
+  local function rateRow(tail,indices)
+    return {kind="number",label=L.servoHz,min=25,max=5000,
+      get=function() return w.data.servo_configurations.servos[indices[1]].rate end,
+      set=function(v)
+        if not w.checks.unplugged then w.message=L.confirmCheck;return end
+        if type(v)~="number" or v%1~=0 or v<25 or v>5000 then return end
+        local changed=false
+        for _,index in ipairs(indices) do
+          local servo=w.data.servo_configurations.servos[index]
+          if servo.rate~=v then servo.rate=v;changed=true end
+        end
+        if changed then w.rebootPending=true;w:touch("servo_configurations",false,true) end
+        if w.refreshPulse then w.refreshPulse() end
+      end}
+  end
+  local cards={}
+  for _,tail in ipairs({false,true}) do
+    local indices={}
+    for _,index in ipairs(w:servos()) do if (index==3)==tail then indices[#indices+1]=index end end
+    if #indices>0 then
+      local rows={w:check("unplugged",L.servosUnplugged),row(tail,tail and L.tailServo or L.cyclicServos),rateRow(tail,indices),
+        w:value(L.groupState,function()
+          local first=w.data.servo_configurations.servos[indices[1]]
+          for _,index in ipairs(indices) do
+            local s=w.data.servo_configurations.servos[index]
+            if s.rate~=first.rate or (s.mid<=860)~=(first.mid<=860) then return L.mixed end
+          end
+          return L.uniform
+        end)}
+      local card=w:cardDef(tail and L.tailServo or L.cyclicServos,L.servoHzHint,rows,nil,"pulses")
+      card.summary,card.servoIndex=L.servoHzQuick,indices[1]
+      cards[#cards+1]=card
+    end
+  end
+  if #cards==0 then cards[1]=w:cardDef(L.servoType,L.servoTypeHint,{w:value(L.servo,function() return L.unavailable end)}) end
+  return cards
 end

@@ -33,7 +33,8 @@ return function(w)
     if not i then w.message = L.noSlots; s.id = nil; return end
     local lo, hi = H.switchRange(s.base[aux + 5], value)
     w.data.mode_ranges.mode_ranges[i] = { id = s.id, auxChannelIndex = aux - 1, range = { start = lo, ["end"] = hi } }
-    send(i); s.id = nil; w.message = L.detected
+    send(i); s.id = nil
+    w.message = string.format(L.switchDetected,w:channelNumber(aux-1),s.base[aux+5],value)
   end
   w.validate = function() if not assigned(0) then w.message = L.armRequired; return false end; return true end
   local cards = {}
@@ -58,7 +59,9 @@ return function(w)
         end),
         w:button(function() return s.id==id and L.cancelDetect or L.assign end,function()
           if s.id==id then s.id=nil;w.message=L.ready;return end
-          s.id,s.base,s.untilAt,s.aux,s.value,s.at=id,nil,getTime()+1500,nil,nil,nil
+          local baseline=w:channelSnapshot("rc")
+          if not baseline or #baseline<6 then w.message=L.waitChannels;return end
+          s.id,s.base,s.untilAt,s.aux,s.value,s.at=id,baseline,getTime()+1500,nil,nil,nil
           w.message=L.flick
         end),
         w:button(L.remove, function()

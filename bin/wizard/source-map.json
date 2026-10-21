@@ -831,9 +831,10 @@
       "contracts": [
         "S03.mode-status-versus-switch",
         "S03.switch-settle",
-        "VISUAL.mode-switch-feedback"
+        "VISUAL.mode-switch-feedback",
+        "REVIEW.mode-first-flick"
       ],
-      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises. The drawing follows the assigned ARM channel or actual Rescue/Trainer mode flag; it does not demonstrate arming."
+      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises. The drawing follows the assigned ARM channel or actual Rescue/Trainer mode flag; it does not demonstrate arming. Learning snapshots current mapped FC channels on click, preserving immediate switch movement."
     },
     {
       "source": "tabs/setup_wizard/StepMotor.svelte",
@@ -912,9 +913,10 @@
       ],
       "contracts": [
         "S04.readback-paired-capacity",
-        "S04.switch-recording-gain-feedback"
+        "S04.switch-recording-gain-feedback",
+        "REVIEW.mode-first-flick"
       ],
-      "adaptation": "EdgeTX trim-mix instructions replace Ethos screenshots. Paired slot reservations avoid partial assignments when the table is full. Channel plans paginate to four rows."
+      "adaptation": "EdgeTX trim-mix instructions replace Ethos screenshots. Paired slot reservations avoid partial assignments when the table is full. Channel plans paginate to four rows. Learning snapshots current mapped FC channels on click, preserving immediate switch movement."
     },
     {
       "source": "tabs/setup_wizard/StepRates.svelte",
@@ -975,9 +977,10 @@
         "S02.order-detection-and-throttle",
         "S02.port-selection",
         "S02.protocol-ids-presets-feature-group",
-        "CORE.receiver-trial-radio-guard"
+        "CORE.receiver-trial-radio-guard",
+        "REVIEW.fc-input-learning"
       ],
-      "adaptation": "Receiver wiring detection is directed to USB Configurator: the trial reinitializes the receiver UART carrying radio MSP. A radio-side guard sends no START. Mapping, protocol/port configuration, live inputs and throttle setup stay in this step."
+      "adaptation": "Receiver wiring detection is directed to USB Configurator: the trial reinitializes the receiver UART carrying radio MSP. A radio-side guard sends no START. Mapping, protocol/port configuration, live inputs and throttle setup stay in this step. The radio requires an established receiver/MSP link, so receiver UART selection is omitted. Protocol configuration and USB guidance remain. Learning snapshots current raw FC input on click; throttle-switch instructions include OFF/ON endpoints."
     },
     {
       "source": "tabs/setup_wizard/StepSensors.svelte",
@@ -1019,9 +1022,10 @@
         "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua"
       ],
       "contracts": [
-        "S07.servo-bands-and-reboot"
+        "S07.servo-bands-and-reboot",
+        "REVIEW.custom-servo-hz"
       ],
-      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises."
+      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises. Separate cyclic/tail cards add custom 25-5000 Hz without changing pulse calibration; mixed settings and firmware pulse constraints are explicit. The waveform uses stable cached points refreshed on edits."
     },
     {
       "source": "tabs/setup_wizard/StepServos.svelte",

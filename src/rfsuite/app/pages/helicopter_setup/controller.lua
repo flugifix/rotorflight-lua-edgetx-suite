@@ -17,6 +17,15 @@ function M.new(runtime, transport, mathModule, labels)
     step = 1, card = 1, ready = false, active = true, holds = {}, live = {}, checks = {},
     progress = 0, message = labels.loading, generation = 0, selectedServo = 0, percent = 10 }
   function w:session() return _G.rfsuite and _G.rfsuite.session or {} end
+  function w:channelSnapshot(api)
+    local at
+    if api=="rc" then at=self.rcAt elseif api=="rx_channels" then at=self.rxChannelsAt else return nil end
+    local d=self.data[api]
+    if not at or now()<at or now()-at>200 or not d or not d.channels or #d.channels<5 then return nil end
+    local copy={}
+    for i=1,math.min(18,#d.channels) do copy[i]=d.channels[i] end
+    return copy
+  end
   function w:allowed()
     local s = self:session()
     if not s.mcu_id or s.mcu_id == "" then return false end
@@ -537,6 +546,8 @@ function M.new(runtime, transport, mathModule, labels)
     self:read(api, function(d)
       self.data[api] = d
       if api == "attitude" then self.attitudeAt = now() end
+      if api == "rc" then self.rcAt = now() end
+      if api == "rx_channels" then self.rxChannelsAt = now() end
       if api == "status" then
         self:acceptStatus(d)
       end

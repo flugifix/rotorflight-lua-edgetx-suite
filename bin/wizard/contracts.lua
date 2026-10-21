@@ -369,6 +369,49 @@ return function(h)
     check(w.rebootPending and w.dirty.board_alignment_config,"S01 alignment deferred to reboot gate")
     check(not w.validate(),"S01 physical direction answer required")
   end)
+  case("REVIEW.fc-input-learning",function()
+    local w=world();settle(w);w.step=2
+    local values={1500,1500,1500,1500,1000,1000,1500,1500}
+    local function raw()
+      local copy={};for i,v in ipairs(values) do copy[i]=v end
+      w.data.rx_channels={channels=copy};w.rxChannelsAt=getTime()
+      return w.data.rx_channels
+    end
+    raw();local cards=step(w,"receiver")
+    for _,row in ipairs(cards[1].rows) do check(row.label~=L.port,"REVIEW receiver UART is not editable on its radio link") end
+    cards[2].rows[1].press()
+    values[4]=2000;h.measure("RX learning",function() w.onLive("rx_channels",raw()) end)
+    check(w.rx.detect and w.rx.detect.index==2,"REVIEW first movement after Detect uses the pre-click FC baseline")
+    for _,channel in ipairs({1,2,3,5}) do values[channel]=2000;h.measure("RX learning",function() w.onLive("rx_channels",raw()) end) end
+    check(w.rx.detect==nil and w.data.rx_map.throttle==4,"REVIEW subsequent controls need no extra baseline reply")
+    w.data.rx_map.throttle=4;values[5]=1000;raw()
+    cards[4].rows[2].press();values[5]=2000;w.onLive("rx_channels",raw());cards[4].rows[4].press()
+    eq(w.data.rc_config.rc_min_throttle,1020,"REVIEW throttle recording includes the current OFF switch endpoint")
+    eq(w.data.rc_config.rc_max_throttle,1980,"REVIEW one ON switch transition completes the range")
+  end)
+  case("REVIEW.mode-first-flick",function()
+    local w=world();settle(w);w.step=3;w.data.boxids.box_ids={0}
+    w.data.rc={channels={1500,1500,1500,1500,1000,1000}};w.rcAt=getTime()
+    local cards=step(w,"modes");cards[1].rows[2].press()
+    local nextValue={channels={1500,1500,1500,1500,1000,2000}}
+    w.data.rc=nextValue;w.rcAt=getTime();w.onLive("rc",nextValue)
+    h.advance(40);h.measure("mode learning",function() w.onLive("rc",nextValue) end)
+    check(w.modeListen.id==nil,"REVIEW immediate switch flick is learned from the pre-click FC input")
+    local found
+    for _,r in ipairs(w.data.mode_ranges.mode_ranges) do if r.id==0 and r.range.start<r.range["end"] then found=r end end
+    check(found and found.auxChannelIndex==0,"REVIEW learned mode uses the FC AUX index after five controls")
+    local copy=w:channelSnapshot("rc");w.data.rc.channels[6]=1000
+    eq(copy[6],2000,"REVIEW click baseline is a snapshot, not a mutable packet alias")
+    w.rcAt=nil;w.rxChannelsAt=getTime();cards[1].rows[2].press()
+    check(w.modeListen.id==nil and w.message==L.waitChannels,"REVIEW raw-RX freshness cannot substitute for missing RC freshness")
+    w.rcAt=getTime()-201;cards[1].rows[2].press()
+    check(w.modeListen.id==nil,"REVIEW stale FC channels cannot start learning")
+    w.rcAt=getTime();w.step=4;w.profile=nil
+    local profiles=step(w,"profiles");profiles[1].rows[1].set(1);profiles[1].rows[2].press()
+    local profileValue={channels={1500,1500,1500,1500,1000,2000}}
+    w.data.rc=profileValue;w.rcAt=getTime();h.measure("profile learning",function() w.onLive("rc",profileValue) end)
+    check(w.profile.record and w.profile.channel==0,"REVIEW profile switch also learns the first post-click movement")
+  end)
   case("S02.protocol-ids-presets-feature-group",function()
     local w=world();local entries=w:receiverProtocols();local ids={}
     for _,e in ipairs(entries) do ids[e[2]]=e[1] end
@@ -379,10 +422,10 @@ return function(h)
     eq(ids.IBUS2,19,"S02 IBUS2 wire ID")
     w.data.rx_config.serialrx_provider=9;w.data.feature_config.enabledFeatures=1<<25
     local rx=step(w,"receiver")
-    eq(rx[1].rows[2].get(),0,"S02 SPI receiver does not masquerade as stored serial protocol")
-    rx[1].rows[2].set(1)
+    eq(rx[1].rows[1].get(),0,"S02 SPI receiver does not masquerade as stored serial protocol")
+    rx[1].rows[1].set(1)
     eq(w.data.feature_config.enabledFeatures,1<<3,"S02 choosing stored CRSF still changes receiver feature group")
-    eq(rx[1].rows[2].get(),1,"S02 serial receiver selection readback")
+    eq(rx[1].rows[1].get(),1,"S02 serial receiver selection readback")
     w.data.feature_config.enabledFeatures=(1<<0)|(1<<13)|(1<<14)|(1<<25)|(1<<28)
     w:serialReceiver()
     eq(w.data.feature_config.enabledFeatures,(1<<3)|(1<<28),"S02 RX feature group preserves RPM feature")
@@ -413,13 +456,13 @@ return function(h)
   end)
   case("S02.order-detection-and-throttle",function()
     local w=world();local c=step(w,"receiver")
-    c[2].rows[1].press()
     local values={1500,1500,1500,1500,1500,1500,1500,1500}
     local function reply()
       local copy={};for i,v in ipairs(values) do copy[i]=v end
-      w.onLive("rx_channels",{channels=copy})
+      w.data.rx_channels={channels=copy};w.rxChannelsAt=getTime();w.onLive("rx_channels",w.data.rx_channels)
     end
     reply()
+    c[2].rows[1].press()
     -- Collective, roll, pitch, yaw, throttle; a used channel is never reused.
     for _,channel in ipairs({3,2,4,1,5}) do
       values[channel]=2000;reply();reply()
@@ -430,7 +473,7 @@ return function(h)
     eq(w.data.rx_map.rudder,0,"S02 yaw detected")
     eq(w.data.rx_map.throttle,4,"S02 throttle detected")
     check(w.rx.detect==nil and w.dirty.rx_map,"S02 permutation completes")
-    c[4].rows[2].press();values[5]=1100;reply();values[5]=1399;reply();c[4].rows[4].press()
+    values[5]=1100;reply();c[4].rows[2].press();values[5]=1399;reply();c[4].rows[4].press()
     check(w.message==L.travelShort,"S02 travel below 300 rejected")
     values[5]=1900;reply();c[4].rows[4].press()
     eq(w.data.rc_config.rc_min_throttle,1120,"S02 low range margin")
@@ -461,6 +504,7 @@ return function(h)
   end)
   case("S03.switch-settle",function()
     local w=world();w.data.boxids.box_ids={0}
+    w.data.rc={channels={1500,1500,1500,1500,1000,1000}};w.rcAt=getTime()
     local c=step(w,"modes");c[1].rows[2].press()
     w.onLive("rc",{channels={1500,1500,1500,1500,1000,1000}})
     w.onLive("rc",{channels={1500,1500,1500,1500,1000,2000}})
@@ -498,8 +542,11 @@ return function(h)
   end)
   case("S04.switch-recording-gain-feedback",function()
     local w=world();local c=step(w,"profiles")
+    w.data.rc={channels={1500,1500,1500,1500,1000,1000,2012}};w.rcAt=getTime()
     c[1].rows[1].set(1);c[1].rows[2].press()
-    local function rc(value) w.onLive("rc",{channels={1500,1500,1500,1500,1000,value,2012}}) end
+    local function rc(value)
+      w.data.rc={channels={1500,1500,1500,1500,1000,value,2012}};w.rcAt=getTime();w.onLive("rc",w.data.rc)
+    end
     rc(1000);rc(2000);rc(1500);rc(1200)
     c[1].rows[4].press()
     local r=H.rangeOf(w.data.adjustment_ranges.adjustment_ranges,2)
@@ -558,6 +605,45 @@ return function(h)
     local job=w.bus.jobs[#w.bus.jobs]
     job.after({output=0,result=1})
     check(w.error~=nil,"S06 refused tail pin blocks advancement")
+  end)
+  case("REVIEW.custom-servo-hz",function()
+    local w=world();local c=step(w,"servoType")
+    local rate
+    for _,r in ipairs(c[1].rows) do if r.kind=="number" then rate=r end end
+    check(rate~=nil,"REVIEW servo type offers an editable Hz field")
+    if not rate then return end
+    eq(rate.min,25,"REVIEW custom Hz uses the firmware minimum")
+    eq(rate.max,5000,"REVIEW custom Hz uses the firmware maximum")
+    local servos=w.data.servo_configurations.servos
+    local mid,travel,scale=servos[0].mid,servos[0].max,servos[0].rpos
+    local original=servos[0].rate;rate.set(200)
+    eq(servos[0].rate,original,"REVIEW Hz change requires unplugged servos")
+    w.checks.unplugged=true;local tailRate=servos[3].rate;rate.set(200)
+    for i=0,2 do eq(servos[i].rate,200,"REVIEW Hz applies to every cyclic PWM servo") end
+    eq(servos[3].rate,tailRate,"REVIEW cyclic Hz leaves the tail unchanged")
+    eq(servos[0].mid,mid,"REVIEW Hz preserves calibrated centre")
+    eq(servos[0].max,travel,"REVIEW Hz preserves calibrated travel")
+    eq(servos[0].rpos,scale,"REVIEW Hz preserves output scale")
+    check(w.rebootPending and w.dirty.servo_configurations,"REVIEW custom Hz marks the configuration for restart")
+    eq(c[1].rows[2].get(),4,"REVIEW custom Hz is shown as a custom type")
+    local tail=c[2].rows[3];tail.set(250)
+    eq(servos[3].rate,250,"REVIEW tail Hz has a separate field")
+    eq(servos[0].rate,200,"REVIEW tail Hz leaves cyclic rates unchanged")
+    rate.set(24);rate.set(5001);rate.set(200.5)
+    eq(servos[0].rate,200,"REVIEW out-of-range/fractional Hz cannot be written")
+    servos[1].rate=333;eq(c[1].rows[4].get(),L.mixed,"REVIEW different group settings are explicitly marked mixed")
+    w.cards=c;w.card=1
+    local scene=h.view.new(w,{w=320,h=240},h.diagrams)
+    while not scene:step() do end
+    local wave
+    for _,item in ipairs(scene.children) do if item.type=="line" and type(item.pts)=="function" and #item.pts()==50 then wave=item end end
+    check(wave~=nil,"REVIEW custom Hz has a cached pulse reference")
+    local points=wave.pts();local before=points[5][1]
+    h.measure("Hz edit",function() rate.set(250) end);eq(wave.pts(),points,"REVIEW Hz edits retain native point-table identity")
+    check(points[5][1]~=before,"REVIEW custom Hz updates the existing waveform")
+    rate.set(5000);check(not wave.visible(),"REVIEW impossible pulse timing is not drawn as a valid waveform")
+    rate.set(200);check(wave.visible(),"REVIEW supported timing restores the same waveform")
+    eq(c[1].rows[4].get(),L.uniform,"REVIEW group Hz edit resolves mixed rates explicitly")
   end)
   case("S07.servo-bands-and-reboot",function()
     local w=world();w.checks.unplugged=true
@@ -659,7 +745,9 @@ return function(h)
   case("S14-S15.axis-direction-and-trims",function()
     local w=world();local c=step(w,"direction");c[1].enter()
     for _,i in ipairs({1,2,4}) do eq(w.holds["mixer"..i].value,2502,"S14 passthrough axis "..i) end
-    w.checks.control1=true;local before=w.data.mixer_input.inputs[1].rate;c[1].rows[2].press()
+    eq(c[1].rows[2].get(),L.rightDown,"S14 roll expectation stays visible beside the controls")
+    eq(c[1].summary,L.rearCheck,"S14 left/right is defined from behind the helicopter")
+    w.checks.control1=true;local before=w.data.mixer_input.inputs[1].rate;c[1].rows[3].press()
     eq(w.data.mixer_input.inputs[1].rate,-before,"S14 reverse input scale")
     check(not w.checks.control1,"S14 reversal invalidates previous physical answer")
     c=step(w,"level");c[1].enter()
@@ -931,8 +1019,8 @@ return function(h)
     check(a~=signature(s),"VISUAL command changes existing stick marker")
     s=scene("rates");w.rateStyles[w.rateProfile]=1;a=signature(s);w.rateStyles[w.rateProfile]=3
     check(a~=signature(s),"VISUAL selected style changes existing rate curve")
-    s=scene("servoType");w.data.servo_configurations.servos[0].rate=50;a=signature(s)
-    w.data.servo_configurations.servos[0].rate=560
+    s=scene("servoType");w.checks.unplugged=true;w.cards[1].rows[2].set(1);a=signature(s)
+    w.cards[1].rows[2].set(3)
     check(a~=signature(s),"VISUAL selected servo rate changes existing pulses")
     s=scene("modes")
     w.data.mode_ranges.mode_ranges[1]={id=0,auxChannelIndex=0,range={start=1800,["end"]=2100}}
@@ -980,8 +1068,8 @@ return function(h)
     eq(w.message,L.receiverUsbHint,"CORE receiver trial directs user to USB")
     for i=sent+1,#q.sent do check(q.sent[i].command~=0x5F12,"CORE no receiver trial request sent over radio") end
     local cards=step(w,"receiver")
-    eq(cards[1].rows[3].label,L.receiverUsb,"CORE receiver task explains USB route")
-    cards[1].rows[3].press()
+    eq(cards[1].rows[2].label,L.receiverUsb,"CORE receiver task explains USB route")
+    cards[1].rows[2].press()
     eq(w.message,L.receiverUsbHint,"CORE receiver USB button explains connection loss")
   end)
   case("CORE.trial-state-and-diagnostics",function()

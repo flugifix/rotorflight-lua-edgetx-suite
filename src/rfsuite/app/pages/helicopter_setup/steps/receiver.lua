@@ -8,9 +8,15 @@ return function(w)
   local keys = { "aileron", "elevator", "rudder", "collective", "throttle", "aux1", "aux2", "aux3" }
   local order = { 4, 1, 2, 3, 5 }
   local names = { L.roll, L.pitch, L.yaw, L.collective, L.throttle }
+  local function prompt()
+    return order[r.detect.index]==5 and L.toggleThrottle or L.move.." "..names[order[r.detect.index]]
+  end
   local function detect()
-    r.detect = { index = 1, found = {}, exclude = {}, peaks = {}, baseline = nil }
-    w.message = L.move .. " " .. names[order[1]]
+    if r.detect then r.detect=nil;w.message=L.ready;return end
+    local baseline=w:channelSnapshot("rx_channels")
+    if not baseline then w.message=L.waitChannels;return end
+    r.detect = { index = 1, found = {}, exclude = {}, peaks = {}, baseline = baseline }
+    w.message = prompt()
   end
   w.onLive = function(api, d)
     if api ~= "rx_channels" then return end
@@ -26,8 +32,10 @@ return function(w)
     local i = H.moved(s.peaks, s.exclude)
     if not i then return end
     s.found[order[s.index]], s.exclude[i] = i - 1, true
-    s.index, s.baseline, s.peaks = s.index + 1, nil, {}
-    if s.index <= 5 then w.message = L.move .. " " .. names[order[s.index]]; return end
+    s.index, s.baseline, s.peaks = s.index + 1, d.channels, {}
+    if s.index <= 5 then
+      w.message = string.format(L.channelDetected,i).."  "..prompt();return
+    end
     local used = {}; for _, c in pairs(s.found) do used[c] = true end
     local nextChannel = 0
     for n = 1, 8 do
@@ -52,7 +60,10 @@ return function(w)
       return channels[(w.data.rx_map[keys[n]] or n - 1) + 1] or "--"
     end
   end
-  local port=w:port(L.port,64)
+  local function input(n)
+    local get=mapped(n)
+    return function() return string.format("CH%d %s",(w.data.rx_map[keys[n]] or n-1)+1,tostring(get())) end
+  end
   local protocol=w:enum("rx_config","serialrx_provider",L.protocol,w:receiverProtocols(),true)
   local protocolGet,protocolSet=protocol.get,protocol.set
   protocol.get=function()
@@ -61,16 +72,15 @@ return function(w)
   protocol.set=function(v)
     protocolSet(v);w:serialReceiver();w:touch("rx_config",true)
   end
-  port.enabled=function() return not w.trial end
-  protocol.enabled=port.enabled
-  return {
+  protocol.enabled=function() return not w.trial end
+  local cards = {
     w:cardDef(L.receiver, L.receiverHint, {
-      port, protocol,
+      protocol,
       w:button(L.receiverUsb, function() w.message=L.receiverUsbHint end),
       w:button(L.saveReboot, function() w:serialReceiver(); w:reboot() end)
     }),
     w:cardDef(L.channelOrder, L.channelHint, {
-      w:button(L.detect, detect),
+      w:button(function() return r.detect and L.cancelDetect or L.detect end, detect),
       { kind="choice",label=L.standardOrder,values={"ELRS","FrSky","Futaba / Hitec","DSM / Graupner / JR"},
         get=function()
           for i,preset in ipairs({{0,1,3,2,5,4,6,7},{0,1,3,4,2,5,6,7},{0,1,3,5,2,4,6,7},{1,2,3,5,0,4,6,7}}) do
@@ -86,11 +96,16 @@ return function(w)
       w:value(L.roll, mapped(1)), w:value(L.collective, mapped(4))
     }),
     w:cardDef(L.checkSticks, L.sticksHint, {
-      w:value(L.roll, mapped(1)), w:value(L.pitch, mapped(2)), w:value(L.yaw, mapped(3)), w:value(L.collective, mapped(4))
+      w:value(L.rollRight, input(1)), w:value(L.pitchForward, input(2)), w:value(L.yawRight, input(3)), w:value(L.collectiveUp, input(4))
     }, nil, "sticks"),
     w:cardDef(L.throttleRange, L.throttleHint, {
       w:value(L.throttle, mapped(5)),
-      w:button(L.record, function() r.low, r.high, r.record = 3000, 0, true end),
+      w:button(L.record, function()
+        local channels=w:channelSnapshot("rx_channels")
+        local v=channels and channels[(w.data.rx_map.throttle or 4)+1]
+        if type(v)~="number" or v<=500 then w.message=L.waitChannels;return end
+        r.low,r.high,r.record=v,v,true;w.message=L.throttleSwitchRange
+      end),
       w:value(L.range, function() return r.high>0 and string.format("%d / %d", r.low, r.high) or "--" end),
       w:button(L.useRange, function()
         if r.high - r.low < 300 then w.message = L.travelShort; return end
@@ -112,4 +127,9 @@ return function(w)
       end)
     })
   }
+  cards[1].summary=L.receiverQuick
+  cards[2].summary=L.channelQuick
+  cards[3].summary=L.sticksQuick
+  cards[4].summary=L.throttleQuick
+  return cards
 end

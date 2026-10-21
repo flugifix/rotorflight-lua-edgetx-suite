@@ -100,10 +100,20 @@ alternate attitude/status/attitude/servo at the existing request cadence, withou
 increasing total request frequency. Projection runs once per changed sample in
 wakeup; native getters only read fixed point tables. No reply rebuilds the scene.
 
+Receiver, mode and profile detection capture a fresh FC-channel baseline when the
+button is pressed; stale/missing samples ask the pilot to wait. Receiver mapping
+uses raw wire-order RX_CHANNELS. Modes/profiles use RC in the FC function order,
+with the displayed channel translated back through RX_MAP. Throttle may be a
+switch: record its OFF/ON positions and finish OFF. The current endpoint is included
+immediately. Control checks show the requested direction, FC channel and expected
+physical response; **?** explains the viewing reference and the servo-direction remedy.
+
 The mode-switch drawing follows the actual assigned ARM input range or the FC's
 Rescue/Trainer flag. It shows unavailable input neutrally. ARM feedback describes
 the switch while the wizard inhibits arming. The profile-switch reference stays
-still. Receiver bars and control-command meters already follow live inputs;
+still. Servo pulse references cache custom Hz/width geometry on settings edits;
+the native getters do not generate waves. Timing beyond the pulse limit displays
+a restart/readback hint instead of a physically impossible waveform. Receiver bars and control-command meters already follow live inputs;
 swash diagrams follow the selected geometry. All other mechanical drawings remain
 test references: commanded output or board attitude cannot measure actual servo,
 swash, blade or gyro-correction movement. Verify these on the real helicopter.
@@ -114,19 +124,19 @@ The short instruction area may show only its first lines; **?** opens the full t
 | # | Step | Controls and checks |
 | --- | --- | --- |
 | 1 | Board orientation | Confirm servos unplugged and all blades removed. Calibrate the accelerometer with the model level and still. Detect orientation by lifting the tail, or enter roll, pitch and yaw in degrees. After restart, compare the live helicopter model with real roll/pitch movements and confirm the directions. Automatic alignment requires firmware support. |
-| 2 | Receiver | Choose a free/current receiver UART and serial protocol; use USB Configurator for receiver wiring detection (the trial interrupts the radio MSP link). Save & reboot is available here. Detect roll, pitch, yaw, collective and throttle channel mapping one stick at a time, or select ELRS, FrSky, Futaba/Hitec or DSM/Graupner/JR presets. Check all stick values. Record at least 300 µs throttle travel; Use measured range adds a 20 µs margin at each end. Zero limits select firmware defaults. Throttle is low compares the mapped input with the low threshold; it is not permission to arm. |
+| 2 | Receiver | Keep the established receiver UART; protocol configuration remains available, and use USB Configurator for receiver wiring detection (the trial interrupts the radio MSP link). Save & reboot is available here. Detect roll, pitch, yaw, collective and throttle channel mapping one stick at a time, or select ELRS, FrSky, Futaba/Hitec or DSM/Graupner/JR presets. Check FC channel numbers and rising values for roll/yaw right, pitch forward and collective up. Detection uses a fresh pre-click snapshot, so an immediate stick/switch movement is retained. Record all throttle-switch positions (or both proportional endpoints), starting and finishing OFF, with at least 300 µs travel; Use measured range adds a 20 µs margin at each end. Zero limits select firmware defaults. Throttle is low compares the mapped input with the low threshold; it is not permission to arm. |
 | 3 | Mode switches | Assign ARM, RESCUE and TRAINER when the FC exposes them. Move the switch to its intended ON position; a clear AUX movement and settled position determine the active window. Reassign or Remove an assignment. ARM assignment is required. No unrelated mode slots are overwritten. |
 | 4 | Profiles & gain | Detect a two- or three-position switch; select PID + rate profiles, PID only or None. Visit the positions and Use switch. Optional gain uses a knob, or four trim-button values on one spare channel. Mapped gain is 50–150%; button gain is ±5%, bounded to 25–200%. The trim guide gives MAX mix weights 30/40/50/60%, with 100% at rest. Configure those mixes in EdgeTX; this page does not rewrite the transmitter model. |
 | 5 | Rates | Select each rate profile and Keep current, Trainer (180/270°/s), Sport (250/400°/s), or 3D (400/600°/s). Only switch-selected profiles, or the active profile, are offered. Suggest fills a three-position switch in its position order. Collective pitch is preserved. Profiles are selected, read and written sequentially, then the original rate profile is restored. |
 | 6 | Swashplate | Select Direct, 120, 135, 140, 90L or 90V; clockwise/counterclockwise main rotor; variable-pitch, motorised or bidirectional tail. Tail changes reset the yaw input rate to ±250 or ±1000. Switching between servo and motor tail sets TTA to 0 or 100 on every PID profile; motor-to-bidirectional changes preserve custom TTA. If supported and required, the tail pin is moved between SERVO 4 and MOTOR 2; a refusal blocks advance. A missing command is reported as unsupported. |
-| 7 | Servo type | Servos must be unplugged. Choose cyclic and tail groups separately: 50 Hz/1520 µs, 333 Hz/1520 µs or 560 Hz/760 µs. Changing pulse band resets centre, travel and scale to the matching defaults. Frame-rate changes require restart. Only the PWM servos belonging to the selected swash/tail are used; bus channels are excluded. |
+| 7 | Servo type | Servos must be unplugged. Choose cyclic and tail groups separately: 50 Hz/1520 µs, 333 Hz/1520 µs or 560 Hz/760 µs. Changing pulse band resets centre, travel and scale to the matching defaults. Frame-rate changes require restart. Only the PWM servos belonging to the selected swash/tail are used; bus channels are excluded.  Custom 25–5000 Hz fields are separate for cyclic/tail and preserve centre, travel and scale. Mixed groups are explicit. Manufacturer limits apply; firmware may reduce the rate for pulse limits/shared timers, so verify after restart. |
 | 8 | Governor | Off, Limit, Direct, Electric or Nitro, plus Normal, Switch or Function throttle. Switch requires Electric or Nitro. The fast-RPM warning requires motor poles plus an RPM sensor or bidirectional DShot; serial ESC telemetry does not meet that requirement. |
 | 9 | Motor & ESC | Choose throttle protocol, motor pole counts and bidirectional DShot. Enter motor pinion/main gear tooth counts and tail input/output gears for a servo tail, or tail motor poles for a motor tail. Castle telemetry and the ESC_SENSOR feature are kept consistent. |
 | 10 | Connect the servos | One restart applies pending board, servo-rate, mixer, governor and motor settings. Keep servos unplugged during it. Afterwards, check that the required main/tail motor outputs exist, that all required servo outputs exist, and confirm servos connected/powered with blades still removed. |
 | 11 | ESC & spin test | PWM only: with battery off, send full throttle; once the actual output reaches 99.5%, connect the battery and select low throttle, following the ESC's tones. Confirm calibration at low output. Then confirm blades removed and hold the main-motor test at 5–50%, initially 10%. Release to stop. Confirm the actual rotor direction. |
 | 12 | ESC telemetry | Optional protocol and free/current ESC UART, wiring detection when supported, and Save & reboot. Check live volts, amperes, temperature and RPM. Off needs no serial ESC telemetry; Castle uses its throttle wire. |
 | 13 | Servo direction & centre | Relevant servos are held at centre. Test each swash servo at +20°; it must lift its link. Reverse flips the servo's reverse flag. Set each centre pulse to the arm's specified neutral angle; an offset over 100 µs prompts a mechanics check. Confirm each swash direction and each arm centre. |
-| 14 | Control directions | Roll, pitch and collective use mixer passthrough. Check live RC commands and physical swash response. Wrong reverses the corresponding mixer input rate. Confirm each axis. |
+| 14 | Control directions | Roll, pitch and collective use mixer passthrough. Check live RC commands and physical swash response. Wrong reverses the corresponding mixer input rate. Use the named stick direction and the always-visible expected movement; roll is viewed from behind, pitch from the side with the nose right. Confirm each axis. |
 | 15 | Level the swash | Hold roll, pitch and collective at zero. Adjust roll, pitch and collective trims in 0.1% units, ±100%. Reset clears them. Use a leveller or measure links and confirm level. |
 | 16 | Blade pitch | Hold 9° collective or cyclic. Enter the measured angle in 0.1° units and Apply; the mixer rate is corrected by 9/measured, preserving sign and limiting magnitude to 20–200%. Set cyclic, collective and total pitch limits in degrees. Full-stick collective is applied to all supported Rotorflight/Actual rate profiles, restoring the original selection. Confirm no binding at full travel. |
 | 17 | Tail rotor | Servo tail: hold neutral, set centre trim, check yaw passthrough and reverse if needed; command ±22° to calibrate rate, then ±60° to set CW/CCW limits. Raw yaw limits use 1000 units per 24°. Motor tail: blades-off hold controls for forward, and reverse for bidirectional tails. Idle test is limited to 15 seconds; idle is limited to 25.5% by the MSP U8 field. |
@@ -275,6 +285,11 @@ desktop fonts. They are not native EdgeTX screenshots or radio acceptance eviden
 [Compact pitch movement](../images/helicopter_setup/motion-attitude-pitch-small.gif) ·
 [320×240 roll movement](../images/helicopter_setup/motion-attitude-roll-narrow.gif) ·
 [800×480 orientation](../images/helicopter_setup/01-large-task-3.png)
+
+[FC input directions](../images/helicopter_setup/02-small-task-3.png) ·
+[Throttle-switch endpoints](../images/helicopter_setup/02-small-task-4.png) ·
+[Cyclic servo Hz](../images/helicopter_setup/07-small.png) ·
+[Tail servo Hz](../images/helicopter_setup/07-small-task-2.png)
 
 [320×240 illustrated tasks](../images/helicopter_setup/illustrations-narrow.png) ·
 [480×272 illustrated tasks](../images/helicopter_setup/illustrations-small.png) ·

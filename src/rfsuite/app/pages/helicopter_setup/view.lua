@@ -7,10 +7,12 @@ end
 function M.new(w, ctx, diagrams)
   local width, height = ctx.w, ctx.h
   local large = width >= 700
+  w.refreshPulse=nil
   if w.attitudeView then w.attitudeView.valid=false;w.attitudeView=nil end
   local card = w.cards and w.cards[w.card]
   local attitudeCard=card and card.art=="attitude"
   local compact = width < 400 and {
+    [w.L.directionCorrect]=w.L.shortCorrect,
     [w.L.servosUnplugged]=w.L.shortUnplugged,[w.L.cyclicServos]=w.L.shortCyclicServos,
     [w.L.swashType]=w.L.shortSwash, [w.L.rotorDirection]=w.L.shortRotation,
     [w.L.measuredDegrees]=w.L.shortMeasured, [w.L.ratePercent]=w.L.shortRate,

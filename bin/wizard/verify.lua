@@ -236,6 +236,11 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
   for n,name in ipairs(steps) do
     w.step, w.stepKey, w.rebootPending, w.transition = n,name,nil,nil
     measure("definition",function() w.cards = load(PATH .. "steps/" .. name .. ".lua")(w) end)
+    if n==2 then
+      w.data.rx_channels={channels={1500,1500,1500,1500,1500,1500,1500,1500}}
+      w.data.rx_channels.channels[w.data.rx_map.throttle+1]=1000
+      w.rxChannelsAt=getTime();w.rx.low,w.rx.high=1000,2000
+    end
     check(type(w.cards)=="table" and #w.cards>0,name.." has cards")
     for c, card in ipairs(w.cards) do
       w.card = c
@@ -263,7 +268,7 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
         w.data.attitude={roll=0,pitch=0,yaw=0};w.attitudeAt=getTime()
         w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
       end
-      if (n==1 and c==3) or (n==6 and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
+      if (n==1 and c==3) or (n==2 and c>1) or (n==6 and c==2) or (n==7 and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
         exported[#exported+1] = {step=n,name=name,task=c,width=size[1],height=size[2],children=resolve(job.children)}
       end
       if n==6 then
@@ -307,6 +312,9 @@ for _,size in ipairs({{320,240},{480,272},{800,480}}) do
     {name="rates",card=1,group="rates",values={1,2,3},apply=function(value) w.rateStyles[w.rateProfile]=value end},
     {name="servoType",card=1,group="pulses",values={50,333,560},apply=function(value)
       w.data.servo_configurations.servos[0].rate=value
+      w.data.servo_configurations.servos[0].mid=value==560 and 760 or 1520
+      w.data.servo_configurations.servos[0].max=value==560 and 250 or 700
+      if w.refreshPulse then w.refreshPulse() end
     end},
     {name="swash",card=1,group="geometry",values={2,5,6},apply=function(value) w.data.mixer_config.swash_type=value end}
   }

@@ -83,7 +83,7 @@ function M.append(children, w, card, x, y, width, height)
       meter(80,31+(i-1)*31,125,function()
         local channel=w.data.rx_map[k] or 0
         local value=w.data.rx_channels and w.data.rx_channels.channels[channel+1]
-        return value and (value-w.data.rc_config.rc_center)/w.data.rc_config.rc_deflection or 0
+        return value and (value-w.data.rc_config.rc_center)/math.max(1,w.data.rc_config.rc_deflection) or 0
       end)
     end
     line({{5,149},{210,149}},ink,1)
@@ -109,35 +109,36 @@ function M.append(children, w, card, x, y, width, height)
     line({{22,128},{22,132}});line({{207,128},{207,132}})
   elseif kind == "pulses" then
     text(5,0,210,L.pulseTrain)
-    local prepared,windows={},{}
-    local initial=w.data.servo_configurations.servos[0] or {rate=50,mid=1520}
-    local specs={{math.max(1,initial.rate),initial.mid},{50,1520},{333,1520},{560,760}}
-    local captions={initial.rate.." Hz / "..initial.mid.." us","50 Hz / 1520 us","333 Hz / 1520 us","560 Hz / 760 us"}
-    for i,spec in ipairs(specs) do
-      local pts={}
-      local period=1000/spec[1]
-      local window=math.min(20,period*12)
-      windows[i]=string.format("%.1f ms",window)
-      -- Fixed 50 points per variant: pad the last point for LVGL's live pts.
-      local time=0
-      while time<window and #pts<48 do
-        local a,b=math.min(time,window),math.min(time+spec[2]/1000,window)
-        pts[#pts+1]={10+a*200/window,112};pts[#pts+1]={10+a*200/window,64}
-        pts[#pts+1]={10+b*200/window,64};pts[#pts+1]={10+b*200/window,112}
+    local servoIndex=card.servoIndex or 0
+    local pts={}
+    for i=1,50 do pts[i]={px(10),py(112)} end
+    local caption,windowText,valid="","",false
+    -- Called during scene preparation or a settings edit, never by a native getter.
+    w.refreshPulse=function()
+      local s=w.data.servo_configurations.servos[servoIndex] or {rate=50,mid=1520,max=700}
+      local rate=math.max(1,s.rate)
+      local period,window=1000/rate,math.min(20,12000/rate)
+      caption=tostring(s.rate).." Hz / "..tostring(s.mid).." us"
+      valid=s.mid>0 and s.mid+s.max>0 and rate<=math.floor(950000/(s.mid+s.max))
+      windowText=valid and string.format("%.1f ms",window) or L.pulseLimited
+      local index,time=1,0
+      local function put(a,b)
+        pts[index][1],pts[index][2]=px(a),py(b);index=index+1
+      end
+      while time<window and index<48 do
+        local a,b=math.min(time,window),math.min(time+s.mid/1000,window)
+        put(10+a*200/window,112);put(10+a*200/window,64)
+        put(10+b*200/window,64);put(10+b*200/window,112)
         time=time+period
       end
-      pts[#pts+1]={210,112}
-      while #pts<50 do pts[#pts+1]={210,112} end
-      prepared[i]=points(pts)
+      while index<=50 do put(210,112) end
     end
-    local function mode()
-      local s=w.data.servo_configurations.servos[0]
-      return s and s.rate==560 and 4 or s and s.rate==333 and 3 or s and s.rate==50 and 2 or 1
-    end
+    w.refreshPulse()
     local wave=line({{10,112},{210,112}},accent,2)
-    wave.pts=function() return prepared[mode()] end
-    text(5,29,210,function() return captions[mode()] end)
-    text(5,140,210,function() return windows[mode()] end)
+    wave.pts=function() return pts end
+    wave.visible=function() return valid end
+    text(5,29,210,function() return caption end)
+    text(5,140,210,function() return windowText end)
     line({{10,120},{210,120}});line({{10,117},{10,124}});line({{210,117},{210,124}})
   elseif kind == "switch" then
     text(5,0,210,L.move)
@@ -171,8 +172,8 @@ function M.append(children, w, card, x, y, width, height)
       local geometry = {}
       for i=1,3 do
         local rad = (angles[i] or 0)*math.pi/180
-        local a,b = 108+math.sin(rad)*68, 88-math.cos(rad)*48
-        geometry[i] = { pts=points({{108,88},{a,b}}), pos={px(a-6),py(b-8)} }
+        local a,b = 108+math.sin(rad)*48, 83-math.cos(rad)*48
+        geometry[i] = { pts=points({{108,83},{108+(a-108)*0.78,83+(b-83)*0.78}}), pos={px(a-6),py(b-8)} }
         if mode==1 then
           geometry[i] = { pts=points({{35,49+(i-1)*30},{75,49+(i-1)*30}}), pos={px(9),py(41+(i-1)*30)} }
         end
@@ -183,8 +184,8 @@ function M.append(children, w, card, x, y, width, height)
       local geometry={}
       for i=1,3 do
         local rad=layouts[mode][i]*math.pi/180
-        local a,b=108+math.sin(rad)*68,88+math.cos(rad)*48
-        geometry[i]={pts=points({{108,88},{a,b}}),pos={px(a-6),py(b-8)}}
+        local a,b=108+math.sin(rad)*48,83+math.cos(rad)*48
+        geometry[i]={pts=points({{108,83},{108+(a-108)*0.78,83+(b-83)*0.78}}),pos={px(a-6),py(b-8)}}
       end
       prepared[mode+6]=geometry
     end
@@ -197,8 +198,14 @@ function M.append(children, w, card, x, y, width, height)
     text(5,0,210,function() return mode()==1 and L.artServoRoles or width<180 and L.artFront or L.artTop end)
     arrow(184,58,184,29).visible=geometric
     text(125,8,92,L.artFront).visible=function() return geometric() and width>=180 end
-    line({{108,62},{139,76},{139,100},{108,115},{77,100},{77,76},{108,62}}).visible=geometric
-    rect(103,83,10,10,accent).visible=geometric
+    local ring={}
+    for i=0,16 do
+      local angle=i*math.pi/8
+      ring[#ring+1]={108+math.sin(angle)*32,83-math.cos(angle)*32}
+    end
+    line(ring,ink,2).visible=geometric
+    line({{99,83},{117,83}},ink,1).visible=geometric
+    line({{108,74},{108,92}},ink,1).visible=geometric
     for i=1,3 do
       local index = i
       local item = line({{108,88},{108,40}},accent,3)
@@ -213,7 +220,6 @@ function M.append(children, w, card, x, y, width, height)
       text(88,41+(i-1)*30,130,({L.pitch,L.roll,L.collective})[i]).visible=function() return mode()==1 end
     end
     text(5,138,210,function() return captions[mode()] end)
-    text(102,121,22,"4").visible=function() return not w:motorised() and mode()>1 end
     local cw=points({{170,111},{194,111},{194,93},{188,99},{194,93},{200,99}})
     local ccw=points({{194,111},{170,111},{170,93},{164,99},{170,93},{176,99}})
     local rotation=line({{170,111},{194,111}},accent,2)
@@ -221,23 +227,27 @@ function M.append(children, w, card, x, y, width, height)
   elseif kind == "swashRoll" or kind == "swashPitch" or kind == "swashLift" or kind == "level" then
     local tilt = (kind=="swashRoll" or kind=="swashPitch") and 13 or 0
     local lift = kind=="swashLift" and 17 or 0
-    local left,right = 73-lift-tilt,73-lift+tilt
+    local left,right = 79-lift-tilt,79-lift+tilt
     text(5,0,210,kind=="swashPitch" and L.artSide or L.artRear)
     line({{110,29},{110,131}},ink,3)
     rect(91,26,38,9); rect(49,128,122,11)
-    line({{63,73},{91,73}}); line({{129,73},{157,73}})
-    line({{65,left},{155,right}},accent,4)
-    line({{65,left+5},{65,119},{48,119}})
-    line({{155,right+5},{155,119},{172,119}})
+    -- The thin dashed line is the neutral plane; the closed blue rim is the target.
+    for a=44,164,24 do line({{a,79},{a+12,79}},ink,1) end
+    line({{60,left},{78,left-7},{143,right-7},{160,right},{142,right+7},{77,left+7},{60,left}},accent,3)
+    line({{65,left+5},{65,117},{48,117}})
+    line({{155,right+5},{155,117},{172,117}})
+    rect(39,115,20,8);rect(161,115,20,8)
+    if kind~="swashPitch" then text(23,93,30,L.leftMark);text(179,93,30,L.rightMark) end
     if kind=="level" then
-      rect(130,32,61,16,accent); rect(155,36,10,8,accent)
+      line({{62,79},{62,48},{158,48},{158,79}},ink,2)
+      rect(80,42,60,12,accent);rect(106,45,8,6,accent)
       text(5,141,210,L.artLevel)
     elseif kind=="swashLift" then
       arrow(187,109,187,66); text(5,141,210,L.collective)
     else
       arrow(185,58,185,100)
       text(5,141,210,kind=="swashRoll" and L.roll or L.pitch)
-      if kind=="swashPitch" then arrow(144,135,204,135) end
+      if kind=="swashPitch" then arrow(162,37,203,37);text(160,6,58,L.artFront) end
     end
   elseif kind == "servo" or kind == "servoMove" or kind == "servoCentre" then
     text(5,0,210,L.servo)
@@ -251,19 +261,21 @@ function M.append(children, w, card, x, y, width, height)
     line({{57,50},{57,56}},ink)
     if kind=="servoMove" then
       line({{143,53},{143,30}},accent); arrow(177,75,177,30)
-      text(5,141,160,L.movesUp)
+      text(5,141,210,L.artMovesUp)
     elseif kind=="servoCentre" then
       line({{143,53},{143,21}}); line({{133,53},{133,43},{143,43}},accent)
       text(5,141,200,L.artNeutral)
     end
   elseif kind == "pitch" then
     text(5,0,210,L.artSide)
-    -- Blade section against a horizontal reference, with a pitch gauge below.
-    line({{22,78},{198,78}})
-    line({{25,83},{184,56},{198,59},{40,88},{25,83}},accent,3)
-    line({{81,88},{81,115},{143,115},{143,76}})
-    rect(77,115,70,22); text(84,117,62,"9°")
-    line({{154,78},{154,70},{152,64}},accent)
+    -- Blade cross-section: rounded leading edge, tapered trailing edge, 9-degree chord.
+    for a=14,194,24 do line({{a,96},{a+12,96}},ink,1) end
+    line({{29,96},{27,91},{32,85},{44,81},{68,78},{105,77},{190,70},{107,86},{69,94},{44,99},{34,100},{29,96}},accent,3)
+    line({{30,96},{190,70}},ink,1)
+    -- A gauge rests on the blade; its display is an explicit reference, not telemetry.
+    line({{78,79},{78,54},{143,54},{143,74}},ink,2)
+    rect(73,28,75,28);text(84,30,60,"9°")
+    line({{130,96},{130,90},{129,84}},accent,2)
     text(5,141,210,L.artReference)
   elseif kind == "board" then
     text(5,0,210,L.artTop)
@@ -279,6 +291,16 @@ function M.append(children, w, card, x, y, width, height)
       line({{110,33},{91,66},{95,93},{106,103},{106,136},{115,136},{115,103},{127,93},{131,66},{110,33}})
       line({{47,76},{173,76}},ink,3)
       arrow(47,126,47,63,ink); arrow(173,63,173,126)
+    elseif kind=="gyroPitch" then
+      -- Nose right: a lowered nose requires the swash to tilt back/up.
+      line({{49,96},{134,101},{165,117},{139,122},{116,112},{49,104},{49,96}},ink,2)
+      line({{49,96},{29,80},{29,106},{49,104}},ink,2)
+      line({{111,101},{111,45}},ink,3)
+      line({{52,48},{170,68}},ink,3)
+      line({{78,89},{143,78}},accent,4)
+      line({{84,113},{78,132},{152,132},{143,121}})
+      arrow(191,64,191,109,ink);arrow(28,131,28,110)
+      text(146,18,65,L.artFront)
     else
       line({{110,43},{110,115}})
       line({{68,115},{153,115},{164,134},{57,134},{68,115}})

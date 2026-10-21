@@ -37,19 +37,19 @@ draft discard is also checked with the old curve and choices still present.
 | # | Source step | Read/write/check coverage | Contract prefix |
 | --- | --- | --- | --- |
 | 1 | Sensors | Accelerometer present/absent; preparation gate; calibration ACK and status completion; signed alignment; start/query, uncalibrated, timeout, rejection and successful auto-align; pending restart; physical orientation answer. | `S01`, `CORE` |
-| 2 | Receiver | Free/current ports; VCP exclusion and soft-serial IDs; preservation of unrelated port functions; RX feature group; explicit serial protocol IDs; USB guidance and a radio-side wiring-trial guard; all four channel presets; collective-first detection and exclusion of previously found channels; raw mapped bars; throttle travel, margins, defaults, missing input and arming threshold. | `S02`, `CORE` |
+| 2 | Receiver | Receiver UART selection is intentionally omitted on the established radio/MSP link; generic port helpers retain their independent tests for other steps. RX feature group; explicit serial protocol IDs; USB guidance and a radio-side wiring-trial guard; all four channel presets; fresh pre-click FC snapshots; collective-first detection and exclusion of previously found channels; raw mapped bars; throttle-switch travel including its starting endpoint, margins, defaults, missing input and arming threshold; named input directions and raw CH numbers. | `S02`, `CORE` |
 | 3 | Modes | Only advertised ARM/RESCUE/TRAINER; existing/free/full slots; ≥300 µs clear movement, 400 ms settle and detection timeout; indexed write and cleared linkage; remove; ARM switch feedback versus actual STATUS flags for other modes. | `S03` |
 | 4 | Profiles & gain | Existing mode/channel readback; PID+rates, PID-only and None; detection thresholds and accumulated peaks; clustered positions and full travel; paired slot capacity; live profile/knob/button feedback; exact 83/84 gain functions and neutral windows; channel-use plan including channels beyond CH8; EdgeTX trim-mix instructions. | `S04`, `SOURCE` |
 | 5 | Rates | Profiles actually selected by the adjustment range, or the active profile; individual reads on entry; matching preset/custom state; three-position suggestion; only chosen profiles written; collective preserved; original selection restored; chosen state cleared after save. | `S05`, `SOURCE` |
 | 6 | Swashplate | Swash type, rotor direction and tail mode; Direct roles, common layouts, front/rear reference variants and tail servo number; signed yaw reset; TTA on every PID profile only when servo/motor kind changes; compatible BOTH pin state; unsupported pin command and refused switch. | `S06`, `CORE`, `VISUAL` |
-| 7 | Servo type | Relevant PWM groups and bus exclusion; mixed/custom group readback; unplugged requirement; 50/333/560 Hz and 1520/760 µs; centre/travel/scale reset only across pulse bands; restart on frame-rate change; pulse reference follows selection. | `S07`, `CORE`, `VISUAL` |
+| 7 | Servo type | Relevant PWM groups and bus exclusion; mixed/custom group readback; unplugged requirement; 50/333/560 Hz and 1520/760 µs; centre/travel/scale reset only across pulse bands; restart on frame-rate change; custom cyclic/tail 25–5000 Hz preserves calibration; mixed readback and restart; cached custom pulse reference follows edits with stable native tables and a pulse-limit hint. | `S07`, `CORE`, `VISUAL` |
 | 8 | Governor | Feature bit overrides a latent stored mode; mode/type writes; Switch only with headspeed control and reset when leaving it; restart; fast-RPM warning distinguishes RPM input/bidirectional DShot from serial ESC telemetry. | `S08` |
 | 9 | Motor & ESC | Versioned sparse protocol IDs, including API 12.09/12.10 Disabled; motor poles; main and tail gearing; motor-tail variant; Castle protocol/feature consistency. | `S09-S12` |
 | 10 | Connection gate | Batch initial restart; unplugged confirmation before it; same visit/FC after reconnect; arming lock reasserted; actual main/tail outputs and required PWM servos; powered/connected/blades confirmations. | `S10`, lifecycle sweep |
 | 11 | ESC & spin | PWM-only high→low→done; actual high/low output gates; cancel releases high output; fresh calibration on revisit; live output marker; main spin guards, 5–50%, default 10%, 250 ms refresh, changed power and release; physical direction answer. | `S11`, `CORE` |
 | 12 | ESC telemetry | Versioned protocols; Off frees ESC function; Castle throttle-wire telemetry; free/current port; saved-config trial eligibility; successful combination kept live, cancel restores prior flags, Save & reboot persists it; V/A/temperature/RPM and explicit receiving/missing feedback. | `S09-S12`, `CORE` |
 | 13 | Servos | Centre all relevant servos; +20° test toggles; reverse preserves other flag bits and invalidates confirmation; affirmative answer returns to centre; mid pulse, band centre and >100 µs mechanics warning; actual output feedback. | `S13` |
-| 14 | Control directions | Passthrough for stabilized roll/pitch/collective; live RC command bars; signed rate reversal invalidates physical confirmation; no automatic claim about mechanical response. | `S14-S15`, `VISUAL` |
+| 14 | Control directions | Passthrough for stabilized roll/pitch/collective; live RC command bars; visible expected movement and rear/side viewing references; signed rate reversal invalidates physical confirmation; no automatic claim about mechanical response. | `S14-S15`, `VISUAL` |
 | 15 | Level | Hold three axes at zero; trims are roll, pitch and collective, not servo numbers; ±100% in 0.1% units; individual numeric zero or Reset all; physical level confirmation. | `S14-S15` |
 | 16 | Pitch | Toggle 9° on one axis, others zero; measurement only while held; 9/measured correction from the measured axis with signs preserved on both cyclic axes; 20–200% clamp; cyclic/collective 0–20°, total 0–36°; full-stick 0–25° on all supported rate profiles; unsupported types skipped; selection restored. | `S16`, `SOURCE` |
 | 17 | Tail | Servo zero/passthrough/toggle holds; live yaw; centre ±25°; signed calibration 10–500%; ±22°/±60° and 24° per 1000 raw units; CW/CCW limits; servo confirmations; motor/bidirectional hold variants, idle/use-current-power and release. | `S17`, `CORE` |
@@ -64,9 +64,11 @@ draft discard is also checked with the old curve and choices still present.
   waiting for an MSP reply, releases holds and disables editing. Initial loading
   finishes with a fresh lock readback. A stale or lost lock cannot be bypassed by
   an ACK or a busy transaction.
-- Timed servo/mixer support is proved by command 196 timed OFF. The source's
-  version-only assumption is intentionally corrected. API 12.10 without firmware
-  PR 541 uses three-byte permanent holds with explicit warning and cleanup.
+- Timed support is proved separately for commands 193 and 191 using OFF-only
+  valid/invalid-length parser checks. Command 196 does not prove mixer support.
+  The source's version-only assumption is intentionally corrected. API 12.10
+  without firmware PR 541 uses three-byte permanent holds with explicit warning
+  and cleanup.
 - Every task/step exit drops unsent keepalives and releases held outputs.
   Wiring STOP belongs to the cleanup queue, so it survives page teardown.
   Errors block EEPROM/advance; profile transactions attempt to restore selection.
@@ -90,9 +92,12 @@ draft discard is also checked with the old curve and choices still present.
   required to copy browser SVGs onto the radio.
 - Motor tests additionally stop after 15 seconds. Tail idle is capped at 25.5%,
   the U8 protocol ceiling, rather than offering a value that wraps on the wire.
-- Mechanical, board, servo-arm, tail and gyro drawings are references. Stick and
-  output markers follow cached MSP values; layout, rotation arrow, rate curve and
-  pulse train follow settings. The switch hint is the source's decorative cue.
+- Mechanical, servo-arm, tail and gyro drawings are labelled references. Blade
+  pitch uses a blade cross-section, gauge and horizontal datum; the swash uses a
+  closed rim, linkages and a neutral plane. Nick and roll gyro checks have distinct
+  side/rear views. Board verification follows fresh cached MSP roll/pitch; stale
+  data hides the model. Stick/output markers and assigned mode cues follow cached
+  MSP values; layout, rotation arrow, rate curve and pulse train follow settings.
   No scene is rebuilt on an MSP reply. No canvas or image rotation is used.
 
 The telemetry transport adaptation is covered separately: all 42 adjustment records

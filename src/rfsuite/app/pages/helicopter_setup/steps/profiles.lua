@@ -68,7 +68,10 @@ return function(w)
     p.listen=nil;w.message=L.detected
   end
   local function listen(kind)
-    cancel();p.listen,p.untilAt=kind,getTime()+2000;w.message=L.flick
+    local baseline=w:channelSnapshot("rc")
+    if not baseline or #baseline<6 then w.message=L.waitChannels;return end
+    cancel();p.base,p.peaks=baseline,{}
+    p.listen,p.untilAt=kind,getTime()+2000;w.message=L.flick
   end
   local function channelValue(channel) return w.data.rc and w.data.rc.channels[channel+6] end
   local function plan(channel)
