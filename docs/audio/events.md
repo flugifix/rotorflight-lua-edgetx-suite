@@ -258,7 +258,7 @@ The transmitter module's power (the `TPWR` reading, in mW) is judged as a share 
 - **Levels** as the link quality alert: a level entered is spoken at once with the percentage, recovering is silent, a level is left only 5 points below its line, and only the critical level vibrates. The power moves in the module's steps (for example 100 and 250 mW against a 250 mW maximum, 40% and 100%), so a module that steps down and back up again starts a new announcement each time it climbs back for longer than the hold.
 
 #### What Telemetry Lost Covers, and What It Leaves to the Radio
-Only a flight controller that stops sending while the radio link is still up is announced: the link statistics keep arriving and the radio stays connected, but the flight controller's telemetry frames have stayed away for 6 seconds. The radio cannot tell this case apart on its own until it reports each sensor as lost, 20 seconds later. A lost RF link is what the radio itself announces, and hearing the same event twice is worse than hearing it once, so a lost link stays silent here -- also when the flight controller's frames stopped with it. A drop while the model is disarmed is a normal power-off and stays silent too.
+Only a flight controller that stops sending while the radio link is still up is announced: the link statistics keep arriving and the radio stays connected, but the flight controller's telemetry frames have stayed away for 6 seconds. The radio cannot tell this case apart on its own until it reports each sensor as lost, 20 seconds later. A lost RF link is what the radio itself announces, and hearing the same event twice is worse than hearing it once, so a lost link stays silent here -- also when the flight controller's frames stopped with it. A drop while the model is disarmed is a normal power-off and stays silent too. The silence counts only after a telemetry frame has arrived since the suite's first audio pass of the current connection, so a flight controller that has sent none since then -- for example one that was already silent when the link returned -- is not announced.
 
 The loss is announced **once**. A model that stays silent keeps the announcement's recovery window open, and it is the return that speaks again -- not the silence, however long it lasts.
 
@@ -342,6 +342,40 @@ the page that switches an alert on is the page that says how it behaves.
 - **The pack check is not in the table**, because it has no condition to hold: it speaks once
   when the model connects and is latched for the rest of that connection. **Neither is
   Rescue**, whose two announcements are spoken once per change of state.
+- **A file the sound pack lacks** leaves its announcement silent and without vibration.
+  *Main Power Lost*, *Telemetry Lost* and *Telemetry Dropouts* look for their file first and stay
+  silent without one; the latter two log it once per connection. The other alerts in the table
+  above count it as made: such an alert is tried again after the usual ten seconds and spends its
+  *Repeat* count as if it had spoken, and the log names the file once. The flight timer counts it
+  as made for that flight.
+
+## While the Flight Controller Is Silent
+
+When the flight controller stops sending telemetry while the radio link stays up -- a receiver
+powered on its own, or a flight controller that stops while powered -- the radio goes on
+reporting each of its sensors at the last value it received. An alert judging such a value
+would repeat it every ten seconds for a reading nobody sends any more. So the alerts that read
+a flight controller value wait while its telemetry frames have stayed away for 6 seconds, the
+test *Telemetry Lost* is spoken on (also when that announcement is off):
+
+- **Held:** low pack voltage, *Main Power Lost*, the BEC / receiver alert, ESC temperature, MCU
+  temperature, ESC load, the empty SmartFuel alarm, the SmartFuel percentage callouts and the
+  SmartFuel level spoken on connect.
+- **Not held:** the link alerts (link quality, RSSI, Downlink, both SNR, TX power), which read
+  the radio's own link statistics; telemetry dropouts and telemetry lost, which watch the frames
+  arriving; the flight timer; the announcements made on a change or once on connect -- arming,
+  governor, profiles, rescue, the model name -- which a value that stands still never sets off;
+  and the pack check, made once when the model connects.
+- **Nothing a held alert has counted starts over.** Its *Repeat* count and its level stand as
+  they were, and it is judged again from the first frame that arrives: a SmartFuel step passed
+  during the silence, or the level on connect, is spoken then, and *Main Power Back* is still
+  announced when the pack reads again. A *Hold* that had begun keeps its start, so a reading
+  still past the line when the frames return can be spoken at once.
+- A held alert is not spoken, so it raises nothing under *Raise Volume*.
+- The test needs the time of the flight controller's last telemetry frame, and a frame received
+  since the suite's first audio pass of the current connection: until one has arrived, or with a
+  flight controller whose telemetry never records one, nothing is held and *Telemetry Lost* is
+  not spoken.
 
 ## Raise Volume
 
@@ -366,7 +400,8 @@ such announcement. Another one within those 8 seconds extends the time and write
   *Master volume*: in *Off* and *Callout level* they change nothing.
 - **Only what is spoken raises it.** A reading that stays inside its hold, an alert whose
   *Repeat* count is spent, a file the sound pack lacks, an announcement held back by the quarter of a
-  second the suite leaves after handing over the previous one: none of them raises the volume.
+  second the suite leaves after handing over the previous one, an alert held while the flight
+  controller is silent: none of them raises the volume.
 - **Two writes per raise**, one before the announcement and one 8 seconds after the last, each a
   change of the global variable that EdgeTX saves with the model. An alert that repeats every
   10 seconds is back at the *Normal Level* before its next announcement, so each repeat raises it
