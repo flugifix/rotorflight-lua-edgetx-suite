@@ -132,6 +132,11 @@ function M.encode(items)
   return table.concat(out, "/")
 end
 
+-- Names the radio supplies (the model name, the firmware string) are shortened with "..." where
+-- the field is narrower than the name. A field offers them when this prefix fits; the screen
+-- shortens with the same fitLine in the same font.
+local SHORTENED = { model = true, firmware = true }
+local SHORTENED_WORST = string.rep("W", 8) .. "..."
 local WORST = {
   clock = "23:59", date = "2099-12-31", tx_battery = "12.0 V  100%", model = "WWWWWWWWWWWWWWW",
   timer1 = "<-999:59", timer2 = "<-999:59", timer3 = "<-999:59", tx_gps = "No fix · Sat 99+",
@@ -253,6 +258,16 @@ local function valueFont(kind, boxW, geometry)
   end
   return boxW < 180 and SMLSIZE or MIDSIZE
 end
+-- A value whose worst case does not fit in its font steps down, DBLSIZE to MIDSIZE to SMLSIZE.
+-- The editor's fit check and the screen use this one answer, so what is offered is what is drawn.
+local STEP_DOWN = {}
+if DBLSIZE ~= nil then STEP_DOWN[DBLSIZE] = MIDSIZE end
+if MIDSIZE ~= nil then STEP_DOWN[MIDSIZE] = SMLSIZE end
+local function fittingFont(kind, worstValue, boxW, width, geometry, measureCache)
+  local font = valueFont(kind, boxW, geometry)
+  while font ~= nil and measure(worstValue, font, measureCache) > width do font = STEP_DOWN[font] end
+  return font
+end
 
 local function moduleFits(kind, boxW, height, labels, knownGeometry, measureCache)
   local geometry = knownGeometry or M.geometry(boxW, height)
@@ -261,8 +276,7 @@ local function moduleFits(kind, boxW, height, labels, knownGeometry, measureCach
   local detailedGps = kind == "tx_gps" and gpsDetailed(boxW, height, labels, measureCache, geometry)
   local headerWidth = detailedGps and math.floor(inner / 2) or inner
   if measure(label, SMLSIZE, measureCache) > headerWidth then return false end
-  local font = valueFont(kind, boxW, geometry)
-  local worstValue = WORST[kind] or "-"
+  local worstValue = SHORTENED[kind] and SHORTENED_WORST or WORST[kind] or "-"
   if kind == "tx_gps" then
     worstValue = string.format("%s · %s 99+", labels and labels.gps_no_fix or "No fix",
       labels and labels.gps_satellites or "Sat")
@@ -276,15 +290,16 @@ local function moduleFits(kind, boxW, height, labels, knownGeometry, measureCach
         .. (labels and labels[spec[4]] or spec[5]) .. " " .. spec[6]
       if measure(line, SMLSIZE, measureCache) > inner then return false end
     end
-    return true
+    return SMLSIZE
   end
-  if measure(worstValue, font, measureCache) > headerWidth then return false end
+  local font = fittingFont(kind, worstValue, boxW, headerWidth, geometry, measureCache)
+  if font == nil then return false end
   if kind == "clock" and measure(WORST.date, SMLSIZE, measureCache) > inner then return false end
   if kind == "tx_gps" then
     local timeLine = labels and labels.gps_time_unavailable or "Time status unknown"
     if measure(timeLine, SMLSIZE, measureCache) > inner then return false end
   end
-  return true
+  return font
 end
 
 function M.typesForField(width, height, fields, labels, measureCache, knownGeometry)
@@ -347,17 +362,18 @@ local function layout(items, width, height, labels, crop)
   local rows, itemIndex, fitCache, detailCache, heightCache = {}, 0, {}, {}, {}
   local _, detailHeight = measure("Ag", SMLSIZE)
   heightCache[SMLSIZE] = detailHeight
-  for rowNumber = 1, math.min(#sourceRows, geometry.maxRows) do
+  -- A drawn screen (crop) skips a saved row that does not fit this zone and packs the rows that
+  -- do from the top, so one row too wide for a widget zone does not hide the rows after it.
+  for rowNumber = 1, crop and #sourceRows or math.min(#sourceRows, geometry.maxRows) do
+    if #rows >= geometry.maxRows then break end
     local source = sourceRows[rowNumber]
-    if #source > geometry.maxFields then
-      if crop then break end
-      return nil, "fields", itemIndex + 1
-    end
+    local tooMany = #source > geometry.maxFields
+    if tooMany and not crop then return nil, "fields", itemIndex + 1 end
     local boxW = fieldWidth(width, geometry, #source)
-    local row = { items = {}, y = geometry.top + (rowNumber - 1) * (geometry.rowHeight + geometry.gap),
+    local row = { items = {}, y = geometry.top + #rows * (geometry.rowHeight + geometry.gap),
       h = geometry.rowHeight }
-    local fits = true
-    for field = 1, #source do
+    local fits = not tooMany
+    for field = 1, tooMany and 0 or #source do
       itemIndex = itemIndex + 1
       local item = source[field]
       local fitKey = item.type .. ":" .. tostring(boxW)
@@ -370,7 +386,7 @@ local function layout(items, width, height, labels, crop)
         if crop then fits = false; break end
         return nil, "width", itemIndex
       end
-      local font = valueFont(item.type, boxW, geometry)
+      local font = fitsItem
       if heightCache[font] == nil then local _; _, heightCache[font] = measure("Ag", font) end
       local detailed = false
       if item.type == "tx_gps" then
@@ -385,8 +401,7 @@ local function layout(items, width, height, labels, crop)
         font = font, lineHeight = heightCache[font], detailHeight = detailHeight,
         valueY = detailHeight + 12, detailedGps = detailed }
     end
-    if not fits then break end
-    rows[#rows + 1] = row
+    if fits then rows[#rows + 1] = row end
   end
   if #rows == 0 then return crop and {} or nil, "fit", 1 end
   return rows, #rows < #sourceRows and "cropped" or nil
@@ -761,8 +776,13 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
       local valueX = box.detailedGps and x + math.floor(boxW / 2) or x + 8
       local valueY = box.detailedGps and y + 5 or y + box.valueY
       local valueW = box.detailedGps and math.floor(boxW / 2) - 8 or boxW - 16
+      local shownFont, shown = box.font, SHORTENED[item.type] and { raw = false, text = "-" } or nil
       children[#children + 1] = { type = "label", x = valueX, y = valueY, w = valueW,
-        text = function() local snap = cache.snapshotValues or values; return tostring(snap[item.type] or "-") end,
+        text = shown and function()
+          local raw = (cache.snapshotValues or values)[item.type]
+          if raw ~= shown.raw then shown.raw, shown.text = raw, fitLine(tostring(raw or "-"), valueW, shownFont) end
+          return shown.text
+        end or function() local snap = cache.snapshotValues or values; return tostring(snap[item.type] or "-") end,
         align = box.detailedGps and RIGHT or nil,
         color = item.type == "tx_battery"
           and function() return cache.batteryLow and COLOR_THEME_WARNING or COLOR_THEME_PRIMARY1 end

@@ -521,4 +521,72 @@ check("scene exposes a reactive value", type(valueClosure) == "function")
 cache.snapshotValues.clock = "12:35"
 check("reactive value updates without rebuild", valueClosure() == "12:35")
 
+-- The fit checks above run on even-width stand-in fonts. These run on the radio's own advance
+-- widths (edgetx_font_widths.lua: 800x480 radios use the lrg set, 480x272/480x320 the std set).
+do
+  local Widths = assert(loadfile(root .. "/bin/dashboard/edgetx_font_widths.lua"))()
+  local savedSizeText, savedW, savedH = lcd.sizeText, LCD_W, LCD_H
+  local measured = 0
+  local function useFonts(set)
+    local byFont = { [SMLSIZE] = set.XS, [MIDSIZE] = set.L, [DBLSIZE] = set.bold_XL }
+    lcd.sizeText = function(value, font)
+      measured = measured + 1
+      local widths, width = byFont[font] or set.XS, 0
+      for _, code in utf8.codes(tostring(value)) do width = width + (widths[code] or widths[87]) end
+      return width, (byFont[font] or set.XS).line
+    end
+  end
+  local function has(list, kind)
+    for i = 1, #list do if list[i] == kind then return true end end
+    return false
+  end
+  local function tiles(scene)
+    local n = 0
+    for i = 1, #scene do
+      if scene[i].type == "rectangle" and (scene[i].rounded == 5 or scene[i].rounded == 7) then n = n + 1 end
+    end
+    return n
+  end
+  for _, case in ipairs({ { Widths.lrg, 800, 480, "elrs+elrs+elrs+elrs/clock" },
+      { Widths.std, 480, 320, "clock+clock+clock/elrs" } }) do
+    useFonts(case[1]); LCD_W, LCD_H = case[2], case[3]
+    local name = case[2] .. "x" .. case[3]
+    check(name .. " small-screen default draws its three tiles with the radio's fonts",
+      tiles(standby.build({ w = case[2], h = case[3] }, "Waiting", text, standby.decode("clock+tx_battery/elrs"),
+        {}, {})) == 3)
+    check(name .. " the editor offers the model name in a two-field row",
+      has(standby.typesForField(case[2], case[3], 2, nil, {}), "model"))
+    local skipped = standby.build({ w = case[2], h = case[3] }, "Waiting", text, standby.decode(case[4]), {}, {})
+    check(name .. " a saved row that does not fit does not hide the rows after it", tiles(skipped) == 1)
+    local wideScene = standby.build({ w = case[2], h = case[3] }, "Waiting", text, standby.decode(nil, case[2]), {}, {})
+    check(name .. " the unsaved default draws every tile with the radio's fonts",
+      tiles(wideScene) == (case[2] >= 700 and 4 or 3))
+    local longName, nameCache = string.rep("W", 15), {}
+    local nameScene = standby.build({ w = case[2], h = case[3] }, "Waiting", text,
+      standby.decode(case[2] >= 700 and "clock+tx_battery+model" or "model+clock"), { model = longName }, nameCache)
+    local nameNode
+    for i = 1, #nameScene do
+      local node = nameScene[i]
+      if node.type == "label" and type(node.text) == "function" and string.sub(node.text(), 1, 1) == "W" then
+        nameNode = node
+      end
+    end
+    local shown = nameNode and nameNode.text() or ""
+    -- 800x480, three fields: the name's prefix does not fit at MIDSIZE, so editor and screen both
+    -- step down to SMLSIZE. 480x320, two fields: it fits at MIDSIZE.
+    check(name .. " the screen draws the name in the font the editor's fit check chose",
+      nameNode ~= nil and nameNode.font == (case[2] >= 700 and SMLSIZE or MIDSIZE)
+        and has(standby.typesForField(case[2], case[3], case[2] >= 700 and 3 or 2, nil, {}), "model"))
+    check(name .. " a model name wider than its field is shortened with ... to the field width",
+      string.sub(shown, -3) == "..." and #shown < #longName + 3
+        and lcd.sizeText(shown, nameNode.font) <= nameNode.w)
+    local before = measured
+    nameNode.text(); nameNode.text()
+    check(name .. " an unchanged name is not measured again", measured == before)
+    nameCache.snapshotValues = { model = "Gaui X3" }
+    check(name .. " a name that fits is drawn whole", nameNode.text() == "Gaui X3")
+  end
+  lcd.sizeText, LCD_W, LCD_H = savedSizeText, savedW, savedH
+end
+
 print(string.format("standby regression: %d checks passed", passed))

@@ -2791,7 +2791,7 @@ return {
         saved_message = "Standby-Bildschirm gespeichert",
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen",
-        help_message = "Standby-Bildschirm: zeigt Senderinfos, während das Dashboard auf den Flight Controller wartet.\nZeile 1: Felder teilen die Zeile gleichmäßig; kleinere Zonen zeigen nur führende ganze Zeilen.\nFeld 1: Modul wählen; nur passende Module werden angeboten. Sender-GPS wechselt zwischen kompakter und detaillierter Ansicht.\n+ Feld: gleich großes Feld hinzufügen, wenn vorhandene und angebotene Module passen.\nFeld entfernen: dieses Feld löschen.\n+ Zeile: Zeile hinzufügen, solange Platz ist.\nZeile entfernen: diese Zeile löschen."
+        help_message = "Standby-Bildschirm: zeigt Senderinfos, während das Dashboard auf den Flight Controller wartet.\nZeile 1: Felder teilen die Zeile gleichmäßig; kleinere Zonen lassen nicht passende Zeilen aus.\nFeld 1: Modul wählen; nur passende Module werden angeboten. Sender-GPS wechselt zwischen kompakter und detaillierter Ansicht.\n+ Feld: gleich großes Feld hinzufügen, wenn vorhandene und angebotene Module passen.\nFeld entfernen: dieses Feld löschen.\n+ Zeile: Zeile hinzufügen, solange Platz ist.\nZeile entfernen: diese Zeile löschen."
       },
       settings_dashboard_theme = {
         section_dashboard_theme = "Dashboard-Design",
