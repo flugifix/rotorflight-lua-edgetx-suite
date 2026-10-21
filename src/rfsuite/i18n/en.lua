@@ -2710,7 +2710,7 @@ return {
       settings_dashboard_quick_menu = {
         place = "Position %d",
         none = "-",
-        help_message = "Which entries the dashboard's Quick Settings menu shows, row by row, left to right.\nPosition 1, 2, ...: the entry in that place; the dash leaves it empty. An entry chosen twice counts at its first place.\nA chosen entry still hides where it does not apply, as in the menu. Saved with the default order, the menu follows the default.\nBattery profile: not a position; it is always the last row of the menu while the flight controller reports a profile.",
+        help_message = "Which entries the dashboard's Quick Settings menu shows, row by row, left to right.\nPosition 1, 2, ...: the entry in that place; the dash leaves it empty. An entry chosen twice counts at its first place.\nA chosen entry still hides where it does not apply, as in the menu. Saved with the default order, the menu follows the default.\nBattery profile: not a position; it is always the last row of the menu while the model is disarmed and the flight controller reports a profile.",
         saved_title = "Saved",
         saved_message = "Quick Settings saved",
         save_error_title = "Error",

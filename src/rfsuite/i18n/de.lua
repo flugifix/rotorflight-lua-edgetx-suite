@@ -2738,7 +2738,7 @@ return {
       settings_dashboard_quick_menu = {
         place = "Position %d",
         none = "-",
-        help_message = "Welche Einträge das Menü Schnelleinstellungen des Dashboards zeigt, Zeile für Zeile von links nach rechts.\nPosition 1, 2, ...: der Eintrag an dieser Stelle; der Strich lässt sie leer. Ein doppelt gewählter Eintrag zählt an seiner ersten Stelle.\nEin gewählter Eintrag bleibt verborgen, wo er nicht passt, wie im Menü. Mit der Standard-Reihenfolge gespeichert, folgt das Menü dem Standard.\nAkkuprofil: keine Position; es ist immer die letzte Zeile im Menü, solange der Flugcontroller ein Profil meldet.",
+        help_message = "Welche Einträge das Menü Schnelleinstellungen des Dashboards zeigt, Zeile für Zeile von links nach rechts.\nPosition 1, 2, ...: der Eintrag an dieser Stelle; der Strich lässt sie leer. Ein doppelt gewählter Eintrag zählt an seiner ersten Stelle.\nEin gewählter Eintrag bleibt verborgen, wo er nicht passt, wie im Menü. Mit der Standard-Reihenfolge gespeichert, folgt das Menü dem Standard.\nAkkuprofil: keine Position; es ist immer die letzte Zeile im Menü, solange das Modell entschärft ist und der Flugcontroller ein Profil meldet.",
         saved_title = "Gespeichert",
         saved_message = "Schnelleinstellungen gespeichert",
         save_error_title = "Fehler",

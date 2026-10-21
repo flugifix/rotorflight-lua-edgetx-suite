@@ -80,7 +80,8 @@ allows. Six places on the screen open a page over it, and a seventh opens the su
 - **The profile row** of the left panel (PID, rate and battery profile) opens *Profile & Tuning*:
   the in-flight tuning surface, or a note that it is not available now, and, only while the
   model is disarmed, the model's battery
-  profiles, the one in force in green. Pressing a profile makes it the one in force and the page
+  profiles, the one in force in green, each with its capacity and, where the flight controller
+  reports them, its cell count and warning voltage under it (*6S · Warn 3.50V*). Pressing a profile makes it the one in force and the page
   stays open, showing whether the change is being sent, was done or failed.
 - **The link bars** in the top bar open the *ELRS* link page: beside the title the air rate and
   its modulation (*500Hz (LORA)*), then one row per reading, each a bar with its figure -- the link
@@ -138,10 +139,12 @@ allows. Six places on the screen open a page over it, and a seventh opens the su
   that fit and *No events yet* until the first. A key can open the page as well: choose
   *Theme: Status* for it on the *Keys* page.
 
-Urban draws these pages, the quick menu and the battery picker in the look of the screen they
-open over, in its colour scheme: a plain page, a title up to a size larger than the top bar's
+Urban draws these pages, the quick menu, the battery picker and the battery profile page in the
+look of the screen they open over, in its colour scheme: a plain page, a title up to a size larger than the top bar's
 lettering with a thin line under it, buttons drawn as an outline with the choice in force in green, and a large **X** at the
-top right that closes the page. The battery picker shows the packs in two columns from two packs up, each
+top right that closes the page. The battery profile page has a **<** box left of its title as
+well, which returns to the quick menu, and says at its foot *Sending...*, *Done* or *Failed* for
+the last profile pressed, or *CHANGEABLE ONLY WHEN DISARMED* while the model is armed. The battery picker shows the packs in two columns from two packs up, each
 with its name and a line with its capacity, its cycle count and the battery profile a pick selects
 (*1100 mAh - 7 cycles - P2*; no profile where none of the board's matches the pack), and *NO BATTERY*
 as a one-line row of its own at the foot, outlined in green where no pack is picked. Where

@@ -39,12 +39,13 @@ EdgeTX gives every script, so it looks the same whichever dashboard theme is sel
 | **BATTERY** | Brings the battery prompt back, with this model's packs. It stays full screen, the picker taking the menu's place. Only listed while the battery registry has a pack for this model and the model is disarmed. |
 | **MAIN MENU** | Opens the suite's tool, with its whole menu, inside the widget — see [the tool from full screen](#the-tool-from-full-screen). Only listed while the model is disarmed. |
 | **FLIGHT LOG** | Opens the suite's tool inside the widget on its [Flight Log](../pages/tools/flight_log.md) page; the back key there closes it again. Not in the menu as it comes — the pilot adds it on the *Quick Settings* page — and then only listed while the *Flight Log* preview is on and the model is disarmed. |
-| **BATTERY PROFILE** | A grid of the model's battery profiles; pressing one makes it the profile in force. Only listed while the model is disarmed. |
+| **BATTERY PROFILE** | Opens [the battery profile page](#the-battery-profile-page), where pressing a profile makes it the one in force. Not one of the entries above: a row of its own under them — see [the layout](#the-layout). Only shown while the model is disarmed and the flight controller has reported at least one battery profile with a capacity. |
 
-That is the menu as it comes, *FLIGHT LOG* aside. Which of these entries it shows, and in which order, is the
+That is the menu as it comes, *FLIGHT LOG* aside. Which of the first five entries it shows, and in which order, is the
 pilot's to choose on *System* → *Settings* → *Dashboard* →
 [*Quick Settings*](../pages/settings/dashboard/quick_menu.md). An entry chosen there still hides
-where the table says it is not listed.
+where the table says it is not listed. BATTERY PROFILE is not chosen there; the menu always draws
+it where it is offered.
 
 **ERASE BLACKBOX and BATTERY PROFILE are not offered while the model is armed** because nothing
 they send would arrive: while the model is armed the suite sends no configuration messages to
@@ -61,6 +62,26 @@ state for this model. With the preview switch off the entry is not listed at all
 offers no route into a feature the widget has stopped driving. What the surface itself does is
 in [in-flight tuning](inflight-tuning.md); the screen it opens sends nothing until the
 interlock switch is thrown.
+
+## The layout
+
+The entries the pilot has chosen are laid out on six places of equal size: two columns on a
+widget zone at least 300 pixels wide, one column on a narrower one. They fill the places row by
+row, left to right, in the pilot's order. An entry that is not offered now takes no place, so
+there are no gaps; with an odd number of entries in two columns the place beside the last one
+stays empty. The places keep their size whatever is shown, so with fewer entries the room below
+them stays free. An entry past the sixth place is not drawn.
+
+BATTERY PROFILE is always on the row after the last row of places, across the whole width and as
+tall as one of them. Its title is on the left; on the right is the profile in force, with a `›`
+to say the row opens a page:
+
+`6S · 2000mAh · Warn 3.50V ›`
+
+— the cell count, the capacity and the warning voltage per cell. Where that does not fit, the
+warning voltage is left out first, then the cell count; the capacity always stays. On firmware
+that does not report a cell count and cell voltages per battery profile, the row shows the
+capacity alone. With no profile known to be in force, it shows the title and the `›` only.
 
 ## The erase confirmation
 
@@ -105,28 +126,36 @@ Two things are different from the tool started from the tool list:
 - **Some memory stays in use after it is closed.** The pages are released, but the parts of the
   tool the dashboard shares stay loaded until the widget is.
 
-## The battery profile grid
+## The battery profile page
 
-One button per battery profile the flight controller carries a capacity for — profiles 1 to 6,
-and a profile whose capacity is zero is left out rather than shown as an empty one. Each button
-is labelled with that profile's capacity in mAh, and the profile the flight controller reports
-is highlighted. Which one that is comes from the *BatP* telemetry sensor; a model that is not
-sending it keeps the last profile that was read, and profile 1 until one has been read at all.
+Tapping the BATTERY PROFILE row opens a page with one button per battery profile the flight
+controller carries a capacity for — profiles 1 to 6, and a profile whose capacity is zero is left
+out rather than shown as an empty one. Each button is labelled with that profile's capacity in
+mAh and, in smaller letters under it where the firmware reports them, its cell count and warning
+voltage per cell (`6S · Warn 3.50V`). The profile the flight controller reports is highlighted.
+Which one that is comes from the *BatP* telemetry sensor; a model that is not sending it keeps
+the last profile that was read, and none is highlighted until one has been read at all.
 
 Pressing a capacity sets that battery profile on the flight controller and writes the setting
 to the board's own storage, which is what makes the board apply the change and tell the rest of
-the radio about it. The menu then closes and leaves full screen, or, over a theme that takes
-full screen, shows the theme again.
+the radio about it. The page stays open, and the line at its foot says how the change went:
+*SENDING...*, then *SET AND SAVED*, or *NOT SAVED* where it failed.
 
-The grid is two buttons wide, one wide on a narrow widget zone, and three wide on a screen at
-least 400 pixels across when there are more than four profiles, so all six still fit below the
-entries above it. It stops at the bottom edge of the screen: a profile whose button would not
-fit is not drawn.
+The buttons are two wide, one wide on a narrow widget zone, and three wide on a screen at least
+400 pixels across when there are more than four profiles; their rows share the room between the
+header and the foot line.
+
+The **<** at the left of the header returns to the quick menu; the **X** at the right leaves full
+screen, or, over a theme that takes full screen, closes the page and shows the theme again.
+
+While the model is armed the page stays open, but its buttons cannot be pressed: the profile in
+force stays highlighted, and the foot line says *CHANGEABLE ONLY WHEN DISARMED*. A change pressed
+in the air would never reach the board, for the same reason given for ERASE BLACKBOX above.
 
 ## Closing it
 
 The **X** in the header closes the menu and leaves full screen. So does every entry except
-in-flight tuning, BATTERY, MAIN MENU and FLIGHT LOG, which swap one full-screen surface for another. The battery
+in-flight tuning, BATTERY, MAIN MENU, FLIGHT LOG and BATTERY PROFILE, which swap one full-screen surface for another. The battery
 picker's packs, *NO BATTERY* and its own X leave full screen as well, and the next entry into
 full screen shows the quick menu, with BATTERY to bring the picker back. EdgeTX's own way out of
 full screen — a long press on the return key — works as it does anywhere else.
@@ -134,7 +163,8 @@ full screen — a long press on the return key — works as it does anywhere els
 Over a theme that takes full screen, the same X, entries and picker answers close what is open
 and show the theme again instead; the theme's own close control, or a long press on the return
 key, leaves full screen. On a radio with page keys, PAGE opens and closes the menu there, and a
-short press on the return key closes the menu or the picker.
+short press on the return key closes the menu or the picker, and on the battery profile page
+does what its **<** does.
 
 ## For contributors
 
@@ -150,13 +180,15 @@ menus:
 | --- | --- |
 | `id` | The entry's name, for anything that has to refer to it. |
 | `title` | The text on the row, already translated. |
-| `kind` | `action` for a single button, `choice` for a title over a grid of options. |
-| `view` | For a `choice` whose options are drawn by a view of their own: that view's id. The menu then draws the row as the single button that opens it (its `after`), and the view draws the options. |
+| `kind` | `action` for a single press, `choice` for a set of options. |
+| `view` | For a `choice`: the id of the view its options are drawn and pressed in. Every `choice` has one; the menu draws the entry as the single button that opens it (its `after`), and the view draws the options. |
 | `visibleWhen` | The name of a condition that decides whether the row exists at all, and whether a press on it is run (`M.run` refuses a row whose condition does not hold now). Omitted, the row is always there. |
 | `press` | The work an `action` does when it is pressed, and nothing else. Optional: a row whose whole effect is its `after` has none. |
 | `after` | What follows the press, as data: `done`, `openView:<id>`, `closeView`, `exitFullscreen`, `openTool` or `none`. Missing means `none`. The actions are described in [dashboard views](../developer/dashboard-views.md). |
 | `confirm` | Optional, the question the row asks before its press is performed: a table of already-translated strings — `title`, `message`, the optional `detail`, and the labels `confirmLabel` and `cancelLabel`. Present, the press is held until the pilot answers — see [the erase confirmation](#the-erase-confirmation). |
-| `options` | For a `choice`: a list, or a function returning one, of `{ id, label, current, press, after }`. `id` is what a run is matched by: a battery profile's number, 1 to 6, and a pack's registry id. The battery-profile grid is one, and the battery picker's packs are the other. |
+| `options` | For a `choice`: a list, or a function returning one, of `{ id, label, detail, current, press, after }`. `id` is what a run is matched by: a battery profile's number, 1 to 6, and a pack's registry id. `detail` is an optional second, smaller line under the label. The battery profiles are one, and the battery picker's packs are the other. |
+| `values` | Optional, a function `values(w)` returning texts for a row that shows a value beside its title, longest first, each a shortening of the one before. BATTERY PROFILE has one: the profile in force as `6S · 2000mAh · Warn 3.50V`, then `6S · 2000mAh`, then `2000mAh`, from the parts the flight controller reports; an empty list where no profile is known to be in force. |
+| `armedNote` | Optional, already translated: what a page of the entry's options says while the model is armed and none of them can be pressed. BATTERY PROFILE has one. |
 | `close` | Optional, `{ press, after }`: what closing the surface that draws the options does. |
 | `info` | Optional, a function returning what the entry knows about the state it acts on, read when it is called. ERASE BLACKBOX has one: `{ used, total }` of the blackbox, from the summary the flight controller last sent. |
 
@@ -165,13 +197,16 @@ report)` runs it: the work — the option's `press` when an option is given, els
 and then its `after`, or the `after` given in its place. It is the one place both happen, for
 the menu's own buttons, the picker's and a theme's. An entry whose `visibleWhen` does not hold
 now is refused there, and again when its question is answered; the options and the `close` of an
-entry that names a `view` are not asked. `report` is handed to the work: an entry
+entry that names a `view` are not asked. The battery profile page stays open when the model arms,
+so a profile's own `press` asks the arm state and queues nothing while the model is armed.
+`report` is handed to the work: an entry
 that sends messages to the flight controller queues them as one chain and reports on the chain
 through it (`"busy"`, then `"ok"` on the last message's reply or `"failed"` on any message's
-error). The menu's own buttons pass none, so what they queue is what they always queued.
+error). The menu's own buttons pass none, so what they queue is what they always queued; the
+battery profile page passes one for each press and shows the outcome in its foot line.
 
 **Menus are lists of entry ids.** `M.LISTS` names them — `quick` is the quick menu's default,
-`erase_blackbox`, `inflight_tuning`, `battery_pick`, `tool`, `battery_profile` — and
+`erase_blackbox`, `inflight_tuning`, `battery_pick`, `tool` — and
 `M.list(widget, name)` returns the entries of one. For `quick` that is the pilot's list rather
 than the default: `M.entries(widget)` and `M.list(widget, "quick")` read the ids from the
 `dashboard.quick_menu` preference through `src/rfsuite/widgets/dashboard/quick_menu_order.lua`,
@@ -181,12 +216,28 @@ string of ids separated by commas: absent, or not a string, is the default; the 
 an emptied menu; an id the build does not offer is dropped, and an id named twice counts at its
 first place. A string that names nothing the build offers reads as the default. An entry added
 to the menu is added to `OFFERED` there, and to `DEFAULT` only where an unconfigured radio
-should show it. `M.resolve(widget, entry, option)` finds
+should show it. `battery_profile` is in neither: a stored list that still names it reads without
+it. `M.resolve(widget, entry, option)` finds
 the menu's own record and option for what a caller hands in, by `id`, and
 `M.coreList(widget, list)` the records for a list of them — every entry the menu can build, not
 only the ones in the pilot's list, so a theme that names an entry gets it. A theme reaches the same records
 through its `ctx` and may draw them its own way, but it adds none and changes none: see
 [dashboard themes](../developer/dashboard-themes.md#the-theme-draws-the-widget-acts).
+
+**The layout is fixed by numbers on the module.** `M.build` lays the entries of its list on
+`M.PLACES` (6) places, in two columns where the zone is at least `M.TWO_COLUMNS_FROM` (300)
+pixels wide and in one below that, filled row by row and left to right; an entry its
+`visibleWhen` hides takes no place, and one past the last place is not drawn. BATTERY PROFILE is
+not drawn on a place: `M.build` skips `battery_profile` in any list it is given and draws the
+entry itself, with `M.entry(widget, "battery_profile")`, on the row after the last row of places.
+The value on that row is the longest of the entry's `values` that fits, chosen by
+`M.fitFirst(texts, font, maxW)`, followed by `M.OPENS_MARK` (` ›`). `M.renderKey(widget)`
+rebuilds the menu when the profile in force changes and when the flight controller's battery
+configuration arrives or goes.
+
+**BATTERY PROFILE is a `choice` with `view = "battery_profile"`.** In the menu it is the row that
+opens the battery profile page (`widgets/dashboard/battery_profile_menu.lua`), which draws its
+options; each runs with `M.run(widget, entry, option, "none", report)`, so the page stays open.
 
 **BATTERY is the battery prompt's record.** `battery_pick` is a `choice` with `view =
 "battery_pick"`: in the menu it is the BATTERY button, and the battery picker
