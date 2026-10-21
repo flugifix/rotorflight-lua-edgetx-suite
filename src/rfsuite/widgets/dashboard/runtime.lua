@@ -871,6 +871,7 @@ local function standbyTexts(self, items, infoKind)
     module_elrs = t("widgets.dashboard.standby.module_elrs", "ELRS TX configuration"),
     elrs_reading = t("widgets.dashboard.standby.elrs_reading", "Reading"),
     elrs_unavailable = t("widgets.dashboard.standby.elrs_unavailable", "Unavailable"),
+    elrs_no_module = t("widgets.dashboard.standby.elrs_no_module", "No ELRS module"),
     elrs_last_read = t("widgets.dashboard.standby.elrs_last_read", "Last read %d s ago"),
     elrs_packet_rate = t("widgets.dashboard.standby.elrs_packet_rate", "Packet Rate"),
     elrs_telemetry_ratio = t("widgets.dashboard.standby.elrs_telemetry_ratio", "Telemetry Ratio"),
@@ -965,6 +966,7 @@ local function prepareStandbyTextCache(self, items)
     if selected.elrs then
       texts.elrs_reading = t("widgets.dashboard.standby.elrs_reading", "Reading")
       texts.elrs_unavailable = t("widgets.dashboard.standby.elrs_unavailable", "Unavailable")
+      texts.elrs_no_module = t("widgets.dashboard.standby.elrs_no_module", "No ELRS module")
       texts.elrs_last_read = t("widgets.dashboard.standby.elrs_last_read", "Last read %d s ago")
       texts.elrs_packet_rate = t("widgets.dashboard.standby.elrs_packet_rate", "Packet Rate")
       texts.elrs_telemetry_ratio = t("widgets.dashboard.standby.elrs_telemetry_ratio", "Telemetry Ratio")
@@ -1029,7 +1031,9 @@ local function standbyJobStep(self)
     self._lastChildCount = #children
     return true
   end
-  local encodedLayout = dashboard[DashboardStandby.KEY_LAYOUT]
+  -- With nothing saved, the default is the one for this zone's width: a widget zone on a wide
+  -- radio keeps the two-field first row it can show.
+  local encodedLayout = dashboard[DashboardStandby.KEY_LAYOUT] or DashboardStandby.defaultLayout(self.zone.w)
   local items, itemsChanged = self._standbyItems, false
   if items == nil or self._standbyLayout ~= encodedLayout then
     items = DashboardStandby.decode(encodedLayout)
@@ -4621,7 +4625,7 @@ function Runtime.new(zone, options)
       self._standbyFullscreen = event ~= nil
       if self._standbyModule then
         local Standby = self._standbyModule
-        local encodedLayout = dashboardPrefs.standby_layout
+        local encodedLayout = dashboardPrefs.standby_layout or Standby.defaultLayout(self.zone.w)
         local standbyItems = self._standbyItems
         if standbyItems == nil or self._standbyLayout ~= encodedLayout then
           standbyItems = Standby.decode(encodedLayout)

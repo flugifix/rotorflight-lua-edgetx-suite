@@ -40,7 +40,16 @@ local TYPE_KEYS = {
   uptime = "module_uptime", firmware = "module_firmware", elrs = "module_elrs",
 }
 
+-- The default always ends in a full ELRS row, so a pilot sees what the module is set to before
+-- choosing anything; a screen wide enough for four fields per row adds the model name above it.
 local DEFAULT = "clock+tx_battery/elrs"
+local DEFAULT_WIDE = "clock+tx_battery+model/elrs"
+M.WIDE_WIDTH = 700
+
+function M.defaultLayout(width)
+  width = tonumber(width) or LCD_W or 480
+  return width >= M.WIDE_WIDTH and DEFAULT_WIDE or DEFAULT
+end
 local TYPE_SET = {}
 for i = 1, #M.TYPES do TYPE_SET[M.TYPES[i]] = true end
 
@@ -78,8 +87,8 @@ function M.fromRows(rows)
   return items
 end
 
-function M.decode(value)
-  if value == nil then value = DEFAULT end
+function M.decode(value, width)
+  if value == nil then value = M.defaultLayout(width) end
   if value == "-" then return {} end
   if type(value) ~= "string" or value == "" then return {}, "malformed" end
   local scanLimit = 256
@@ -214,7 +223,7 @@ function M.geometry(width, height)
   local available = math.max(0, height - top - footer - gap)
   local rows = math.min(M.MAX_ROWS, math.floor((available + gap) / (rowHeight + gap)))
   return { compact = compact, micro = micro, top = top, footer = footer, gap = gap,
-    margin = margin, rowHeight = rowHeight, maxRows = rows, maxFields = width >= 700 and 4 or 2 }
+    margin = margin, rowHeight = rowHeight, maxRows = rows, maxFields = width >= M.WIDE_WIDTH and 4 or 2 }
 end
 
 local function fieldWidth(width, geometry, fields)
@@ -527,10 +536,19 @@ function M.setElrsSnapshot(cache, snapshot, now)
       or old.maxPower ~= snapshot.maxPower or old.dynamic ~= snapshot.dynamic then cache.snapshotAt = nil end
 end
 
+-- Reasons a finished read gives when no ELRS module answered: no CRSF module at all, a CRSF
+-- module that is not ELRS, or no device information within the discovery pings.
+local NO_MODULE = { no_crsf = true, not_elrs = true, no_answer = true }
+
 function M.elrsText(cache, now)
   local snap, text = cache.elrs, cache.text
   if type(snap) ~= "table" or snap.status == "unavailable" then
-    local unavailable = text and text("elrs_unavailable", "Unavailable") or "Unavailable"
+    local unavailable
+    if type(snap) == "table" and NO_MODULE[snap.reason] then
+      unavailable = text and text("elrs_no_module", "No ELRS module") or "No ELRS module"
+    else
+      unavailable = text and text("elrs_unavailable", "Unavailable") or "Unavailable"
+    end
     cache.elrsCompact = { unavailable, "", "" }
     return unavailable
   end

@@ -2754,8 +2754,6 @@ return {
         add_row = "+ Zeile",
         remove_row = "Zeile entfernen",
         saved_entries_skipped = "Nicht unterstützte gespeicherte Einträge wurden übersprungen.",
-        large_default_placeholder = "Vorläufiger Standard: Uhr und Senderakku über der ELRS-Zeile.",
-        elrs_unavailable_placeholder = "Vorläufiger Text ohne Modul: Nicht verfügbar.",
         fit_empty = "Vor dem Speichern mindestens eine Zeile hinzufügen.",
         gps_no_fix = "Kein Fix",
         gps_latitude = "Breitengrad",
@@ -2793,7 +2791,7 @@ return {
         saved_message = "Standby-Bildschirm gespeichert",
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen",
-        help_message = "Standby-Bildschirm: zeigt Senderinfos, während das Dashboard auf den Flight Controller wartet.\nZeile 1: Felder teilen die Zeile gleichmäßig; kleinere Zonen zeigen nur führende ganze Zeilen.\nFeld 1: Modul wählen; nur passende Module werden angeboten. Sender-GPS wechselt zwischen kompakter und detaillierter Ansicht.\n+ Feld: gleich großes Feld hinzufügen, wenn vorhandene und angebotene Module passen.\nFeld entfernen: dieses Feld löschen.\n+ Zeile: Zeile hinzufügen, solange Platz ist.\nZeile entfernen: diese Zeile löschen. Standard für große Bildschirme und Text ohne ELRS sind vorläufige Platzhalter."
+        help_message = "Standby-Bildschirm: zeigt Senderinfos, während das Dashboard auf den Flight Controller wartet.\nZeile 1: Felder teilen die Zeile gleichmäßig; kleinere Zonen zeigen nur führende ganze Zeilen.\nFeld 1: Modul wählen; nur passende Module werden angeboten. Sender-GPS wechselt zwischen kompakter und detaillierter Ansicht.\n+ Feld: gleich großes Feld hinzufügen, wenn vorhandene und angebotene Module passen.\nFeld entfernen: dieses Feld löschen.\n+ Zeile: Zeile hinzufügen, solange Platz ist.\nZeile entfernen: diese Zeile löschen."
       },
       settings_dashboard_theme = {
         section_dashboard_theme = "Dashboard-Design",
@@ -3178,6 +3176,7 @@ return {
         gps_hdop = "HDOP",
         elrs_reading = "Wird gelesen",
         elrs_unavailable = "Nicht verfügbar",
+        elrs_no_module = "Kein ELRS-Modul",
         elrs_last_read = "Zuletzt vor %d s gelesen",
         elrs_packet_rate = "Paketrate",
         elrs_telemetry_ratio = "Telemetrie-Ratio",

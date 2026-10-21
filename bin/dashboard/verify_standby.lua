@@ -55,6 +55,12 @@ local default, defaultErr = standby.decode(nil)
 check("default decodes two compact rows", defaultErr == nil and #default == 3
   and default[1].row == 1 and default[2].row == 1 and default[3].row == 2
   and standby.encode(default) == "clock+tx_battery/elrs")
+local wide, wideErr = standby.decode(nil, 800)
+check("large-screen default carries clock, TX battery and model above a full ELRS row", wideErr == nil
+  and standby.encode(wide) == "clock+tx_battery+model/elrs")
+check("large-screen default validates at 800x480", standby.validate(wide, 800, 480))
+check("the default follows the radio width when none is given",
+  standby.encode(standby.decode(nil)) == "clock+tx_battery/elrs")
 for _, fixture in ipairs({
   { 480, 272, 2 }, { 480, 320, 2 }, { 800, 480, 3 }, { 320, 480, 3 },
 }) do
@@ -271,7 +277,28 @@ local unavailableFound = false
 for i = 1, #unavailableScene do
   if rendered(unavailableScene[i]) == "Unavailable" then unavailableFound = true end
 end
-check("unknown module state renders the current placeholder", unavailableFound)
+check("unknown module state renders Unavailable", unavailableFound)
+
+local function elrsWords(reason, textFn)
+  local cache = { text = textFn }
+  standby.setElrsSnapshot(cache, { status = "unavailable", reason = reason }, 1)
+  local items = standby.decode("elrs")
+  local scene = standby.build({ w = 480, h = 320 }, "Waiting", textFn, items, standby.snapshot(items, cache), cache)
+  local words = {}
+  for i = 1, #scene do
+    local value = rendered(scene[i])
+    if type(value) == "string" then words[value] = true end
+  end
+  return words
+end
+for _, reason in ipairs({ "no_crsf", "not_elrs", "no_answer" }) do
+  check("a radio without an ELRS module reads No ELRS module (" .. reason .. ")",
+    elrsWords(reason, text)["No ELRS module"] and not elrsWords(reason, text)["Unavailable"])
+  check("a radio without an ELRS module reads Kein ELRS-Modul in German (" .. reason .. ")",
+    elrsWords(reason, deText)["Kein ELRS-Modul"] == true)
+end
+check("an ELRS module that answered without the fields still reads Unavailable",
+  elrsWords("no_fields", text)["Unavailable"] == true and not elrsWords("no_fields", text)["No ELRS module"])
 
 batterySample.volts, batterySample.pct, batterySample.low = 7.8, 50, false
 tick = 603

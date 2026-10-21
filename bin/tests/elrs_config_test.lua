@@ -241,6 +241,7 @@ do
   assert(Config.request("timeout", { owner = "test" })); assert(not Config.acquire("diagnostics"))
   for i = 0, 5 do Config.step({ owner = "test", identity = "timeout", crsf = crsf, push = push, now = i }) end
   assert(#sent == Config.limits.pings and Config.snapshot("timeout").status == "unavailable")
+  assert(Config.snapshot("timeout").reason == "no_answer", "unanswered discovery did not report no_answer")
 end
 do
   Config.invalidate(nil); local crsf, push = transport(); drain(crsf)

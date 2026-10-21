@@ -2726,8 +2726,6 @@ return {
         add_row = "+ Row",
         remove_row = "Remove row",
         saved_entries_skipped = "Unsupported saved entries were skipped.",
-        large_default_placeholder = "Temporary default: Clock and TX battery above the ELRS row.",
-        elrs_unavailable_placeholder = "Temporary no-module text: Unavailable.",
         fit_empty = "Add at least one row before saving.",
         gps_no_fix = "No fix",
         gps_latitude = "Latitude",
@@ -2765,7 +2763,7 @@ return {
         saved_message = "Standby screen saved",
         save_error_title = "Error",
         save_error_message = "Save failed",
-        help_message = "Standby screen: show radio information while the dashboard waits for the flight controller.\nRow 1: filled fields share the row equally; smaller zones show only leading complete rows.\nField 1: choose a module; the list includes only modules that fit. TX GPS adapts from compact to detailed content.\n+ Field: add another equal field when current modules and all offered choices fit.\nRemove field: delete this field.\n+ Row: add a row while the screen has room.\nRemove row: delete this row. Large-screen and no-ELRS defaults are temporary placeholders."
+        help_message = "Standby screen: show radio information while the dashboard waits for the flight controller.\nRow 1: filled fields share the row equally; smaller zones show only leading complete rows.\nField 1: choose a module; the list includes only modules that fit. TX GPS adapts from compact to detailed content.\n+ Field: add another equal field when current modules and all offered choices fit.\nRemove field: delete this field.\n+ Row: add a row while the screen has room.\nRemove row: delete this row."
       },
       settings_dashboard_theme = {
         section_dashboard_theme = "Dashboard Theme",
@@ -3183,6 +3181,7 @@ return {
         gps_hdop = "HDOP",
         elrs_reading = "Reading",
         elrs_unavailable = "Unavailable",
+        elrs_no_module = "No ELRS module",
         elrs_last_read = "Last read %d s ago",
         elrs_packet_rate = "Packet Rate",
         elrs_telemetry_ratio = "Telemetry Ratio",

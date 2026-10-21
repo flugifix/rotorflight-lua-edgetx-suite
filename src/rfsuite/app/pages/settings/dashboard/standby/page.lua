@@ -91,13 +91,6 @@ local function firstNewType(ids, row)
   return ids[1]
 end
 
-local function hasType(kind)
-  for row = 1, #ui.rows do
-    for field = 1, #ui.rows[row] do if ui.rows[row][field].type == kind then return true end end
-  end
-  return false
-end
-
 function M.getHeaderActions() deps(); return { save = true, help = true } end
 function M.onReload(ctx) deps(); fromPrefs(ctx.preferences); ui.dirty = false end
 
@@ -155,15 +148,6 @@ function M.build(ctx)
   if ui.salvaged then
     y = y + appendNote(children, x, y, w,
       t(i18n, "saved_entries_skipped", "Unsupported saved entries were skipped."), COLOR_THEME_WARNING)
-  end
-  if screenW >= 700 then
-    y = y + appendNote(children, x, y, w,
-      t(i18n, "large_default_placeholder", "Temporary default: Clock and TX battery above the ELRS row."),
-      COLOR_THEME_PRIMARY1)
-  end
-  if hasType("elrs") then
-    y = y + appendNote(children, x, y, w,
-      t(i18n, "elrs_unavailable_placeholder", "Temporary no-module text: Unavailable."), COLOR_THEME_PRIMARY1)
   end
   for rowNumber = 1, #ui.rows do
     local row = ui.rows[rowNumber]

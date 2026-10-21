@@ -9,7 +9,7 @@ When enabled, the dashboard uses one configurable standby surface while it waits
 
 The editor builds the layout row by row. Every filled field in a row gets an equal share of its width, and no empty gap is stored. *+ Row* is offered only while another row fits the radio screen. *+ Field* is offered only when the existing modules and every choice offered for the new field fit at the narrower width. Each *Field* list is filtered to the modules that fit there. There are no manual size or move controls.
 
-The default on a small screen has Clock and TX battery in the first row and a full-width ELRS row below it. The current large-screen default temporarily uses that same first row above the ELRS row; the final large-screen rows remain undecided. The ELRS row stays in the default on a radio without a responding ELRS module and currently says *Unavailable*; that wording is also temporary. Both placeholders are identified on the settings page.
+Until a layout is saved, a zone narrower than 700 pixels shows Clock and TX battery in the first row and a full-width ELRS row below it; a zone at least 700 pixels wide, such as the full screen of an 800x480 radio, shows Clock, TX battery and the selected model in the first row above the same ELRS row, and leaves the third row free. The ELRS row stays in the default on a radio without an ELRS module and then reads *No ELRS module*; replace it with another module to use the space.
 
 A smaller widget zone draws the leading complete rows that fit. Saved rows after them remain in the layout and return in a taller zone. The screen does not page, rotate, or scroll.
 

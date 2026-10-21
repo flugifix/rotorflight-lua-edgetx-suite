@@ -85,8 +85,9 @@ do
   check("editor has no size selectors", countControls("choice", "Size") == 0)
   check("editor has no move controls", not press("Move up") and not press("Move down"))
   check("two-row compact screen does not offer another row", not press("+ Row"))
-  check("ELRS placeholder decision is visibly marked",
-    hasLabel("Temporary no-module text: Unavailable."))
+  check("editor carries no placeholder notes",
+    not hasLabel("Temporary no-module text: Unavailable.")
+      and not hasLabel("Temporary default: Clock and TX battery above the ELRS row."))
 
   check("second row can add a fitting equal-share field", press("+ Field", 1))
   build()
@@ -173,10 +174,16 @@ do
 
   LCD_W, LCD_H = 800, 480
   lcd.sizeText = savedSizeText
+  local storedLayout = ctx.preferences.dashboard.standby_layout
+  ctx.preferences.dashboard.standby_layout = nil
   Page.onReload(ctx)
   build()
-  check("large-screen placeholder decision is visibly marked",
-    hasLabel("Temporary default: Clock and TX battery above the ELRS row."))
+  check("large-screen default opens as clock, TX battery and model above the ELRS row",
+    hasLabel("Row 1") and hasLabel("Row 2") and not hasLabel("Row 3") and countControls("choice") == 4
+      and not hasLabel("Temporary default: Clock and TX battery above the ELRS row."))
+  ctx.preferences.dashboard.standby_layout = storedLayout
+  Page.onReload(ctx)
+  build()
   check("large geometry offers a third row", press("+ Row"))
   build()
   Page.onSave(ctx)
@@ -203,7 +210,7 @@ do
     return #tostring(text) * (font == MIDSIZE and 9 or 6), font == MIDSIZE and 17 or 12
   end
   check("default layout fits native TX15 English font heights",
-    Standby.validate(Standby.decode(nil), 480, 320))
+    Standby.validate(Standby.decode(nil, 480), 480, 320))
   lcd.sizeText = savedSizeText
   local cache = {}
   local labels = { timer1_detail = "Localized timer one" }
@@ -217,7 +224,7 @@ do
   end
   check("timer tile uses its item-specific localized detail key", localized)
 
-  local compactItems = Standby.decode(nil)
+  local compactItems = Standby.decode(nil, 480)
   local compactCache = {}
   local compactTree = Standby.build({ x = 0, y = 0, w = 480, h = 320 }, "waiting",
     function(_, fallback) return fallback end, compactItems, {}, compactCache,
@@ -649,6 +656,27 @@ do
     print(string.format("retained tree %s: %d getters resolved on each of %d passes", name, #retainedRefs,
       passesWithOldTree))
     retainedWidget:background()
+  end
+
+  -- Nothing saved: the default follows the zone, so a widget zone on a wide radio still shows its
+  -- first row, and the full screen of a wide radio gets the three-field first row.
+  for _, case in ipairs({ { 480, 320, 3 }, { 800, 480, 4 } }) do
+    local defaultWidget = Runtime.new({ x = 0, y = 0, w = case[1], h = case[2] }, {})
+    defaultWidget.preferences.dashboard = defaultWidget.preferences.dashboard or {}
+    defaultWidget.preferences.dashboard.standby_enabled = true
+    defaultWidget.preferences.dashboard.standby_layout = nil
+    defaultWidget.preferences.audio_events = defaultWidget.preferences.audio_events or {}
+    defaultWidget.preferences.audio_events.tpwr_alert = false
+    defaultWidget.state.fblConnected, defaultWidget.state.armed = false, false
+    defaultWidget.state.hadInflightFlight, defaultWidget.flightMode = false, "preflight"
+    for _ = 1, 5 do Stubs.tick(); defaultWidget:refresh(nil, nil) end
+    local tree, tiles = Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}, 0
+    for i = 1, #tree do
+      if tree[i].type == "rectangle" and (tree[i].rounded == 5 or tree[i].rounded == 7) then tiles = tiles + 1 end
+    end
+    check(string.format("unsaved default shows %d tiles in a %dx%d zone (LCD_W %d)", case[3], case[1], case[2],
+      LCD_W or 0), defaultWidget._treeKind == "standby" and tiles == case[3])
+    defaultWidget:background()
   end
 
   local widthWidget = Runtime.new({ x = 0, y = 0, w = 320, h = 320 }, {})
