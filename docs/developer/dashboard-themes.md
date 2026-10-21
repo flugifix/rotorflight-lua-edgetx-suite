@@ -954,7 +954,10 @@ than doing what the first column says: pressed twice, it opens the view and clos
 
 The keys are not answered while the in-flight tuning surface or the suite tool is up. On the
 connect splash `ctx.keys` is still empty until the theme has built; radio-wide choices and
-manifest bindings already act. With the theme base showing and no view on top, an unbound
+manifest bindings to the host's actions and views already act. A manifest binding to one of the
+theme's own views acts once the connection is ready: the theme's views are registered then, and
+before it the host refuses to open a view it does not have. With the theme base showing and no
+view on top, an unbound
 Theme key does not open the quick menu as a fallback.
 
 MDL, SYS and TELE open the radio's own menus everywhere but in a widget's fullscreen, where the

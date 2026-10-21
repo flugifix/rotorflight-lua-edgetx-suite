@@ -40,8 +40,10 @@ A radio without one of these keys never sends it; its saved choice still remains
   their own *Keys* settings page, which only acts on keys left on **Theme** here. Default binds
   none, so on Default a key put on **Theme**, PAGE > and PAGE < included, does nothing while
   the dashboard itself is showing.
-- On the connection screen, global actions and manifest bindings already work. Build bindings
-  become available when that theme has built.
+- On the connection screen, global actions already work, and so do manifest bindings to the
+  host's actions and to its own views, such as the quick menu. A manifest binding to one of the
+  theme's own views takes effect once the connection is ready, when those views are registered;
+  build bindings once that theme has built.
 - An opened menu can be closed with its bound menu key. Short RTN keeps the current Back/Close
   behavior, and long RTN leaves fullscreen. MDL, SYS or TELE on Theme does nothing while another
   view is on top unless the theme binds it to that view. PAGE keys on Theme close the quick menu

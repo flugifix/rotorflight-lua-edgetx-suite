@@ -371,8 +371,9 @@ The picker's `back` is its close box — the prompt is dismissed and `done` foll
 plain `closeView` would leave `pending` standing and the picker would open again on the next
 pass. A long press on RTN leaves full screen in the firmware; Lua sees only its press edge,
 which is not answered. Keys are not answered while the in-flight tuning surface or suite tool
-is up. Radio-wide choices and manifest bindings already act on the connection splash, before
-the theme's build supplies `ctx.keys`.
+is up. Radio-wide choices and manifest bindings to the widget's own actions and views already
+act on the connection splash, before the theme's build supplies `ctx.keys`; a manifest binding
+to one of the theme's views acts once the connection is ready and those views are registered.
 
 ## `rfsuite.batteryPick`
 
