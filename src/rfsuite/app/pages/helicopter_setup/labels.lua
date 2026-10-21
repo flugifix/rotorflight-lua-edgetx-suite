@@ -447,4 +447,7 @@ local L = {
 }
 L.steps = { L.sensors, L.receiver, L.modeSwitches, L.profiles, L.rates, L.swash, L.servoType, L.governor, L.motor,
   L.connect, L.spinTest, L.escTelemetry, L.servoDirectionCentre, L.controlDirections, L.level, L.bladePitch, L.tail, L.gyroCheck, L.finish }
+-- The step chooser numbers its entries the way the Configurator wizard does.
+L.numberedSteps = {}
+for i, name in ipairs(L.steps) do L.numberedSteps[i] = i .. ". " .. name end
 return L

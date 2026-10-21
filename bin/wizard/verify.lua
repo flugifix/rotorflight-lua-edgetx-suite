@@ -134,6 +134,25 @@ local bundle = load("i18n/"..locale..".lua")
 for k in pairs(L) do if bundle.app.modules.helicopter_setup[k] then L[k] = bundle.app.modules.helicopter_setup[k] end end
 L.steps = { L.sensors,L.receiver,L.modeSwitches,L.profiles,L.rates,L.swash,L.servoType,L.governor,L.motor,L.connect,
   L.spinTest,L.escTelemetry,L.servoDirectionCentre,L.controlDirections,L.level,L.bladePitch,L.tail,L.gyroCheck,L.finish }
+local rawLabels = load(PATH .. "labels.lua")
+check(#rawLabels.numberedSteps == 19 and rawLabels.numberedSteps[1] == "1. " .. rawLabels.sensors
+  and rawLabels.numberedSteps[19] == "19. " .. rawLabels.finish, "step chooser entries are numbered like the source")
+L.numberedSteps = {}
+for i, name in ipairs(L.steps) do L.numberedSteps[i] = i .. ". " .. name end
+do
+  local manifest = assert(loadfile("src/rfsuite/app/manifest.lua"))()
+  local numbered = 0
+  for _, menu in pairs(manifest.menus or {}) do
+    for _, entry in ipairs(menu.pages or {}) do
+      local n = tonumber((entry.id or ""):match("^step_(%d%d)$") or "")
+      if n and menu.title == "@i18n(app.modules.helicopter_setup.name)@" then
+        check(entry.title:sub(1, #(n .. ". @i18n(")) == n .. ". @i18n(", "menu entry " .. n .. " is numbered")
+        numbered = numbered + 1
+      end
+    end
+  end
+  eq(numbered, 19, "all nineteen step entries in the wizard menu are numbered")
+end
 local function beginWorld()
   q.messages,q.sent = {},{}
   local w = load(PATH .. "controller.lua").new(runtime,load(PATH .. "transport.lua"),H,L)

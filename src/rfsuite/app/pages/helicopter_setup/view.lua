@@ -82,7 +82,7 @@ function M.new(w, ctx, diagrams)
     local x = large and math.floor(width*0.43) or 10
     local bw = width-x-10
     all[#all+1] = { type="choice",x=x,y=rowY,w=bw,h=controlH,title=w.L.chooseStep,
-      values=w.L.steps,get=function() return w.selectedStep end,
+      values=w.L.numberedSteps,get=function() return w.selectedStep end,
       set=function(v) if w:usable() and v>=1 and v<=19 then w.selectedStep=v end end,
       active=function() return w.canEdit == true end }
     button(x,rowY+rowH,bw,w.L.startStep,function() w:startStep(w.selectedStep) end,
