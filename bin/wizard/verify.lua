@@ -269,6 +269,9 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
       measure("reactive",function() resolve(job.children) end)
       for _,item in ipairs(job.children) do
         if item.y and item.h then check(item.y+item.h<=size[2],name.." fits height") end
+        if size[1]>=700 and item.type=="label" and item.y==50 and item.text==card.title and card.art~="attitude" then
+          check(item.w>=size[1]-40,name.." card title spans the full width on large screens")
+        end
         if item.type=="line" then
           local pts=type(item.pts)=="function" and item.pts() or item.pts
           for _,point in ipairs(pts) do

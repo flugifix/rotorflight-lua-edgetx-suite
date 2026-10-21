@@ -113,7 +113,9 @@ function M.new(w, ctx, diagrams)
       diagrams.append(all,w,card,10,large and 108 or 56,
         large and formX-26 or width-20,large and height-controlH-168 or rowY-68)
     else
-    all[#all + 1] = label(10, large and 50 or 27, large and formX-24 or width-20, card.title, large and MIDSIZE or SMLSIZE)
+    -- The title sits above the form rows, so on large screens it takes the full width instead of
+    -- wrapping into the summary below it.
+    all[#all + 1] = label(10, large and 50 or 27, width-20, card.title, large and MIDSIZE or SMLSIZE)
     all[#all + 1] = label(10, large and 94 or 48, large and formX-30 or width-20, card.summary or card.detail)
     all[#all].h = large and (illustrated and 98 or height-controlH-154) or rowY-52
     if illustrated then
