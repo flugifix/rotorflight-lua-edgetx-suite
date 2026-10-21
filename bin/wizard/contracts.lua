@@ -1015,6 +1015,22 @@ return function(h)
       eq(servos[0].flags,0,"CORE a scene edit made while a list was open applies")
     end
   end)
+  case("CORE.save-writes-changed-rows-only",function()
+    local w=world();settle(w)
+    local ranges=w.data.adjustment_ranges.adjustment_ranges
+    check(#ranges>10,"CORE fixture carries a full adjustment table")
+    ranges[3].adjMin=(ranges[3].adjMin or 0)+1;w:touch("adjustment_ranges")
+    q.sent={};w:save();drain(w)
+    local rows={}
+    for _,m in ipairs(q.sent) do if m.command==53 then rows[#rows+1]=m.payload[1] end end
+    eq(table.concat(rows,","),"2","CORE save rewrites only the changed adjustment row")
+    local modes=w.data.mode_ranges.mode_ranges
+    modes[2].auxChannelIndex=(modes[2].auxChannelIndex or 0)+1;w:touch("mode_ranges")
+    q.sent={};w:discard();drain(w)
+    rows={}
+    for _,m in ipairs(q.sent) do if m.command==35 then rows[#rows+1]=m.payload[1] end end
+    eq(table.concat(rows,","),"1","CORE discard restores only the changed mode row")
+  end)
   case("CORE.card-result-does-not-carry-over",function()
     local w=world();settle(w);w.step=3;w.cards=step(w,"modes");w.card=1
     w.message=string.format(L.switchDetected,5,1500,2100)

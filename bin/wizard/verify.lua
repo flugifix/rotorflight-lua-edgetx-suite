@@ -393,6 +393,9 @@ failCommand=nil
 -- Whole-table work is generated one record per pass, with EEPROM last.
 w=world()
 q.sent = {}
+-- Every row differs, so every row is sent; unchanged rows are skipped (contracts).
+for _,r in ipairs(w.data.adjustment_ranges.adjustment_ranges) do r.adjStep=(r.adjStep or 0)+1 end
+for _,r in ipairs(w.data.mode_ranges.mode_ranges) do r.auxChannelIndex=(r.auxChannelIndex or 0)+1 end
 for _,name in ipairs({"mode_ranges","adjustment_ranges","servo_configurations","mixer_input","serial_config"}) do w:touch(name) end
 measure("save callback",function() w:save(function() w.completedSave=true end) end)
 for _=1,1800 do

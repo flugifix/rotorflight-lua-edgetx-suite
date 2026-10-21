@@ -11,6 +11,12 @@ local function copy(v)
   local out = {}; for k, x in pairs(v) do out[k] = copy(x) end; return out
 end
 local function now() return getTime() end
+local function same(a, b)
+  if type(a) ~= "table" or type(b) ~= "table" then return a == b end
+  for k, x in pairs(a) do if not same(x, b[k]) then return false end end
+  for k in pairs(b) do if a[k] == nil then return false end end
+  return true
+end
 
 function M.new(runtime, transport, mathModule, labels)
   local w = { runtime = runtime, math = mathModule, L = labels, data = {}, saved = {}, dirty = {},
@@ -160,9 +166,27 @@ function M.new(runtime, transport, mathModule, labels)
       api == "mixer_input" and 4 or api == "serial_config" and 12 or
       api == "mode_ranges" and #d[api].mode_ranges or
       api == "adjustment_ranges" and #d[api].adjustment_ranges
+    -- Mode and adjustment tables are written row by row, and a full table is dozens of
+    -- messages. Only rows that differ from the other side of the save or discard are sent.
+    local other = (from == nil) and self.saved or self.data
+    local rows = (api == "mode_ranges" or api == "adjustment_ranges") and other and other[api] and other[api][api]
+    local function unchanged(index)
+      if not rows then return false end
+      if not same(d[api][api][index], rows[index]) then return false end
+      if api ~= "mode_ranges" then return true end
+      local extra, otherExtra = d.mode_ranges_extra, other.mode_ranges_extra
+      return extra ~= nil and otherExtra ~= nil and
+        same(extra.mode_ranges_extra[index], otherExtra.mode_ranges_extra[index])
+    end
     if count then
       self.bus:add({ expand = function()
         cursor = cursor + 1
+        -- Compare a few rows per pass at most; an unchanged stretch yields an empty job.
+        local skipped = 0
+        while cursor <= count and unchanged(cursor) do
+          cursor, skipped = cursor + 1, skipped + 1
+          if skipped == 4 and cursor <= count then cursor = cursor - 1; return { run = function() end } end
+        end
         if cursor > count then return nil end
         local index = cursor
         if api == "servo_configurations" then
