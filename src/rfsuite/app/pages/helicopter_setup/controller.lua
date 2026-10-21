@@ -362,7 +362,7 @@ function M.new(runtime, transport, mathModule, labels)
       self.buildRequested=true;self:rebuild();return
     end
     if self.modelPreparationCard then
-      if (self.modelPreparationMethod~=2 and self.modelPreparationMethod~=3) or not self:ack("modelReady") then return end
+      if not self:ack("modelReady") then return end
       self.modelPreparationDone,self.modelPreparationCard=true,nil
       self.cards,self.buildRequested=nil,true;self:rebuild();return
     end

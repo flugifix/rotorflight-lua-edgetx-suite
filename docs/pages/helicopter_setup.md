@@ -42,12 +42,12 @@ warnings appear when a legacy hold is actually used, rather than during model pr
 ## Before the 19 steps
 
 Every new setup visit first shows **Prepare the radio model**, outside the numbered
-sequence. The active model name is displayed. Select **Rotorflight template** or
-**Manually checked**, then confirm **Model checked**. Check the active transmitter
+sequence. The active model name is displayed. Use the Rotorflight model template or
+check the model yourself, then confirm **Model checked**: the active transmitter
 model, its control functions, channel outputs, throttle travel and switches. **?**
 explains the full preparation and shows the unabridged model name. This screen
-records a current pilot confirmation, not an automatic model audit; template use
-alone cannot pass it. Receiver mapping is still checked in step 2.
+records a current pilot confirmation, not an automatic model audit. Receiver
+mapping is still checked in step 2.
 
 The confirmation is deliberately not stored in per-FC history, because a board can
 be used with another transmitter model. It is required again on every new complete

@@ -1217,9 +1217,7 @@ return function(h)
               modelGateSeen=true
               eq(#loaded,0,"CORE model gate precedes step definition loading")
             end
-            if item.type=="choice" and item.values[1]=="@i18n(app.modules.helicopter_setup.modelNotChecked)@" then
-              item.set(number%2==0 and 3 or 2)
-            elseif item.type=="choice" and item.values[1]=="@i18n(app.modules.helicopter_setup.no)@" and item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@" then
+            if item.type=="choice" and item.values[1]=="@i18n(app.modules.helicopter_setup.no)@" and item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@" then
               item.set(2)
             end
           end
@@ -1288,17 +1286,13 @@ return function(h)
     eq(w.activeModelName,"Bench model","CORE preparation shows active radio model")
     check(w.modelPreparationCard and next(w.holds)==nil,"CORE model gate precedes automatic holds")
     w:next();check(w.modelPreparationCard,"CORE unchecked model cannot advance")
-    w.modelPreparationMethod=2;w:next()
-    check(w.modelPreparationCard,"CORE template alone does not confirm correct current model")
-    w.checks.modelReady=true;w.modelPreparationMethod=4;w:next()
-    check(w.modelPreparationCard,"CORE invalid model basis cannot advance")
-    w.modelPreparationMethod=3;w:next();w:tick()
+    w.checks.modelReady=true;w:next();w:tick()
     check(w.modelPreparationDone and w.preparationCard,"CORE manual model check leads to physical preparation")
     check(next(w.holds)==nil,"CORE model check does not bypass physical test prerequisites")
     local nextVisit=world();settle(nextVisit)
     load("app/pages/helicopter_setup/navigation.lua").attach(nextVisit,{menu={getCurrentMenuId=function() return "helicopter_setup_page" end}})
     nextVisit.buildRequested=true;nextVisit:tick()
-    check(nextVisit.modelPreparationCard and nextVisit.modelPreparationMethod==1 and not nextVisit:ack("modelReady"),
+    check(nextVisit.modelPreparationCard and not nextVisit:ack("modelReady"),
       "CORE new visit always rechecks the transmitter model")
   end)
   case("CORE.history-store",function()

@@ -53,12 +53,9 @@ function M.attach(w, ctx)
       self.card,self.recoveryCard=1,true;return true
     end
     if not self.modelPreparationRequired or self.modelPreparationDone then return false end
-    self.modelPreparationMethod = self.modelPreparationMethod or 1
     self.cards={self:cardDef(self.L.modelPreparationTitle,self.L.modelPreparationIntro.."\n"..self.L.modelPreparationHint.."\n"..
       self.L.activeModel..": "..self.activeModelName,{
       self:value(self.L.activeModel,function() return self.activeModelName end),
-      {kind="choice",label=self.L.modelBasis,values={self.L.modelNotChecked,self.L.modelTemplate,self.L.modelManual},
-        get=function() return self.modelPreparationMethod end,set=function(value) self.modelPreparationMethod=value end},
       self:check("modelReady",self.L.modelChecked)
     })}
     self.cards[1].summary=self.L.modelPreparationIntro

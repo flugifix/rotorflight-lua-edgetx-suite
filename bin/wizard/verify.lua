@@ -472,9 +472,9 @@ for _=1,5000 do
       if number then frameVisited[tonumber(number)]=true end
     end
     if active and item.type=="choice" and item.set and
-      (item.values[1]==L.modelNotChecked or item.values[1]=="@i18n(app.modules.helicopter_setup.modelNotChecked)@") then
-      if not pausedModelChoice then ticks=ticks+400;pausedModelChoice=true end
-      measure("page input",function() item.set(2) end)
+      (item.title==L.modelChecked or item.title=="@i18n(app.modules.helicopter_setup.modelChecked)@") and
+      not pausedModelChoice then
+      ticks=ticks+400;pausedModelChoice=true
     end
     if active and item.type=="choice" and item.set and
       (item.values[1]==L.no or item.values[1]=="@i18n(app.modules.helicopter_setup.no)@") and
