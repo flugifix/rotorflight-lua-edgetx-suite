@@ -65,9 +65,15 @@ assert(releases == releasesAtProbe + 1, "a finished probe did not release its EL
 for i = 1, #pushes do assert(pushes[i].kind ~= 0x2D, "read-only simulated probe emitted a parameter write") end
 pushes = {}
 assert(Task.selectOption("rate", 0))
+local invalidationsAtSelect = invalidations
 now = 5; Task.wakeup()
 assert(#pushes == 1 and pushes[1].kind == 0x2D,
   "one selected option writes=" .. tostring(#pushes) .. " kind=" .. tostring(pushes[1] and pushes[1].kind))
+-- The write changed the module, so the snapshot the standby screen and the TX power alert share
+-- must be invalidated once the write has completed, not only before it started.
+assert(not Task.isRunning() and invalidations == invalidationsAtSelect + 1,
+  "a completed write did not invalidate the shared ELRS snapshot: "
+    .. tostring(invalidations - invalidationsAtSelect))
 now = 6; Task.wakeup()
 assert(#pushes == 1, "diagnostics emitted more than one write for one selected option")
 
