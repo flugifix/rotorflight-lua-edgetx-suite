@@ -63,7 +63,7 @@ Monitors the main pack voltage and the model's power supply.
 | Raise Volume | `voltage_raise` | On | Radio | *Master volume* mode only -- see *Raise Volume* below. The alert's critical level -- the pack held below the flight controller's minimum cell voltage times the cell count for *Hold* -- is spoken at the *Alert Level*, until the alert clears; before it is reached, the warning is spoken at the normal level. |
 | Hold | `voltage_hold` | 2 s | Radio | How long the reading has to stay below the warning threshold before the alert speaks (0 to 10 s). A hold of 0 announces on the first reading below the level, which is the behaviour before this setting existed. |
 | Reset (mV/cell) | `voltage_reset` | 100 mV | Radio | How far above the warning threshold the pack has to come back, in millivolts per cell, before the alert counts as cleared (50 to 500 mV per cell, in steps of 50). Editable while *Voltage alert* is on. |
-| Main power lost | `main_power_lost` | Off | Radio | Announces that the main pack has gone while the flight controller is still alive on a BEC or a backup battery, with the BEC voltage spoken. |
+| Main power lost | `main_power_lost` | Off | Radio | Announces that the main pack has gone while the flight controller is still alive on a BEC or a backup battery, with the BEC voltage spoken. The pack coming back is announced once, with its voltage; if that falls into the quarter of a second after another announcement's file, it is made on the next pass. |
 | Raise Volume | `main_power_raise` | On | Radio | *Master volume* mode only -- see *Raise Volume* below. *Main power lost* is spoken at the *Alert Level*; the pack coming back does not raise it. |
 | Announce as | `voltage_announce` | Pack | Radio | How a flight pack voltage is spoken: *Pack* says the pack voltage with one decimal, *Cell* the voltage per cell with two. It applies to the voltage alert, to the pack coming back after *Main power lost*, and to *Pack Not Full* on the *On Connect* page. The BEC voltage spoken with *Main power lost*, and the BEC / receiver alerts of *Setup* → *Power* → *Alerts*, are not flight pack readings and are spoken as they are. Where no cell count is known, the pack voltage is spoken. |
 | Repeat | `voltage_repeat` | Until cleared | Radio | How often an alert on this page speaks while its condition holds -- see *Repeat and Haptic* below. |
@@ -192,9 +192,16 @@ Callouts of the SmartFuel level while the model is connected. The flight control
 | --- | --- | --- | --- | --- |
 | SmartFuel | `fuel_alerts` | On | Radio | Master switch for the descending percentage callouts and the empty alarm. |
 | Callout % | `fuel_callout_percent` | Every 10% | Radio | The steps at which the falling level is spoken, each once: *Only at 10%*, or every 5%, 10%, 20%, 25% or 50%. |
+| Finer below | `fuel_finer_below` | Off | Radio | The level from which the steps become finer: *Off*, or 10%, 15%, 20%, 25%, 30%, 40% or 50% -- see *Finer Steps Near the End* below. |
+| Finer step | `fuel_finer_step` | Every 5% | Radio | The step below *Finer below*: every 1%, 2% or 5%. Editable while *Finer below* is not *Off*. |
 | Repeat | `fuel_repeat_below_zero` | Once | Radio | How often the empty battery / fuel alarm speaks while fuel is at 0% -- *Until cleared*, or 1 to 10 announcements ten seconds apart. The descending percentage callouts are not repeated: each step is spoken once as it is passed. |
 | Haptic | `fuel_haptic_below_zero` | Off | Radio | Transmitter vibration alongside the empty alarm. |
 | Raise Volume | `fuel_empty_raise` | On | Radio | *Master volume* mode only -- see *Raise Volume* below. The empty alarm at 0% is spoken at the *Alert Level*; the percentage callouts above it do not raise it. |
+
+#### Finer Steps Near the End
+With *Finer below* set, the callout speaks the *Callout %* steps above that level, then the level itself, then every multiple of *Finer step* below it down to the step. *Every 20%* with finer steps of 5% below 30% speaks 80, 60, 40, 30, 25, 20, 15, 10 and 5%; with 2% below 25% the finer part is 25, 24, 22 and so on down to 2%. The *Callout %* steps below the level are not spoken on their own. With *Finer below* at *Off* the steps are the *Callout %* steps alone, as before the setting existed.
+
+A step is passed once its announcement was handed to the radio, or once the sound pack turned out to have no file for it. An announcement that falls into the quarter of a second after the previous file -- another alert spoken in the same pass -- is made on the next pass rather than lost, and when the level has fallen past further steps meanwhile, the lowest one passed is spoken.
 
 ### 9. Link Quality
 
