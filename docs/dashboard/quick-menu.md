@@ -170,8 +170,11 @@ full screen — a long press on the return key — works as it does anywhere els
 
 Over a theme that takes full screen, the same X, entries and picker answers close what is open
 and show the theme again instead; the theme's own close control, or a long press on the return
-key, leaves full screen. With a view open, the page keys close the quick menu or
-open it over another view. A key bound to the quick menu also opens and closes it, and a short
+key, leaves full screen. With a view open, a page key on **Quick menu**, its default on the
+radio-wide [Keys](../pages/settings/dashboard/keys.md) page, or on **Theme** closes the quick
+menu or opens it over another view; one the theme binds to the view on top closes that view
+instead. A page key set there to another action does that action, and on **Nothing** nothing:
+the view stays. A key bound to the quick menu also opens and closes it, and a short
 press on the return key closes the menu or the picker, and on the battery
 profile page does what its **<** does.
 

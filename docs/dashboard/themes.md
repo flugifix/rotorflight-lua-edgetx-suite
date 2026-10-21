@@ -67,7 +67,8 @@ With the global [Keys](../pages/settings/dashboard/keys.md) choices as they come
 the suite tool, and TELE and the page keys open the quick menu, also before the FC connects;
 Default binds no key itself, so MDL, and any key put on **Theme**, does nothing while the
 dashboard itself is showing.
-With a view open, PAGE closes the quick menu or opens it over another view. Closing the menu returns to the
+With a view open, PAGE as it comes, or on **Theme**, closes the quick menu or opens it over
+another view; PAGE set there to another action does that action, and on **Nothing** nothing. Closing the menu returns to the
 dashboard.
 
 ![Default before, during and after the flight](../images/dashboard/themes/default.png)
