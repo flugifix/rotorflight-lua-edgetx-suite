@@ -558,7 +558,7 @@ local function contractWorld()
   elseif mutation=="mode-flag" then v.modeActive=function() return true end
   elseif mutation and mutation~="bulk-read" and mutation~="history-early" and mutation~="stale-status" and mutation~="retry-stale"
     and mutation~="pitch-discard" and mutation~="back-commit" and mutation~="stale-blades"
-    and mutation~="shared-timeout-probe" and mutation~="cleanup-unlock" then error("Unknown negative control: "..mutation) end
+    and mutation~="shared-timeout-probe" and mutation~="cleanup-unlock" and mutation~="drop-stale-edit" then error("Unknown negative control: "..mutation) end
   return v
 end
 local contractCases=assert(loadfile("bin/wizard/contracts.lua"))()({

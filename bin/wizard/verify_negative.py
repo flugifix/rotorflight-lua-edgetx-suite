@@ -17,7 +17,8 @@ def main():
             ('back-commit','FAIL REVIEW Back Save runs the originating commit'),
             ('stale-blades','FAIL REVIEW ESC calibration requires its own blade confirmation'),
             ('shared-timeout-probe','FAIL REVIEW servo capability cannot authorize mixer timeouts'),
-            ('cleanup-unlock','FAIL REVIEW failed cleanup never re-enables arming')]
+            ('cleanup-unlock','FAIL REVIEW failed cleanup never re-enables arming'),
+            ('drop-stale-edit','FAIL CORE an edit made while a list was open applies after fresh STATUS')]
     for mutation,marker in checks:
         command=[args.lua,'bin/wizard/verify.lua']
         if mutation:command+=['--mutation',mutation]

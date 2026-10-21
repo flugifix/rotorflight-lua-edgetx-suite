@@ -83,7 +83,7 @@ function M.new(w, ctx, diagrams)
     local bw = width-x-10
     all[#all+1] = { type="choice",x=x,y=rowY,w=bw,h=controlH,title=w.L.chooseStep,
       values=w.L.numberedSteps,get=function() return w.selectedStep end,
-      set=function(v) if w:usable() and v>=1 and v<=19 then w.selectedStep=v end end,
+      set=function(v) w:applyEdit(function() if not w.overview or v<1 or v>19 then return end w.selectedStep=v end) end,
       active=function() return w.canEdit == true end }
     button(x,rowY+rowH,bw,w.L.startStep,function() w:startStep(w.selectedStep) end,
       function() return w.canEdit == true end)
@@ -126,7 +126,8 @@ function M.new(w, ctx, diagrams)
     end
     for i, r in ipairs(card.rows) do
       local y = rowY + (i-1)*rowH
-      local function enabled() return w.canEdit == true and current() and (not r.enabled or r.enabled()) end
+      local function editable() return current() and (not r.enabled or r.enabled()) end
+      local function enabled() return w.canEdit == true and editable() end
       if r.kind == "button" or r.kind == "hold" then
         button(formX, y, formW, r.label, function() if enabled() and w:usable() then r.press() end end, enabled,
           r.kind == "hold" and "momentaryButton" or "button", r.release)
@@ -144,11 +145,11 @@ function M.new(w, ctx, diagrams)
         elseif r.kind == "choice" then
           all[#all + 1] = { type = "choice", x = formX+formW-editW, y = y, w = editW, h = controlH,
             title = r.label, values = r.values, get = r.get,
-            set = function(v) if enabled() and w:usable() then r.set(v) end end, active = enabled }
+            set = function(v) w:applyEdit(function() if editable() then r.set(v) end end) end, active = enabled }
         else
           all[#all + 1] = { type = "numberEdit", x = formX+formW-editW, y = y, w = editW, h = controlH,
             min = r.min, max = r.max, get = r.get,
-            set = function(v) if enabled() and w:usable() then r.set(v) end end,
+            set = function(v) w:applyEdit(function() if editable() then r.set(v) end end) end,
             display = function(v)
               if r.divisor then return string.format("%.1f", v / r.divisor) end
               return tostring(v)

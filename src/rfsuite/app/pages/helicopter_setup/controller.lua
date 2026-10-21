@@ -36,7 +36,7 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:fail(api, reason)
     self.bus:cancel()
-    self.statusQueued = nil
+    self.statusQueued, self.pendingEdit = nil, nil
     self.statusFailure = api == "status" or api == "arming_disable"
     self.error = api .. ": " .. tostring(reason)
     self.message, self.transition = self.L.failed, nil
@@ -96,6 +96,7 @@ function M.new(runtime, transport, mathModule, labels)
     end
     if (d.reboot_required or 0) ~= 0 then self.rebootPending = true end
     if self.locked and (d.arming_disable_flags & (1 << 16)) == 0 then
+      self.pendingEdit = nil
       self.locked = false; self:fail("arming_disable", "lock lost"); return
     end
     self.statusArmed = false
@@ -106,6 +107,24 @@ function M.new(runtime, transport, mathModule, labels)
       self.calibrationAt = nil; self.message = self.L.calibrated
     elseif self.calibrationAt and now()-self.calibrationAt>=1000 then
       self.calibrationAt=nil;self.message=self.L.calibrationFailed
+    end
+    local edit = self.pendingEdit
+    self.pendingEdit = nil
+    if edit and self:usable() then edit() end
+  end
+  -- A native list or number editor can hold the page for seconds without a wakeup,
+  -- so the STATUS that authorizes an edit may have expired by the time the value
+  -- arrives. The value is kept and applied only once a fresh STATUS confirms the
+  -- arming lock; it is dropped if that STATUS does not.
+  function w:applyEdit(fn)
+    if self:usable() then fn(); return end
+    if not (self.ready and self.locked and not self.error and self:allowed()) then return end
+    self.pendingEdit = fn
+    if not self.statusQueued then
+      self.statusQueued = true
+      self.bus:urgent({ api = "status", after = function(d)
+        self.statusQueued = nil; self:acceptStatus(d)
+      end })
     end
   end
   function w:retry()

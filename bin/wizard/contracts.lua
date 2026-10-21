@@ -979,6 +979,38 @@ return function(h)
     w:tick()
     check(w.error~=nil,"CORE expiry during pending mutation still fails closed")
   end)
+  case("CORE.edit-held-across-native-list",function()
+    -- A native list holds the page without a wakeup; the value arrives with expired STATUS.
+    local w=world();settle(w)
+    if h.mutation=="drop-stale-edit" then
+      w.applyEdit=function(self,fn) if self:usable() then fn() end end
+    end
+    local c=step(w,"servoType");local row=c[#c].rows[1]
+    local servos=w.data.servo_configurations.servos
+    for _,i in ipairs({0,1,2}) do servos[i].flags=0 end
+    w.statusAt=getTime()-301
+    w:applyEdit(function() row.set(2) end)
+    eq(servos[0].flags,0,"CORE an expired STATUS does not authorize the edit at once")
+    drain(w)
+    eq(servos[0].flags,2,"CORE an edit made while a list was open applies after fresh STATUS")
+    check(not w.error and w:usable(),"CORE the held edit leaves the page usable")
+    w.statusAt=getTime()-301
+    w:applyEdit(function() row.set(1) end)
+    w:fail("status",L.stale);drain(w)
+    eq(servos[0].flags,2,"CORE a failure drops the held edit")
+    -- The scene control routes through the same path.
+    w.error=nil;w.locked=true;settle(w);w.cards=c;w.card=#c
+    local job=h.view.new(w,{w=800,h=480},h.diagrams);while not job.done do job:step() end
+    local choice
+    for _,item in ipairs(job.children) do if item.type=="choice" and item.title==L.geometryCorrection then choice=item end end
+    check(choice~=nil,"CORE geometry choice is on the scene")
+    if choice then
+      w.statusAt=getTime()-301;choice.set(1)
+      eq(servos[0].flags,2,"CORE a scene edit waits for fresh STATUS")
+      drain(w)
+      eq(servos[0].flags,0,"CORE a scene edit made while a list was open applies")
+    end
+  end)
   case("CORE.status-expiry-during-pending-request",function()
     local w=world();settle(w);w:hold("servo",0,400)
     w.bus:add({api="rc"});w.bus:tick()
