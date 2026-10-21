@@ -279,6 +279,7 @@ return {
         receiverQuick = "Receiver link connected. See ?.",
         channelQuick = "Move only the requested control.",
         modeQuick = "Press Assign, then move the switch to ON. See ?.",
+        channelPlanHint = "The receiver channel the FC uses for each function.",
         sticksQuick = "Named direction: value must rise.",
         throttleQuick = "Throttle switch: OFF/ON, then OFF.",
         servoHz = "Hz",

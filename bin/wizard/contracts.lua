@@ -525,6 +525,16 @@ return function(h)
     eq(r.range["end"],2100,"S03 switch high end margin")
     eq(w.data.mode_ranges_extra.mode_ranges_extra[2].linkedTo,0,"S03 removes previous mode linkage")
   end)
+  case("S04.channel-use-cards-describe-channels",function()
+    local w=world();settle(w);local c=step(w,"profiles");local seen=0
+    for _,card in ipairs(c) do
+      if card.title==L.channelPlan then
+        seen=seen+1
+        check(card.detail==L.channelPlanHint or card.detail==L.beyondEight,"S04 channel-use card explains the channel list")
+      end
+    end
+    check(seen>=2,"S04 channel use is shown on its own cards")
+  end)
   case("S04.readback-paired-capacity",function()
     local w=world();local ranges=w.data.adjustment_ranges.adjustment_ranges
     ranges[1]=H.mapped(2,2,1000,2000,1,3)

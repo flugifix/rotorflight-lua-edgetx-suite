@@ -140,7 +140,7 @@ return function(w)
       w:value(L.cyclicDown,function() return "30% / 1654 us" end),w:value(L.cyclicUp,function() return "40% / 1705 us" end),
       w:value(L.yawDown,function() return "50% / 1756 us" end),w:value(L.yawUp,function() return "60% / 1807 us" end)
     }),
-    w:cardDef(L.profiles,L.channelPlan,{
+    w:cardDef(L.channelPlan,L.channelPlanHint,{
       w:value(L.profileNow,function()
         local r=H.rangeOf(ranges,2);local v=r and channelValue(r.adjChannel)
         return v and H.mappedValue(r,v) or "--"
@@ -157,6 +157,6 @@ return function(w)
     if channels[channel] then local ch=channel;rows[#rows+1]=w:value("CH"..w:channelNumber(ch),function() return plan(ch) end) end
     if #rows==4 then cards[#cards+1]=w:cardDef(L.channelPlan,L.beyondEight,rows);rows={} end
   end
-  if #rows>0 then cards[#cards+1]=w:cardDef(L.channelPlan,L.profileHint,rows) end
+  if #rows>0 then cards[#cards+1]=w:cardDef(L.channelPlan,L.channelPlanHint,rows) end
   return cards
 end

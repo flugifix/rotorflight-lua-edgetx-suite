@@ -279,6 +279,7 @@ return {
         receiverQuick = "Verbindung steht. Hilfe: ?",
         channelQuick = "Nur angeforderten Geber bewegen.",
         modeQuick = "Zuweisen drücken, dann Schalter auf EIN. Hilfe: ?",
+        channelPlanHint = "Welchen Empfängerkanal der FC für welche Funktion nutzt.",
         sticksQuick = "Genannte Richtung: Wert steigt.",
         throttleQuick = "Gas-Schalter: AUS/EIN, wieder AUS.",
         servoHz = "Hz",
