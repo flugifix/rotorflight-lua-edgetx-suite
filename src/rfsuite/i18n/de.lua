@@ -383,7 +383,7 @@ return {
     controlDirections = "Steuerrichtungen",
     bladePitch = "Blattpitch",
     gyroCheck = "Kreiselprüfung",
-    help = "Komplette Einrichtung oder Einzelschritt im Suite-Menü wählen. Der Verlauf zeigt frühere Abschlüsse; immer erneut prüfen. Im Einrichtungsverlauf lässt sich der Verlauf dieses FC zurücksetzen. Fehlende Vorarbeiten stehen in der Aufgabenhilfe. Alle Blätter abnehmen. Servos bis zur Prüfung von Typ und Frequenz abstecken. Empfänger-Verdrahtung per USB-Configurator erkennen.\nZurück: vorherige Aufgabe oder Suite-Menü.\nWeiter: nächste Aufgabe.\nSpeichern: nur nach bestätigten Schreibvorgängen.\nNeustart: Servos abgesteckt lassen.\nMotor: Loslassen stoppt.",
+    help = "Zurück: vorherige Aufgabe oder Suite-Menü; bei Änderungen Speichern/Verwerfen wählen.\nWeiter: nächste Aufgabe; alle Blätter abnehmen und die Aufgabenhinweise beachten.\nSpeichern & weiter: bestätigte Änderungen speichern und diesen Schritt abschließen.\n?: vollständige Aufgabenhinweise, frühere Abschlüsse und fehlende Vorarbeiten. Bei jedem Besuch erneut prüfen.",
     help_title = "Helikopter einrichten",
     calibrated = "Kalibrierung abgeschlossen",
     centreDegrees = "Mittentrimmung (Grad)",

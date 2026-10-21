@@ -383,7 +383,7 @@ return {
     controlDirections = "Control directions",
     bladePitch = "Blade pitch",
     gyroCheck = "Gyro check",
-    help = "Select Complete setup or a single step in the Suite menu. History records earlier visits only; check again every time. Setup history can reset this FC record. Missing prerequisites are listed in task help. Remove all blades. Keep servos unplugged until their type/rate is checked. Receiver wiring detection requires USB Configurator.\nBack: previous task or return to the Suite.\nContinue: next task.\nSave: store settings only after acknowledged writes.\nRestart: keep servos unplugged.\nHold: release to stop the motor.",
+    help = "Back: previous task or return to the Suite; pending changes offer Save/Discard.\nContinue: next task; remove all blades and follow the task instructions.\nSave & next: store acknowledged changes and complete this step.\n?: full task instructions, earlier completion and missing prerequisites. Check again on every visit.",
     help_title = "Helicopter Setup",
     calibrated = "Calibration complete",
     centreDegrees = "Centre trim (deg)",
