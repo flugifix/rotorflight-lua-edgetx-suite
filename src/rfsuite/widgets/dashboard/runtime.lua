@@ -1036,7 +1036,8 @@ local function standbyJobStep(self)
     self._standbyItems, self._standbyLayout = items, encodedLayout
     invalidateStandbyTextState(self)
     self._standbyCache.elrsWidths = self._standbyCache.elrsActiveWidths
-    self._standbyCache.batteryWidths, self._standbyCache.batteryFills = nil, nil
+    -- The visible tree's battery getter still reads its fill until the new tree swaps in.
+    self._standbyCache.batteryWidths = nil
     itemsChanged = true
   end
   prepareStandbyTextCache(self, items)
@@ -4628,7 +4629,8 @@ function Runtime.new(zone, options)
           invalidateStandbyTextState(self)
           if self._standbyCache then
             self._standbyCache.elrsWidths = self._standbyCache.elrsActiveWidths
-            self._standbyCache.batteryWidths, self._standbyCache.batteryFills = nil, nil
+            -- The visible tree's battery getter still reads its fill until the new tree swaps in.
+            self._standbyCache.batteryWidths = nil
           end
         end
         prepareStandbyTextCache(self, standbyItems)

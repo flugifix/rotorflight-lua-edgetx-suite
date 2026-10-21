@@ -789,7 +789,10 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
           color = COLOR_THEME_PRIMARY1, filled = true }
         children[#children + 1] = { type = "hline", x = batteryX + 2,
           y = batteryY + math.floor(batteryH / 2), w = 1, h = batteryH - 4,
-          size = function() return cache.batteryFills[batteryW], batteryH - 4 end,
+          size = function()
+            local fills = cache.batteryFills
+            return fills and fills[batteryW] or 0, batteryH - 4
+          end,
           color = function() return cache.batteryLow and COLOR_THEME_WARNING or COLOR_THEME_SECONDARY1 end }
         children[#children + 1] = { type = "rectangle", x = batteryX, y = batteryY,
           w = batteryW, h = batteryH, color = COLOR_THEME_PRIMARY1, filled = false,

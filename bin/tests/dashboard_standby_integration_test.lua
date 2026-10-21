@@ -596,6 +596,61 @@ do
     staleWidget._job == nil and staleWidget._standbyModule == nil
       and staleWidget._standbyCache == nil and #Stubs.lvgl.trees == 0)
 
+  -- The firmware keeps evaluating the visible tree's getters until the replacement is swapped in,
+  -- and a layout change prepares that replacement over several passes. Every getter of the old
+  -- tree must keep answering in that window, whatever the new layout drops from the cache.
+  local retainedCases = {
+    { w = 480, h = 320, layout = "tx_battery+clock/elrs/tx_gps" },
+    { w = 800, h = 480, layout = "tx_battery+clock+model/elrs+timer1/tx_gps" },
+  }
+  for c = 1, #retainedCases do
+    local case = retainedCases[c]
+    local name = case.w .. "x" .. case.h
+    local retainedWidget = Runtime.new({ x = 0, y = 0, w = case.w, h = case.h }, {})
+    retainedWidget.preferences.dashboard = retainedWidget.preferences.dashboard or {}
+    retainedWidget.preferences.dashboard.standby_enabled = true
+    retainedWidget.preferences.dashboard.standby_layout = case.layout
+    retainedWidget.preferences.audio_events = retainedWidget.preferences.audio_events or {}
+    retainedWidget.preferences.audio_events.tpwr_alert = false
+    retainedWidget.state.fblConnected, retainedWidget.state.armed = false, false
+    retainedWidget.state.hadInflightFlight, retainedWidget.flightMode = false, "preflight"
+    for _ = 1, 5 do Stubs.tick(); retainedWidget:refresh(nil, nil) end
+    local retainedTree = Stubs.lvgl.trees[#Stubs.lvgl.trees]
+    local retainedRefs = {}
+    for i = 1, #Stubs.lvgl.refs do retainedRefs[i] = Stubs.lvgl.refs[i] end
+    local batteryGetter = false
+    for i = 1, #(retainedTree or {}) do
+      if retainedTree[i].type == "hline" and type(retainedTree[i].size) == "function" then batteryGetter = true end
+    end
+    check(name .. " retained-tree fixture builds the battery tile with its getters",
+      retainedWidget._treeKind == "standby" and batteryGetter and #retainedRefs > 0)
+    local function resolveRetained()
+      for i = 1, #retainedRefs do
+        local ok, a = pcall(retainedRefs[i])
+        if not ok then return false, tostring(a) end
+        if a == nil then return false, "getter " .. i .. " returned nil" end
+      end
+      return true
+    end
+    check(name .. " retained getters resolve before the layout change", resolveRetained())
+    retainedWidget.preferences.dashboard.standby_layout = "clock"
+    local passesWithOldTree, retainedFailure = 0, nil
+    for _ = 1, 8 do
+      Stubs.tick(); retainedWidget:refresh(nil, nil)
+      if Stubs.lvgl.trees[1] ~= retainedTree then break end
+      passesWithOldTree = passesWithOldTree + 1
+      local ok, err = resolveRetained()
+      if not ok and retainedFailure == nil then retainedFailure = "pass " .. passesWithOldTree .. ": " .. err end
+    end
+    check(name .. " old standby getters resolve while a new layout prepares: " .. tostring(retainedFailure),
+      retainedFailure == nil)
+    check(name .. " layout change keeps the old tree standing while it prepares", passesWithOldTree >= 2
+      and Stubs.lvgl.trees[1] ~= retainedTree)
+    print(string.format("retained tree %s: %d getters resolved on each of %d passes", name, #retainedRefs,
+      passesWithOldTree))
+    retainedWidget:background()
+  end
+
   local widthWidget = Runtime.new({ x = 0, y = 0, w = 320, h = 320 }, {})
   widthWidget.preferences.dashboard = widthWidget.preferences.dashboard or {}
   widthWidget.preferences.dashboard.standby_enabled = true
