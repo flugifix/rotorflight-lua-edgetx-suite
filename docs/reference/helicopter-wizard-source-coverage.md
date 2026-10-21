@@ -67,7 +67,9 @@ sweep in `verify.lua` at 320×240, 480×272, 480×320 and 800×480.
 - Every task/step exit drops unsent keepalives and releases held outputs.
   Wiring STOP belongs to the cleanup queue, so it survives page teardown.
   Errors block EEPROM/advance; profile transactions attempt to restore selection.
-- Back/Next and a save/discard exit replace arbitrary web step jumps. Visit-local
+- Suite menu entries support direct entry and the complete 19-step sequence.
+  Entry and exit resolve pending changes, release overrides and ask for the
+  relevant physical preparation before entering automatic holds. Visit-local
   step state survives an expected reboot. It is not persisted across a new visit
   or transferred to another FC. RTN/EXIT uses the same Back route.
 - Receiver wiring detection is redirected to USB Configurator. Firmware
@@ -90,6 +92,25 @@ sweep in `verify.lua` at 320×240, 480×272, 480×320 and 800×480.
   pulse train follow settings. The switch hint is the source's decorative cue.
   No scene is rebuilt on an MSP reply. No canvas or image rotation is used.
 
+The telemetry transport adaptation is covered separately: all 42 adjustment records
+and PWM/bus servo records are indexed reads, with raw-to-packed mapping, atomic
+publication, progress, malformed-record failure and long-save STATUS preemption.
+Every step is also entered through its Suite entry with the shared lazy page.
+Direct-step preparation and completion use explicit fixture answers. Per-FC
+history covers all bits, isolated FCs, validated completion, recheck hints, advisory
+prerequisites, explicit reset, bounded reads, interrupted writes and visible
+retry/continue/cancel failure paths. No history bit can supply a safety answer. Packed telemetry feedback
+covers absence, stale values, error priority and the independence of MSP locking.
+The reference's 19-step order remains the complete-setup path. An unnumbered
+radio-model preparation precedes each new setup visit: template/manual selection
+and current-model confirmation must both be supplied. It loads no step definition
+and enters no holds; a new visit always asks again. The reset page omits this gate.
+
+The desktop renderer now honors native theme palette colors for filled rectangles.
+Earlier previews masked a dark-background contrast defect; source-level color
+checks and light-background renders now cover it. Desktop rendering still cannot
+prove native font sizes, touch behavior or actual mechanics.
+
 ## Verification and limits
 
 Run:
@@ -101,8 +122,9 @@ python bin/wizard/audit_source.py
 python bin/wizard/verify_negative.py --lua lua5.3
 ```
 
-The negative controls restore three concrete former defects: wrong FBUS ID,
-false-positive mode feedback and stale status hidden behind a busy request. Each
+The negative controls restore oversized USB bulk reads, wrong FBUS ID, false-positive
+mode feedback and stale status hidden behind a busy request, and also inject a
+premature history write before validation. Each
 must fail its named assertion, alongside a passing positive control in the same run.
 These are additional checks; assertions and budget thresholds are not weakened.
 

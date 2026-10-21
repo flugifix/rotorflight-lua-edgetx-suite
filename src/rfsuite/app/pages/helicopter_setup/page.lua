@@ -4,13 +4,14 @@ local BASE = "/SCRIPTS/TOOLS/rfsuite-core/"
 local PATH = "app/pages/helicopter_setup/"
 local modules, stage, w, context, viewJob, scene, sceneKey = {}, 1
 local deps = { "tasks/msp/runtime.lua", PATH .. "transport.lua", PATH .. "math.lua", PATH .. "labels.lua",
-  PATH .. "controller.lua", PATH .. "forms.lua", PATH .. "workflow.lua", PATH .. "view.lua", "lib/armed.lua", PATH .. "diagrams.lua" }
+  PATH .. "controller.lua", PATH .. "forms.lua", PATH .. "workflow.lua", PATH .. "view.lua", "lib/armed.lua", PATH .. "diagrams.lua", PATH .. "navigation.lua",
+  "lib/system_state.lua", "lib/sensors.lua", PATH .. "feedback.lua", PATH .. "history_store.lua", PATH .. "history.lua" }
 local keys = { "sensors", "receiver", "modes", "profiles", "rates", "swash", "servoType", "governor", "motor",
   "connect", "throttle", "escTelemetry", "servos", "direction", "level", "pitch", "tail", "gyro", "finish" }
 local function key()
   if not w then return "loading" end
   return tostring(w.step) .. ":" .. tostring(w.card) .. ":" .. tostring(w.cards) .. ":" .. tostring(w.confirmExit)
-    .. ":" .. tostring(w.error) .. ":" .. tostring(context.w) .. ":" .. tostring(context.h)
+    .. ":" .. tostring(w.overview) .. ":" .. tostring(w.historyFailure) .. ":" .. tostring(w.error) .. ":" .. tostring(context.w) .. ":" .. tostring(context.h)
 end
 function M.build(ctx)
   context = ctx
@@ -24,7 +25,7 @@ function M.build(ctx)
     table.move(scene, 1, #scene, #ctx.children+1, ctx.children)
   else
     ctx.children[#ctx.children+1] = { type = "label", x = 12, y = 30, w = ctx.w-24,
-      text = "@i18n(helicopter.loading)@", color = COLOR_THEME_PRIMARY1, font = SMLSIZE }
+      text = function() return w and w.loadingText or "@i18n(helicopter.loading)@" end, color = COLOR_THEME_PRIMARY1, font = SMLSIZE }
   end
 end
 function M.wakeup(ctx)
@@ -35,7 +36,9 @@ function M.wakeup(ctx)
   end
   if not w then
     w = modules[5].new(modules[1], modules[2], modules[3], modules[4])
-    modules[6].attach(w); modules[7].attach(w)
+    modules[6].attach(w); modules[7].attach(w); modules[11].attach(w, context)
+    modules[14].attach(w, modules[12], modules[13])
+    modules[16].attach(w, modules[15])
     w.requestClose, w.requestRebuild = context.requestClose, context.requestRebuild
     w.armedEpoch = modules[9].changeCount()
     w:load(); return
@@ -48,12 +51,13 @@ function M.wakeup(ctx)
     if viewJob:step() then scene, sceneKey = viewJob.children, viewJob.key; viewJob = nil; w:rebuild() end
     return
   end
-  if (w.cards or w.error or w.confirmExit) and sceneKey ~= key() then
+  if ((w.ready and (w.cards or w.overview)) or w.error or w.confirmExit or w.historyFailure) and sceneKey ~= key() then
     viewJob = modules[8].new(w, context, modules[10]); viewJob.key = key(); return
   end
   w:tick()
+  w:pollSystemState()
   w.canEdit = w:usable()
-  w.canNext = w.canEdit and w.cards ~= nil and (not w.trial or w.trial.success == true)
+  w.canNext = w.canEdit and not w.historyMode and not w.historyFailure and w.cards ~= nil and (not w.trial or w.trial.success == true)
 end
 function M.onBack()
   if w then w:back() elseif context and context.requestClose then context.requestClose() end

@@ -30,6 +30,7 @@ function M.new(runtime, transport, mathModule, labels)
     self.statusQueued = nil
     self.error = api .. ": " .. tostring(reason)
     self.message, self.transition = self.L.failed, nil
+    self.closing = nil
     self:release()
     -- A failed multi-profile transaction must restore the selected profile, too.
     if self.restoreProfile and self:allowed() then
@@ -38,6 +39,30 @@ function M.new(runtime, transport, mathModule, labels)
     end
   end
   w.bus = transport.new(runtime, function() return w:allowed() end, function(a, r) w:fail(a, r) end)
+  function w:loadProgress()
+    self.progress = self.progress + 1
+    self.loadingText = string.format("%s %d/%d", self.L.loading, self.progress, self.loadTotal)
+  end
+  function w:readRecords(name, api, field, servo)
+    local records, index = {}, 0
+    self.bus:add({ expand = function()
+      local count = servo and self.data.status.servo_count or 42
+      if index >= count then return end
+      local slot, raw = index, index
+      if servo and count > 8 then
+        local pwm = count - 18
+        if slot >= pwm then raw = slot - pwm + 8 end
+      end
+      index = index + 1
+      return { api = api, payload = { raw }, after = function(d)
+        records[servo and slot or slot + 1] = d[field]
+        self:loadProgress()
+      end }
+    end })
+    self:run(function()
+      self.data[name] = servo and { servo_count = index, servos = records } or { adjustment_ranges = records }
+    end)
+  end
   function w:read(api, after, optional, payload)
     self.bus:add({ api = api, payload = payload, optional = optional, after = after })
   end
@@ -55,6 +80,7 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:acceptStatus(d)
     self.data.status, self.statusAt = d, now()
+    if (d.reboot_required or 0) ~= 0 then self.rebootPending = true end
     if self.locked and (d.arming_disable_flags & (1 << 16)) == 0 then
       self.locked = false; self:fail("arming_disable", "lock lost"); return
     end
@@ -94,7 +120,7 @@ function M.new(runtime, transport, mathModule, labels)
     -- Generate at most one indexed message per call. A full adjustment table
     -- must not be encoded in a button callback or an MSP reply.
     local cursor = 0
-    local count = api == "servo_configurations" and math.min(8, d[api].servo_count) or
+    local count = api == "servo_configurations" and (d[api].servo_count > 8 and d[api].servo_count-18 or d[api].servo_count) or
       api == "mixer_input" and 4 or api == "serial_config" and 12 or
       api == "mode_ranges" and #d[api].mode_ranges or
       api == "adjustment_ranges" and #d[api].adjustment_ranges
@@ -221,6 +247,7 @@ function M.new(runtime, transport, mathModule, labels)
     end
     self:write("eeprom_write", {}, function()
       self.dirty, self.live, self.profileOriginal = {}, {}, nil
+      self.savedRebootPending = self.rebootPending
       self.snapshotIndex = 1
     end)
     -- Snapshot one API block per wakeup; never clone the whole configuration in a reply.
@@ -245,10 +272,26 @@ function M.new(runtime, transport, mathModule, labels)
     end
     self:release()
     self.step, self.card, self.commit, self.cards, self.enter, self.onLive = step, card or 1, nil, nil, nil, nil
+    if self.updateHistoryHints then self:updateHistoryHints() end
     self.buildRequested = true; self:rebuild()
   end
   function w:next()
     if not self:usable() or not self.cards then return end
+    if self.modelPreparationCard then
+      if (self.modelPreparationMethod~=2 and self.modelPreparationMethod~=3) or not self:ack("modelReady") then return end
+      self.modelPreparationDone,self.modelPreparationCard=true,nil
+      self.cards,self.buildRequested=nil,true;self:rebuild();return
+    end
+    if self.entryRebootGate then
+      if self:ack("unplugged") and self:ack("blades") then self:reboot() end
+      return
+    end
+    if self.preparationCard then
+      if not self:preparationComplete() then return end
+      self.preparationDone, self.preparationCard = true, nil
+      self.cards, self.buildRequested = nil, true
+      self:rebuild();return
+    end
     if self.trial then
       if self.trial.success then self:reboot() else self.message=self.L.detecting end
       return
@@ -259,11 +302,11 @@ function M.new(runtime, transport, mathModule, labels)
     if self.step == 10 and self.rebootPending then self:reboot(); return end
     if self.rebootPending and self.step > 10 then self:reboot(); return end
     if not next(self.dirty) then
-      if self.step == 19 then self:close() else self:navigate(self.step + 1, 1) end
+      if self.finishStep then self:finishStep() elseif self.step == 19 then self:close() else self:navigate(self.step + 1, 1) end
       return
     end
     self:save(function()
-      if self.step == 19 then self:close() else self:navigate(self.step + 1, 1) end
+      if self.finishStep then self:finishStep() elseif self.step == 19 then self:close() else self:navigate(self.step + 1, 1) end
     end)
   end
   function w:back()
@@ -273,19 +316,29 @@ function M.new(runtime, transport, mathModule, labels)
       return
     end
     if self.transition then return end
-    if self.confirmExit then self.confirmExit = nil; self:rebuild(); return end
+    if self.historyFailure then
+      self.historyFailure, self.historyRetry, self.historySkip = nil, nil, nil
+      self.message = self.L.historyNotSaved
+      self:rebuild(); return
+    end
+    if self.confirmExit then self.confirmExit, self.exitToSteps = nil, nil; self:rebuild(); return end
+    if self.overview then self.confirmExit = true; self:rebuild(); return end
+    if self.requestSteps and self.card == 1 and (self.singleStep or self.step == 1) then self:requestSteps(); return end
     if self.card > 1 then self:navigate(self.step, self.card - 1)
     elseif self.step > 1 then self:navigate(self.step - 1, 1)
     else self:release(); self.confirmExit = true; self:rebuild() end
   end
   function w:close()
+    if self.closing then return end
+    self.closing, self.transition = true, true
     self:release()
     self:write("arming_disable", { disabled = false }, function()
       self.active = false; if self.requestClose then self.requestClose() end
     end)
   end
-  function w:discard()
+  function w:discard(after)
     self.transition = true
+    self:release()
     for kind, profiles in pairs(self.profileOriginal or {}) do
       for index, original in pairs(profiles) do
         self:action("set_pid_profile", { index + (kind == "rates" and 128 or 0) })
@@ -301,7 +354,17 @@ function M.new(runtime, transport, mathModule, labels)
         else self:sendDirty(api, self.saved) end
       end
     end
-    self:run(function() self:close() end)
+    if after then
+      for _, name in ipairs(READS) do
+        local api = name
+        self:run(function() self.data[api] = copy(self.saved[api]) end)
+      end
+      self:run(function()
+        self.dirty, self.live, self.profileOriginal = {}, {}, nil
+        self.rebootPending, self.transition = self.savedRebootPending, nil
+        after()
+      end)
+    else self:run(function() self:close() end) end
   end
   function w:reboot()
     self:save(function()
@@ -312,12 +375,24 @@ function M.new(runtime, transport, mathModule, labels)
   function w:load()
     self.ready, self.error, self.progress, self.transition = false, nil, 0, true
     self.statusQueued = nil
+    self.loadingText, self.loadTotal = self.L.loading, #READS + 66
     self.locked = false
     self:write("arming_disable", { disabled = true })
     self:read("status", function(d)
       if (d.arming_disable_flags & (1 << 16)) == 0 then self:fail("arming_disable", "not active"); return end
+      local count = d.servo_count
+      if count > 26 or (count > 8 and count < 18) then self:fail("status", "servo count"); return end
+      self.loadTotal = #READS + 40 + count
       self.locked = true; self:acceptStatus(d)
     end)
+    if self.loadHistory then self:run(function() self:loadHistory() end) end
+    if self.historyMode then
+      self:run(function()
+        self.ready, self.transition, self.buildRequested = true, nil, true
+        self.message = self.L.ready; self:rebuild()
+      end)
+      return
+    end
     for _, api in ipairs({ "servo_override", "mixer_override", "motor_override" }) do
       local name = api
       self:run(function() self.bus.apis[name] = assert(loadScript(BASE .. "tasks/msp/api/" .. name .. ".lua", "t"))() end)
@@ -326,16 +401,22 @@ function M.new(runtime, transport, mathModule, labels)
     self:write("servo_override_all", { value = 2001, timeout = 500 }, function(_, err) self.timed = err == nil end, true)
     for _, name in ipairs(READS) do
       local api = name
-      self:read(api, function(d)
+      -- Bulk adjustment/servo tables can exceed the firmware's 320-byte
+      -- telemetry response buffer. Read their records through the Suite APIs.
+      if api == "adjustment_ranges" then
+        self:readRecords(api, "get_adjustment_range", "adjustment_range")
+      elseif api == "servo_configurations" then
+        self:readRecords(api, "get_servo_config", "servo_config", true)
+      else self:read(api, function(d)
         if api == "board_alignment_config" and d then
           for _, key in ipairs({"roll_degrees", "pitch_degrees", "yaw_degrees"}) do d[key] = self.math.signed(d[key]) end
         end
-        self.data[api], self.progress = d, self.progress + 1
+        self.data[api] = d; self:loadProgress()
         if api == "status" then
           -- The ARM box bit is identified by BOXIDS below, never assumed to be bit zero.
           self:acceptStatus(d)
         end
-      end, api == "tail_motor_output", api == "tail_motor_output" and {0} or nil)
+      end, api == "tail_motor_output", api == "tail_motor_output" and {0} or nil) end
       self:run(function() self.saved[api] = copy(self.data[api]) end)
     end
     -- Loading many API blocks can take seconds over telemetry. Read the lock
@@ -348,12 +429,14 @@ function M.new(runtime, transport, mathModule, labels)
         self:fail("status", "configuration"); return
       end
       self.startTail = self.data.mixer_config.tail_rotor_mode
+      self.savedRebootPending = self.rebootPending
       self.ready, self.transition, self.buildRequested = true, nil, true
       self.message = self.timed and self.L.ready or self.L.persistent
       self:rebuild()
     end)
   end
   function w:poll()
+    if self.historyMode then return end
     local time = now()
     if time - (self.lastPoll or 0) < 20 then return end
     self.lastPoll = time
@@ -415,7 +498,7 @@ function M.new(runtime, transport, mathModule, labels)
     end
     -- STATUS preempts long indexed writes and wiring trials. Check expiry before
     -- waiting for the transport, so an unanswered request cannot keep a hold alive.
-    if self.ready and not self.error and not self.transition then
+    if self.ready and self.locked and not self.error and not self.rebootPhase then
       local age = now() - (self.statusAt or 0)
       if age > 300 then
         self:fail("status", self.L.stale); self.message = self.L.stale; return
@@ -430,8 +513,19 @@ function M.new(runtime, transport, mathModule, labels)
     if not self.bus:idle() then self.bus:tick(); return end
     if self.buildRequested and self.ready then
       self.buildRequested = nil
+      if self.overview then self:rebuild(); return end
+      if self.historyMode then self:buildHistory();self:rebuild();return end
+      if self:buildModelPreparation() then self:rebuild();return end
+      self.entryRebootGate = self.returnToSuite and self.step > 10 and self.rebootPending or nil
+      if self.entryRebootGate then
+        self.cards={self:cardDef(self.L.pendingReboot,self.L.entryRestartHint,{
+          self:check("unplugged",self.L.servosUnplugged),self:check("blades",self.L.bladesRemoved)
+        })}
+        self.card=1;self:rebuild();return
+      end
       local key = STEPS[self.step]
       self.validate, self.onLive, self.commit = nil, nil, nil
+      if self.buildPreparation and self:buildPreparation() then self:rebuild();return end
       self.cards = assert(loadScript(BASE .. "app/pages/helicopter_setup/steps/" .. key .. ".lua", "t"))()(self)
       self.card = math.min(self.card, #self.cards)
       if self.cards[self.card].enter then self.cards[self.card].enter() end

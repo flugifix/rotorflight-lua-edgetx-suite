@@ -630,16 +630,31 @@
         "src/rfsuite/app/pages/helicopter_setup/controller.lua",
         "src/rfsuite/app/pages/helicopter_setup/transport.lua",
         "src/rfsuite/app/pages/helicopter_setup/page.lua",
-        "src/rfsuite/app/pages/helicopter_setup/view.lua"
+        "src/rfsuite/app/pages/helicopter_setup/view.lua",
+        "src/rfsuite/app/pages/helicopter_setup/navigation.lua",
+        "src/rfsuite/app/pages/helicopter_setup/feedback.lua",
+        "src/rfsuite/app/pages/helicopter_setup/history.lua",
+        "src/rfsuite/app/pages/helicopter_setup/history_store.lua"
       ],
       "contracts": [
         "CORE.prepared-api-roundtrip",
         "CORE.second-pass-edges",
         "CORE.status-expiry-during-pending-request",
         "CORE.trial-state-and-diagnostics",
-        "CORE.wiring-success-polling-and-teardown"
+        "CORE.wiring-success-polling-and-teardown",
+        "CORE.paged-startup",
+        "CORE.individual-step-entry",
+        "CORE.step-switch-save-discard",
+        "CORE.status-during-save",
+        "CORE.packed-feedback",
+        "VISUAL.native-background",
+        "CORE.suite-step-entries",
+        "CORE.history-store",
+        "CORE.history-guidance-and-reset",
+        "CORE.history-failure-actions",
+        "CORE.radio-model-preparation"
       ],
-      "adaptation": "Visit-local step state survives the expected reconnect. Persistent browser storage and arbitrary step jumps become ordered Back/Next with a save/discard exit. Every leave releases holds. Timed override support is probed, correcting the source version-only assumption."
+      "adaptation": "The complete path keeps all 19 source steps. Suite entries share one lazy page and load only the selected step, with preparation before holds, save/discard, and return to the Suite. Informational per-FC history has explicit reset and advisory prerequisites; no saved bit replaces fresh physical answers. Telemetry-sized indexed startup replaces USB bulk reads. Cached packed-state hints never replace MSP acknowledgements or lock readbacks. Native light palette and responsive diagrams replace browser scenes. An unnumbered current-radio-model confirmation precedes new setup visits; template use alone does not pass it and history cannot retain it."
     },
     {
       "source": "tabs/setup_wizard/StepConnect.svelte",

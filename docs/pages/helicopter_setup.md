@@ -10,7 +10,7 @@ and tail blades before bench work. Keep servos unplugged until the connection ga
 
 ## Where to find it
 
-*Setup* → *Wizards* → *Helicopter Setup*.
+*Configuration* → *Wizards* → *Helicopter Setup*.
 
 The Wizards group is hidden until *System* → *Settings* → *General* → *Preview* →
 *Setup Assistant* is enabled (`visibleWhen = "previewSetupWizard"` on the parent).
@@ -24,13 +24,41 @@ receiver wiring detection in USB Configurator: that test reinitializes the same
 UART that carries the radio link. ESC wiring detection and board auto-alignment
 remain available on the radio when supported by firmware.
 
+## Before the 19 steps
+
+Every new setup visit first shows **Prepare the radio model**, outside the numbered
+sequence. The active model name is displayed. Select **Rotorflight template** or
+**Manually checked**, then confirm **Model checked**. Check the active transmitter
+model, its control functions, channel outputs, throttle travel and switches. **?**
+explains the full preparation and shows the unabridged model name. This screen
+records a current pilot confirmation, not an automatic model audit; template use
+alone cannot pass it. Receiver mapping is still checked in step 2.
+
+The confirmation is deliberately not stored in per-FC history, because a board can
+be used with another transmitter model. It is required again on every new complete
+or individual setup visit, before loading the selected step or entering holds. The
+history/reset page needs no model-configuration confirmation. The Configurator's
+19 numbered steps and their order remain unchanged.
+
 ## Navigation
 
-The wizard draws its own navigation instead of the Suite header.
+The Suite menu offers **Complete setup**, each of the 19 individual steps, and
+**Setup history**. All entry points share the same lazy-loaded page: only the
+selected step definition is loaded. Complete setup starts at step 1 in the original
+order. An individual step starts directly, using current FC settings, and returns
+to the Suite menu after completion. The step title also returns to that menu after
+saving or discarding pending changes. RTN/EXIT follows the same Back route.
+
+Direct configuration steps ask for blades removed and servos unplugged; direct
+servo/control tests, including a servo tail, ask for blades removed and the servo
+type/rate checked before entering their holds. Motor tests retain their own gates.
+These confirmations do not validate the mechanics. An existing restart requirement
+is handled before direct entry to a test after the connection gate: remove blades,
+unplug servos, restart, then confirm the test prerequisites.
 
 | Control | What it does |
 | --- | --- |
-| Back | Previous task; at the start, choose Save or Discard before leaving. RTN/EXIT follows the same route. |
+| Back | Previous task. At the start of a step entered from the Suite, return to its menu, with Save/Discard when changes are pending. RTN/EXIT follows the same route. |
 | Continue | Next task within this step; no EEPROM write. |
 | Save & next | Commit this step and write EEPROM only when something changed. A refused or missing reply blocks advance. |
 | Reboot | At the connection gate, keep servos unplugged until restart completes. |
@@ -70,6 +98,48 @@ The short instruction area may show only its first lines; **?** opens the full t
 | 17 | Tail rotor | Servo tail: hold neutral, set centre trim, check yaw passthrough and reverse if needed; command ±22° to calibrate rate, then ±60° to set CW/CCW limits. Raw yaw limits use 1000 units per 24°. Motor tail: blades-off hold controls for forward, and reverse for bidirectional tails. Idle test is limited to 15 seconds; idle is limited to 25.5% by the MSP U8 field. |
 | 18 | Gyro check | With all overrides released, tilt roll/pitch and, for a servo tail, turn yaw. Confirm correction against motion. If it moves with the model, return to Board orientation. A motor tail omits the servo yaw check inside this step. |
 | 19 | Finish | Review readable swash, rotor direction, tail, collective/cyclic limits, ESC protocol, telemetry, governor/throttle type, fast RPM and ARM assignment. Confirm the final checks, then Finish. Check failsafe, governor behaviour and every control before flight. |
+
+## Completion history and prerequisites
+
+The Suite stores a small history for each connected FC's MCU identity. A step is
+recorded only after its required answers and successful settings save; incomplete,
+discarded or failed steps are not marked. A former completion is shown as
+**Completed before. Check again.** It never supplies a physical answer or skips a
+preparation, direction, blades-off, arming-lock or restart check.
+
+If related earlier steps have no recorded completion, a short footer hint gives the
+count and **?** lists them. These are advisory dependencies: for example receiver
+mapping before modes, swash/servo type/connection before servo centring, and
+control directions/levelling before pitch measurement. A correctly configured FC
+may have been set up elsewhere. History does not prove the current FC settings or
+mechanics, and does not block such a model merely because no visit is recorded.
+
+**Setup history** shows the recorded count. Select **Clear this FC history**, then
+**Reset history**, to clear all 19 markers for that FC. It changes no FC settings,
+transmitter settings, other FC's history or old Setup Assistant data. Readable FC
+identity and a connected, disarmed model are required. This page reads only the
+arming status needed to keep the visit locked; resetting never writes FC EEPROM.
+
+An unwritable card or failed record readback reports that history was not saved.
+Retry is explicit. For a completed setup step, **Continue without history** finishes
+the action without claiming a stored completion. Back cancels that notice without
+advancing. Unreadable history must be explicitly reset before it can record more
+steps. Records are separate, versioned files under `rfsuite.user/wizard-history/`.
+
+## Loading and live feedback
+
+Startup reads adjustment ranges and servo settings one indexed record per request.
+The progress text updates in place while loading. The larger USB bulk replies do
+not fit the firmware telemetry response buffer and are never requested here.
+
+When live System Status (`STAT`) or System Config (`SCFG`) telemetry is available,
+the footer can show FC saving, unsaved changes, restart needed, active override,
+missing receiver link, accelerometer calibration or active PID/rate/battery profiles.
+Specific operation messages, errors and permanent-override warnings take priority.
+Missing or stale packed words add no hint and do not prevent normal MSP operation.
+Their values never acknowledge a save, clear a local restart requirement or replace
+the fresh MSP arming-lock check. EdgeTX can retain per-sensor current status for up
+to 20 seconds; treat these as supplementary observations.
 
 ## Overrides, connection loss and saving
 

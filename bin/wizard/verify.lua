@@ -10,7 +10,7 @@ end
 local function eq(a,b,name) check(a == b, name .. " (" .. tostring(a) .. "/" .. tostring(b) .. ")") end
 local function load(path) return assert(loadfile(ROOT .. path))() end
 function getTime() return ticks end
-COLOR_THEME_PRIMARY1, COLOR_THEME_PRIMARY3, COLOR_THEME_SECONDARY1 = 1, 3, 4
+COLOR_THEME_PRIMARY1, COLOR_THEME_PRIMARY2, COLOR_THEME_PRIMARY3, COLOR_THEME_SECONDARY1 = 1, 2, 3, 4
 SMLSIZE, MIDSIZE = 0, 1
 LCD_W, LCD_H = 480, 272
 local armed = false
@@ -35,10 +35,10 @@ end
 local function u16(p,v) p[#p+1],p[#p+2] = v & 255,(v >> 8) & 255 end
 local modules = {}
 local function api(name) if not modules[name] then modules[name] = load("tasks/msp/api/" .. name .. ".lua") end; return modules[name] end
-local lockDisabled = true
+local lockDisabled, statusServoCount, recordFault = true, 4, nil
 local function status()
   local values = { sensor_status = 3, pid_profile_count = 3, control_rate_profile_count = 3,
-    motor_count = 2, servo_count = 4, current_pid_profile_index = 1, current_control_rate_profile_index = 2,
+    motor_count = 2, servo_count = statusServoCount, current_pid_profile_index = 1, current_control_rate_profile_index = 2,
     arming_disable_flags = lockDisabled and (1 << 16) or 0 }
   local p = {}
   for _, f in ipairs(api("status").fields) do
@@ -70,7 +70,25 @@ local function pump()
   if m.command == failCommand or (legacy and m.command == 196 and #m.payload == 4) then
     if m.errorHandler then m.errorHandler(m,"error") end; return
   end
-  local b = fixtures[m.command] or (byCommand[m.command] and byCommand[m.command].simulatorResponse) or {}
+  -- Real telemetry cannot serialize the USB-sized adjustment/servo tables.
+  if m.command == 52 or m.command == 120 then
+    if m.errorHandler then m.errorHandler(m,"max_retries") end; return
+  end
+  if recordFault and m.command==recordFault.command and m.payload[1]==recordFault.index and not recordFault.short then
+    if m.errorHandler then m.errorHandler(m,"max_retries") end;return
+  end
+  local b
+  if m.command == 156 then
+    b = {};local offset=m.payload[1]*14
+    for i=1,14 do b[i]=fixtures[52][offset+i] end
+  elseif m.command == 125 then
+    b = {};local full=fixtures[120] or api("servo_configurations").simulatorResponse
+    local count=full[1];local raw=m.payload[1]
+    local slot=count>8 and raw>=8 and raw-8+count-18 or raw
+    for i=1,16 do b[i]=full[1+slot*16+i] end
+  end
+  if b and recordFault and m.command==recordFault.command and m.payload[1]==recordFault.index and recordFault.short then b[#b]=nil end
+  b = b or fixtures[m.command] or (byCommand[m.command] and byCommand[m.command].simulatorResponse) or {}
   if m.processReply then m.processReply(m,b) end
 end
 local function measure(name, fn)
@@ -113,14 +131,20 @@ local bundle = load("i18n/"..locale..".lua")
 for k in pairs(L) do if bundle.helicopter[k] then L[k] = bundle.helicopter[k] end end
 L.steps = { L.sensors,L.receiver,L.modeSwitches,L.profiles,L.rates,L.swash,L.servoType,L.governor,L.motor,L.connect,
   L.spinTest,L.escTelemetry,L.servoDirectionCentre,L.controlDirections,L.level,L.bladePitch,L.tail,L.gyroCheck,L.finish }
-local function world()
+local function beginWorld()
   q.messages,q.sent = {},{}
   local w = load(PATH .. "controller.lua").new(runtime,load(PATH .. "transport.lua"),H,L)
-  load(PATH .. "forms.lua").attach(w);load(PATH .. "workflow.lua").attach(w)
+  load(PATH .. "forms.lua").attach(w);load(PATH .. "workflow.lua").attach(w);load(PATH .. "navigation.lua").attach(w)
   w.requestRebuild = function() w.rebuilds = (w.rebuilds or 0)+1 end
   w:load()
+  return w
+end
+local function world()
+  local w=beginWorld()
   for _=1,1000 do measure("wakeup",function() w:tick() end);pump(); ticks=ticks+1; if w.ready or w.error then break end end
   check(w.ready and not w.error,"initial configuration read")
+  check(w.overview==true,"initial step overview is available")
+  w:startStep(1,true)
   w:tick(); pump(); ticks=ticks+1
   return w
 end
@@ -148,6 +172,30 @@ local function resolve(t)
     else out[k] = v end
   end
   return out
+end
+local historyPreview=world()
+load(PATH.."history.lua").attach(historyPreview,load(PATH.."history_store.lua"))
+load(PATH.."feedback.lua").attach(historyPreview,load("lib/system_state.lua"),{})
+historyPreview.history:publish(1)
+for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+  historyPreview.overview,historyPreview.historyMode=nil,nil
+  historyPreview.activeModelName="Model01"
+  historyPreview.modelPreparationRequired,historyPreview.modelPreparationDone=true,nil
+  historyPreview:buildModelPreparation()
+  local modelScene=view.new(historyPreview,{w=size[1],h=size[2]},diagrams)
+  while not modelScene.done do modelScene:step() end
+  exported[#exported+1]={step=0,name="model-preparation",task="model",width=size[1],height=size[2],children=resolve(modelScene.children)}
+  historyPreview.modelPreparationCard,historyPreview.modelPreparationRequired=nil,nil
+  historyPreview.overview,historyPreview.historyMode=nil,true
+  historyPreview:buildHistory();historyPreview.message=L.ready
+  local menu=view.new(historyPreview,{w=size[1],h=size[2]},diagrams)
+  while not menu.done do menu:step() end
+  exported[#exported+1]={step=0,name="history",width=size[1],height=size[2],children=resolve(menu.children)}
+  historyPreview.historyMode=nil;historyPreview.singleStep=true;historyPreview.step=13
+  historyPreview:updateHistoryHints();historyPreview:buildPreparation()
+  local preparation=view.new(historyPreview,{w=size[1],h=size[2]},diagrams)
+  while not preparation.done do preparation:step() end
+  exported[#exported+1]={step=0,name="preparation",task="prepare",width=size[1],height=size[2],children=resolve(preparation.children)}
 end
 for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
   for n,name in ipairs(steps) do
@@ -302,6 +350,14 @@ eq(#w:servos(),2,"motor tail excludes servo 4")
 local motorCards=load(PATH.."steps/tail.lua")(w)
 eq(#motorCards,2,"motor tail variant stays within Tail step")
 -- Actual page bootstrap and scene slices, including every reactive callback.
+local historyFiles=assert(loadfile("bin/wizard/history_fixture.lua"))()()
+historyFiles:install()
+local originalSources={getValue=getValue,getFieldInfo=getFieldInfo,getSourceValue=getSourceValue,model=model}
+function getValue() return 8 end
+function getFieldInfo(name) if name=="STAT" or name=="SCFG" or name=="RxBt" then return {id=1} end end
+function getSourceValue(name) return 8,name=="telem99" or name=="STAT" or name=="SCFG" end
+model={getSensor=function(index) if index<99 then return {name="STAT"} end end}
+
 local page=load(PATH.."page.lua")
 local ctx={children={},x=0,y=0,w=480,h=272,requestRebuild=function() end,requestClose=function() end}
 page.build(ctx)
@@ -314,7 +370,7 @@ page.onClose()
 -- Walk the actual page through its rendered callbacks. Construction and every
 -- reactive getter share this measured frame, as they do in the dashboard host.
 local frameClosed,frameVisited=false,{}
-local frameCtx={children={},x=0,y=0,w=480,h=272,requestRebuild=function() end,
+local frameCtx={children={},x=0,y=0,w=480,h=272,menu={getCurrentMenuId=function() return "helicopter_setup_page" end},requestRebuild=function() end,
   requestClose=function() frameClosed=true end}
 page.build(frameCtx)
 for _=1,5000 do
@@ -326,9 +382,13 @@ for _=1,5000 do
   if frameClosed then break end
   for _,item in ipairs(frameCtx.children) do
     local active=type(item.active)~="function" or item.active()
-    if item.type=="label" and type(item.text)=="string" then
+    if (item.type=="label" or item.type=="button") and type(item.text)=="string" then
       local number=string.match(item.text,"^(%d+)/19")
       if number then frameVisited[tonumber(number)]=true end
+    end
+    if active and item.type=="choice" and item.set and
+      (item.values[1]==L.modelNotChecked or item.values[1]=="@i18n(helicopter.modelNotChecked)@") then
+      measure("page input",function() item.set(2) end)
     end
     if active and item.type=="choice" and item.set and
       (item.values[1]==L.no or item.values[1]=="@i18n(helicopter.no)@") and
@@ -338,8 +398,8 @@ for _=1,5000 do
     if active and item.type=="button" and item.press then
       local caption=type(item.text)=="function" and item.text() or item.text
       local key=type(caption)=="string" and string.match(caption,"^@i18n%(helicopter%.([%w_]+)%)@$")
-      if key=="continue" or key=="saveNext" or key=="finish" or
-        caption==L.continue or caption==L.saveNext or caption==L.finish then
+      if key=="continue" or key=="saveNext" or key=="finish" or key=="completeSetup" or
+        caption==L.continue or caption==L.saveNext or caption==L.finish or caption==L.completeSetup then
         measure("page input",item.press)
       end
     end
@@ -349,6 +409,12 @@ check(frameClosed,"actual rendered page completes the whole wizard")
 local frameCount=0;for _ in pairs(frameVisited) do frameCount=frameCount+1 end
 eq(frameCount,19,"actual page callbacks visit all nineteen steps")
 page.onClose()
+local storedHistory=load(PATH.."history_store.lua").new("test-board")
+storedHistory:load()
+eq(storedHistory.mask,(1<<19)-1,"actual complete run persists every validated step")
+historyFiles:restore()
+getValue,getFieldInfo,getSourceValue,model=originalSources.getValue,originalSources.getFieldInfo,originalSources.getSourceValue,originalSources.model
+
 -- Follow all 19 steps with explicit positive physical answers. No simulator or
 -- radio events are synthesized; these are calls into the actual page controller.
 w=world();q.sent={};w.requestClose=function() w.closed=true end
@@ -404,12 +470,16 @@ local function contractWorld()
       if self.ready and getTime()-(self.statusAt or 0)>300 then return end
       return original(self)
     end
-  elseif mutation then error("Unknown negative control: "..mutation) end
+  elseif mutation and mutation~="bulk-read" and mutation~="history-early" then error("Unknown negative control: "..mutation) end
   return v
 end
 local contractCases=assert(loadfile("bin/wizard/contracts.lua"))()({
-  world=contractWorld,load=load,H=H,L=L,q=q,check=check,eq=eq,pump=pump,measure=measure,api=api,
-  fixtures=fixtures,advance=function(value) ticks=ticks+value end
+  world=contractWorld,load=load,H=H,L=L,q=q,check=check,eq=eq,pump=pump,measure=measure,api=api,stepNames=steps,
+  fixtures=fixtures,advance=function(value) ticks=ticks+value end,
+  beginWorld=beginWorld,mutation=mutation,
+  setServoCount=function(count) statusServoCount=count end,
+  setRecordFault=function(value) recordFault=value end,
+  view=view,diagrams=diagrams,resolve=resolve
 })
 print("Source contracts: "..#contractCases.." scenario groups")
 for name,count in pairs(worst) do print(string.format("BUDGET %-12s %d / 14000",name,count)) end

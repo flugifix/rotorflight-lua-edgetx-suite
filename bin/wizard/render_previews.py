@@ -45,10 +45,10 @@ def render(scene):
         kind = item['type']
         x, y, w, h = (item.get(k, 0) for k in ('x', 'y', 'w', 'h'))
         x, y = item.get('pos', (x, y))
-        color = '#156db2' if item.get('color') == 4 else '#26394c'
+        color = {1:'#000000', 2:'#ffffff', 3:'#0c3f66', 4:'#125e99'}.get(item.get('color'), '#26394c')
         if kind == 'rectangle':
             if item.get('filled'):
-                draw.rectangle((x,y,x+w,y+h), fill='#edf1f5')
+                draw.rectangle((x,y,x+w,y+h), fill=color)
             else:
                 draw.rectangle((x,y,x+w,y+h), outline=color, width=item.get('thickness', 2))
         elif kind == 'line':

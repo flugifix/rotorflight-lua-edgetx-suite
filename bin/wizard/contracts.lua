@@ -22,6 +22,178 @@ return function(h)
     check(false,"contract transport completes")
   end
   local function settle(w) w.buildRequested=nil;drain(w);w.statusAt=getTime() end
+  case("CORE.paged-startup",function()
+    local w=world();settle(w)
+    if h.mutation=="bulk-read" then
+      w.readRecords=function(self,name)
+        self:read(name,function(d) self.data[name]=d;self:loadProgress() end)
+      end
+      w:load();drain(w)
+    end
+    check(w.ready and not w.error,"CORE paged startup reaches ready on telemetry")
+    local slots,servos={},{}
+    for _,m in ipairs(q.sent) do
+      check(m.command~=52 and m.command~=120,"CORE no oversized startup command")
+      if m.command==156 or m.command==125 then
+        eq(#m.payload,1,"CORE indexed read carries one index")
+        check(not m.isWrite,"CORE indexed read is a read")
+        local list=m.command==156 and slots or servos;list[#list+1]=m.payload[1]
+      end
+    end
+    eq(#slots,42,"CORE every adjustment slot read")
+    for i=1,42 do eq(slots[i],i-1,"CORE adjustment indexes keep order") end
+    eq(table.concat(servos,","),"0,1,2,3","CORE PWM servo indexes read")
+    eq(#w.data.adjustment_ranges.adjustment_ranges,42,"CORE complete adjustment table published")
+    eq(w.progress,w.loadTotal,"CORE loading progress reaches total")
+    check(string.find(w.loadingText,tostring(w.loadTotal),1,true)~=nil,"CORE loading text reports progress")
+    h.setServoCount(22)
+    local full={22};local template=h.api("servo_configurations").simulatorResponse
+    for slot=0,21 do
+      local raw=slot<4 and slot or slot-4+8
+      for i=2,17 do full[#full+1]=template[i] end
+      full[2+slot*16],full[3+slot*16]=(1300+raw)%256,math.floor((1300+raw)/256)
+    end
+    h.fixtures[120]=full
+    w=world();settle(w)
+    local raw={}
+    for _,m in ipairs(q.sent) do if m.command==125 then raw[#raw+1]=m.payload[1] end end
+    eq(#raw,22,"CORE packed bus table reads all records")
+    eq(raw[5],8,"CORE bus table skips unused PWM indexes")
+    eq(raw[22],25,"CORE bus table reaches last raw servo")
+    eq(w.data.servo_configurations.servo_count,22,"CORE packed servo count preserved")
+    eq(w.data.servo_configurations.servos[4].mid,1308,"CORE raw bus record stored at packed index")
+    q.sent={};w:touch("servo_configurations");w:save();drain(w)
+    local written={}
+    for _,m in ipairs(q.sent) do if m.command==212 then written[#written+1]=m.payload[1] end end
+    eq(table.concat(written,","),"0,1,2,3","CORE PWM changes never rewrite packed bus servo slots")
+    h.fixtures[120]=nil;h.setServoCount(4)
+    for _,fault in ipairs({{command=156,index=16},{command=156,index=16,short=true},{command=125,index=2,short=true}}) do
+      h.setRecordFault(fault);w=h.beginWorld();drain(w)
+      check(not w.ready and w.error~=nil,"CORE missing indexed record blocks ready")
+      check(w.data[fault.command==156 and "adjustment_ranges" or "servo_configurations"]==nil,
+        "CORE incomplete indexed table never published")
+      check(not w:usable(),"CORE indexed failure leaves controls disabled")
+      h.setRecordFault(nil)
+    end
+  end)
+  case("CORE.individual-step-entry",function()
+    for selected=1,19 do
+      local w=world();settle(w);w:showSteps()
+      local scene=h.view.new(w,{w=480,h=272},h.diagrams)
+      while not scene:step() do end
+      local start
+      for _,item in ipairs(scene.children) do
+        if item.type=="choice" then item.set(selected) end
+        if item.type=="button" and item.text==L.startStep then start=item end
+      end
+      check(start~=nil,"CORE individual start control exists")
+      start.press();drain(w);w:tick()
+      eq(w.step,selected,"CORE selected individual step starts directly")
+      check(w.singleStep and not w.overview,"CORE individual mode is explicit")
+      if w:standalonePreparation() then
+        eq(w.cards[1].title,L.prepareStep,"CORE individual prerequisites are visible")
+        local card=w.card;w:next();eq(w.card,card,"CORE individual prerequisite must be acknowledged")
+        check(next(w.holds)==nil,"CORE preparation does not enter an automatic servo hold")
+      end
+      w.checks=setmetatable({},{__index=function() return true end})
+      w.data.mode_ranges.mode_ranges[1]={id=0,auxChannelIndex=0,range={start=1800,["end"]=2100}}
+      for _=1,1500 do
+        w:tick();h.pump();h.advance(1)
+        if w.cards and not w.transition and not w.error then w:next() end
+        if w.overview or w.error then break end
+      end
+      check(w.overview and not w.error,"CORE completed individual step returns to overview")
+      check(w.active and w.locked,"CORE individual completion retains arming lock")
+    end
+  end)
+  case("CORE.step-switch-save-discard",function()
+    local w=world();settle(w)
+    local original=w.data.board_alignment_config.yaw_degrees
+    w:field("board_alignment_config","yaw_degrees",45,true)
+    w:hold("servo",0,400);w:requestSteps()
+    check(next(w.holds)==nil,"CORE step switch releases held output")
+    check(w.confirmExit and w.exitToSteps and not w.overview,"CORE dirty step switch asks save/discard")
+    w:back();check(not w.confirmExit and not w.overview,"CORE cancel retains current step")
+    w:requestSteps();w:resolveExit(false);drain(w)
+    check(w.overview and not next(w.dirty),"CORE discarded step switch returns clean")
+    eq(w.data.board_alignment_config.yaw_degrees,original,"CORE discard restores displayed baseline")
+    check(not w.rebootPending,"CORE discard clears unsaved reboot requirement")
+    w:startStep(1,true);w:tick()
+    w:field("board_alignment_config","yaw_degrees",90,true)
+    w:requestSteps();w:resolveExit(true);drain(w)
+    check(w.overview and not next(w.dirty),"CORE saved step switch returns clean")
+    eq(w.data.board_alignment_config.yaw_degrees,90,"CORE saved step switch retains new value")
+    check(w.rebootPending,"CORE saved reboot requirement remains visible")
+    w:startStep(13);check(w.overview,"CORE bench step blocked until pending restart")
+    w:startStep(2);w:tick()
+    w:field("rc_config","rc_min_throttle",950)
+    w:requestSteps();w:resolveExit(false);drain(w)
+    check(w.rebootPending,"CORE discard preserves earlier saved reboot requirement")
+    w.rebootPending=nil;w:startStep(5);w:tick();w:back()
+    check(w.overview,"CORE Back from individual step returns to overview")
+    w:back();check(w.confirmExit and not w.exitToSteps,"CORE Back from overview offers exit")
+    w=world();settle(w)
+    local status=h.api("status").parse(h.fixtures[101]);status.reboot_required=1
+    w:acceptStatus(status);w:requestSteps();w:startStep(13)
+    check(w.overview and w.rebootPending,"CORE existing MSP restart flag blocks direct bench entry")
+  end)
+  case("CORE.status-during-save",function()
+    local w=world();settle(w)
+    w:touch("adjustment_ranges");w:save()
+    local statusReads=0
+    for _=1,1500 do
+      w:tick();h.pump();h.advance(15)
+      if w.error or not w.transition then break end
+    end
+    for _,m in ipairs(q.sent) do if m.command==101 then statusReads=statusReads+1 end end
+    check(not w.error and not w.transition,"CORE long indexed save keeps status fresh")
+    check(statusReads>5,"CORE STATUS preempts a long save")
+  end)
+  case("VISUAL.native-background",function()
+    local w=world();settle(w)
+    local scene=h.view.new(w,{w=480,h=272},h.diagrams)
+    eq(scene.all[1].color,COLOR_THEME_PRIMARY2,"VISUAL page uses native light background color")
+  end)
+  case("CORE.packed-feedback",function()
+    local w=world();settle(w)
+    local values, reads = {}, 0
+    load("app/pages/helicopter_setup/feedback.lua").attach(w,load("lib/system_state.lua"),{
+      getLiveValue=function(source) reads=reads+1;return values[source] end
+    })
+    local function poll() h.advance(25);w:pollSystemState() end
+    w.message=L.ready
+    poll();poll();eq(w:feedbackText(),L.ready,"CORE missing packed words preserve MSP feedback")
+    values.system_config=(1<<12)|(1<<14)|1|(2<<3)|(3<<6)
+    poll();poll();eq(w:feedbackText(),L.fcReboot,"CORE FC restart observation is shown")
+    check(not w.rebootPending,"CORE packed feedback cannot create a local restart transaction")
+    values.system_config=1<<13;poll();poll()
+    eq(w:feedbackText(),L.fcSaving,"CORE FC saving observation is shown")
+    w.message=L.failed;eq(w:feedbackText(),L.failed,"CORE operation failure wins over packed hint")
+    w.message=L.ready;w.legacyHold=true
+    eq(w:feedbackText(),L.persistent,"CORE permanent override warning wins over packed hint")
+    w.legacyHold=nil;w.transition=true
+    eq(w:feedbackText(),L.ready,"CORE packed hint does not obscure active transaction")
+    w.transition=nil;values.system_config=1<<12;poll();poll()
+    eq(w:feedbackText(),L.fcUnsaved,"CORE FC dirty observation is shown")
+    values.system_config=nil;values.system_status=1<<20;poll();poll()
+    eq(w:feedbackText(),L.fcOverride,"CORE FC override observation is shown")
+    values.system_status=1<<19;w.step=1;poll();poll()
+    eq(w:feedbackText(),L.fcAcc,"CORE calibration observation is contextual")
+    values.system_status=0;w.step=2;poll();poll()
+    eq(w:feedbackText(),L.fcReceiver,"CORE receiver observation is contextual")
+    values.system_status=8;w.overview=true
+    values.system_config=1|(2<<3)|(3<<6);poll();poll()
+    eq(w:feedbackText(),string.format(L.fcProfiles,1,2,3),"CORE FC profiles are readable")
+    local count=reads;w:pollSystemState();eq(reads,count,"CORE telemetry feedback polling is paced")
+    values.system_status,values.system_config=nil,nil;poll();poll()
+    eq(w:feedbackText(),L.ready,"CORE stale words clear optional hint")
+    w:acceptStatus(h.api("status").parse(h.fixtures[101]))
+    check(w:usable(),"CORE absent telemetry does not block fresh MSP lock")
+    w.locked=false;values.system_status=0;values.system_config=0;poll();poll()
+    check(not w:usable(),"CORE packed words never prove MSP arming lock")
+    w.error="MSP failure";poll()
+    check(not w.systemStatus and not w.systemConfig and not w.systemHint,"CORE error clears packed cache")
+  end)
   case("SOURCE.pure-helper-golden-vectors",function()
     local vectors=assert(loadfile("bin/wizard/source_vectors.lua"))().cases
     local function same(actual,expected,prefix)
@@ -571,6 +743,208 @@ return function(h)
     local power
     for _,m in ipairs(q.sent) do if m.command==195 and m.payload[1]==0 then power=m.payload[2]+m.payload[3]*256 end end
     eq(power,250,"CORE motor refresh follows changed power setting")
+  end)
+  case("CORE.suite-step-entries",function()
+    local fs=assert(loadfile("bin/wizard/history_fixture.lua"))()();fs:install()
+    local registry=load("app/pages/init.lua")
+    local original=loadScript
+    local loaded={}
+    loadScript=function(path,mode)
+      if string.find(path,"/helicopter_setup/steps/",1,true) then loaded[#loaded+1]=path end
+      return original(path,mode)
+    end
+    local function entry(id,number,history)
+      q.messages,q.sent,loaded={},{},{}
+      local page=load("app/pages/helicopter_setup/page.lua")
+      local closed=false
+      local ctx={children={},w=480,h=272,menu={getCurrentMenuId=function() return id end},
+        requestClose=function() closed=true end,requestRebuild=function() end}
+      page.build(ctx)
+      local found,modelGateSeen=false,false
+      for _=1,1000 do
+        h.measure("suite entry",function()
+          page.wakeup(ctx);ctx.children={};page.build(ctx);h.resolve(ctx.children)
+        end)
+        h.pump();h.advance(1)
+        for _,item in ipairs(ctx.children) do
+          if type(item.text)=="string" then
+            if history and item.text=="@i18n(helicopter.historyTitle)@" then found=true end
+            if not history and tonumber(string.match(item.text,"^(%d+)/19"))==number then found=true end
+          end
+        end
+        if not found and not history then
+          for _,item in ipairs(ctx.children) do
+            if item.text=="@i18n(helicopter.modelPreparationTitle)@" then
+              modelGateSeen=true
+              eq(#loaded,0,"CORE model gate precedes step definition loading")
+            end
+            if item.type=="choice" and item.values[1]=="@i18n(helicopter.modelNotChecked)@" then
+              item.set(number%2==0 and 3 or 2)
+            elseif item.type=="choice" and item.values[1]=="@i18n(helicopter.no)@" and item.values[2]=="@i18n(helicopter.yes)@" then
+              item.set(2)
+            end
+          end
+          for _,item in ipairs(ctx.children) do
+            local caption=type(item.text)=="function" and item.text() or item.text
+            if item.type=="button" and caption=="@i18n(helicopter.continue)@" then item.press() end
+          end
+        end
+        if found then break end
+      end
+      check(found,"CORE Suite entry opens the selected page "..id)
+      eq(registry.pagePathByMenuId[id],"helicopter_setup/page.lua","CORE Suite entry shares the lazy page module")
+      if history then
+        eq(#loaded,0,"CORE history entry loads no setup step")
+        for _,m in ipairs(q.sent) do check(m.command==99 or m.command==101,"CORE history opens without configuration reads/writes") end
+      else
+        check(modelGateSeen,"CORE Suite step requires current radio-model preparation")
+        check(#loaded<=1,"CORE direct entry loads at most its own step definition")
+      end
+      if string.find(id,"_step_",1,true) then
+        for _=1,2000 do
+          h.measure("suite completion",function()
+            page.wakeup(ctx);ctx.children={};page.build(ctx);h.resolve(ctx.children)
+          end)
+          h.pump();h.advance(1)
+          if closed then break end
+          for _,item in ipairs(ctx.children) do
+            local active=type(item.active)~="function" or item.active()
+            if active and item.type=="choice" and item.values[1]=="@i18n(helicopter.no)@" and
+              item.values[2]=="@i18n(helicopter.yes)@" then item.set(2) end
+            local caption=type(item.text)=="function" and item.text() or item.text
+            if active and item.type=="button" and (caption=="@i18n(helicopter.continue)@" or
+              caption=="@i18n(helicopter.saveNext)@" or caption=="@i18n(helicopter.saveStep)@" or
+              caption=="@i18n(helicopter.backToSuite)@") then item.press() end
+          end
+        end
+        check(closed,"CORE direct Suite step completes back to its menu "..number)
+        for _,path in ipairs(loaded) do
+          check(string.find(path,"/steps/"..h.stepNames[number]..".lua",1,true)~=nil,"CORE individual visit loads no other step")
+        end
+        local unlock=false
+        for _,m in ipairs(q.sent) do if m.command==99 and m.payload[1]==0 then unlock=true end end
+        check(unlock,"CORE individual Suite completion releases the arming lock")
+      end
+      page.onClose()
+    end
+    entry("helicopter_setup_page",1)
+    for index=1,19 do entry(string.format("helicopter_setup_step_%02d_page",index),index) end
+    entry("helicopter_setup_history_page",nil,true)
+    local recorded=load("app/pages/helicopter_setup/history_store.lua").new("test-board");recorded:load()
+    eq(recorded.mask,(1<<19)-1,"CORE all nineteen individual Suite visits record their validated completion")
+    loadScript=original;fs:restore()
+  end)
+  case("CORE.radio-model-preparation",function()
+    local w=world();settle(w)
+    local originalModel=model
+    model={getInfo=function() return {name="Bench model",filename="model01.yml"} end}
+    load("app/pages/helicopter_setup/navigation.lua").attach(w,{menu={getCurrentMenuId=function() return "helicopter_setup_step_13_page" end}})
+    model=originalModel
+    w.buildRequested=true;w:tick()
+    eq(w.activeModelName,"Bench model","CORE preparation shows active radio model")
+    check(w.modelPreparationCard and next(w.holds)==nil,"CORE model gate precedes automatic holds")
+    w:next();check(w.modelPreparationCard,"CORE unchecked model cannot advance")
+    w.modelPreparationMethod=2;w:next()
+    check(w.modelPreparationCard,"CORE template alone does not confirm correct current model")
+    w.checks.modelReady=true;w.modelPreparationMethod=4;w:next()
+    check(w.modelPreparationCard,"CORE invalid model basis cannot advance")
+    w.modelPreparationMethod=3;w:next();w:tick()
+    check(w.modelPreparationDone and w.preparationCard,"CORE manual model check leads to physical preparation")
+    check(next(w.holds)==nil,"CORE model check does not bypass physical test prerequisites")
+    local nextVisit=world();settle(nextVisit)
+    load("app/pages/helicopter_setup/navigation.lua").attach(nextVisit,{menu={getCurrentMenuId=function() return "helicopter_setup_page" end}})
+    nextVisit.buildRequested=true;nextVisit:tick()
+    check(nextVisit.modelPreparationCard and nextVisit.modelPreparationMethod==1 and not nextVisit:ack("modelReady"),
+      "CORE new visit always rechecks the transmitter model")
+  end)
+  case("CORE.history-store",function()
+    local fs=assert(loadfile("bin/wizard/history_fixture.lua"))()();fs:install()
+    local Store=load("app/pages/helicopter_setup/history_store.lua")
+    local a,b=Store.new("board-A","/user/board-A.lua"),Store.new("board-B","/user/board-B.lua")
+    a:load();b:load();eq(a.mask,0,"CORE new FC has no history")
+    local saved
+    h.measure("history write",function() saved=a:save((1<<19)-1) end)
+    check(saved,"CORE all nineteen history bits persist")
+    a=Store.new("board-A","/user/board-A.lua");a:load()
+    eq(a.count,19,"CORE new visit reads nineteen historical steps")
+    eq(b.mask,0,"CORE another FC does not inherit history")
+    check(b:save(128),"CORE another FC keeps its own history")
+    check(a:save(0),"CORE explicit reset succeeds")
+    eq(a.mask,0,"CORE reset clears this FC only")
+    b:load();eq(b.mask,128,"CORE reset preserves another FC")
+    for _,failure in ipairs({"mkdir","open","write","short","delete","rename","readback"}) do
+      fs.failure=nil;check(a:save(1),"CORE persistence failure positive control")
+      fs.failure=failure
+      check(not a:save(3),"CORE file failure is reported "..failure)
+      eq(a.mask,1,"CORE failed write never claims persisted completion "..failure)
+      if failure=="rename" then
+        local recovered=Store.new("board-A","/user/board-A.lua");recovered:load()
+        eq(recovered.mask,3,"CORE valid temporary record recovers interrupted replacement")
+      end
+    end
+    fs.failure=nil
+    fs.files[a.path]="RFW1 524288\n";a:load()
+    check(a.invalid and a.mask==0,"CORE out-of-range history is unknown")
+    check(not a:save(1),"CORE unreadable history needs explicit reset")
+    check(a:save(0),"CORE explicit reset replaces unreadable history")
+    fs.files[a.path]="RFW1 2\n"..string.rep("x",10000)
+    h.measure("history read",function() a:load() end)
+    check(a.invalid,"CORE oversized history is refused after one bounded read")
+    local invalid=Store.new("../another-board");invalid:load()
+    check(not invalid.path and not invalid:save(1),"CORE FC identity cannot escape history directory")
+    fs:restore()
+  end)
+  case("CORE.history-guidance-and-reset",function()
+    local fs=assert(loadfile("bin/wizard/history_fixture.lua"))()();fs:install()
+    local w=world();settle(w)
+    load("app/pages/helicopter_setup/history.lua").attach(w,load("app/pages/helicopter_setup/history_store.lua"))
+    w:loadHistory();w.singleStep=true
+    if h.mutation=="history-early" then
+      local original=w.next
+      w.next=function(self)
+        self.history:save(self.history.mask | (1 << (self.step-1)))
+        return original(self)
+      end
+    end
+    w.step=14;w:updateHistoryHints()
+    check(w.prerequisiteHint and string.find(w.prerequisiteDetails,L.receiver,1,true),"CORE missing receiver prerequisite is explained")
+    check(w.checks.control1~=true,"CORE history never supplies a physical answer")
+    step(w,"direction");w.card=#w.cards;w:next();drain(w)
+    eq(w.history.mask,0,"CORE unconfirmed step cannot enter history")
+    w.checks.control1,w.checks.control2,w.checks.control4=true,true,true
+    w:next();drain(w)
+    check(w.overview and (w.history.mask&(1<<13))~=0,"CORE validated single step is recorded before returning")
+    w:startStep(14);w:tick()
+    check(w.historyHint==L.historyRecheck,"CORE repeated step asks for recheck")
+    check(not w:ack("control1") and next(w.holds)==nil,"CORE past completion cannot bypass fresh preparation")
+    w.historyMode=true;w.preparationCard=nil;w:buildHistory();q.sent={}
+    w.cards[1].rows[3].press();drain(w)
+    check(w.history.mask~=0,"CORE resetting history requires confirmation")
+    w.checks.resetHistory=true;w.cards[1].rows[3].press();drain(w)
+    eq(w.history.mask,0,"CORE confirmed history reset persists zero")
+    eq(w.message,L.historyResetDone,"CORE reset reports its limited effect")
+    for _,m in ipairs(q.sent) do check(m.command~=250,"CORE history reset never writes FC EEPROM") end
+    fs:restore()
+  end)
+  case("CORE.history-failure-actions",function()
+    local fs=assert(loadfile("bin/wizard/history_fixture.lua"))()();fs:install()
+    local w=world();settle(w)
+    load("app/pages/helicopter_setup/history.lua").attach(w,load("app/pages/helicopter_setup/history_store.lua"))
+    w:loadHistory();w.singleStep=true;w.step=14
+    step(w,"direction");w.card=#w.cards
+    w.checks.control1,w.checks.control2,w.checks.control4=true,true,true
+    fs.failure="open";w:next();drain(w)
+    check(w.historyFailure and not w.overview,"CORE card failure waits for explicit action")
+    eq(w.history.mask,0,"CORE card failure has no completion badge")
+    w:back();check(not w.historyFailure and not w.overview,"CORE Back cancels history failure without advancing")
+    w:next();drain(w);fs.failure=nil;w.historyRetry();drain(w)
+    check(w.overview and w.history.mask==(1<<13),"CORE explicit retry records the completed step")
+    w.overview=nil;w.singleStep=true;w.step=15;step(w,"level");w.card=#w.cards;w.checks.level=true
+    fs.failure="short";w:next();drain(w)
+    check(w.historyFailure,"CORE failed readback is visible")
+    w.historySkip();drain(w)
+    check(w.overview and (w.history.mask&(1<<14))==0,"CORE explicit continue leaves failed visit unrecorded")
+    fs:restore()
   end)
   return cases
 end

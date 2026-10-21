@@ -1,4 +1,4 @@
-"""Prove the source contracts reject three concrete former defects, offline."""
+"""Prove the source contracts reject concrete former defects, offline."""
 import argparse
 import subprocess
 
@@ -9,6 +9,8 @@ def main():
     args=parser.parse_args()
     checks=[(None,'0 failures'),('rx-ids','FAIL S02 FBUS wire ID'),
             ('mode-flag','FAIL S03 rescue requires actual mode flag'),
+            ('bulk-read','FAIL CORE paged startup reaches ready on telemetry'),
+            ('history-early','FAIL CORE unconfirmed step cannot enter history'),
             ('stale-status','FAIL CORE stale status releases holds before bus wait')]
     for mutation,marker in checks:
         command=[args.lua,'bin/wizard/verify.lua']

@@ -19,12 +19,19 @@ MSP queue and API modules. It never opens another telemetry transport.
 | `servo_override_all` | 196 | U16 value, optionally U16 timeout. A timed OFF is the capability probe. |
 | `mixer_override` | 190/191 | Read 29 U16 values; write one U8 index + U16 value, optionally U16 timeout. OFF = 2501; passthrough = 2502. |
 | `mixer_input` | 170/171 | Read signed rate/min/max records, indexed from zero; write U8 index plus three S16 values. Stabilized axes are 1, 2, 3, 4. |
-| `servo_configurations` | 120/212 | U8 count plus 16-byte records; a write has the packed U8 index followed by one complete record. |
+| `get_servo_config` / `servo_configurations` | 125/212 | Read U8 raw servo-parameter index, reply one 16-byte record. PWM slots retain their index; packed bus slots map to raw 8–25. Writes retain packed U8 index plus one complete record. Bulk command 120 is not used. |
+| `get_adjustment_range` / `set_adjustment_range` | 156/53 | Read U8 index, reply one 14-byte record; all 42 slots are read sequentially. Bulk command 52 is not used. |
 | `rc_config` | 66/67 | A complete 12-byte RC configuration is required; truncated throttle/deflection data is refused. |
 | `acc_calibration` / `attitude` | 205 / 108 | Empty calibration command; S16 tenths of degrees roll/pitch and S16 degree yaw. |
 | `board_auto_align` | `0x5F13` | U8 start; query state and three signed alignment angles. Optional firmware extension. |
 | `rx_serial_trial` | `0x5F12` | U8 start/stop; state, combination, inversion, half-duplex, pin swap and elapsed time. Wire codec retained; radio wizard directs detection to USB and sends no START. |
 | `esc_sensor_trial` | `0x5F0C` | U8 start/stop; state, combination, half-duplex, pin swap and elapsed time. Optional firmware extension. |
+
+Bulk adjustment command 52 returns 588 bytes, beyond the firmware's 320-byte
+telemetry response buffer. A servo table with bus channels can also exceed it.
+Indexed reads publish a complete table only after every record succeeds. Each
+request remains a read, with one U8 index. A timeout or malformed record stops
+startup without offering partially loaded settings. Progress is a cached label.
 
 Receiver setup requires a working MSP radio link. Receiver wiring detection must
 run through USB Configurator: the firmware trial closes/reopens the receiver UART
@@ -52,7 +59,7 @@ other pages keep the host's normal return-to-root behaviour.
 
 Scene assembly is paced, and MSP callbacks only publish buffers. Live labels and
 control properties read cached page state. All visit state is released in `onClose`.
-STATUS refresh can preempt indexed jobs and wiring trials. A status older than three
+STATUS refresh can preempt indexed jobs, saving/rollback transactions and wiring trials. A status older than three
 seconds releases overrides before waiting for pending replies. Successful wiring
 trials remain live for inspection until save/cancel/leave; STOP uses cleanup ownership.
 
