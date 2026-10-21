@@ -178,7 +178,7 @@ local CARD_PAD = 4
 -- at the left end of the header, before the model name: this one opens the quick menu, the one beside
 -- it the suite's tool (L.toolControl). There is no close control -- a long press on RTN leaves
 -- full screen in the firmware, and init.lua declares that (`fullscreenExit`), which is what the
--- host's theme check reads. The page keys open the menu by the binding L.KEYS gives them.
+-- host's theme check reads. On the theme base, PAGE keys open the menu only when explicitly bound.
 --
 -- The press is a `button`, and everything drawn over it is a LINE: on the full screen surface a
 -- rectangle takes a press and hands it to its PARENT, so a rectangle over the button would
