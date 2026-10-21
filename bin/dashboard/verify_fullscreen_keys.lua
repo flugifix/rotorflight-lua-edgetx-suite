@@ -135,7 +135,8 @@ local function runtimeDeclaredKeysCaseIn(source)
   FC.install(Stubs)
   Stubs.reset()
   FC.reset()
-  local declared = { pageDown = "openView:menu" }
+  -- MDL, the one key on Theme as the radio comes, so the menu can only be the manifest's doing.
+  local declared = { mdl = "openView:menu" }
   local manifest = { name = "Key test", fullscreen = "theme", keys = declared }
   local realLoadScript = _G.loadScript
   _G.loadScript = function(path, mode)
@@ -153,8 +154,8 @@ local function runtimeDeclaredKeysCaseIn(source)
   if w._viewBase ~= "theme" then return "the manifest's fullscreen mode was not read" end
   if w._declaredKeys ~= declared then return "the manifest's keys table was not retained" end
   local Views = _G.rfsuite.require("widgets/dashboard/views.lua")
-  if Views.key(w, _G.EVT_VIRTUAL_NEXT_PAGE) ~= true or Views.top(w) ~= "menu" then
-    return "the manifest's PAGE > binding did not open the menu before a theme build"
+  if Views.key(w, _G.EVT_MODEL_BREAK) ~= true or Views.top(w) ~= "menu" then
+    return "the manifest's MDL binding did not open the menu before a theme build"
   end
   -- A different manifest must drop the previous theme's declarations.
   manifest = { name = "No keys", fullscreen = "theme" }
@@ -195,7 +196,11 @@ end
 -- has to arrive in `ctx.keys` as that binding, and Nothing as no binding at all.
 local SHIPPED_KEY_THEMES = { "urban", "grid", "deck" }
 
-local function themePageKeysCase(Keys)
+-- The real layout of a shipped theme, loaded the way the widget loads it. `transform`, where
+-- given, rewrites the layout's source first, `transform(source, theme)` (the self-test's
+-- mutants). Returns the layout and a
+-- function that puts back every global the load touched.
+local function loadThemeLayout(theme, transform)
   local savedRfsuite, savedLoadScript = _G.rfsuite, _G.loadScript
   local function restore()
     _G.rfsuite, _G.loadScript = savedRfsuite, savedLoadScript
@@ -203,40 +208,67 @@ local function themePageKeysCase(Keys)
       if type(k) == "string" and string.match(k, "^__rfsuiteTheme") then _G[k] = nil end
     end
   end
-  local function loader(path)
+  restore()
+  _G.rfsuite = {}
+  _G.loadScript = function(path)
     local rel = string.match(path, "rfsuite%-core/(.+)$")
     local src = rel and readFile(SRC .. rel)
     if src == nil then return nil end
     return load(src, "@" .. rel)
   end
+  local rel = "widgets/dashboard/themes/" .. theme .. "/layout.lua"
+  local src = assert(readFile(SRC .. rel))
+  if transform then src = transform(src, theme) end
+  local ok, layout = pcall(function() return assert(load(src, "@" .. rel))() end)
+  if not ok then restore(); error(layout, 0) end
+  return layout, restore
+end
+
+-- `ctx.keys` as the theme's build leaves it for a stored theme configuration.
+local function bindThemeKeys(layout, config)
+  local ctx = { keys = {}, action = function() end, entry = function() end }
+  layout.bindKeys({ themeConfig = config }, ctx)
+  return ctx.keys
+end
+
+-- The PAGE keys put on Theme radio-wide: what the theme binds is then what they do.
+local PAGE_ON_THEME = { key_page_down = "theme", key_page_up = "theme" }
+
+local function themePageKeysCase(Keys, transform)
+  local restore = function() end
   local ok, bad = pcall(function()
     for _, theme in ipairs(SHIPPED_KEY_THEMES) do
       restore()
-      _G.rfsuite, _G.loadScript = {}, loader
-      local rel = "widgets/dashboard/themes/" .. theme .. "/layout.lua"
-      local layout = assert(load(assert(readFile(SRC .. rel)), "@" .. rel))()
-      local function bind(config)
-        local ctx = { keys = {}, action = function() end, entry = function() end }
-        layout.bindKeys({ themeConfig = config }, ctx)
-        return ctx.keys
-      end
+      local layout
+      layout, restore = loadThemeLayout(theme, transform)
+      -- The PAGE rows start on Nothing for this case, so a stored Quick menu differs from the
+      -- row's default: a binding that ignored the stored choice would leave the key unbound
+      -- rather than pass by answering with a default that happens to be the same choice.
       local menuChoice = {}
       for i = 1, #(layout.KEYS or {}) do
         local entry = layout.KEYS[i]
-        if entry.key == "pageDown" or entry.key == "pageUp" then menuChoice[entry.pref] = "menu" end
+        if entry.key == "pageDown" or entry.key == "pageUp" then
+          entry.default = "none"
+          menuChoice[entry.pref] = "menu"
+        end
       end
-      local stored = bind(menuChoice)
-      local action = Keys.resolve({}, "pageDown", stored)
+      if next(menuChoice) == nil then return theme .. ": the layout has no PAGE rows" end
+      local fresh = bindThemeKeys(layout, {})
+      if fresh.pageDown ~= nil or fresh.pageUp ~= nil then
+        return theme .. ": PAGE rows on Nothing are bound with no stored choice"
+      end
+      local stored = bindThemeKeys(layout, menuChoice)
+      local action = Keys.resolve(PAGE_ON_THEME, "pageDown", stored)
       if action ~= "openView:menu" then
         return theme .. ": PAGE > set to the quick menu on the theme page resolves to " .. tostring(action)
       end
-      action = Keys.resolve({}, "pageUp", stored)
+      action = Keys.resolve(PAGE_ON_THEME, "pageUp", stored)
       if action ~= "openView:menu" then
         return theme .. ": PAGE < set to the quick menu on the theme page resolves to " .. tostring(action)
       end
       local nothing = {}
       for pref in pairs(menuChoice) do nothing[pref] = "none" end
-      local unbound = bind(nothing)
+      local unbound = bindThemeKeys(layout, nothing)
       if unbound.pageDown ~= nil or unbound.pageUp ~= nil then
         return theme .. ": PAGE set to Nothing on the theme page is still bound"
       end
@@ -245,6 +277,40 @@ local function themePageKeysCase(Keys)
   restore()
   if not ok then return "raised: " .. tostring(bad) end
   return bad
+end
+
+-- As the radio comes, both page keys open the quick menu over the theme itself, on a theme that
+-- binds its own keys (Urban), on one that binds none (Default) and on a theme whose full screen is
+-- the quick menu (no base layer). The choice is the radio's, so it holds whatever the theme binds.
+local function freshPageKeysCase(Keys, Views)
+  local events = { pageDown = _G.EVT_VIRTUAL_NEXT_PAGE, pageUp = _G.EVT_VIRTUAL_PREV_PAGE }
+  local layout, restore = loadThemeLayout("urban")
+  local urbanKeys = bindThemeKeys(layout, {})
+  restore()
+  local bad = {}
+  for _, name in ipairs({ "pageDown", "pageUp" }) do
+    for _, spec in ipairs({
+      { theme = "urban", base = true, keys = urbanKeys },
+      { theme = "default", base = true, keys = {} },
+      { theme = "legacy", base = false, keys = {} },
+    }) do
+      -- Every theme and key is tried, so a failure names all of them rather than the first.
+      local action, global = Keys.resolve({}, name, spec.keys)
+      local w = newWidget(Views, spec.base)
+      for k, v in pairs(spec.keys) do w._viewCtx.keys[k] = v end
+      if action ~= "openView:menu" or global ~= true then
+        bad[#bad + 1] = spec.theme .. " " .. name .. " resolves to " .. tostring(action)
+          .. (global and " (radio-wide)" or " (theme)")
+      elseif Views.key(w, events[name]) ~= true or Views.top(w) ~= "menu" then
+        bad[#bad + 1] = spec.theme .. " " .. name .. " did not open the quick menu"
+      elseif Views.key(w, events[name]) ~= true or Views.top(w) ~= nil then
+        bad[#bad + 1] = spec.theme .. " a second " .. name .. " did not close the quick menu"
+      end
+    end
+  end
+  if #bad > 0 then
+    return "with fresh preferences, expected the radio-wide quick menu: " .. table.concat(bad, "; ")
+  end
 end
 
 local function keysPageCase(keysSrc, pageSrc)
@@ -260,7 +326,7 @@ local function keysPageCase(keysSrc, pageSrc)
   page.onReload(ctx)
   page.build(ctx)
   if #rows ~= 5 then return "the page drew " .. #rows .. " key rows, expected 5" end
-  local want = { "theme", "theme", "theme", "suite_tool", "menu" }
+  local want = { "menu", "menu", "theme", "suite_tool", "menu" }
   for i = 1, 5 do
     if rows[i].selected ~= want[i] then
       return "row " .. i .. " shows " .. tostring(rows[i].selected) .. " with no preference, expected " .. want[i]
@@ -329,8 +395,11 @@ local CASES = {
   {
     id = "absent and invalid choices fall back to the key's default",
     fn = function(Keys)
-      if Keys.choice("unknown", "mdl") ~= "theme" or Keys.choice({}, "pageDown") ~= "theme" then
-        return "an invalid PAGE/MDL choice did not resolve to Theme"
+      if Keys.choice("unknown", "mdl") ~= "theme" then
+        return "an invalid MDL choice did not resolve to Theme"
+      end
+      if Keys.choice({}, "pageDown") ~= "menu" or Keys.choice(nil, "pageUp") ~= "menu" then
+        return "an invalid or absent PAGE choice did not resolve to the quick menu"
       end
       if Keys.choice(nil, "sys") ~= "suite_tool" or Keys.choice("unknown", "tele") ~= "menu" then
         return "an absent SYS/TELE choice did not resolve to its default"
@@ -388,6 +457,7 @@ local CASES = {
       }) do
         for _, binding in ipairs({ false, "none", "openView:menu" }) do
           local w = newWidget(Views)
+          w.preferences.dashboard = { key_page_down = "theme", key_page_up = "theme" }
           w._viewCtx.keys[spec.name] = binding or nil
           Views.navigate(w, "openView:menu")
           if Views.top(w) ~= "menu" then return "the quick-menu fixture did not open" end
@@ -436,17 +506,19 @@ local CASES = {
     fn = function(Keys, Views)
       local declared = { pageDown = "openView:menu", mdl = "none", sys = "none" }
       local ctxKeys = { pageDown = "none" }
-      local action, global = Keys.resolve({}, "pageDown", ctxKeys, declared)
+      local onTheme = { key_page_down = "theme", key_page_up = "theme" }
+      local action, global = Keys.resolve(onTheme, "pageDown", ctxKeys, declared)
       if action ~= "none" or global then return "ctx.keys did not win over init.keys" end
-      action, global = Keys.resolve({}, "pageDown", {}, declared)
+      action, global = Keys.resolve(onTheme, "pageDown", {}, declared)
       if action ~= "openView:menu" or global then return "init.keys did not precede nothing" end
-      action, global = Keys.resolve({}, "pageUp", {}, declared)
+      action, global = Keys.resolve(onTheme, "pageUp", {}, declared)
       if action ~= nil or global then return "a key absent from both tables did not resolve to nothing" end
       action, global = Keys.resolve({}, "sys", {}, declared)
       if action ~= "openTool" or not global then return "the global default did not win over init.keys" end
       action, global = Keys.resolve({ key_page_down = "none" }, "pageDown", {}, declared)
       if action ~= "none" or not global then return "an explicit choice did not win over init.keys" end
       local w = newWidget(Views)
+      w.preferences.dashboard = onTheme
       w._declaredKeys = declared
       w._viewCtx.keys.pageDown = "none"
       if Views.key(w, _G.EVT_VIRTUAL_NEXT_PAGE) ~= true or Views.top(w) ~= nil then
@@ -564,6 +636,12 @@ local CASES = {
     end,
   },
   {
+    id = "fresh PAGE keys open the quick menu on every theme",
+    fn = function(Keys, Views)
+      return freshPageKeysCase(Keys, Views)
+    end,
+  },
+  {
     id = "fullscreen exit cancels a pending fullscreen job",
     fn = function()
       return runtimeCase(runtimeSource, runtimeCancellationCaseIn)
@@ -623,6 +701,45 @@ if selfTest then
     os.exit(1)
   end
   print("(self-test) no-default mutant went red: " .. hit.case .. ": " .. hit.detail)
+  local noPageDefault, pageCount = mutate(keysSource, '{ id = "pageDown", pref = "key_page_down", default = "menu" }',
+    '{ id = "pageDown", pref = "key_page_down", default = "theme" }')
+  if pageCount ~= 1 then
+    print("SELF-TEST FAILED: the PAGE > default was found " .. pageCount .. " times, expected once")
+    os.exit(1)
+  end
+  failures = runChecks(noPageDefault, true)
+  hit = redIn(failures, "fresh PAGE keys open the quick menu on every theme")
+  if hit == nil then
+    print("SELF-TEST FAILED: leaving PAGE > on Theme by default stayed green")
+    os.exit(1)
+  end
+  print("(self-test) PAGE-default mutant went red: " .. hit.case .. ": " .. hit.detail)
+  -- A theme layout that ignores the stored choice and binds each row's default instead.
+  local storedRead = "local id = Common.option(state, entry.pref, KEY_ACTION_IDS, entry.default)"
+  for _, theme in ipairs(SHIPPED_KEY_THEMES) do
+    local found
+    local function ignoreStored(src)
+      local out, n = mutate(src, storedRead, "local id = entry.default")
+      found = n
+      return out or src
+    end
+    local Keys = loadPair(keysSource)
+    local themeBad = themePageKeysCase(Keys, function(src, which)
+      if which ~= theme then return src end
+      return ignoreStored(src)
+    end)
+    if found ~= 1 then
+      print("SELF-TEST FAILED: the stored-choice read was found " .. tostring(found) .. " times in " .. theme .. ", expected once")
+      os.exit(1)
+    end
+    -- The Quick menu half must go red itself: the Nothing half alone would catch this mutant too,
+    -- and would hide a Quick menu assertion that passes whatever is stored.
+    if themeBad == nil or not string.find(themeBad, theme .. ": PAGE > set to the quick menu", 1, true) then
+      print("SELF-TEST FAILED: a " .. theme .. " layout that ignores stored key choices stayed green")
+      os.exit(1)
+    end
+    print("(self-test) ignore-stored mutant went red for " .. theme .. ": " .. themeBad)
+  end
   local oldSave, saveCount = mutate(pageSource, "if value == entry.default then value = nil end",
     'if value == "theme" then value = nil end')
   if saveCount ~= 1 then

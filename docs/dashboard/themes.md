@@ -64,8 +64,9 @@ In fullscreen, Default shows the dashboard at the full screen size with the same
 The controls at the top right open the suite tool (while disarmed), open the quick menu,
 and leave fullscreen with **X**. A long press on the return key also leaves fullscreen.
 With the global [Keys](../pages/settings/dashboard/keys.md) choices as they come, SYS opens
-the suite tool and TELE opens the quick menu, also before the FC connects; Default binds no key
-itself, so the page keys and MDL on **Theme** do nothing while the dashboard itself is showing.
+the suite tool, and TELE and the page keys open the quick menu, also before the FC connects;
+Default binds no key itself, so MDL, and any key put on **Theme**, does nothing while the
+dashboard itself is showing.
 With a view open, PAGE closes the quick menu or opens it over another view. Closing the menu returns to the
 dashboard.
 

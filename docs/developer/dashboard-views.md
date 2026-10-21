@@ -345,7 +345,7 @@ has no widget of its own to pass. It is the `ctx` a fullscreen theme's build rec
 ## Keys
 
 Radio-wide choices on [Keys](../pages/settings/dashboard/keys.md) apply with or without a base
-layer, including the SYS/Main menu and TELE/Quick menu defaults. Keys on **Theme** return false
+layer, including the SYS/Main menu and the TELE and PAGE/Quick menu defaults. Keys on **Theme** return false
 without a base layer, so LVGL can handle them. With the base showing and no view on top,
 `ctx.keys[key]` wins over `init.keys[key]`; an unbound key is consumed without navigation.
 `views.key(widget, event)` is called for every event of a fullscreen pass that is not idle,

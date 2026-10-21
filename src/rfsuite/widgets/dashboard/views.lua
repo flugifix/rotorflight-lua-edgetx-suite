@@ -842,8 +842,8 @@ end
 --- Answer a fullscreen key. Returns true when the key was one of the six and answered. Theme
 --- bindings for MDL, SYS and TELE with a view on top return false unless they toggle that view;
 --- a radio-wide choice (Settings > Dashboard > Keys, widgets/dashboard/keys.lua) still applies
---- on top. That includes a key's default there: SYS and TELE are not on Theme unless the pilot
---- put them there.
+--- on top. That includes a key's default there: the page keys, SYS and TELE are not on Theme
+--- unless the pilot put them there. The rules below are those of a key on Theme.
 --
 --   PAGE down / up  with the quick menu on top: close it. With any other view on top: open the
 --                   menu over it. With the base layer showing: `ctx.keys`, then `init.keys`,

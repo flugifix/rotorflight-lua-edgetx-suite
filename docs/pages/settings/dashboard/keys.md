@@ -8,7 +8,8 @@ sidebar_position: 29
 
 Choose the dashboard's hardware shortcuts at fullscreen, including before the flight controller
 connects. These choices belong to the radio and apply to every theme and model.
-Out of the box, SYS opens the suite tool and TELE the quick menu; the other keys are the theme's.
+Out of the box, SYS opens the suite tool, and TELE, PAGE > and PAGE < the quick menu; MDL is the
+theme's.
 
 ## Where to find it
 
@@ -18,7 +19,8 @@ Out of the box, SYS opens the suite tool and TELE the quick menu; the other keys
 
 | Setting | What it does |
 | --- | --- |
-| PAGE >, PAGE <, MDL | One action per key, **Theme** by default. With the theme itself showing and no view on top, **Theme** uses the theme's binding; an unbound key is consumed without opening anything. **Nothing** disables the key. **Quick menu**, **Main menu**, **Flight log** and **Exit fullscreen** override any theme binding. |
+| MDL | One action per key, **Theme** by default. With the theme itself showing and no view on top, **Theme** uses the theme's binding; an unbound key is consumed without opening anything. **Nothing** disables the key. **Quick menu**, **Main menu**, **Flight log** and **Exit fullscreen** override any theme binding. |
+| PAGE >, PAGE < | As above, **Quick menu** by default: the key opens the quick menu and closes it again. |
 | SYS | As above, **Main menu** by default. |
 | TELE | As above, **Quick menu** by default. |
 
@@ -27,14 +29,16 @@ A radio without one of these keys never sends it; its saved choice still remains
 ## Notes
 
 - Save applies the choices to every model; no per-model copy is written. A key left on its
-  default stores nothing, so SYS and TELE on **Theme** are stored as Theme.
-- SYS and TELE hold their default for **every** theme, including themes whose full screen is
-  the quick menu: SYS opens the suite tool there as well, and TELE answers with the quick menu
-  that is already on screen. Put either on **Theme** to give it back to the theme.
+  default stores nothing, so PAGE, SYS and TELE put on **Theme** are stored as Theme.
+- PAGE, SYS and TELE hold their default for **every** theme. On a theme that draws its own full
+  screen, such as Urban, Grid and Deck, the page keys are the key path to the quick menu. On
+  themes whose full screen is the quick menu, SYS opens the suite tool there as well, and TELE
+  and the page keys answer with the quick menu that is already on screen, or open it over
+  another view. Put a key on **Theme** to give it back to the theme.
 - A theme binds keys in its full-screen build, or declares them in its manifest (`init.lua`).
   Build bindings take precedence over manifest bindings. Urban, Grid and Deck let the pilot bind them on
   their own *Keys* settings page, which only acts on keys left on **Theme** here. Default binds
-  none, so on Default every key on **Theme**, including PAGE > and PAGE <, does nothing while
+  none, so on Default a key put on **Theme**, PAGE > and PAGE < included, does nothing while
   the dashboard itself is showing.
 - On the connection screen, global actions and manifest bindings already work. Build bindings
   become available when that theme has built.

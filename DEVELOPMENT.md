@@ -245,14 +245,16 @@ lua5.3 bin/dashboard/verify_fullscreen_keys.lua --self-test
 lua5.3 bin/dashboard/verify_fullscreen_keys.lua
 ```
 
-It loads the real key resolver and view router, then checks the SYS and TELE defaults, that a key
-on Theme does only what the theme binds, the host page-key fallback, radio-wide choices on top of a
-view, Nothing consumption and operation before a theme base exists. It loads the real Keys page and
+It loads the real key resolver and view router, then checks the PAGE, SYS and TELE defaults (the
+page keys on Urban, on Default and on a quick-menu theme), that a key on Theme does only what the
+theme binds, the PAGE navigation over open views, radio-wide choices on top of a view, Nothing
+consumption and operation before a theme base exists. It loads the real Urban, Grid and Deck
+layouts and checks that a stored PAGE choice is what they bind. It loads the real Keys page and
 checks that it shows the defaults and stores only the choices that differ from them. It also loads
 the real runtime and checks that leaving fullscreen cancels pending fullscreen builds and splashes
-before their job step can run. The self-test changes the radio-wide branch, drops the SYS default,
-makes the page store Theme as absent and disables the early exit guard; each mutation must turn
-its own case red.
+before their job step can run. The self-test changes the radio-wide branch, drops the SYS and the
+PAGE > default, makes each theme layout ignore the stored choice, makes the page store Theme as
+absent and disables the early exit guard; each mutation must turn its own case red.
 
 Release notes wait under `release-notes/`, one file per pull request, until the release is cut:
 `python bin/release/collect_release_notes.py` files them under the version in
