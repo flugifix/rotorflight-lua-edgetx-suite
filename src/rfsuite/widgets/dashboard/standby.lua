@@ -690,6 +690,13 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
   end
   cache.zoneW, cache.zoneH, cache.labels = w, h, labels
   local rows = layout(items, w, h, labels, true) or {}
+  -- The answer M.snapshot would compute for these inputs, so its next pass need not fit them again.
+  local detailedGps = false
+  for r = 1, #rows do
+    for i = 1, #rows[r].items do if rows[r].items[i].detailedGps then detailedGps = true end end
+  end
+  cache.gpsDetailItems, cache.gpsDetailW, cache.gpsDetailH = items, w, h
+  cache.gpsDetailText, cache.gpsDetailNeeded = i18n, detailedGps
   cache.valueOverflow = false
   local compact, _, footerH, headerDividerY, short, micro = frameGeometry(h)
   local logoW = short and math.min(100, math.floor(w * 0.28))
