@@ -600,6 +600,31 @@ do
     check(name .. " an unchanged name is not measured again", measured == before)
     nameCache.snapshotValues = { model = "Gaui X3" }
     check(name .. " a name that fits is drawn whole", nameNode.text() == "Gaui X3")
+    -- Detailed GPS needs three detail columns and the row height of four text lines: a full-width
+    -- field on an 800x480 screen has both; 480x320 shows the compact presentation.
+    local savedGps = getTxGPS
+    getTxGPS = function()
+      return { fix = true, numsat = 7, lat = -33.12345, lon = -151.54321, alt = -1234, speed = 56, heading = 2712, hdop = 85 }
+    end
+    for _, language in ipairs({ { "en", text }, { "de", deText } }) do
+      local gpsItemsReal, gpsCacheReal = standby.decode("tx_gps"), { text = language[2] }
+      local gpsValuesReal = standby.snapshot(gpsItemsReal, gpsCacheReal, { w = case[2], h = case[3] })
+      local gpsSceneReal = standby.build({ w = case[2], h = case[3] }, "Waiting", language[2],
+        gpsItemsReal, gpsValuesReal, gpsCacheReal)
+      local detailLines, allFit = 0, true
+      for i = 1, #gpsSceneReal do
+        local node = gpsSceneReal[i]
+        local value = rendered(node)
+        if node.type == "label" and type(value) == "string" and string.find(value, ": ", 1, true) then
+          detailLines = detailLines + 1
+          allFit = allFit and lcd.sizeText(value, node.font) <= node.w
+        end
+      end
+      check(name .. " " .. language[1] .. " TX GPS in a full-width field is "
+        .. (case[2] >= 700 and "detailed" or "compact"),
+        detailLines == (case[2] >= 700 and 6 or 0) and allFit)
+    end
+    getTxGPS = savedGps
   end
   lcd.sizeText, LCD_W, LCD_H = savedSizeText, savedW, savedH
 end

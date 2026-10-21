@@ -239,8 +239,9 @@ local function gpsDetailed(width, height, labels, measureCache, knownGeometry)
   local geometry = knownGeometry or M.geometry(width, height)
   local _, lineHeight = measure("Ag", SMLSIZE, measureCache)
   local columns = width >= 600 and 3 or 2
+  -- As build draws it: the caption, 12 px, the detail lines, then the time line at the bottom.
   local lines = 2 + math.ceil(#GPS_WORST / columns)
-  if lineHeight * lines + 16 > geometry.rowHeight then return false end
+  if lineHeight * lines + 12 > geometry.rowHeight then return false end
   local inner = width - 16
   local detailWidth = math.floor((inner - geometry.gap * (columns - 1)) / columns)
   for n = 1, #GPS_WORST do
