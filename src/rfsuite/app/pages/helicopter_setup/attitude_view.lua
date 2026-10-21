@@ -2,16 +2,28 @@
 -- Body axes: forward, right, up. Positive pitch lowers the nose; positive roll
 -- lowers the right side, matching the Board Alignment page's attitude labels.
 local M = {}
+-- The side silhouette of the other drawings, given width; vertex 1 is the nose and
+-- vertex 17 the right edge of the rotor disc.
 local vertices = {
-  {2,0,.1},{.5,0,.8},{1,-.5,0},{1,.5,0},{-.8,-.35,0},{-.8,.35,0},
-  {-.7,0,.45},{-2.6,0,.25},{-2.6,0,.8},
-  {1.2,-.65,-.55},{-1,-.65,-.55},{1.2,.65,-.55},{-1,.65,-.55},
-  {0,0,1.05},{0,0,.6},{0,-2.35,1.05},{0,2.35,1.05},
-  {2.2,0,1.05},{-2.2,0,1.05},{-2.6,-.1,.65},{-2.6,-.1,-.15},
-  {-2.2,-.1,.25},{-2.95,-.1,.25}
+  {1.125,0,-0.125},{0.9,-0.28,0.575},{0.375,-0.32,0.875},{-0.65,-0.3,0.775},{-1.05,-0.18,0},
+  {-0.675,-0.4,-0.275},{0.725,-0.4,-0.275},{0.9,0.28,0.575},{0.375,0.32,0.875},{-0.65,0.3,0.775},
+  {-1.05,0.18,0},{-0.675,0.4,-0.275},{0.725,0.4,-0.275},{2.9,0,1.375},{2.511,1.45,1.375},{1.45,2.511,1.375},
+  {0,2.9,1.375},{-1.45,2.511,1.375},{-2.511,1.45,1.375},{-2.9,0,1.375},{-2.511,-1.45,1.375},
+  {-1.45,-2.511,1.375},{-0,-2.9,1.375},{1.45,-2.511,1.375},{2.511,-1.45,1.375},{0,0,0.875},{0,0,1.375},
+  {-0.85,0,0.425},{-3.075,0,0.725},{-3.225,0,0.5},{-1,0,0},{-3.15,0,0.675},{-3.15,0,1.275},{-3.475,0,0.6},
+  {-3.3,0,0.15},{-3.15,0,0.5},{-3,-0.2,1.125},{-3.475,-0.2,0.25},{-2.875,-0.2,0.45},{-3.575,-0.2,0.925},
+  {0.825,-0.36,0.55},{0.225,-0.36,0.625},{-0.075,-0.36,0.1},{1,-0.36,0.1},{1.25,-0.55,-0.55},{1.1,-0.55,-0.7},
+  {0.75,-0.55,-0.7},{0.65,-0.55,-0.275},{-0.925,-0.55,-0.7},{-0.8,-0.55,-0.275},{-1.3,-0.55,-0.7},
+  {1.25,0.55,-0.55},{1.1,0.55,-0.7},{0.75,0.55,-0.7},{0.65,0.55,-0.275},{-0.925,0.55,-0.7},{-0.8,0.55,-0.275},
+  {-1.3,0.55,-0.7}
 }
-local paths = {{1,3,5,7,2,1,4,6,7},{3,2,4,1,3},{5,6,4},{7,8,9,8},
-  {15,14},{16,17},{18,19},{3,10,11,5},{4,12,13,6},{20,21},{22,23}}
+local paths = {
+  {1,2,3,4,5,6,7,1},{1,8,9,10,11,12,13,1},{3,9},{6,12},{41,42,43,44,41},{28,29,30,31},{32,33,34,35,36},
+  {37,38},{39,40},{26,27},{14,15,16,17,18,19,20,21,22,23,24,25,14},{45,46,47,48,47,49,50,49,51},
+  {52,53,54,55,54,56,57,56,58}
+}
+local thick = {3,1,1,1,2,2,2,2,2,3,2,2,1}
+local accent = {false,false,false,false,true,false,false,true,true,false,true,false,false}
 local function finite(v) return type(v)=="number" and v==v and math.abs(v)<10000 end
 function M.new(children,w,x,y,width,height)
   local s={projected={},valid=false,readout=w.L.attitudeWaiting}
@@ -21,20 +33,30 @@ function M.new(children,w,x,y,width,height)
     local r,p=roll*math.pi/180,pitch*math.pi/180
     local cr,sr,cp,sp=math.cos(r),math.sin(r),math.cos(p),math.sin(p)
     local minX,maxX,minY,maxY=math.huge,-math.huge,math.huge,-math.huge
-    for i,v in ipairs(vertices) do
-      local yr,zr=v[2]*cr+v[3]*sr,-v[2]*sr+v[3]*cr
+    local projected=s.projected
+    for i=1,#vertices do
+      local v=vertices[i]
+      local y,z=v[2],v[3]
+      local yr,zr=y*cr+z*sr,-y*sr+z*cr
       local xp,zp=v[1]*cp+zr*sp,-v[1]*sp+zr*cp
-      local out=s.projected[i]
-      out[1],out[2]=.94*xp+.34*yr,-.12*xp+.33*yr-.94*zp
-      minX,maxX=math.min(minX,out[1]),math.max(maxX,out[1])
-      minY,maxY=math.min(minY,out[2]),math.max(maxY,out[2])
+      -- Seen from behind the left side and a little above: the nose points left,
+      -- as in the other drawings, and a level rotor disc reads as a level ellipse.
+      local px,py=-.766*xp+.643*yr,-.94*zp-.22*xp-.262*yr
+      local out=projected[i]
+      out[1],out[2]=px,py
+      if px<minX then minX=px end
+      if px>maxX then maxX=px end
+      if py<minY then minY=py end
+      if py>maxY then maxY=py end
     end
     -- Fit the complete helicopter, including steep tilts, into compact displays.
     local scale=math.min((width-12)/(maxX-minX),(height-28)/(maxY-minY))
-    local midX,midY=(minX+maxX)/2,(minY+maxY)/2
-    for _,out in ipairs(s.projected) do
-      out[1]=math.floor(cx+scale*(out[1]-midX)+.5)
-      out[2]=math.floor(cy+scale*(out[2]-midY)+.5)
+    local ox,oy=cx-scale*(minX+maxX)/2+.5,cy-scale*(minY+maxY)/2+.5
+    local floor=math.floor
+    for i=1,#projected do
+      local out=projected[i]
+      out[1]=floor(ox+scale*out[1])
+      out[2]=floor(oy+scale*out[2])
     end
   end
   function s:update(d,at,time,allowed)
@@ -55,8 +77,8 @@ function M.new(children,w,x,y,width,height)
     local pts={}
     for j,index in ipairs(path) do pts[j]=s.projected[index] end
     children[#children+1]={type="line",pts=function() return pts end,
-      visible=function() return s.valid end,thickness=i==2 and 3 or 2,
-      color=(i==2 or i==5 or i==6 or i==7) and COLOR_THEME_SECONDARY1 or COLOR_THEME_PRIMARY1}
+      visible=function() return s.valid end,thickness=thick[i],
+      color=accent[i] and COLOR_THEME_SECONDARY1 or COLOR_THEME_PRIMARY1}
   end
   children[#children+1]={type="label",x=x,y=y+height-22,w=width,h=22,font=SMLSIZE,
     color=COLOR_THEME_PRIMARY1,text=function() return s.readout end}
