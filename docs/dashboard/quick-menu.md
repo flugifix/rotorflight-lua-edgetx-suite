@@ -55,9 +55,9 @@ where the table says it is not listed. BATTERY PROFILE is not chosen there; the 
 it where it is offered.
 
 **ERASE BLACKBOX and BATTERY PROFILE are not offered before the connection is ready or while
-the model is armed.** Before the connection is ready the suite has not yet read the board it is
-talking to, so it has nothing to write for; a profile pressed on the battery profile page then
-queues nothing either. While the model is
+the model is armed.** Before the connection is ready — at start, or with the link lost and the
+battery profile page still open — a write would wait for the next connection, which can be a
+different board; a profile pressed on the battery profile page then queues nothing either. While the model is
 armed nothing they send would arrive: the suite sends no configuration messages to
 the flight controller and drops the ones waiting, so an erase or a profile change pressed in the
 air would never reach the board. A menu that was already open when the model armed still shows
