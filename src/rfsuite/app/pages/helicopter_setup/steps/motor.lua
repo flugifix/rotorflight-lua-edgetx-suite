@@ -1,11 +1,17 @@
 return function(w)
   local L = w.L
   w.commit = function() w:fixMotor() end
+  -- Bidirectional DShot is an on/off setting and applies to the DShot protocols only.
+  local dshot = w:c("motor_config", "use_dshot_telemetry", L.bidirectionalDshot, { L.off, L.on }, true)
+  dshot.enabled = function()
+    local p = w.data.motor_config.motor_pwm_protocol
+    return p >= 5 and p <= 7
+  end
   return {
     w:cardDef(L.motor, L.motorHint, {
       w:enum("motor_config", "motor_pwm_protocol", L.protocol, w:motorProtocols(), true),
       w:n("motor_config", "motor_pole_count_0", L.motorPoles, 2, 255, true),
-      w:n("motor_config", "use_dshot_telemetry", L.bidirectionalDshot, 0, 1, true),
+      dshot,
       w:check("blades", L.bladesRemoved)
     }, nil, "heli"),
     w:cardDef(L.gearing, L.gearingHint, {

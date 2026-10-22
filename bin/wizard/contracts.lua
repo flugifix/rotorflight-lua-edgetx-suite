@@ -726,6 +726,15 @@ return function(h)
     w.data.motor_config.use_dshot_telemetry=0;w.data.esc_sensor_config.protocol=1
     check(not w:fastRpm(),"S08 serial ESC telemetry does not prove fast RPM")
   end)
+  case("S09.bidirectional-dshot-switch",function()
+    local w=world();settle(w);local c=step(w,"motor");local row=c[1].rows[3]
+    eq(row.kind,"choice","S09 bidirectional DShot is an on/off choice")
+    w.data.motor_config.motor_pwm_protocol=0
+    check(not row.enabled(),"S09 bidirectional DShot is inactive for PWM")
+    w.data.motor_config.motor_pwm_protocol=6;w.data.motor_config.use_dshot_telemetry=0
+    check(row.enabled(),"S09 bidirectional DShot is offered for DShot")
+    row.set(2);eq(w.data.motor_config.use_dshot_telemetry,1,"S09 On writes 1")
+  end)
   case("S09-S12.versioned-esc-and-ports",function()
     local w=world();local oldVersion=rfsuite.session.apiVersion
     for _,v in ipairs({{version="12.09",off=10,telem=14},{version="12.10",off=11,telem=15}}) do
