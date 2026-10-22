@@ -21,11 +21,20 @@ return function(w)
     r.detect = { index = 1, found = {}, exclude = {}, peaks = {}, baseline = baseline }
     w.message = prompt()
   end
+  local function travelSig()
+    local map, rc = w.data.rx_map, w.data.rc_config or {}
+    local parts = { tostring(rc.rc_center), tostring(rc.rc_deflection) }
+    for n = 1, 4 do parts[#parts + 1] = tostring(map[keys[n]]) end
+    return table.concat(parts, ",")
+  end
   w.onLive = function(api, d)
     if api ~= "rx_channels" then return end
     local map = w.data.rx_map
     local rc = w.data.rc_config
     local span = rc and rc.rc_deflection or 0
+    -- Travel belongs to one channel map and one stick range; a change starts the measurement over.
+    local sig = travelSig()
+    if sig ~= r.travelSig then r.travel, r.travelSig = { {0, 0}, {0, 0}, {0, 0}, {0, 0} }, sig end
     for n = 1, 4 do
       local v = d.channels[(map[keys[n]] or n - 1) + 1]
       if type(v) == "number" and v > 500 and span > 0 then
@@ -65,8 +74,15 @@ return function(w)
   -- range, the way the firmware scales it (rc.c: (rcInput - rc_center) / rc_deflection).
   r.travel = r.travel or { {0, 0}, {0, 0}, {0, 0}, {0, 0} }
   local TRAVEL = 95
+  -- Recorded travel counts only for the current channel map and stick range, and only while the
+  -- latest reply still carries every mapped control.
   local function travelOk()
-    for n = 1, 4 do if r.travel[n][1] < TRAVEL or r.travel[n][2] < TRAVEL then return false end end
+    local rc, channels = w.data.rc_config, (w.data.rx_channels or {}).channels or {}
+    if r.travelSig ~= travelSig() or not rc or (rc.rc_deflection or 0) <= 0 then return false end
+    for n = 1, 4 do
+      if type(channels[(w.data.rx_map[keys[n]] or n - 1) + 1]) ~= "number" then return false end
+      if r.travel[n][1] < TRAVEL or r.travel[n][2] < TRAVEL then return false end
+    end
     return true
   end
   w.validate = function()

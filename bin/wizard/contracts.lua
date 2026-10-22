@@ -476,6 +476,21 @@ return function(h)
     check(not w.validate() and w.message==L.sticksShort,"S02 a control under 95 percent keeps the step open")
     values[w.data.rx_map.collective+1]=2000;w.onLive("rx_channels",raw())
     check(w.validate(),"S02 full travel on every control completes the step")
+    local collective=w.data.rx_map.collective
+    w.data.rx_map.collective=7;w.onLive("rx_channels",raw())
+    check(not w.validate(),"S02 a changed channel map measures the travel anew")
+    w.data.rx_map.collective=collective;w.onLive("rx_channels",raw())
+    for i=1,8 do values[i]=i<=4 and 1000 or values[i] end;w.onLive("rx_channels",raw())
+    for i=1,4 do values[i]=2000 end;w.onLive("rx_channels",raw())
+    check(w.validate(),"S02 the travel measured on the restored map completes the step")
+    local short={1500,1500,1500};w.data.rx_channels={channels=short}
+    check(not w.validate(),"S02 a reply without every mapped control does not complete the step")
+    raw();w.data.rc_config.rc_deflection=0
+    check(not w.validate(),"S02 a zero stick range does not complete the step")
+    w.data.rc_config.rc_deflection=500
+    w.step=3;w:navigate(2,1)
+    check(w.rx.travel==nil,"S02 every visit to the receiver step measures the travel anew")
+    w.step=2;cards=step(w,"receiver")
     cards[4].rows[5].press()
     eq(cards[4].rows[2].get(),string.format(L.travelPair,0,0),"S02 measure again clears the travel")
   end)

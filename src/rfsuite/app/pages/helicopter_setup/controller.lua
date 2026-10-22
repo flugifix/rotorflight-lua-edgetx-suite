@@ -373,6 +373,8 @@ function M.new(runtime, transport, mathModule, labels)
       if step == 11 or step == 17 then self.bladesOff, self.percent = false, 10 end
       if step == 11 then self.calibratedEsc, self.escStage = nil, nil end
       if step == 5 then self.rateStyles, self.rateLoaded = {}, nil end
+      -- Stick travel is measured anew on every visit to the receiver step.
+      if step == 2 and self.rx then self.rx.travel, self.rx.travelSig = nil, nil end
     end
     self:release()
     -- A result reported on one card (a learned switch, a calibration) is not about the next one;
