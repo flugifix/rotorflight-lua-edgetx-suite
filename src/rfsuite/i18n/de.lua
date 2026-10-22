@@ -2656,7 +2656,6 @@ return {
         value_ch = "Wertkanal",
         bank_gvar = "Freigabevariable",
         value_gvar = "Wertvariable",
-        pulse_ms = "Pulslänge (ms)",
         trims = "Reihen über die Trimmungen bedienen",
         trims_unreadable = "Dieses Funkgerät hat seine Trimmungen nicht gemeldet, hier ist keine wählbar.",
         row_1 = "Reihe 1",
@@ -2714,7 +2713,6 @@ return {
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen",
         pointer_fc = "Belegung, Schrittweite und Sicherungsprofil stehen unter Setup > Steuerung.",
-        pulse_ms_note = "Der Logikschalter lässt 200 ms jedes Drucks durch: ein Druck, ein Schritt. So lange steht die Variable.",
         gvar_in_use = "wird benutzt von",
         gvar_name_clash = "ist nicht die Variable, die diese Einrichtung ansteuert"
       },

@@ -200,9 +200,9 @@ local SCHEMA = {
       enabled = false,
     },
     -- Everything else the transmitter's half holds -- the interlock switch, the channel and
-    -- global-variable pair, the pulse length and the trim assignment -- is declared and
-    -- defaulted by widgets/dashboard/inflight/setup.lua, which states that the radio half is
-    -- duplicated nowhere. Keeping the section open is what honours that.
+    -- global-variable pair and the trim assignment -- is declared and defaulted by
+    -- widgets/dashboard/inflight/setup.lua, which states that the radio half is duplicated
+    -- nowhere. Keeping the section open is what honours that.
     open = true,
   },
   dashboard = {

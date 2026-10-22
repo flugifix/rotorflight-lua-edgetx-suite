@@ -2628,7 +2628,6 @@ return {
         value_ch = "Value channel",
         bank_gvar = "Enable variable",
         value_gvar = "Value variable",
-        pulse_ms = "Pulse length (ms)",
         trims = "Drive rows from the trims",
         trims_unreadable = "This radio did not report its trims, so no trim can be chosen here.",
         row_1 = "Row 1",
@@ -2686,7 +2685,6 @@ return {
         save_error_title = "Error",
         save_error_message = "Save failed",
         pointer_fc = "The set layout, the step size and the undo profile are in Setup > Controls.",
-        pulse_ms_note = "The logical switch lets 200 ms of each press through: one press, one step. This is how long the variable stands.",
         gvar_in_use = "is in use by",
         gvar_name_clash = "is not the variable this setup drives"
       },

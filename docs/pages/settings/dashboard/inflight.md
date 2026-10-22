@@ -69,7 +69,6 @@ switch; the value line is switched by the logical switch above.
 | Value channel | The channel that steps the parameter. 5 to 16, default 12. |
 | Enable variable | The global variable put on the enable channel. 0 to 9, where 0 is none; default 6. |
 | Value variable | The global variable put on the value channel. 0 to 9, where 0 is none; default 5. |
-| Pulse length (ms) | How long a press holds the value variable. 310 to 400 in steps of 10, default 310; a value stored by an earlier version below 310 is read as 310. One press is one step: the flight controller counts nothing before 100 ms of stillness and repeats only after 200 ms more, so the channel has to stand longer than the first and end before the second. The logical switch on the value line does that, letting 200 ms through whatever is set here; 310 ms is how long the variable has to stand for that window to run out in full. A longer setting only makes a held step control repeat more slowly. |
 
 A variable already driven by another mixer line is named under the fields as a warning, not a
 refusal: a pilot who knows what that line does may still want it.

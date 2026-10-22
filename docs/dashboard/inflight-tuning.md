@@ -31,7 +31,7 @@ Two pages, one for each half:
 
 - [*System* → *Settings* → *Dashboard* → *In-Flight Tuning*](../pages/settings/dashboard/inflight.md)
   — the radio's half: the master switch, the interlock switch, the channels, the variables,
-  the pulse length and the trims. It carries **Set up the model**, which writes the mixer
+  and the trims. It carries **Set up the model**, which writes the mixer
   lines, the logical switch that times each press, the variable details and the trim modes
   after showing what it would change. A model set up by an earlier version needs it once more:
   its value line has no logical switch yet, and the setup check refuses the interlock with

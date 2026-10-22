@@ -84,11 +84,6 @@ M.DEFAULTS = {
   -- reaches, and the model is walked to WARN that one of them is spoken for rather than to choose.
   bank_gvar = 6,
   value_gvar = 5,
-  -- How long the value variable stands for one press. It is no longer what the flight controller
-  -- sees: the logical switch gating the value line (M.PULSE_LS_DELAY, M.PULSE_LS_DURATION) lets the
-  -- code through for 200 ms on the radio's own timer, whatever the widget pass does. The variable
-  -- only has to stand until that window is over, and M.PULSE_MS_MIN is that bound.
-  pulse_ms = 310,
   trims = true,
   -- Walk-and-adjust with three trims is the arrangement the pilot flew and asked to keep, and it
   -- is the one that works on every radio: the six-trim layout needs six trims, and the TX15, the
@@ -139,16 +134,13 @@ M.DEFAULTS = {
 M.PULSE_LS_DELAY = 1
 M.PULSE_LS_DURATION = 2
 
--- How long the value variable must stand for that window to run out in full. The variable is
+-- The fixed length the value variable stands for that window to run out in full. The variable is
 -- written at any point inside a tick; the switch sees it within 10 ms, the delay runs out on the
 -- next tick, at most 110 ms later, and the duration two ticks after that: 310 ms. Cleared earlier,
 -- the switch is reset during its delay and nothing steps, or the channel is cut inside the window
 -- (the line's weight is the variable). Cleared later, nothing happens -- the window is already
--- over -- so the pass that clears it may run as late as it likes. A stored value below this,
--- written by a build that timed the plateau in the widget, is raised to it on load.
-M.PULSE_MS_MIN = 310
--- A longer setting only makes a held step control repeat more slowly; the board still sees 200 ms.
-M.PULSE_MS_MAX = 400
+-- over -- so the pass that clears it may run as late as it likes.
+M.PULSE_MS = 310
 
 -- How long the value variable stays at 0 after a pulse before the next one may start, for a tap, a
 -- trim and every repeat of a held step control alike. The switch re-arms only after it has seen the
@@ -215,9 +207,8 @@ M.SET_MODE_CUSTOM = "custom"
 --
 -- A setting belongs to the RADIO when it is true of the transmitter whatever is plugged into it:
 -- the interlock switch, the two channels and the two global variables the mixer devotes to the
--- adjustment pair, the pulse length, and which trims stand in for the rows. One transmitter has
--- one set of those, and a pilot who set them up once should not meet them again on his next
--- model. They live in the radio's own preferences file, section [inflight].
+-- adjustment pair, and which trims stand in for the rows. One transmitter has one set of those,
+-- and a pilot who set them up once should not meet them again on his next model. They live in the radio's own preferences file, section [inflight].
 --
 -- A setting belongs to the MODEL when it describes the machine: which set of parameters its
 -- flight controller offers, how far one press moves them, and which PID profile is the undo.
@@ -225,7 +216,7 @@ M.SET_MODE_CUSTOM = "custom"
 --
 -- `enabled` is in BOTH lists, and deliberately: see M.settings.
 M.RADIO_KEYS = {
-  "enabled", "switch", "bank_ch", "value_ch", "bank_gvar", "value_gvar", "pulse_ms",
+  "enabled", "switch", "bank_ch", "value_ch", "bank_gvar", "value_gvar",
   "trims", "trim_mode", "nav_trim", "bank_trim", "adj_trim",
   "row_trim_1", "row_trim_2", "row_trim_3", "row_trim_4", "row_trim_5", "row_trim_6"
 }
@@ -692,7 +683,6 @@ function M.loadRadioSettings(preferences)
     value_ch = clampNumber(src.value_ch, M.CHANNEL_MIN, M.CHANNEL_MAX, M.DEFAULTS.value_ch),
     bank_gvar = clampNumber(src.bank_gvar, 0, M.GVAR_MAX_INDEX, M.DEFAULTS.bank_gvar),
     value_gvar = clampNumber(src.value_gvar, 0, M.GVAR_MAX_INDEX, M.DEFAULTS.value_gvar),
-    pulse_ms = clampNumber(src.pulse_ms, M.PULSE_MS_MIN, M.PULSE_MS_MAX, M.DEFAULTS.pulse_ms),
     trims = src.trims ~= false,
     -- Named explicitly in both directions, so that the DEFAULT is what an unset store gets. Read
     -- as "navigate or else rows" this silently pinned every store that had never been saved to
@@ -779,7 +769,6 @@ function M.storeRadioSettings(target, settings)
   target.value_ch = settings.value_ch
   target.bank_gvar = settings.bank_gvar
   target.value_gvar = settings.value_gvar
-  target.pulse_ms = settings.pulse_ms
   target.trims = settings.trims == true
   target.trim_mode = settings.trim_mode or M.TRIM_MODE_ROWS
   target.nav_trim = settings.nav_trim or 0

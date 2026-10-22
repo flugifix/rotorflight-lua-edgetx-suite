@@ -67,8 +67,7 @@ end
 -- file. Re-exported here because the widget side, the screens and the probes reach for it
 -- through this module and there is no reason to make them all learn a second name.
 M.DEFAULTS = Setup.DEFAULTS
-M.PULSE_MS_MIN = Setup.PULSE_MS_MIN
-M.PULSE_MS_MAX = Setup.PULSE_MS_MAX
+M.PULSE_MS = Setup.PULSE_MS
 M.CHANNEL_MIN = Setup.CHANNEL_MIN
 M.CHANNEL_MAX = Setup.CHANNEL_MAX
 M.GVAR_MAX_INDEX = Setup.GVAR_MAX_INDEX
@@ -322,13 +321,11 @@ local HOLD_LIMIT_TICKS = HOLD_LIMIT_SECONDS * 100
 -- and the pilot has to be able to read why the steps stopped.
 local HOLD_LIMIT_NOTICE_TICKS = 300
 
---- How long the value variable stands for one pulse, in ticks of the radio's 10 ms clock. Never
--- below M.PULSE_MS_MIN: the logical switch on the value line is what ends the plateau the board
--- sees, and a variable cleared before that switch's window is over cuts the window or cancels it.
+--- The fixed pulse length M.PULSE_MS, in ticks of the radio's 10 ms clock. The logical switch on
+-- the value line ends the plateau the board sees, and a variable cleared before that switch's
+-- window is over cuts the window or cancels it.
 function Drive:pulseTicks()
-  local ms = tonumber(self.settings and self.settings.pulse_ms) or M.DEFAULTS.pulse_ms
-  if ms < M.PULSE_MS_MIN then ms = M.PULSE_MS_MIN end
-  return math.floor((ms / 10) + 0.5)
+  return math.floor((M.PULSE_MS / 10) + 0.5)
 end
 
 -- The gap at 0 after every pulse, in the same ticks; see Setup.PULSE_GAP_MS.
@@ -1103,7 +1100,7 @@ end
 -- while, and very inaccurately".
 --
 -- So one press is one pulse, which is what the touch control has always done: the magnitude goes
--- on at the edge and stays on for `pulse_ms` -- until the first pass at or after it -- however
+-- on at the edge and stays on for M.PULSE_MS -- until the first pass at or after it -- however
 -- early the trim is let go, and the logical switch on the value line lets 200 ms of it through. The
 -- cool-down after a pulse is the gap the next pulse needs to be counted as a new one
 -- (Setup.PULSE_GAP_MS), so two presses closer together than that are one step and not an arbitrary
@@ -1509,7 +1506,7 @@ local function settingsSignature(settings)
     tostring(settings.radio_enabled), tostring(settings.model_enabled), tostring(settings.switch),
     tostring(settings.bank_ch),
     tostring(settings.value_ch), tostring(settings.bank_gvar), tostring(settings.value_gvar),
-    tostring(settings.pulse_ms), tostring(settings.trims), tostring(settings.backup_profile),
+    tostring(settings.trims), tostring(settings.backup_profile),
     tostring(settings.trim_mode), tostring(settings.nav_trim), tostring(settings.bank_trim),
     tostring(settings.adj_trim),
     tostring(settings.set_mode), tostring(settings.step),

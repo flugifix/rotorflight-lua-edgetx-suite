@@ -9,9 +9,8 @@
 --
 -- Everything on this page belongs to the RADIO and applies to every model on it: which switch
 -- arms the overlay, which channels and global variables the transmitter's mixer devotes to the
--- adjustment pair, how long a pulse stands, and which trims stand in for the rows. One
--- transmitter has one set of those, and a pilot who set them up once should not meet them again
--- on his next machine. So they are in the radio's own preferences file under [inflight], saved
+-- adjustment pair, and which trims stand in for the rows. One transmitter has one set of those,
+-- and a pilot who set them up once should not meet them again on his next machine. So they are in the radio's own preferences file under [inflight], saved
 -- the way every other Settings page saves, and no flight controller has to be connected for any
 -- of it -- which is why this page carries no store gate and no note asking for a link.
 --
@@ -841,8 +840,6 @@ end
 local function wiringNotes(i18n)
   return t(i18n, "wiring_note",
       "One mixer line per channel: MAX at the variable's weight, added; a logical switch on the value line."),
-    t(i18n, "pulse_ms_note",
-      "The logical switch lets 200 ms of each press through: one press, one step. This is how long the variable stands."),
     t(i18n, "reading_radio", "Reading the radio..."),
     widestWarning(i18n)
 end
@@ -867,7 +864,7 @@ local function appendGvarNote(children, x, y, w, readingNote, widestNote)
 end
 
 local function buildWiring(children, x, y, w, i18n)
-  local wiringNote, pulseNote, readingNote, widestNote = wiringNotes(i18n)
+  local wiringNote, readingNote, widestNote = wiringNotes(i18n)
   local cursorY = y
   cursorY = cursorY + appendNote(children, x, cursorY, w, wiringNote)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
@@ -878,9 +875,6 @@ local function buildWiring(children, x, y, w, i18n)
     t(i18n, "bank_gvar", "Enable variable"), "bank_gvar", 0, Setup.GVAR_MAX_INDEX, nil, gvarEdited)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
     t(i18n, "value_gvar", "Value variable"), "value_gvar", 0, Setup.GVAR_MAX_INDEX, nil, gvarEdited)
-  cursorY = cursorY + appendNumber(children, x, cursorY, w,
-    t(i18n, "pulse_ms", "Pulse length (ms)"), "pulse_ms", Setup.PULSE_MS_MIN, Setup.PULSE_MS_MAX, 10)
-  cursorY = cursorY + appendNote(children, x, cursorY, w, pulseNote)
 
   -- The variables are fixed defaults now, so the model is walked to say when one of them is
   -- already spoken for rather than to choose a free pair. It is a warning and not a refusal: a
