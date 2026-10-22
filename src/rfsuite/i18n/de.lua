@@ -295,7 +295,7 @@ return {
         servoQuestion = "Hebel nach oben?",
         directionOk = "Richtung geprüft",
         directionOpen = "Richtung testen",
-        offsetFrom = "%+d us von %d",
+        offsetFrom = "Mitte %d us (%+d)",
         servoTestUp = "20° hoch",
         answerUp = "Ja, hoch",
         answerDown = "Nein, umkehren",

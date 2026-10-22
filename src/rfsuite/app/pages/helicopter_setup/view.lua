@@ -117,7 +117,7 @@ function M.new(w, ctx, diagrams)
     -- wrapping into the summary below it.
     all[#all + 1] = label(10, large and 50 or 27, width-20, card.title, large and MIDSIZE or SMLSIZE)
     if not (card.grid and not large) then
-    all[#all + 1] = label(10, large and 94 or 48, large and formX-30 or width-20, card.summary or card.detail)
+    all[#all + 1] = label(10, large and 94 or 48, large and not card.grid and formX-30 or width-20, card.summary or card.detail)
     all[#all].h = large and (card.grid and 30 or illustrated and 98 or height-controlH-154) or rowY-52
     end
     if illustrated then

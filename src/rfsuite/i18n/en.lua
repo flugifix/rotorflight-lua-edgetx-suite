@@ -295,7 +295,7 @@ return {
         servoQuestion = "Arm moved up?",
         directionOk = "Direction checked",
         directionOpen = "Test direction",
-        offsetFrom = "%+d us from %d",
+        offsetFrom = "Centre %d us (%+d)",
         servoTestUp = "Move up 20°",
         answerUp = "Yes, up",
         answerDown = "No, reverse",

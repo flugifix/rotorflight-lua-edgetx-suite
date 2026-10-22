@@ -288,6 +288,12 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
         if size[1]>=700 and item.type=="label" and item.y==50 and item.text==card.title and card.art~="attitude" then
           check(item.w>=size[1]-40,name.." card title spans the full width on large screens")
         end
+        if size[1]>=700 and card.grid and item.type=="label" and item.y==94 then
+          check(item.w>=size[1]-40,name.." grid summary spans the full width on large screens")
+        end
+        if card.grid and item.type=="button" and type(item.text)=="string" and #item.text<=3 then
+          check(item.w>=#item.text*(item.font==SMLSIZE and 8 or 12)+12,name.." nudge label fits its button "..size[1].." w"..item.w)
+        end
         if item.type=="line" then
           local pts=type(item.pts)=="function" and item.pts() or item.pts
           for _,point in ipairs(pts) do

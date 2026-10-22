@@ -30,16 +30,16 @@ return function(w)
     c.far = function() return math.abs(s.mid - centreOf(s)) > FAR end
     c.live = function()
       local v = w.data.servo and w.data.servo.servos and w.data.servo.servos[index + 1]
-      return (v and (v .. " us") or "--") .. ((s.flags & 1) ~= 0 and ("  " .. L.reversed) or "")
+      return (v and (v .. " us") or "--") .. (c.reversed() and ("  " .. L.reversed) or "")
     end
+    c.reversed = function() return (s.flags & 1) ~= 0 end
     c.status = function()
       if c.far() then return L.servoFar end
       if tail then return "" end
       if c.testing() then return L.servoQuestion end
       return c.confirmed() and L.directionOk or L.directionOpen
     end
-    c.centre = function() return tostring(s.mid) end
-    c.offset = function() local centre = centreOf(s); return string.format(L.offsetFrom, s.mid - centre, centre) end
+    c.offset = function() return string.format(L.offsetFrom, s.mid, s.mid - centreOf(s)) end
     c.test = function()
       if t.testing ~= nil then w:hold("servo", t.testing, 0) end
       if t.testing == index then t.testing = nil; return end
