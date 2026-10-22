@@ -320,7 +320,8 @@ local function matchesPolarRates(a, axis)
   local record = ui.rcTuning
   if not record or record.cyclic_polarity ~= 1 or record.rates_type ~= a.ratesType then return false end
   -- Polar and rates belong to the active rate profile: reject a record from before a profile
-  -- switch when the own-axis rates differ. Keep per-axis advice until Reload reads again.
+  -- switch when the own-axis rates differ. Keep per-axis advice until the next read of the
+  -- rate settings.
   if axis == AXIS_ROLL then return record.rcRates_1 == a.rcRate and record.rates_1 == a.sRate end
   if axis == AXIS_PITCH then return record.rcRates_2 == a.rcRate and record.rates_2 == a.sRate end
   return false
