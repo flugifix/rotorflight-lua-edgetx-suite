@@ -11,6 +11,7 @@ function M.attach(w, state, sensors)
     if now < due then return end
     due = now + 25
     local value = state.read(sensors, source)
+    self.systemReads = (self.systemReads or 0) + 1
     if source == "system_status" then self.systemStatus = value; source = "system_config"
     else self.systemConfig = value; source = "system_status" end
     local status, config, L = self.systemStatus, self.systemConfig, self.L

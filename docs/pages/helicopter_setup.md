@@ -61,6 +61,12 @@ or individual setup visit, before loading the selected step or entering holds. T
 history/reset page needs no model-configuration confirmation. The Configurator's
 19 numbered steps and their order remain unchanged.
 
+The same card checks two prerequisites up front: the Rotorflight telemetry sensors
+*System Status* and *System Config*. Each row reads **Live**, **Checking** or, after
+four reads without a value, **Missing**. The wizard uses them for its hints about unsaved
+settings, a pending restart and a lost receiver link; **?** says where to add a missing
+one (*Configuration* > *Setup* > *Telemetry*, then discover new sensors in the model).
+
 ## Navigation
 
 The Suite menu offers **Complete setup**, each of the 19 individual steps, and

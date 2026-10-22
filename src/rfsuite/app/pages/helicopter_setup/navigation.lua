@@ -44,6 +44,11 @@ function M.attach(w, ctx)
     return (self.step > 1 and self.step < 10) or (self.step >= 13 and self.step <= 16) or
       (self.step == 17 and not self:motorised()) or self.step == 18
   end
+  -- A prerequisite row: the packed sensor is live, missing after four reads, or still being checked.
+  function w:sensorState(value)
+    if value ~= nil then return self.L.sensorLive end
+    return (self.systemReads or 0) >= 4 and self.L.sensorMissing or self.L.sensorChecking
+  end
   function w:buildModelPreparation()
     if self.recoveryRequired then
       self.cards={self:cardDef(self.L.recoveryTitle,self.L.recoveryHint,{
@@ -54,9 +59,12 @@ function M.attach(w, ctx)
     end
     if not self.modelPreparationRequired or self.modelPreparationDone then return false end
     self.cards={self:cardDef(self.L.modelPreparationTitle,self.L.modelPreparationIntro.."\n"..self.L.modelPreparationHint.."\n"..
-      self.L.activeModel..": "..self.activeModelName,{
+      self.L.activeModel..": "..self.activeModelName.."\n\n"..self.L.sensorsHint,{
       self:value(self.L.activeModel,function() return self.activeModelName end),
-      self:check("modelReady",self.L.modelChecked)
+      self:check("modelReady",self.L.modelChecked),
+      -- Prerequisites checked up front: the two packed FC state sensors the hints depend on.
+      self:value(self.L.fcStatusSensor,function() return self:sensorState(self.systemStatus) end),
+      self:value(self.L.fcConfigSensor,function() return self:sensorState(self.systemConfig) end)
     })}
     self.cards[1].summary=self.L.modelPreparationIntro
     self.card,self.modelPreparationCard=1,true

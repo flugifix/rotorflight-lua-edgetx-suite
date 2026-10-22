@@ -953,6 +953,20 @@ return function(h)
     eq(#wide[1].grid,4,"S13 the tail is the fourth row on large screens")
     eq(wide[1].grid[1].role,L.roleCentreLine,"S13 each servo names its role")
   end)
+  case("CORE.prerequisite-sensors",function()
+    local w=world();settle(w)
+    w.modelPreparationRequired,w.modelPreparationDone,w.activeModelName=true,nil,"Heli"
+    check(w:buildModelPreparation(),"CORE the model card is built")
+    local rows=w.cards[1].rows
+    eq(rows[3].label,L.fcStatusSensor,"CORE the model card checks the FC status sensor up front")
+    eq(rows[4].label,L.fcConfigSensor,"CORE the model card checks the FC config sensor up front")
+    w.systemStatus,w.systemConfig,w.systemReads=nil,nil,1
+    eq(rows[3].get(),L.sensorChecking,"CORE a sensor not read yet is still being checked")
+    w.systemReads=4;w.systemStatus={word=1}
+    eq(rows[3].get(),L.sensorLive,"CORE a decoded status word reads as live")
+    eq(rows[4].get(),L.sensorMissing,"CORE a sensor without value after four reads reads as missing")
+    check(string.find(w.cards[1].detail,L.sensorsHint,1,true)~=nil,"CORE the help says where to add a missing sensor")
+  end)
   case("S14-S15.axis-direction-and-trims",function()
     local w=world();local c=step(w,"direction");c[1].enter()
     for _,i in ipairs({1,2,4}) do eq(w.holds["mixer"..i].value,2502,"S14 passthrough axis "..i) end
