@@ -49,6 +49,7 @@ local t = nil
 local AXIS_ROLL, AXIS_PITCH, AXIS_YAW = 1, 2, 3
 
 local REFRESH_INTERVAL_SECONDS = 2
+local RC_TUNING_REFRESH_SECONDS = 10
 
 -- Feed-forward match
 local FF_MIN_COUNT = 1000       -- 10 s of usable 40-200 deg/s stick
@@ -122,7 +123,7 @@ local ui = {
   pending = false,
   rcTuning = nil,
   rcTuningPending = false,
-  rcTuningRequested = false,
+  lastRcTuning = 0,
   unsupported = false,      -- the flight controller refused the command: no polling until Reload
   lastPoll = 0,
   lastData = nil,
@@ -151,7 +152,6 @@ local function ensureDeps()
   if not Controls then Controls = loadModule("ui/controls.lua") end
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not TuneAdvisorApi then TuneAdvisorApi = loadModule("tasks/msp/api/tune_advisor.lua") end
-  if not RcTuningApi then RcTuningApi = loadModule("tasks/msp/api/rc_tuning.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not t then t = Common and Common.pageT("flight_tuning_tune_advisor") or nil end
 end
@@ -465,14 +465,15 @@ local function getQueue()
 end
 
 local function readRcTuning()
-  if ui.rcTuningPending or ui.rcTuningRequested then return end
+  if ui.rcTuningPending then return end
+  if not RcTuningApi then RcTuningApi = loadModule("tasks/msp/api/rc_tuning.lua") end
   local api = RcTuningApi
   local queue = getQueue()
   if not api or not queue then return end
 
   local generation = ui.generation
   ui.rcTuningPending = true
-  ui.rcTuningRequested = true
+  ui.lastRcTuning = nowSeconds()
   queue:add({
     command = api.command,
     simulatorResponse = api.simulatorResponse,
@@ -485,9 +486,13 @@ local function readRcTuning()
       local data = ui.lastData
       local shown = data and data.axis == ui.selected
       local matchedBefore = shown and matchesPolarRates(data.a, data.axis)
+      local previous = ui.rcTuning
       ui.rcTuning = record
       local matchedAfter = shown and matchesPolarRates(data.a, data.axis)
-      if matchedBefore or matchedAfter then render() end
+      local pitchRatesChanged = matchedBefore and matchedAfter
+        and (previous.rates_type ~= record.rates_type or previous.rcRates_2 ~= record.rcRates_2
+          or previous.rates_2 ~= record.rates_2)
+      if matchedBefore ~= matchedAfter or pitchRatesChanged then render() end
     end,
     errorHandler = function()
       if generation ~= ui.generation then return end
@@ -584,7 +589,7 @@ local function ensureLoaded(i18n)
   ui.lastPoll = 0
   ui.rcTuning = nil
   ui.rcTuningPending = false
-  ui.rcTuningRequested = false
+  ui.lastRcTuning = 0
   ui.lastData = nil
   ui.lastSignature = nil
   ui.text = loadTexts(i18n)
@@ -623,7 +628,8 @@ function M.wakeup(ctx)
       and (ui.lastPoll == 0 or now - ui.lastPoll >= REFRESH_INTERVAL_SECONDS) then
     ui.lastPoll = now
     poll()
-  elseif ui.lastData ~= nil and not ui.unsupported then
+  elseif ui.lastData ~= nil and not ui.unsupported
+      and (ui.lastRcTuning == 0 or now - ui.lastRcTuning >= RC_TUNING_REFRESH_SECONDS) then
     readRcTuning()
   end
 end
@@ -706,7 +712,7 @@ end
 
 function M.onReload()
   -- Ask again, e.g. after a firmware update
-  ui.rcTuningRequested = false
+  ui.lastRcTuning = 0
   ui.unsupported = false
   ui.lastSignature = nil
   ui.lastPoll = nowSeconds()
@@ -733,7 +739,7 @@ function M.onClose()
   ui.pending = false
   ui.rcTuning = nil
   ui.rcTuningPending = false
-  ui.rcTuningRequested = false
+  ui.lastRcTuning = 0
   ui.unsupported = false
   ui.lastData = nil
   ui.lastSignature = nil
