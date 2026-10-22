@@ -9,8 +9,9 @@
 --
 -- Everything on this page belongs to the RADIO and applies to every model on it: which switch
 -- arms the overlay, which channels and global variables the transmitter's mixer devotes to the
--- adjustment pair, and which trims stand in for the rows. One transmitter has one set of those,
--- and a pilot who set them up once should not meet them again on his next machine. So they are in the radio's own preferences file under [inflight], saved
+-- adjustment pair, and which trims stand in for the rows. One
+-- transmitter has one set of those, and a pilot who set them up once should not meet them again
+-- on his next machine. So they are in the radio's own preferences file under [inflight], saved
 -- the way every other Settings page saves, and no flight controller has to be connected for any
 -- of it -- which is why this page carries no store gate and no note asking for a link.
 --

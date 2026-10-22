@@ -207,8 +207,9 @@ M.SET_MODE_CUSTOM = "custom"
 --
 -- A setting belongs to the RADIO when it is true of the transmitter whatever is plugged into it:
 -- the interlock switch, the two channels and the two global variables the mixer devotes to the
--- adjustment pair, and which trims stand in for the rows. One transmitter has one set of those,
--- and a pilot who set them up once should not meet them again on his next model. They live in the radio's own preferences file, section [inflight].
+-- adjustment pair, and which trims stand in for the rows. One transmitter has
+-- one set of those, and a pilot who set them up once should not meet them again on his next
+-- model. They live in the radio's own preferences file, section [inflight].
 --
 -- A setting belongs to the MODEL when it describes the machine: which set of parameters its
 -- flight controller offers, how far one press moves them, and which PID profile is the undo.
