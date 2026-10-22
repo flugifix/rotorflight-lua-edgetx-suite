@@ -155,6 +155,91 @@ The short instruction area may show only its first lines; **?** opens the full t
 | 18 | Gyro check | With all overrides released, tilt roll/pitch and, for a servo tail, turn yaw. Confirm correction against motion. If it moves with the model, return to Board orientation. A motor tail omits the servo yaw check inside this step. |
 | 19 | Finish | Review readable swash, rotor direction, tail, collective/cyclic limits, ESC protocol, telemetry, governor/throttle type, fast RPM and ARM assignment. Confirm the final checks, then Finish. Check failsafe, governor behaviour and every control before flight. |
 
+<!-- radio pictures: begin -->
+## The steps on the radio
+
+Taken on the EdgeTX simulator (TX16S MK3, 800x480) against a Rotorflight SITL flight controller,
+each step opened from its own menu entry. Smaller screens use the compact layouts described above.
+
+**1. Board orientation** (first card)
+
+![1. Board orientation](../images/helicopter_setup/radio/step-01.png)
+
+**2. Receiver** (the receiver card, then the stick travel card after roll and pitch went end to end)
+
+![2. Receiver](../images/helicopter_setup/radio/step-02.png)
+![2. Receiver, second picture](../images/helicopter_setup/radio/step-02b.png)
+
+**3. Mode switches** (first card)
+
+![3. Mode switches](../images/helicopter_setup/radio/step-03.png)
+
+**4. Profiles & gain** (first card)
+
+![4. Profiles & gain](../images/helicopter_setup/radio/step-04.png)
+
+**5. Rates** (first card)
+
+![5. Rates](../images/helicopter_setup/radio/step-05.png)
+
+**6. Swashplate** (first card)
+
+![6. Swashplate](../images/helicopter_setup/radio/step-06.png)
+
+**7. Servo type** (first card)
+
+![7. Servo type](../images/helicopter_setup/radio/step-07.png)
+
+**8. Governor** (first card)
+
+![8. Governor](../images/helicopter_setup/radio/step-08.png)
+
+**9. Motor & ESC** (first card)
+
+![9. Motor & ESC](../images/helicopter_setup/radio/step-09.png)
+
+**10. Connect the servos** (first card)
+
+![10. Connect the servos](../images/helicopter_setup/radio/step-10.png)
+
+**11. ESC & spin test** (first card)
+
+![11. ESC & spin test](../images/helicopter_setup/radio/step-11.png)
+
+**12. ESC telemetry** (first card)
+
+![12. ESC telemetry](../images/helicopter_setup/radio/step-12.png)
+
+**13. Servo direction & centre** (servo 1 under test, waiting for Yes or No)
+
+![13. Servo direction & centre](../images/helicopter_setup/radio/step-13.png)
+
+**14. Control directions** (roll stick at 59 % right)
+
+![14. Control directions](../images/helicopter_setup/radio/step-14.png)
+
+**15. Level the swash** (first card)
+
+![15. Level the swash](../images/helicopter_setup/radio/step-15.png)
+
+**16. Blade pitch** (first card)
+
+![16. Blade pitch](../images/helicopter_setup/radio/step-16.png)
+
+**17. Tail rotor** (tail direction card with the yaw stick to the right)
+
+![17. Tail rotor](../images/helicopter_setup/radio/step-17.png)
+
+**18. Gyro check** (first card)
+
+![18. Gyro check](../images/helicopter_setup/radio/step-18.png)
+
+**19. Finish** (first card)
+
+![19. Finish](../images/helicopter_setup/radio/step-19.png)
+
+<!-- radio pictures: end -->
+
 ## Completion history and prerequisites
 
 The Suite stores a small history for each connected FC's MCU identity. A step is
