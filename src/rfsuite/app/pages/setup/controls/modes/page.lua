@@ -555,6 +555,7 @@ end
 
 local function startLoad(requestRebuild)
   if ui.runtime.readPending then return false end
+  ui.runtime.readFailed = false
   ui.runtime.readComplete = false
   local readValid = type(getSession()) == "table"
   ui.runtime.readPending = true
@@ -580,6 +581,7 @@ local function startLoad(requestRebuild)
 
   local function failed(reason)
     readValid = false
+    ui.runtime.readFailed = true
     ui.runtime.readPending = false
     ui.loading = false
     ui.progress = 0
@@ -1003,6 +1005,13 @@ function M.build(ctx)
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
+  end
+
+  -- After a failed read, these ranges are not the flight controller's: they may include edits
+  -- Reload just discarded. Show the failure instead; Reload reads again.
+  if ui.runtime.readFailed then
+    Common.appendReadFailedNotice(children, x, cursorY + 10, w)
+    return
   end
 
   cursorY = cursorY + 10
