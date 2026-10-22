@@ -152,13 +152,42 @@ local function readStampFile(path, limit)
   return text
 end
 
-local function writeStamp(identity)
-  local f = io.open(STAMP_PATH, "w")
-  if not f then
+-- One line through the suite's logger, reached through the global it publishes so that this
+-- file keeps no dependency of its own.
+local function warn(fmt, ...)
+  local Log = type(_G) == "table" and _G.rfsuite and _G.rfsuite.Log
+  if type(Log) == "table" and type(Log.emitf) == "function" then
+    pcall(Log.emitf, "rfsuite.precompile", "warn", fmt, ...)
+  end
+end
+
+-- mkdir() is a bare global of the firmware's filesystem library and creates one level at a
+-- time. Creating a folder that already exists fails harmlessly, so it is not checked first.
+local function makeDir(path)
+  if type(mkdir) ~= "function" then
     return
   end
-  io.write(f, identity)
-  io.close(f)
+  pcall(mkdir, path)
+end
+
+-- The install archive carries files only, no directory entries, so the user folder exists on
+-- a fresh card only once something has saved into it -- and io.open(path, "w") does not create
+-- a missing parent. Without the folder the stamp is never written, and every start forces the
+-- whole pass again. The stamp is read back with the same comparison Precompile.start makes, so
+-- a write that did not land is reported rather than paid for on every start.
+local function writeStamp(identity)
+  makeDir(string.match(STAMP_PATH, "^(.*)/[^/]+/[^/]+$"))
+  makeDir(string.match(STAMP_PATH, "^(.*)/[^/]+$"))
+
+  local f = io.open(STAMP_PATH, "w")
+  if f then
+    io.write(f, identity)
+    io.close(f)
+  end
+
+  if readStampFile(STAMP_PATH, STAMP_LIMIT) ~= identity then
+    warn("precompile: could not write %s, the next start compiles everything again", STAMP_PATH)
+  end
 end
 
 local function beginDirectory(path)

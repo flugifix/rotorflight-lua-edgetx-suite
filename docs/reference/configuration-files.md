@@ -148,6 +148,10 @@ finish. The tool and the background decoder are not stopped that way.
   the same `.ini.bak` left beside it. It is a file of its own rather than a section of
   `preferences.lua` because it is written while you fly, and every write to `preferences.lua`
   makes the dashboard re-read its settings.
+- `precompiled.txt` — which installed build the configuration tool last compiled, written when
+  *Preparing suite* finishes. A later start compiles everything again only when the installed
+  build differs from it, so deleting it costs one slower start and nothing else. On a fresh card
+  where nothing has been saved yet, the tool creates this folder to write it.
 - `preferences.lua.tmp`, `<mcu id>.lua.tmp` or `model_name_restore.lua.tmp` — a save that was
   interrupted, by a power cut at exactly the wrong moment. The next read finishes it; you should
   never see one for long. If a write fails or the card is full, the temporary file is removed

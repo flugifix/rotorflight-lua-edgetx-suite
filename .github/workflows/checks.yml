@@ -167,6 +167,23 @@ jobs:
       - name: Check automatic and saved voltage bounds
         run: lua5.3 bin/dashboard/verify_voltage_bounds.lua
 
+  startup-compile:
+    # The configuration tool compiles the installed suite at start (src/rfsuite/lib/precompile.lua).
+    # This runs the real module on an in-memory card across consecutive starts: a fresh install
+    # without a user folder and a stamp that cannot be written.
+    name: Start-up compile pass
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Lua 5.3
+        run: sudo apt-get update && sudo apt-get install -y lua5.3
+
+      - name: Check consecutive starts reuse the compiled suite
+        run: lua5.3 bin/package/verify_precompile.lua
+
   board-auto-align:
     # Setup > Alignment drives the flight controller's board auto-alignment. This runs the
     # real page against scripted replies: lifecycle, locking, stale replies, the signed Save
