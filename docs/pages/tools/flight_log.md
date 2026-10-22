@@ -46,7 +46,11 @@ written.
 | Minimum flight length | An arm shorter than this is a spool-up check rather than a flight, and is not logged. 30 s by default; 0 logs every arm. |
 | Set the pack's battery profile | Off by default. A pack picked on the dashboard — in the prompt after connecting or under *BATTERY* in its quick menu — also moves the flight controller onto that pack's battery profile. Never writes while the model is armed. |
 
+![The Settings tab](../../images/tools/flight_log/settings.png)
+
 ## Batteries
+
+![The Batteries tab](../../images/tools/flight_log/batteries.png)
 
 The registry of packs and the editor for it.
 
