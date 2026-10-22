@@ -207,12 +207,14 @@ local function installGlobals(card)
         return chunk
       end,
     },
-    Log = {
-      emitf = function(tag, level, fmt, ...)
-        record.warnings[#record.warnings + 1] = level .. " " .. string.format(fmt, ...)
-      end,
-    },
   }
+
+  -- The suite's own logger, so a line is judged as the log page keeps it: the ring truncates
+  -- what it stores, and a stub that kept the whole line would hide that.
+  local hostPrint = print
+  _G.print = function() end
+  assert(loadfile(ROOT .. "/src/rfsuite/lib/log.lua", "t", _G))()
+  _G.print = hostPrint
 
   return record
 end
@@ -222,6 +224,8 @@ local function launch(card)
   local record = installGlobals(card)
   local chunk = assert(load(moduleSource, "=" .. modulePath, "t", _G))
   local Precompile = chunk()
+  local hostPrint = print
+  _G.print = function() end
   Precompile.start("0.2.0")
   local steps = 0
   while true do
@@ -232,7 +236,13 @@ local function launch(card)
       break
     end
   end
+  _G.print = hostPrint
   _G.io = hostIo
+  for _, entry in ipairs(_G.rfsuite.log_history or {}) do
+    if entry.tag == "rfsuite.precompile" then
+      record.warnings[#record.warnings + 1] = entry.level .. " " .. entry.msg
+    end
+  end
   return record
 end
 
@@ -342,6 +352,17 @@ do
   check("broken source: it is tried", #first.loads == 1, #first.loads .. " loads")
   check("broken source: one warning", #first.warnings == 1, table.concat(first.warnings, "; "))
   check("broken source: the warning names the file", hasWarning(first, "broken.lua"),
+    table.concat(first.warnings, "; "))
+end
+
+-- The log ring keeps the first 100 characters of a line, and the longest page path in the tree
+-- is 73: the file has to come first for the warning to name it.
+do
+  local deep = "app/pages/flight_tuning/advanced/rates_advanced/cyclic_behaviour/page.lua"
+  local card = compiledCard()
+  card.put(CORE .. "/" .. deep, BROKEN, 200)
+  local first = launch(card)
+  check("deep broken source: the stored warning names the whole path", hasWarning(first, deep),
     table.concat(first.warnings, "; "))
 end
 

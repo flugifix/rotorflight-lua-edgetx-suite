@@ -191,7 +191,7 @@ local function writeStamp(identity)
   end
 
   if readStampFile(STAMP_PATH, STAMP_LIMIT) ~= identity then
-    warn("precompile: could not write %s, the next start compiles everything again", STAMP_PATH)
+    warn("could not write rfsuite.user/precompiled.txt, every start compiles everything")
   end
 end
 
@@ -294,7 +294,8 @@ local function compile()
     if chunk == nil and err ~= nil then
       state.failed = state.failed + 1
       if state.firstFailure == nil then
-        state.firstFailure = path .. ": " .. err
+        state.firstFailure = path
+        state.firstError = err
       end
     end
 
@@ -321,6 +322,7 @@ function Precompile.start(version)
     done = 0,
     failed = 0,
     firstFailure = nil,
+    firstError = nil,
     walking = true,
     finished = false
   }
@@ -350,8 +352,15 @@ function Precompile.step()
   state.finished = true
   collectgarbage("collect")
   if state.failed > 0 then
-    warn("precompile: %d of %d files did not compile, first %s", state.failed, #state.files,
-      state.firstFailure)
+    -- The log ring keeps the first 100 characters of a line, so the file comes first and
+    -- without the core's own prefix: the deepest page path still fits, the reason may not.
+    local name = state.firstFailure
+    local prefix = ROOTS[1] .. "/"
+    if string.sub(name, 1, #prefix) == prefix then
+      name = string.sub(name, #prefix + 1)
+    end
+    warn("%s did not compile (%d of %d failed): %s", name, state.failed, #state.files,
+      state.firstError)
   end
   if state.force and state.identity ~= nil then
     writeStamp(state.identity)
