@@ -15,6 +15,7 @@ local MspRuntime = nil
 local RxfailConfigApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
+local SavePipeline = nil
 local t = nil
 
 -- One key and fallback pair per channel, in the form the packager translates in place, so an
@@ -174,99 +175,74 @@ local function queueFailsafeRead(isAutoReload)
 end
 
 local function queueFailsafeWrite(requestRebuild)
-  if not MspRuntime or not RxfailConfigApi or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not RxfailConfigApi then
     return false, "msp_runtime_unavailable"
   end
 
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
-  end
-
-  -- collect all dirty channels
-  local dirtyIdxs = {}
+  -- What is saved, taken now: the page can be left while the writes are on the wire, and a page
+  -- opened again starts from other values. Every payload and the session copy come from here.
+  local saved = {}
+  local steps = {}
   for i = 1, 18 do
     if ui.dirtyChannels[i] then
-      dirtyIdxs[#dirtyIdxs + 1] = i
+      local ch = ui.channels[i]
+      saved[#saved + 1] = { index = i, mode = ch.mode, value = ch.value }
+      steps[#steps + 1] = {
+        label = "MSP_SET_RXFAIL_CONFIG",
+        command = RxfailConfigApi.writeCommand,
+        payload = RxfailConfigApi.buildWritePayload({ index = i - 1, mode = ch.mode, value = ch.value })
+      }
     end
   end
 
-  if #dirtyIdxs == 0 then
+  if #steps == 0 then
     -- nothing to write
     return true
   end
+
+  -- The visit this save belongs to. The page's close sets ui.runtime to nil and its next visit
+  -- creates a new table, so the hooks below change this visit's state only -- never the edits of
+  -- a visit opened since, which its own Save would then no longer write.
+  local visit = ui.runtime
+
+  -- The writes and the EEPROM commit belong to the pipeline, not to this page: the page can be
+  -- left while they are on the wire, and its close releases ui.runtime and the module handles
+  -- above. So nothing below may assume the page is still open.
+  local ok, err = SavePipeline.start({
+    pageId = "setup_controls_failsafe",
+    steps = steps,
+    reboot = false,
+    onSaved = function()
+      local session = getSession()
+      if session then
+        if type(session.setup_controls_failsafe) ~= "table" then
+          session.setup_controls_failsafe = {}
+        end
+        for _, ch in ipairs(saved) do
+          session.setup_controls_failsafe[ch.index] = { mode = ch.mode, value = ch.value }
+        end
+      end
+      if ui.runtime ~= visit then return end
+      ui.dirtyChannels = {}
+      ui.dirty = false
+    end,
+    onDone = function(result)
+      if ui.runtime ~= visit then return end
+      ui.saving = false
+      if result.saved then queueFailsafeRead(true) end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
+  })
+  if not ok then return false, err end
 
   ui.saving = true
   ui.progress = 0
   if type(requestRebuild) == "function" then
     requestRebuild()
   end
-
-  local function writeNext(indexInDirty)
-    if indexInDirty > #dirtyIdxs then
-      -- Step 2: Write EEPROM
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.writeCommand,
-          payload = {},
-          isWrite = true,
-          simulatorResponse = {},
-          processReply = function()
-            -- Success! Reload values
-            ui.dirtyChannels = {}
-            ui.dirty = false
-            ui.saving = false
-            queueFailsafeRead(true)
-          end,
-          errorHandler = function()
-            ui.saving = false
-            if type(requestRebuild) == "function" then
-              requestRebuild()
-            end
-          end
-        })
-      else
-        ui.saving = false
-        if type(requestRebuild) == "function" then
-          requestRebuild()
-        end
-      end
-      return
-    end
-
-    local chIdx = dirtyIdxs[indexInDirty]
-    local ch = ui.channels[chIdx]
-    local payload = RxfailConfigApi.buildWritePayload({
-      index = chIdx - 1,
-      mode = ch.mode,
-      value = ch.value
-    })
-
-    ui.progress = math.floor((indexInDirty - 1) / #dirtyIdxs * 90)
-    if type(requestRebuild) == "function" then
-      requestRebuild()
-    end
-
-    queue:add({
-      command = RxfailConfigApi.writeCommand,
-      payload = payload,
-      isWrite = true,
-      simulatorResponse = {},
-      processReply = function()
-        writeNext(indexInDirty + 1)
-      end,
-      errorHandler = function()
-        ui.saving = false
-        if type(requestRebuild) == "function" then
-          requestRebuild()
-        end
-      end
-    })
-  end
-
-  writeNext(1)
   return true
 end
 
@@ -494,8 +470,8 @@ end
 
 function M.onSave(ctx)
   if not M.canSave() then return false, "loaded_data_missing" end
-  -- The header's Save stays reachable over the overlay. A second chain beside the running one
-  -- would write the same channels twice, and the first one's reply would clear the marks under it.
+  -- The header's Save stays reachable over the overlay. The shared save refuses a second save
+  -- while this one runs, and that refusal would be reported as a failed save.
   if ui.saving then return false end
   local ok, err = queueFailsafeWrite(ctx and ctx.requestRebuild)
   if not ok then
@@ -511,8 +487,7 @@ function M.onSave(ctx)
 end
 
 function M.onReload(ctx)
-  -- A Reload under a running save would put the stored values back into the channels the chain
-  -- has still to send.
+  -- Nothing is read under a running save; Reload works again once the save has finished.
   if ui.saving then return true end
   local session = getSession()
   if session then
@@ -546,6 +521,7 @@ function M.onClose()
   RxfailConfigApi = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
+  SavePipeline = nil
   t = nil
 end
 

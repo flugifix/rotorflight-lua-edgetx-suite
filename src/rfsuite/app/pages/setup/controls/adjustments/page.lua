@@ -21,6 +21,7 @@ local PidProfileApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local ApiVersion = nil
+local SavePipeline = nil
 local t = nil
 
 -- Rotorflight firmware limit: MAX_SUPPORTED_RC_CHANNEL_COUNT (18) - CONTROL_CHANNEL_COUNT (5) = 13 (AUX 1..13, indices 0..12)
@@ -828,165 +829,103 @@ local function startLoad(requestRebuild)
   return true
 end
 
-local function queueAdjustmentsWrite(requestRebuild, i18n, ctx)
-  if not MspRuntime or type(MspRuntime.getState) ~= "function" then
+-- One slot's MSP_SET_ADJUSTMENT_RANGE payload, from the slot's record as the page holds it.
+local function buildSlotPayload(slotIndex)
+  local adjRange = sanitizeAdjustmentRange(ui.adjustmentRanges[slotIndex] or {})
+  ui.adjustmentRanges[slotIndex] = adjRange
+
+  local enaStartStep = clamp((adjRange.enaRange.start - 1500) / 5, -125, 125)
+  local enaEndStep = clamp((adjRange.enaRange["end"] - 1500) / 5, -125, 125)
+  local adjRange1StartStep = clamp((adjRange.adjRange1.start - 1500) / 5, -125, 125)
+  local adjRange1EndStep = clamp((adjRange.adjRange1["end"] - 1500) / 5, -125, 125)
+  local adjRange2StartStep = clamp((adjRange.adjRange2.start - 1500) / 5, -125, 125)
+  local adjRange2EndStep = clamp((adjRange.adjRange2["end"] - 1500) / 5, -125, 125)
+
+  local minLo, minHi = toS16Bytes(adjRange.adjMin)
+  local maxLo, maxHi = toS16Bytes(adjRange.adjMax)
+
+  local enaChannel = adjRange.enaChannel
+  if enaChannel ~= 255 then
+    enaChannel = clamp(math.floor(enaChannel or 0), 0, AUX_CHANNEL_COUNT - 1)
+  end
+  local adjChannel = clamp(math.floor(adjRange.adjChannel or 0), 0, AUX_CHANNEL_COUNT - 1)
+
+  return {
+    slotIndex - 1,
+    clamp(adjRange.adjFunction, 0, 255),
+    enaChannel,
+    toS8Byte(enaStartStep),
+    toS8Byte(enaEndStep),
+    adjChannel,
+    toS8Byte(adjRange1StartStep),
+    toS8Byte(adjRange1EndStep),
+    toS8Byte(adjRange2StartStep),
+    toS8Byte(adjRange2EndStep),
+    minLo,
+    minHi,
+    maxLo,
+    maxHi,
+    clamp(adjRange.adjStep, 0, 255)
+  }
+end
+
+local function queueAdjustmentsWrite(requestRebuild)
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline then
     return false, "msp_runtime_unavailable"
   end
 
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
-  end
-
-  local changedSlots = {}
+  -- Every changed slot's payload is built now, from what Save was pressed with: the page can be
+  -- left while the writes are on the wire, and a page opened again holds other records.
+  local steps = {}
   for i = 1, #ui.adjustmentRanges do
     if ui.dirtySlots[i] then
-      changedSlots[#changedSlots + 1] = i
+      steps[#steps + 1] = {
+        label = "MSP_SET_ADJUSTMENT_RANGE",
+        command = SetAdjustmentRangeApi.writeCommand or 53,
+        payload = buildSlotPayload(i)
+      }
     end
   end
 
-  if #changedSlots == 0 then
+  if #steps == 0 then
     return true
   end
+
+  -- The visit this save belongs to. The page's close sets ui.runtime to nil and its next visit
+  -- creates a new table, so the hooks below change this visit's state only -- never the edits of
+  -- a visit opened since, which its own Save would then no longer write.
+  local visit = ui.runtime
+
+  -- The writes and the EEPROM commit belong to the pipeline, not to this page: the page can be
+  -- left while they are on the wire, and its close releases ui.runtime and the module handles
+  -- above. So nothing below may assume the page is still open.
+  local ok, err = SavePipeline.start({
+    pageId = "setup_controls_adjustments",
+    steps = steps,
+    reboot = false,
+    onSaved = function()
+      if ui.runtime ~= visit then return end
+      ui.dirty = false
+      ui.dirtySlots = {}
+      ui.progress = 100
+      saveToSession()
+    end,
+    onDone = function()
+      if ui.runtime ~= visit then return end
+      ui.saving = false
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
+  })
+  if not ok then return false, err end
 
   ui.saving = true
   ui.progress = 0
   if type(requestRebuild) == "function" then
     requestRebuild()
   end
-
-  local slotPos = 1
-  local total = #changedSlots
-
-  local function failed(reason)
-    ui.saving = false
-    ui.progress = 0
-    if type(requestRebuild) == "function" then
-      requestRebuild()
-    end
-    if ctx and type(ctx.reportSave) == "function" then
-      ctx.reportSave({
-        ok = false,
-        title = pageText(i18n, "save_error_title", "Error"),
-        message = tostring(reason or pageText(i18n, "save_error_message", "Save failed"))
-      })
-    end
-  end
-
-  local function writeNext()
-    if slotPos > total then
-      -- EEPROM write
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.writeCommand,
-          payload = {},
-          isWrite = true,
-          simulatorResponse = {},
-          processReply = function()
-            ui.saving = false
-            ui.dirty = false
-            ui.dirtySlots = {}
-            ui.progress = 100
-            saveToSession()
-            if type(requestRebuild) == "function" then
-              requestRebuild()
-            end
-            if ctx and type(ctx.reportSave) == "function" then
-              ctx.reportSave({
-                ok = true,
-                title = pageText(i18n, "saved_title", "Saved"),
-                message = pageText(i18n, "saved_message", "Adjustment configuration saved")
-              })
-            end
-          end,
-          errorHandler = function() failed("EEPROM write failed") end
-        })
-      else
-        ui.saving = false
-        ui.dirty = false
-        ui.dirtySlots = {}
-        ui.progress = 100
-        saveToSession()
-        if type(requestRebuild) == "function" then
-          requestRebuild()
-        end
-        if ctx and type(ctx.reportSave) == "function" then
-          ctx.reportSave({
-            ok = true,
-            title = pageText(i18n, "saved_title", "Saved"),
-            message = pageText(i18n, "saved_message", "Adjustment configuration saved")
-          })
-        end
-      end
-      return
-    end
-
-    local slotIndex = changedSlots[slotPos]
-    local adjRange = sanitizeAdjustmentRange(ui.adjustmentRanges[slotIndex] or {})
-    ui.adjustmentRanges[slotIndex] = adjRange
-
-    local enaStartStep = clamp((adjRange.enaRange.start - 1500) / 5, -125, 125)
-    local enaEndStep = clamp((adjRange.enaRange["end"] - 1500) / 5, -125, 125)
-    local adjRange1StartStep = clamp((adjRange.adjRange1.start - 1500) / 5, -125, 125)
-    local adjRange1EndStep = clamp((adjRange.adjRange1["end"] - 1500) / 5, -125, 125)
-    local adjRange2StartStep = clamp((adjRange.adjRange2.start - 1500) / 5, -125, 125)
-    local adjRange2EndStep = clamp((adjRange.adjRange2["end"] - 1500) / 5, -125, 125)
-
-    local minLo, minHi = toS16Bytes(adjRange.adjMin)
-    local maxLo, maxHi = toS16Bytes(adjRange.adjMax)
-
-    local enaChannel = adjRange.enaChannel
-    if enaChannel ~= 255 then
-      enaChannel = clamp(math.floor(enaChannel or 0), 0, AUX_CHANNEL_COUNT - 1)
-    end
-    local adjChannel = clamp(math.floor(adjRange.adjChannel or 0), 0, AUX_CHANNEL_COUNT - 1)
-
-    local payload = {
-      slotIndex - 1,
-      clamp(adjRange.adjFunction, 0, 255),
-      enaChannel,
-      toS8Byte(enaStartStep),
-      toS8Byte(enaEndStep),
-      adjChannel,
-      toS8Byte(adjRange1StartStep),
-      toS8Byte(adjRange1EndStep),
-      toS8Byte(adjRange2StartStep),
-      toS8Byte(adjRange2EndStep),
-      minLo,
-      minHi,
-      maxLo,
-      maxHi,
-      clamp(adjRange.adjStep, 0, 255)
-    }
-
-    -- The overlay is the only thing on screen while a save runs and it draws whole percent, so a
-    -- rebuild is worth a scene teardown only when the number it shows actually changes.
-    local progress = math.floor((slotPos - 1) * 90 / total)
-    if progress ~= ui.progress then
-      ui.progress = progress
-      if type(requestRebuild) == "function" then
-        requestRebuild()
-      end
-    end
-
-    queue:add({
-      command = SetAdjustmentRangeApi.writeCommand or 53,
-      payload = payload,
-      isWrite = true,
-      simulatorResponse = {},
-      processReply = function()
-        slotPos = slotPos + 1
-        writeNext()
-      end,
-      errorHandler = function()
-        failed("SET_ADJUSTMENT_RANGE failed at slot " .. tostring(slotIndex))
-      end
-    })
-  end
-
-  writeNext()
   return true, nil
 end
 
@@ -1880,10 +1819,10 @@ function M.build(ctx)
 end
 
 function M.onSave(ctx)
-  -- The header's Save stays reachable over the overlay. A second chain beside the running one
-  -- would write the same slots twice, and the first one's reply would clear the marks under it.
+  -- The header's Save stays reachable over the overlay. The shared save refuses a second save
+  -- while this one runs, and that refusal would be reported as a failed save.
   if ui.saving then return false end
-  local ok, err = queueAdjustmentsWrite(ctx and ctx.requestRebuild, ctx and ctx.i18n, ctx)
+  local ok, err = queueAdjustmentsWrite(ctx and ctx.requestRebuild)
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({
@@ -1898,7 +1837,7 @@ function M.onSave(ctx)
 end
 
 function M.onReload(ctx)
-  -- A read started under a running save would replace the slots the chain has still to send.
+  -- Nothing is read under a running save; Reload works again once the save has finished.
   if ui.saving then return true end
   local session = getSession()
   if session then
@@ -1942,6 +1881,7 @@ function M.onClose()
   LoadingOverlay = nil
   ConfirmDialog = nil
   ApiVersion = nil
+  SavePipeline = nil
   t = nil
 end
 
