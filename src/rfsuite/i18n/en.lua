@@ -2676,7 +2676,6 @@ return {
         plan_cancelled = "Nothing was changed",
         plan_no_dialog = "This radio cannot show the confirmation.",
         help_setup = "Set up the model writes only what differs from the model, after showing it, and says so when nothing does.",
-        help_ls = "Set up the model also writes the logical switch that times each press; a model set up before needs it once more.",
         help_preview = "Settings > General > Preview is what shows this feature. The widget takes a change to it after landing.",
         help_owner = "They belong to the radio and apply to every model on it. No flight controller is needed to change them.",
         help_flow = "The flight controller's own half, and the switch belonging to each model, are in Setup > Controls > In-Flight Tuning.",

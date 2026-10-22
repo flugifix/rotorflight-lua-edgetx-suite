@@ -34,11 +34,6 @@ return function(ctx)
   local setup = t(i18n, "help_setup",
     "Set up the model writes only what differs from the model, after showing it, and says so when nothing does.")
 
-  -- The value line is switched by a logical switch that times each press, so a model set up by an
-  -- earlier build fails the check until the button has written that switch once.
-  local gate = t(i18n, "help_ls",
-    "Set up the model also writes the logical switch that times each press; a model set up before needs it once more.")
-
   -- The trim layout is the one setting a pilot meets with his thumbs rather than his eyes, so
   -- the help says what each of the three trims does rather than leaving the field labels to
   -- carry it on their own.
@@ -61,6 +56,6 @@ return function(ctx)
     "Settings > General > Preview is what shows this feature. The widget takes a change to it after landing.")
 
   return {
-    message = intro .. NL .. owner .. NL .. trims .. NL .. link .. NL .. setup .. NL .. gate .. NL .. flow .. NL .. preview
+    message = intro .. NL .. owner .. NL .. trims .. NL .. link .. NL .. setup .. NL .. flow .. NL .. preview
   }
 end

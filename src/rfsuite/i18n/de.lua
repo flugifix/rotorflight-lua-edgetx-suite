@@ -2704,7 +2704,6 @@ return {
         plan_cancelled = "Es wurde nichts geändert",
         plan_no_dialog = "Dieser Sender kann die Rückfrage nicht anzeigen.",
         help_setup = "Modell einrichten schreibt nur, was abweicht, nachdem es das gezeigt hat, und sagt es, wenn nichts abweicht.",
-        help_ls = "Modell einrichten schreibt auch den Logikschalter, der jeden Druck taktet; ältere Modelle brauchen das einmal.",
         help_preview = "Einstellungen > Allgemein > Vorschau zeigt diese Funktion. Das Widget übernimmt eine Änderung nach der Landung.",
         help_owner = "Sie gehören zum Sender und gelten für jedes Modell darauf. Kein Flugregler nötig, um sie zu ändern.",
         help_flow = "Die Hälfte des Flugreglers und der Schalter jedes Modells stehen unter Setup > Steuerung > In-Flight-Tuning.",
