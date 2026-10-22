@@ -58,8 +58,13 @@ The suggestions follow these rules:
   *Cyclic* row, which edits the Pitch rates. While polar is on, the flight controller applies that one curve
   to the whole cyclic stick, roll included, and a rate change on that row changes both axes in flight. The
   Roll rates are not changed by the row; they are kept as they were and apply again once polar is switched
-  off. This page does not take polar into account: a suggestion for Roll still names the Roll rates and works
-  its values out from them, although they are not in use while polar is on.
+  off. With polar on, Roll and Pitch rate suggestions name the *Cyclic* row and work from the Pitch rates.
+  The page reads the polar setting once after it opens, and again on Reload. Until that read answers, or if
+  it fails, suggestions name the per-axis rows as before. The same holds after a rate profile switch makes
+  the reported rates differ from that read, until Reload reads again. Feed-forward and P/cut-off suggestions
+  stay per axis.
+  Roll and Pitch are still judged separately, so their cards can ask for different changes to the one *Cyclic*
+  row: change it once, fly, and check both again.
 
 ## Related
 
