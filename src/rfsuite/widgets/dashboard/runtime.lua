@@ -4168,7 +4168,11 @@ function Runtime.new(zone, options)
     if event ~= nil and inflightMode(self, true) == nil then
       local modeOf = self._fullscreenModeOf
       local ready = self.connectionReady == true or self.flightMode == "postflight" or self.flightMode == "offline"
-      if modeOf == nil or modeOf[1] ~= self.theme or modeOf.ready ~= ready then takeFullscreenMode(self) end
+      -- Not while a reload has the theme unloaded: the registry made then would lack the theme's
+      -- views and take an open one off the stack. The mode is taken once the theme is back.
+      if self.theme ~= nil and (modeOf == nil or modeOf[1] ~= self.theme or modeOf.ready ~= ready) then
+        takeFullscreenMode(self)
+      end
       local Views = viewsModule()
       local handled, exited
       if event ~= 0 and Views then handled, exited = Views.key(self, event) end

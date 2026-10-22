@@ -165,6 +165,59 @@ local function runtimeDeclaredKeysCaseIn(source)
   Stubs.releaseCard()
 end
 
+-- A preference reload clears `theme` and `themePath` and loads the theme again on a later logic
+-- tick (reloadPreferencesIfNeeded, then reloadActiveTheme). Fullscreen passes keep arriving in
+-- between, and a view of the theme's own that is open must still be open once the theme is back:
+-- the registry is not to be made anew, and the stack pruned, without the theme that registers it.
+local function runtimeReloadWindowCaseIn(source)
+  local Stubs = assert(loadfile(ROOT .. "/bin/accounting/stubs/edgetx.lua"))()
+  _G.__keysTestStubs = Stubs
+  local FC = assert(loadfile(ROOT .. "/bin/accounting/stubs/fc.lua"))()
+  Stubs.install(ROOT)
+  FC.install(Stubs)
+  Stubs.reset()
+  FC.reset()
+  local manifest = { name = "Reload test", fullscreen = "theme",
+    views = { { id = "extra", module = "extra.lua" } } }
+  local realLoadScript = _G.loadScript
+  _G.loadScript = function(path, mode)
+    if path == "/SCRIPTS/TOOLS/rfsuite.user/dashboard/reload-test/init.lua" then
+      return function() return manifest end
+    end
+    if path == "/SCRIPTS/TOOLS/rfsuite.user/dashboard/reload-test/extra.lua" then
+      return function() return { build = function() end } end
+    end
+    return realLoadScript(path, mode)
+  end
+  local Runtime, err = loadModule(source, "widgets/dashboard/runtime.lua")
+  if Runtime == nil then return "runtime did not load: " .. tostring(err) end
+  -- The stub clock stands still, so no logic tick runs: the theme is exactly what is set here.
+  local w = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
+  w.connectionReady = true
+  w.themePath = "user/reload-test"
+  w.theme = { build = function() end }
+  w:refresh(0)
+  local Views = _G.rfsuite.require("widgets/dashboard/views.lua")
+  if Views.find(w, "extra") == nil then return "the theme's view was not registered" end
+  Views.navigate(w, "openView:extra")
+  w:refresh(0)
+  if Views.top(w) ~= "extra" then return "the theme's view did not open" end
+  w.theme, w.themePath, w.built, w.renderKey = nil, nil, false, nil
+  w:refresh(0)
+  -- A key in the window as well, set to Nothing so that it navigates nowhere itself.
+  w.preferences = w.preferences or {}
+  w.preferences.dashboard = w.preferences.dashboard or {}
+  w.preferences.dashboard.key_page_down = "none"
+  w:refresh(_G.EVT_VIRTUAL_NEXT_PAGE)
+  w.themePath = "user/reload-test"
+  w.theme = { build = function() end }
+  w:refresh(0)
+  if Views.top(w) ~= "extra" then
+    return "the theme's view was taken off the stack in the reload window (top: " .. tostring(Views.top(w)) .. ")"
+  end
+  Stubs.releaseCard()
+end
+
 -- The Keys page as the tool runs it: loadScript hands it the keys module under test, the real
 -- settings helpers and a choice control that records its rows. Returns the page and the rows.
 local function loadKeysPage(keysSrc, pageSrc)
@@ -550,6 +603,12 @@ local CASES = {
     end,
   },
   {
+    id = "a theme view stays open through a theme reload",
+    fn = function()
+      return runtimeCase(runtimeSource, runtimeReloadWindowCaseIn)
+    end,
+  },
+  {
     id = "Runtime reads and clears the init keys table",
     fn = function()
       return runtimeCase(runtimeSource, runtimeDeclaredKeysCaseIn)
@@ -778,7 +837,19 @@ if selfTest then
     os.exit(1)
   end
   print("(self-test) fullscreen-exit mutant went red: " .. runtimeBad)
-  print("SELF-TEST PASSED: resolver, default, page-storage and early-exit regressions are detected")
+  local reloadGuard = "if self.theme ~= nil and (modeOf == nil"
+  local reloadMutant, reloadCount = mutate(runtimeSource, reloadGuard, "if (modeOf == nil")
+  if reloadCount ~= 1 then
+    print("SELF-TEST FAILED: the reload-window guard was found " .. reloadCount .. " times, expected once")
+    os.exit(1)
+  end
+  local reloadBad = runtimeCase(reloadMutant, runtimeReloadWindowCaseIn)
+  if reloadBad == nil then
+    print("SELF-TEST FAILED: taking the fullscreen mode without a theme stayed green")
+    os.exit(1)
+  end
+  print("(self-test) reload-window mutant went red: " .. reloadBad)
+  print("SELF-TEST PASSED: resolver, default, page-storage, early-exit and reload-window regressions are detected")
   os.exit(0)
 end
 
