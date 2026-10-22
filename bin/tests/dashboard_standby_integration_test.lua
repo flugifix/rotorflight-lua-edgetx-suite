@@ -767,7 +767,7 @@ do
     and widget._standbyCache.elrs and widget._standbyCache.elrs.packetRate ~= nil)
 
   widget._job = nil
-  widget._standbyActive = true
+  widget._standbyElrsActive = true
   widget.state.fblConnected, widget.state.armed, widget.state.hadInflightFlight = false, false, false
   widget.flightMode = "preflight"
   widget._standbyCache.elrs = { status = "reading", identity = "integration-model" }
@@ -778,7 +778,7 @@ do
   widget:refresh(0, nil)
   check("raw MSP link yields probing but keeps standby render and refreshes cancelled status",
     calls.request == beforeRawRequest and calls.step == beforeRawStep
-      and widget._standbyActive ~= true and widget._standbyCache.elrs.status ~= "reading"
+      and widget._standbyElrsActive ~= true and widget._standbyCache.elrs.status ~= "reading"
       and ((widget._job and widget._job.kind == "standby")
         or (type(widget.renderKey) == "string" and string.sub(widget.renderKey, 1, 8) == "standby|")))
   widget._job = nil
@@ -802,12 +802,12 @@ do
 
   local function excluded(name, setup)
     widget._job = nil
-    widget._standbyActive = false
+    widget._standbyElrsActive = false
     setup()
     local before = calls.request
     Stubs.tick()
     widget:refresh(0, nil)
-    check(name, calls.request == before and widget._standbyActive ~= true
+    check(name, calls.request == before and widget._standbyElrsActive ~= true
       and not (widget._job and widget._job.kind == "standby")
       and not (type(widget.renderKey) == "string" and string.sub(widget.renderKey, 1, 8) == "standby|"))
   end
@@ -826,22 +826,22 @@ do
   widget._job = nil
   widget:refresh(0, nil)
   for _ = 1, 4 do widget:refresh(0, nil) end
-  check("standby re-entry starts a fresh request", widget._standbyActive == true)
+  check("standby re-entry starts a fresh request", widget._standbyElrsActive == true)
   widget._toolHost = { phase = "run", home = { run = function() return 0 end }, cpuHits = 0 }
   local beforeCancel = calls.cancel
   widget:refresh(0, nil)
-  check("hosted tool releases standby owner", calls.cancel > beforeCancel and widget._standbyActive ~= true)
+  check("hosted tool releases standby owner", calls.cancel > beforeCancel and widget._standbyElrsActive ~= true)
 
   widget._toolHost = nil
   widget._job = nil
   widget:refresh(0, nil)
   for _ = 1, 4 do widget:refresh(0, nil) end
-  check("standby enters after hosted tool closes", widget._standbyActive == true)
+  check("standby enters after hosted tool closes", widget._standbyElrsActive == true)
   local firstCache = widget._standbyCache
   beforeCancel = calls.cancel
   widget:background()
   check("background transition releases standby owner", calls.cancel > beforeCancel
-    and widget._standbyActive ~= true)
+    and widget._standbyElrsActive ~= true)
 
   local firstOwner = calls.requestOwners[1]
   local second = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})

@@ -83,7 +83,6 @@ local function cancelStandbyElrs(self, reason)
     end
   end
   self._standbyElrsActive = false
-  self._standbyActive = false
 end
 -- The ELRS provider is loaded for standby and for the TX power alert. When the last standby screen
 -- closes and the alert is off, it is unloaded with its power decoder; lib/crsf.lua stays, since the
@@ -4708,7 +4707,6 @@ function Runtime.new(zone, options)
     elseif elrsReleasePending then
       releaseElrsProvider(self)
     end
-    self._standbyActive = standbyProbeActive
 
     -- `offline` is the post-flight phase with the link already gone, which is exactly the case
     -- this splash must not cover: the summary is what the pilot walked back to the bench for.
