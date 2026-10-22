@@ -118,8 +118,7 @@ local labels = {
   elrs_last_read = "Last read %d s ago", elrs_rate_short = "Rate", elrs_ratio_short = "TLM",
   elrs_power_short = "Max", elrs_dynamic_short = "Dyn", gps_no_fix = "No fix",
   gps_satellites = "Sat", gps_time_unavailable = "Time status unknown",
-  gps_latitude = "Latitude", gps_longitude = "Longitude", gps_altitude = "Altitude",
-  gps_speed = "Speed", gps_course = "Course", gps_hdop = "HDOP",
+  gps_latitude = "Latitude", gps_longitude = "Longitude", gps_course = "Course", gps_hdop = "HDOP",
 }
 local duplicateLabels = {}
 for i = 1, #standby.TYPES do duplicateLabels[standby.TYPES[i]] = string.rep("W", 100) end
@@ -167,7 +166,7 @@ check("selected sources retain bounded values", selected.firmware == "2.12.0"
   and selected.timer1 == ">999:59" and selected.tx_gps == "Fix | 7" and gpsCalls == 1)
 check("detailed GPS values remain available for adaptive rendering", selected._gpsLines
   and selected._gpsLines[1] == "Latitude: 52.12345°"
-  and selected._gpsLines[6] == "HDOP: 0.85")
+  and selected._gpsLines[4] == "HDOP: 0.85")
 
 local defaultScene = standby.build({ w = 480, h = 320 }, "Waiting", text, default, values, cache)
 local defaultTiles = rectangles(defaultScene, 5)
@@ -348,7 +347,8 @@ getTxGPS = function()
     alt = 1234, speed = 56, heading = 2712, hdop = 85 }
 end
 tick = 1108
-local compactGpsValues = standby.snapshot(gpsItems, { text = text }, { w = 480, h = 320 })
+-- Half the width of a 480x320 screen is too narrow for two detail columns.
+local compactGpsValues = standby.snapshot(standby.decode("tx_gps+clock"), { text = text }, { w = 480, h = 320 })
 check("compact GPS does not format hidden detail fields", compactGpsValues.tx_gps == "Fix | 7"
   and compactGpsValues._gpsLines == nil)
 fontWidths[SMLSIZE], fontHeights[SMLSIZE] = 8, 18
@@ -378,22 +378,22 @@ local gpsValues = standby.snapshot(gpsItems, gpsCache, { w = 800, h = 480 })
 check("selected GPS reads and formats transmitter fix", gpsValues.tx_gps == "Fix | 7")
 check("GPS formats all detailed units", gpsValues._gpsLines
   and gpsValues._gpsLines[1] == "Latitude: 52.12345°"
-  and gpsValues._gpsLines[3] == "Altitude: 123.4 m"
-  and gpsValues._gpsLines[4] == "Speed: 5.6 m/s"
-  and gpsValues._gpsLines[5] == "Course: 271.2°"
-  and gpsValues._gpsLines[6] == "HDOP: 0.85")
+  and gpsValues._gpsLines[2] == "Longitude: 13.54321°"
+  and gpsValues._gpsLines[3] == "Course: 271.2°"
+  and gpsValues._gpsLines[4] == "HDOP: 0.85")
+-- EdgeTX fills altitude and speed in different units for UBX and NMEA receivers, so neither is shown.
+check("GPS shows no altitude and no speed", gpsValues._gpsLines and #gpsValues._gpsLines == 4)
 local gpsScene = standby.build({ w = 800, h = 480 }, "Waiting", text,
   gpsItems, gpsValues, gpsCache)
 local gpsDetails, gpsTimeFound = 0, false
 for i = 1, #gpsScene do
   local value = rendered(gpsScene[i])
   if type(value) == "string" and (string.find(value, "Latitude:", 1, true)
-      or string.find(value, "Longitude:", 1, true) or string.find(value, "Altitude:", 1, true)
-      or string.find(value, "Speed:", 1, true) or string.find(value, "Course:", 1, true)
+      or string.find(value, "Longitude:", 1, true) or string.find(value, "Course:", 1, true)
       or string.find(value, "HDOP:", 1, true)) then gpsDetails = gpsDetails + 1 end
   if value == "Time status unknown" then gpsTimeFound = true end
 end
-check("wide GPS scene renders six detailed fields", gpsDetails == 6 and gpsCache.valueOverflow == false)
+check("wide GPS scene renders four detailed fields", gpsDetails == 4 and gpsCache.valueOverflow == false)
 check("wide GPS states the GPS time API limit", gpsTimeFound)
 local twoGpsItems = standby.decode("tx_gps+clock")
 local twoGpsCache = { text = text }
@@ -459,7 +459,7 @@ local malformedGpsValues = standby.snapshot(gpsItems, gpsCache)
 check("detailed GPS rejects non-finite and out-of-range members",
   malformedGpsValues._gpsLines[1] == "Latitude: -"
     and malformedGpsValues._gpsLines[2] == "Longitude: -"
-    and malformedGpsValues._gpsLines[6] == "HDOP: -")
+    and malformedGpsValues._gpsLines[4] == "HDOP: -")
 
 local tinyScene = standby.build({ w = 240, h = 68 }, "Please wait...", text, default, values, {})
 check("tiny widget zone shows only a readable prerequisite", #tinyScene == 3
@@ -644,8 +644,8 @@ do
       check(name .. " a changed firmware string is measured again and drawn whole when it fits",
         firmwareNode.text() == "EdgeTX 2.12.2" and measured > before)
     end
-    -- Detailed GPS needs three detail columns and the row height of four text lines: a full-width
-    -- field on an 800x480 screen has both; 480x320 shows the compact presentation.
+    -- Detailed GPS needs the row height of four text lines and room for its detail columns: a
+    -- full-width field has both, three columns on 800x480 and two on 480x320.
     local savedGps = getTxGPS
     getTxGPS = function()
       return { fix = true, numsat = 7, lat = -33.12345, lon = -151.54321, alt = -1234, speed = 56, heading = 2712, hdop = 85 }
@@ -664,9 +664,8 @@ do
           allFit = allFit and lcd.sizeText(value, node.font) <= node.w
         end
       end
-      check(name .. " " .. language[1] .. " TX GPS in a full-width field is "
-        .. (case[2] >= 700 and "detailed" or "compact"),
-        detailLines == (case[2] >= 700 and 6 or 0) and allFit)
+      check(name .. " " .. language[1] .. " TX GPS in a full-width field is detailed",
+        detailLines == 4 and allFit)
     end
     getTxGPS = savedGps
     check(name .. " every measured font and character is in the radio's font tables: "

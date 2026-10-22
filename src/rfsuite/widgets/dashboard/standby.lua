@@ -156,11 +156,12 @@ local ELRS_COMPACT_WORST = {
   { "elrs_rate_short", "Rate", "1000Hz Full", "elrs_ratio_short", "TLM", "1:128" },
   { "elrs_power_short", "Max", "25/250 mW", "elrs_dynamic_short", "Dyn", "AUX12" },
 }
+-- No altitude and no speed: EdgeTX fills them in 0.1 m and 0.1 m/s from a UBX receiver but in
+-- m and cm/s from an NMEA one (radio/src/gps_ubx.cpp, gps_nmea.cpp), and getTxGPS() passes them
+-- on without saying which protocol is in use.
 local GPS_WORST = {
   { "gps_latitude", "Latitude", "-180.00000°" },
   { "gps_longitude", "Longitude", "-180.00000°" },
-  { "gps_altitude", "Altitude", "-99999.9 m" },
-  { "gps_speed", "Speed", "9999.9 m/s" },
   { "gps_course", "Course", "359.9°" },
   { "gps_hdop", "HDOP", "655.35" },
 }
@@ -516,8 +517,6 @@ local function readValues(cache, items, wantsGpsDetails)
         local gpsValues = {
           usableGps(gps.lat, -90, 90) and string.format("%.5f°", gps.lat) or "-",
           usableGps(gps.lon, -180, 180) and string.format("%.5f°", gps.lon) or "-",
-          scaledGpsValue(gps, "alt", "%.1f", " m", -999999, 999999),
-          scaledGpsValue(gps, "speed", "%.1f", " m/s", 0, 99999),
           scaledGpsValue(gps, "heading", "%.1f", "°", 0, 3599),
           usableGps(gps.hdop, 0, 65535) and string.format("%.2f", gps.hdop / 100) or "-",
         }

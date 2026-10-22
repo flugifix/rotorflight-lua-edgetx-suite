@@ -391,7 +391,7 @@ do
     check(name, gpsReads == before + 1 and firstGps
       and firstGps._gpsTime == gpsText.gps_time_unavailable
       and firstGps._gpsLines[1] == gpsText.gps_latitude .. ": 48.12345°"
-      and firstGps._gpsLines[6] == gpsText.gps_hdop .. ": 1.23")
+      and firstGps._gpsLines[4] == gpsText.gps_hdop .. ": 1.23")
     gpsWidget:background()
   end
   firstGpsSnapshot("first large GPS snapshot is localized before its build pass", "tx_gps")

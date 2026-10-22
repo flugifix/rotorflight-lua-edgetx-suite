@@ -35,7 +35,7 @@ Until a layout is saved, a screen narrower than 700 pixels uses Clock plus TX ba
 
 A smaller dashboard zone draws the saved rows that fit it, packed from the top: a row whose fields do not fit the zone's width is skipped and the rows after it still show, and rows beyond the zone's height are left out. Rows not drawn are retained and return when the widget is placed in a larger zone. The standby screen does not add paging or scrolling.
 
-TX GPS is optional, is read only when its field is selected, and adapts to the available width without a size setting. Compact fields show fix state and satellite count. A full-width field on an 800x480 screen also shows latitude, longitude, altitude in metres, speed in metres per second, course in degrees, and HDOP normalized from EdgeTX's hundredths representation; an unavailable member remains `-`.
+TX GPS is optional, is read only when its field is selected, and adapts to the available width without a size setting. Compact fields show fix state and satellite count. A field with room for the details, such as a full-width field on an 800x480 or a 480x320 screen, also shows latitude, longitude, course in degrees, and HDOP normalized from EdgeTX's hundredths representation; an unavailable member remains `-`. Altitude and speed are not shown, because EdgeTX reports them in different units for UBX and NMEA receivers and a script cannot tell which one is fitted.
 
 The screen reserves a fixed information strip for the highest-priority connection prerequisite. It derives this summary from the dashboard's existing connection state, while the exact connection reason and progress remain visible below it. The strip does not add another radio or telemetry probe.
 
