@@ -575,6 +575,7 @@ local function startLoad(requestRebuild)
   local queue = mspState and mspState.queue
   if not queue or type(queue.add) ~= "function" then
     ui.runtime.readPending = false
+    ui.runtime.readFailed = true
     ui.loading = false
     return false
   end
@@ -582,6 +583,7 @@ local function startLoad(requestRebuild)
   local function failed(reason)
     readValid = false
     ui.runtime.readFailed = true
+    ui.runtime.readComplete = false
     ui.runtime.readPending = false
     ui.loading = false
     ui.progress = 0
@@ -663,6 +665,7 @@ local function startLoad(requestRebuild)
                       ui.dirtySlots = {}
                       ui.progress = 100
                       ui.runtime.readComplete = readValid
+                      ui.runtime.readFailed = false
                       triggerRebuild()
                     end,
                     errorHandler = failed
