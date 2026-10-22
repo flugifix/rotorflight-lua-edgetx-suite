@@ -26,6 +26,13 @@ return function(w)
   end
   local function hold(value) w:hold("mixer", 3, value) end
   local function toggle(value) w:toggleHold("mixer", 3, value) end
+  -- A held end shows as "Release test" on its own button, as in the blade pitch step.
+  local function holdButton(label, value)
+    return w:button(function()
+      local held = w.holds.mixer3
+      return held and held.value == value and L.releaseTest or label
+    end, function() toggle(value) end)
+  end
   local cards={
     w:cardDef(L.tailCentre, L.tailCentreHint, {
       { kind = "number", label = L.centreDegrees, min = -250, max = 250, divisor = 10,
@@ -39,8 +46,8 @@ return function(w)
       w:check("tailDirection", L.directionCorrect)
     }, function() hold(2502) end,"tail"),
     w:cardDef(L.tailCalibration, L.tailCalibrationHint, {
-      w:button(L.holdPositive22, function() toggle(917) end),
-      w:button(L.holdNegative22, function() toggle(-917) end),
+      holdButton(L.holdPositive22, 917),
+      holdButton(L.holdNegative22, -917),
       { kind = "number", label = L.ratePercent, min = 100, max = 5000, divisor = 10,
         get = function() return math.abs(w.data.mixer_input.inputs[3].rate) end,
         set = function(v)
@@ -49,8 +56,8 @@ return function(w)
         end }
     }, function() hold(0) end, "tail22"),
     w:cardDef(L.tailLimits, L.tailLimitHint, {
-      w:button(L.holdPositive60, function() toggle(2500) end),
-      w:button(L.holdNegative60, function() toggle(-2500) end),
+      holdButton(L.holdPositive60, 2500),
+      holdButton(L.holdNegative60, -2500),
       { kind = "number", label = L.clockwiseDegrees, min = 0, max = 600, divisor = 10,
         get = function() return w.math.round(-w.data.mixer_input.inputs[3].min * 0.24) end,
         set = function(v) w.data.mixer_input.inputs[3].min = -w.math.round(v / 0.24); w:touch("mixer_input", false, true) end },
