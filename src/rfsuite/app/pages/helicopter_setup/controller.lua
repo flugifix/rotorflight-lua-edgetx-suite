@@ -169,9 +169,12 @@ function M.new(runtime, transport, mathModule, labels)
     -- Mode and adjustment tables are written row by row, and a full table is dozens of
     -- messages. Only rows that differ from the other side of the save or discard are sent.
     local other = (from == nil) and self.saved or self.data
-    local rows = (api == "mode_ranges" or api == "adjustment_ranges") and other and other[api] and other[api][api]
+    local servos = api == "servo_configurations"
+    local rows = (api == "mode_ranges" or api == "adjustment_ranges" or servos) and other and other[api]
+      and (servos and other[api].servos or other[api][api])
     local function unchanged(index)
       if not rows then return false end
+      if servos then return same(d[api].servos[index - 1], rows[index - 1]) end
       if not same(d[api][api][index], rows[index]) then return false end
       if api ~= "mode_ranges" then return true end
       local extra, otherExtra = d.mode_ranges_extra, other.mode_ranges_extra

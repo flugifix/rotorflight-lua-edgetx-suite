@@ -62,6 +62,7 @@ return function(h)
     eq(raw[22],25,"CORE bus table reaches last raw servo")
     eq(w.data.servo_configurations.servo_count,22,"CORE packed servo count preserved")
     eq(w.data.servo_configurations.servos[4].mid,1308,"CORE raw bus record stored at packed index")
+    for i=0,3 do w.data.servo_configurations.servos[i].mid=w.data.servo_configurations.servos[i].mid+1 end
     q.sent={};w:touch("servo_configurations");w:save();drain(w)
     local written={}
     for _,m in ipairs(q.sent) do if m.command==212 then written[#written+1]=m.payload[1] end end
@@ -1080,6 +1081,15 @@ return function(h)
     rows={}
     for _,m in ipairs(q.sent) do if m.command==35 then rows[#rows+1]=m.payload[1] end end
     eq(table.concat(rows,","),"1","CORE discard restores only the changed mode row")
+  end)
+  case("CORE.live-servo-edit-writes-that-servo",function()
+    local w=world();settle(w)
+    local s=w.data.servo_configurations.servos
+    s[1].mid=s[1].mid+5;w:touch("servo_configurations",false,true)
+    q.sent={};drain(w)
+    local rows={}
+    for _,m in ipairs(q.sent) do if m.command==212 then rows[#rows+1]=m.payload[1] end end
+    eq(table.concat(rows,","),"1","CORE a live edit of one servo writes only that servo")
   end)
   case("CORE.card-result-does-not-carry-over",function()
     local w=world();settle(w);w.step=3;w.cards=step(w,"modes");w.card=1
