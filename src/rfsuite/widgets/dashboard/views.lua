@@ -156,13 +156,10 @@ function CONDITIONS.batteryProfileOffered(widget)
   return false
 end
 
--- The tool opened on its Flight Log page: only while the page is in the tool at all -- the same
--- preview switch the tool's own menu asks (`previewFlightLog` in app/manifest.lua) -- and, like
--- the tool, only while the model is disarmed.
+-- The tool opened on its Flight Log page: like the tool, and like the page's own tile, only while
+-- the model is disarmed.
 function CONDITIONS.flightLogOffered(widget)
-  local previewOn = widget.preferences and widget.preferences.general
-    and widget.preferences.general.preview_flight_log == true
-  return previewOn == true and CONDITIONS.modelDisarmed(widget)
+  return CONDITIONS.modelDisarmed(widget)
 end
 
 --- Whether the named condition holds for this widget. Unknown names, nil included, are false.

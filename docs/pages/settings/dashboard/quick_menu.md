@@ -35,7 +35,7 @@ Empty places are skipped, so the menu has no gaps: a dash in *Position 1* and *B
   condition on top of this list: *IN-FLIGHT TUNING* only while its preview is on, *BATTERY* only
   with a pack for this model while disarmed, *ERASE BLACKBOX* and *MAIN MENU* only while
   disarmed, *FLIGHT LOG*
-  only while the *Flight Log* preview is on and the model is disarmed. Taking an entry
+  only while the model is disarmed. Taking an entry
   out here hides it always.
 - **BATTERY PROFILE is not a position.** The menu always draws it as its last row, under the
   entries chosen here, while the model is disarmed and the flight controller has reported a

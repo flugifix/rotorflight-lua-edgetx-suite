@@ -89,7 +89,6 @@ local SCHEMA = {
       reload_confirm               = true,
       -- preview features
       preview_setup_wizard         = false,
-      preview_flight_log           = false,
       preview_inflight_tuning      = false,
       -- development
       developer_tools              = false,

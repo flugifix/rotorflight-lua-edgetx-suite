@@ -754,8 +754,6 @@ return {
         reload_confirm = "Bestätigen beim Neuladen",
         preview_setup_wizard = "Setup-Assistent",
         preview_confirm_setup_wizard = "Der Setup-Assistent ist noch nicht fertig. Seine Seiten und deren Reihenfolge können sich noch ändern, und er kann auf den Flight Controller schreiben. Prüfe vor dem Fliegen, was er geschrieben hat. Trotzdem anzeigen?",
-        preview_flight_log = "Flugbuch",
-        preview_confirm_flight_log = "Das Flugbuch ist noch nicht fertig. Was es aufzeichnet und wie die Seite es darstellt, kann sich noch ändern, und es legt eine eigene Datei auf der Karte an. Trotzdem anzeigen?",
         preview_inflight_tuning = "In-Flight-Tuning",
         preview_confirm_inflight_tuning = "Noch nicht fertig, und es ändert im Flug Parameter des Flight Controllers. Trotzdem anzeigen?",
         developer_tools = "Entwickler Tools",
