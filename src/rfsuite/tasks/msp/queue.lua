@@ -507,8 +507,18 @@ function Queue:processQueue(now)
       self.logf("debug", "rx cmd=%s src=cache len=%s client=%s",
         tostring(msg.command), tostring(bufLen(buf)), tostring(msg.client))
     end
+    -- A handler belongs to whoever queued the message -- often a page that has closed since --
+    -- and the message is released whatever the handler does. Called bare, a raise left the
+    -- message current: an answered request was sent again, a message given up was given up
+    -- again on every call, and everything queued behind it waited. The same holds for the
+    -- simulator and wire replies below and for the errorHandler where a message is given up.
     if type(msg.processReply) == "function" then
-      msg.processReply(msg, buf)
+      local ok, herr = pcall(msg.processReply, msg, buf)
+      if not ok then
+        self.logf("warn", "reply handler raised cmd=%s rw=%s client=%s src=cache err=%s",
+          tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
+          tostring(herr))
+      end
     end
     self.currentMessage = nil
     self.currentMessageStartTime = nil
@@ -552,7 +562,12 @@ function Queue:processQueue(now)
           tostring(msg.command), tostring(bufLen(msg.buf)), tostring(msg.client))
       end
       if type(msg.processReply) == "function" then
-        msg.processReply(msg, msg.buf)
+        local ok, herr = pcall(msg.processReply, msg, msg.buf)
+        if not ok then
+          self.logf("warn", "reply handler raised cmd=%s rw=%s client=%s src=sim err=%s",
+            tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
+            tostring(herr))
+        end
       end
       self.currentMessage = nil
       self.currentMessageStartTime = nil
@@ -641,7 +656,12 @@ function Queue:processQueue(now)
     end
     if type(msg.processReply) == "function" then
       msg.__retryCount = self.retryCount
-      msg.processReply(msg, msg.buf)
+      local ok, herr = pcall(msg.processReply, msg, msg.buf)
+      if not ok then
+        self.logf("warn", "reply handler raised cmd=%s rw=%s client=%s src=wire err=%s",
+          tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
+          tostring(herr))
+      end
     end
     if not simulatorMode then
       drainAfterSuccess(self, msg.command)
@@ -721,7 +741,12 @@ function Queue:processQueue(now)
     -- same two reasons.
     local reason = self.errorReplySeen and "refused" or "max_retries"
     if type(msg.errorHandler) == "function" then
-      msg.errorHandler(msg, reason)
+      local ok, herr = pcall(msg.errorHandler, msg, reason)
+      if not ok then
+        self.logf("warn", "error handler raised cmd=%s rw=%s client=%s reason=%s err=%s",
+          tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client), reason,
+          tostring(herr))
+      end
     end
     self.logf("warn", "%s cmd=%s rw=%s client=%s attempts=%d%s",
       reason == "refused" and "refused" or "max retries",
