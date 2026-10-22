@@ -752,7 +752,7 @@ return function(h)
     eq(c[1].rows[4].get(),L.uniform,"REVIEW group Hz edit resolves mixed rates explicitly")
   end)
   case("S07.geometry-correction",function()
-    local w=world();local c=step(w,"servoType");local card=c[#c]
+    local w=world();local c=step(w,"servoType");local card=(function() for _,x in ipairs(c) do if x.title==L.geometryCorrection then return x end end end)()
     eq(card.title,L.geometryCorrection,"S07 geometry correction has a card of its own")
     local row=card.rows[1];local servos=w.data.servo_configurations.servos
     servos[0].flags=1;servos[1].flags=0;servos[2].flags=0;servos[3].flags=0
@@ -1192,7 +1192,7 @@ return function(h)
     if h.mutation=="drop-stale-edit" then
       w.applyEdit=function(self,fn) if self:usable() then fn() end end
     end
-    local c=step(w,"servoType");local row=c[#c].rows[1]
+    local c=step(w,"servoType");local row=(function() for _,x in ipairs(c) do if x.title==L.geometryCorrection then return x end end end)().rows[1]
     local servos=w.data.servo_configurations.servos
     for _,i in ipairs({0,1,2}) do servos[i].flags=0 end
     w.statusAt=getTime()-301
@@ -1206,7 +1206,7 @@ return function(h)
     w:fail("status",L.stale);drain(w)
     eq(servos[0].flags,2,"CORE a failure drops the held edit")
     -- The scene control routes through the same path.
-    w.error=nil;w.locked=true;settle(w);w.cards=c;w.card=#c
+    w.error=nil;w.locked=true;settle(w);w.cards=c;for i,x in ipairs(c) do if x.title==L.geometryCorrection then w.card=i end end
     local job=h.view.new(w,{w=800,h=480},h.diagrams);while not job.done do job:step() end
     local choice
     for _,item in ipairs(job.children) do if item.type=="choice" and item.title==L.geometryCorrection then choice=item end end

@@ -100,8 +100,8 @@ return function(w)
   for _,index in ipairs(w:servos()) do
     if index==3 then tail[#tail+1]=index else cyclic[#cyclic+1]=index end
   end
-  if #tail>0 and not w:motorised() then geometryCard(tail,L.tailGeometryCorrection) end
   if #cyclic>0 then geometryCard(cyclic,L.geometryCorrection) end
+  if #tail>0 and not w:motorised() then geometryCard(tail,L.tailGeometryCorrection) end
   if #cards==0 then cards[1]=w:cardDef(L.servoType,L.servoTypeHint,{w:value(L.servo,function() return L.unavailable end)}) end
   return cards
 end
