@@ -30,9 +30,10 @@ Greyed out until the flight controller answers. Read-only while the model is arm
 
 - Saving writes the parameters and the model-name flag to the flight controller; the two
   radio-wide switches are saved on the radio.
-- When a save to the flight controller cannot start, for example because another save is still
-  running, the page shows an Error box with the reason instead of closing the save notice without
-  a message. The two radio-wide switches are saved first and are stored all the same.
+- When the save to the flight controller cannot start, for example because another save is
+  still running, the page shows an Error box naming the reason as a short code (such as `busy`)
+  instead of closing the save notice without a message. The two radio-wide switches are saved
+  first, independently of the flight controller.
 - Where the flight controller does not answer the read, the page says the settings could not be
   read instead of showing its fields, and Save is refused until **Reload** has read them.
 - The rename is temporary. The model's own name is put back when the craft disconnects, or at
