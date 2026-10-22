@@ -213,6 +213,9 @@ local function ensureLoaded()
       syncHeaderTitle = nil
     }
   end
+  -- A save left running on an earlier visit clears this in its onDone; a new visit starts clear,
+  -- as both Beepers pages do.
+  ui.saving = false
 
   ui.config = {
     flightcount = 0,
