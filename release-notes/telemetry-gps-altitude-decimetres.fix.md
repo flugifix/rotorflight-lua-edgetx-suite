@@ -1,0 +1,1 @@
+- CRSF custom telemetry: GPS altitude (`GAlt`, 0x1126) is decoded in decimetres, matching firmware that sends it in decimetres so it no longer stops at 327.67 m MSL (rotorflight/rotorflight-firmware#549). On firmware that still sends centimetres the value reads ten times too high (lib/rf2tlm_sensors)
