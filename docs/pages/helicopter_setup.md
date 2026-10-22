@@ -36,8 +36,14 @@ visit, the page displays **Checking current FC status; controls paused** while t
 fresh STATUS request completes. It does not extend the safety window. A failed
 request displays an error and a receiver-link hint. **Try again** starts a new
 arming-disable/readback handshake; the expired timestamp cannot abort that handshake.
-Status processing continues during resumable scene assembly. Legacy override
-warnings appear when a legacy hold is actually used, rather than during model preparation.
+Status processing continues during resumable scene assembly. On firmware without
+override timeouts, **No test timeout in this firmware: keep the link connected** appears
+when an untimed hold is actually used, rather than during model preparation; a message
+that answers the pilot's own action (for example a refused check) takes its place.
+
+Yes/no answers are buttons that toggle between **No** and **Yes**. They are not lists:
+the page gets no update while a list is open, so a running test would outlive its
+status window behind it.
 
 ## Before the 19 steps
 
@@ -135,11 +141,11 @@ The short instruction area may show only its first lines; **?** opens the full t
 | 10 | Connect the servos | One restart applies pending board, servo-rate, mixer, governor and motor settings. Keep servos unplugged during it. Afterwards, check that the required main/tail motor outputs exist, that all required servo outputs exist, and confirm servos connected/powered with blades still removed. |
 | 11 | ESC & spin test | PWM only: with battery off, send full throttle; once the actual output reaches 99.5%, connect the battery and select low throttle, following the ESC's tones. Confirm calibration at low output. Then confirm blades removed and hold the main-motor test at 5–50%, initially 10%. Release to stop. Confirm the actual rotor direction. |
 | 12 | ESC telemetry | Optional protocol and free/current ESC UART, wiring detection when supported, and Save & reboot. Check live volts, amperes, temperature and RPM. Off needs no serial ESC telemetry; Castle uses its throttle wire. |
-| 13 | Servo direction & centre | Relevant servos are held at centre. Test each swash servo at +20°; it must lift its link. Reverse flips the servo's reverse flag. Set each centre pulse to the arm's specified neutral angle; an offset over 100 µs prompts a mechanics check. Confirm each swash direction and each arm centre. |
-| 14 | Control directions | Roll, pitch and collective use mixer passthrough. Check live RC commands and physical swash response. Wrong reverses the corresponding mixer input rate. Use the named stick direction and the always-visible expected movement; roll is viewed from behind, pitch from the side with the nose right. Confirm each axis. |
+| 13 | Servo direction & centre | One page for all swash servos and the tail servo: a row per servo on 800x480, a column per servo on smaller screens (the tail gets a card of its own there). Every servo is held at centre. **Move up 20°** tests one servo at a time; answer **Yes** if its arm moved up, **No** reverses the servo and keeps the test running. The nudge buttons (-10/-1/+1/+10 µs, -10/+10 on small screens) move the centre; the line beside them shows the centre and its offset from the usual centre. More than 100 µs off asks for the arm to be moved a spline. The tail servo sets its centre only; its direction is checked in step 17. The step completes when every swash direction is confirmed and no centre is more than 100 µs off. |
+| 14 | Control directions | Roll, pitch and collective use mixer passthrough. Check live RC commands and physical swash response. Wrong reverses the corresponding mixer input rate. The first row names the input the check needs and shows where the stick is now (a direction and its travel in percent, or centre); the expected movement stays visible below it; roll is viewed from behind, pitch from the side with the nose right. Confirm each axis. |
 | 15 | Level the swash | Hold roll, pitch and collective at zero. Adjust roll, pitch and collective trims in 0.1% units, ±100%. Reset clears them. Use a leveller or measure links and confirm level. |
 | 16 | Blade pitch | Hold 9° collective or cyclic. Enter the measured angle in 0.1° units and Apply; the mixer rate is corrected by 9/measured, preserving sign and limiting magnitude to 20–200%. Set cyclic, collective and total pitch limits in degrees. Full-stick collective is applied to all supported Rotorflight/Actual rate profiles, restoring the original selection. Confirm no binding at full travel. |
-| 17 | Tail rotor | Servo tail: hold neutral, set centre trim, check yaw passthrough and reverse if needed; command ±22° to calibrate rate, then ±60° to set CW/CCW limits. Raw yaw limits use 1000 units per 24°. Motor tail: blades-off hold controls for forward, and reverse for bidirectional tails. Idle test is limited to 15 seconds; idle is limited to 25.5% by the MSP U8 field. |
+| 17 | Tail rotor | Servo tail: hold neutral, set centre trim, check yaw passthrough (the card names the yaw input and shows the stick) and reverse if needed; command ±22° to calibrate rate, then ±60° to set CW/CCW limits. Raw yaw limits use 1000 units per 24°. Motor tail: blades-off hold controls for forward, and reverse for bidirectional tails. Idle test is limited to 15 seconds; idle is limited to 25.5% by the MSP U8 field. |
 | 18 | Gyro check | With all overrides released, tilt roll/pitch and, for a servo tail, turn yaw. Confirm correction against motion. If it moves with the model, return to Board orientation. A motor tail omits the servo yaw check inside this step. |
 | 19 | Finish | Review readable swash, rotor direction, tail, collective/cyclic limits, ESC protocol, telemetry, governor/throttle type, fast RPM and ARM assignment. Confirm the final checks, then Finish. Check failsafe, governor behaviour and every control before flight. |
 
