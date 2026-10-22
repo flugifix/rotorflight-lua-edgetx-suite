@@ -19,6 +19,12 @@ function M.attach(w, PortLabels)
   end
   function w:button(label, press, enabled) return { kind = "button", label = label, press = press, enabled = enabled } end
   function w:value(label, get) return { kind = "value", label = label, get = get } end
+  -- Sends the pilot to another Suite page where the host offers it; leaving releases the wizard,
+  -- so an unsaved change is settled first.
+  function w:openSuitePage(menuId)
+    if next(self.dirty) then self.message = self.L.saveFirst; return end
+    if type(self.openPage) == "function" then self.openPage(menuId) end
+  end
   -- Where a stick is now: a direction and its travel, or centre (rc_command, -500..500).
   local stickWords = { [1] = { "dirRight", "dirLeft" }, [2] = { "dirForward", "dirBack" },
     [3] = { "dirRight", "dirLeft" }, [4] = { "dirUp", "dirDown" } }

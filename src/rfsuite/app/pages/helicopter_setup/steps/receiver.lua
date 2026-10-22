@@ -120,6 +120,9 @@ return function(w)
       protocol,
       w:button(L.receiverUsb, function() w.message=L.receiverUsbHint end),
       w:button(L.saveReboot, function() w:serialReceiver(); w:reboot() end),
+      -- With a host that can open pages the pointer is a button, otherwise the path in the help.
+      type(w.openPage) == "function" and w:button(L.openElrsLink, function() w:openSuitePage("diagnostics_elrs_link_page") end,
+        function() return protocol.get()>0 and w.data.rx_config.serialrx_provider==9 end) or
       w:value(L.receiverElrs, function()
         return protocol.get()>0 and w.data.rx_config.serialrx_provider==9 and L.receiverElrsLink or "--"
       end)

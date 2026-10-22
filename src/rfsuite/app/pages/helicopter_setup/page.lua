@@ -39,7 +39,7 @@ function M.build(ctx)
     ctx.children[#ctx.children+1]=body
     ctx=setmetatable({children=body.children},{__index=ctx})
   end
-  if w then w.requestClose, w.requestRebuild = ctx.requestClose, ctx.requestRebuild end
+  if w then w.requestClose, w.requestRebuild, w.openPage = ctx.requestClose, ctx.requestRebuild, ctx.openPage end
   if w then w.openHelp = ctx.openHelp end
   if w and ctx.armed then
     w.canEdit, w.canNext, w.message = false, false, w.L.disconnected
@@ -75,7 +75,7 @@ function M.wakeup(ctx)
     modules[6].attach(w, modules[19]); modules[7].attach(w); modules[11].attach(w, context)
     modules[14].attach(w, modules[12], modules[13])
     modules[16].attach(w, modules[15])
-    w.requestClose, w.requestRebuild = context.requestClose, context.requestRebuild
+    w.requestClose, w.requestRebuild, w.openPage = context.requestClose, context.requestRebuild, context.openPage
     w.menuChanged = function()
       local menu = context.menu
       if menu and menu.setCondition then

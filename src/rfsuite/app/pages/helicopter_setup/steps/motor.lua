@@ -29,6 +29,10 @@ return function(w)
       w:n("motor_config", "tail_rotor_gear_ratio_1", L.tailOutputGear, 1, 50000, true)
     })
   }
+  -- A new ESC is set up first in the Suite's ESC Tools; with a host that can open pages, one press.
+  if type(w.openPage) == "function" then
+    table.insert(cards[1].rows, w:button(L.openEscTools, function() w:openSuitePage("esc_tools_menu") end))
+  end
   cards[1].summary=L.motorQuick
   return cards
 end

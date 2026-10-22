@@ -72,6 +72,9 @@ local L = {
 
   receiverElrs = "@i18n(app.modules.helicopter_setup.receiverElrs)@",
   receiverElrsLink = "@i18n(app.modules.helicopter_setup.receiverElrsLink)@",
+  openElrsLink = "@i18n(app.modules.helicopter_setup.openElrsLink)@",
+  openEscTools = "@i18n(app.modules.helicopter_setup.openEscTools)@",
+  saveFirst = "@i18n(app.modules.helicopter_setup.saveFirst)@",
   motorQuick = "@i18n(app.modules.helicopter_setup.motorQuick)@",
   receiverUsb = "@i18n(app.modules.helicopter_setup.receiverUsb)@",
   receiverUsbHint = "@i18n(app.modules.helicopter_setup.receiverUsbHint)@",

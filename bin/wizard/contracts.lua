@@ -937,6 +937,32 @@ return function(h)
     check(reads>=2,"S11 the motor output is read while the hold runs")
     check(longest<=2,"S11 no long run of overrides without an output read")
   end)
+  case("HOST.open-suite-pages",function()
+    local w=world();settle(w);w.step=2
+    local opened
+    w.openPage=function(id) opened=id end
+    w.data.feature_config.enabledFeatures=w.data.feature_config.enabledFeatures|(1<<3)
+    w.data.rx_config.serialrx_provider=9
+    local rx=step(w,"receiver")
+    local button
+    for _,row in ipairs(rx[1].rows) do if row.label==L.openElrsLink then button=row end end
+    check(button~=nil and button.kind=="button","HOST a host that opens pages gets an ELRS Link button")
+    check(button.enabled(),"HOST the ELRS Link button is offered for CRSF")
+    button.press();eq(opened,"diagnostics_elrs_link_page","HOST the button opens the ELRS Link page")
+    w.data.rx_config.serialrx_provider=2
+    check(not button.enabled(),"HOST the ELRS Link button is idle for another receiver")
+    opened=nil;w.dirty.rx_config=true;w.data.rx_config.serialrx_provider=9;button.press()
+    check(opened==nil and w.message==L.saveFirst,"HOST an unsaved change keeps the wizard open")
+    w.dirty.rx_config=nil;w.step=9
+    local motor=step(w,"motor")
+    local esc
+    for _,row in ipairs(motor[1].rows) do if row.label==L.openEscTools then esc=row end end
+    check(esc~=nil,"HOST a host that opens pages gets an ESC Tools button")
+    esc.press();eq(opened,"esc_tools_menu","HOST the button opens ESC Tools")
+    w.openPage=nil
+    local plain=step(w,"motor")
+    for _,row in ipairs(plain[1].rows) do check(row.label~=L.openEscTools,"HOST without openPage there is no button") end
+  end)
   case("S09.new-esc-guidance",function()
     local w=world();settle(w);local card=step(w,"motor")[1]
     check(type(card.summary)=="string" and card.summary==L.motorQuick,

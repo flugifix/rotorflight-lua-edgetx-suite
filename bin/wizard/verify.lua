@@ -292,6 +292,8 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
   for n,name in ipairs(steps) do
     w.step, w.stepKey, w.rebootPending, w.transition = n,name,nil,nil
     w.wideScreen = size[1] >= 700
+    -- Rendered with a host that opens pages, so the extra buttons are laid out too.
+    w.openPage = function() end
     measure("definition",function() w.cards = load(PATH .. "steps/" .. name .. ".lua")(w) end)
     if n==2 then
       w.data.rx_channels={channels={1500,1500,1500,1500,1500,1500,1500,1500}}
