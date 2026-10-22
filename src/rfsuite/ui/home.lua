@@ -1472,6 +1472,7 @@ local function returnToRootOnDisconnect()
 
   closeHelpDialogIfOpen()
   state.pendingMenuOpen = nil
+  state.pendingPageOpen = nil
   -- Nothing can be saved over a link that has gone, so the question is not asked: the page goes
   -- with the rest of the menu.
   state.leavePromptVisible = false
@@ -3093,6 +3094,9 @@ local function buildScene()
         -- finished -- needs the same route the back key takes. Passing it here rather than having
         -- the page reach into the menu keeps the navigation in one place.
         requestClose = function() leaveCurrentPage(false) end,
+        -- Another page by its menu id, for a page that points the pilot on (a wizard that sends
+        -- him to the page where a setting lives). Parked like a tile press and taken by run().
+        openPage = function(menuId) if type(menuId) == "string" then state.pendingPageOpen = menuId end end,
         -- The unsaved-changes question, for a page about to drop an edit of its own accord.
         askUnsavedChanges = function(answers) return askUnsavedChanges(pageModule, answers) end,
         openHelp = function(message, title, subtitle)
@@ -3388,6 +3392,7 @@ function M.init(opts)
   state.armedFeedbackText = nil
   state.connStatusNoticeVisible = false
   state.pendingMenuOpen = nil
+  state.pendingPageOpen = nil
   state.isClosing = false
   state.closeTicks = nil
   state.closeMemStart = nil
@@ -3667,6 +3672,7 @@ function M.run(event, touchState)
         state.leavePromptVisible = false
         state.leavePromptAnswers = nil
         state.pendingMenuOpen = nil
+        state.pendingPageOpen = nil
         closeHelpDialogIfOpen()
         
         -- Release all pages in the registry (queues override/rollback resets). Its writes stay --
@@ -3861,6 +3867,25 @@ function M.run(event, touchState)
       end
       state.focusIndex = 0
       state.pendingMenuOpen = nil
+      transitionedMenuThisTick = true
+      scheduleBuildUI(true)
+    end
+
+    -- A page asked for another page (ctx.openPage). Leaving goes up to the root, so the page on
+    -- screen is released by the next build like any page that is left; the target is then opened
+    -- through its root entry, so its conditions are the menu's. A page the menu would not offer
+    -- now is not opened, and the menu stays at its root.
+    if state.pendingPageOpen and not state.isClosing and not transitionedMenuThisTick then
+      local target = state.pendingPageOpen
+      state.pendingPageOpen = nil
+      while not state.menu.isRoot() do
+        if not state.menu.goBack() then break end
+      end
+      if not openLanding(target) then
+        logf("info", "page %s not offered, the menu stays at its root", target)
+      end
+      state.landingMenuId = nil
+      state.focusIndex = 0
       transitionedMenuThisTick = true
       scheduleBuildUI(true)
     end
