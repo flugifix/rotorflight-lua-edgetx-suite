@@ -326,6 +326,9 @@ return function(h)
     eq(w:feedbackText(),L.persistent,"CORE permanent override warning wins over packed hint")
     w.message=L.confirmCheck
     eq(w:feedbackText(),L.confirmCheck,"CORE a refused check is not hidden by the override warning")
+    w:check("anyCheck",L.directionCorrect).set(2)
+    check(w.message~=L.confirmCheck,"CORE answering a check clears the reminder that asked for it")
+    w.message=L.confirmCheck
     w.message=L.ready
     w.legacyHold=nil;w.transition=true
     eq(w:feedbackText(),L.ready,"CORE packed hint does not obscure active transaction")

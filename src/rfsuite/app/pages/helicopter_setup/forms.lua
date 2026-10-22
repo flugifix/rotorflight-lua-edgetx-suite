@@ -34,7 +34,11 @@ function M.attach(w)
   function w:check(key, label)
     return { kind = "toggle", label = label, values = { self.L.no, self.L.yes },
       get = function() return self.checks[key] and 2 or 1 end,
-      set = function(v) self.checks[key] = v == 2 end }
+      set = function(v)
+        self.checks[key] = v == 2
+        -- Answering clears the reminder that asked for the answer.
+        if v == 2 and self.message == self.L.confirmCheck then self.message = self.L.ready end
+      end }
   end
   function w:cardDef(title, detail, rows, enter, art)
     return { title = title, detail = detail, rows = rows, enter = enter, art = art }
