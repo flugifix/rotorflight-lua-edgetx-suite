@@ -286,12 +286,31 @@ Reload discards every change -- on Adjustments that includes a slot other than t
 is read again when it is next selected. While Modes writes its ranges, the page is covered by the
 save's progress, as Adjustments is, so a range cannot be changed half-way through a save.
 
-Modes, Adjustments, Failsafe and Blackbox Configuration send their save as a chain of writes,
+Modes, Adjustments and Failsafe send their save as a chain of writes,
 every write after the first built only when the one before it is answered, then one EEPROM write. While that chain runs, Save and
 Reload pressed in the header have no effect (a confirmation the preferences ask for first is still
 shown): a second Save would send every write again with a second EEPROM write, and a Reload would
 bring the flight controller's stored values back onto the page -- from the page's last read, or
 from the new read's replies -- before the chain has built its remaining writes from it. Once the save has finished, both work as before.
+
+Blackbox Configuration and Blackbox Logging send their save through the tool's shared save rather
+than from the page: Configuration writes its logging settings and then its debug settings, Logging
+its logging settings, each built when Save is pressed, then one EEPROM write. While it runs, the
+page is covered by the save's progress. A save that worked reads *Settings saved.* and the notice
+clears itself after two seconds; one that failed reads *Not saved* and stays up until it is closed
+(a failed write said nothing before). Back pressed while the save runs is not asked about unsaved
+changes; the page is left once the notice has gone. When the tool opened from the dashboard closes
+during the save, the save still finishes with the values Save was pressed with, and its replies no
+longer reach what the page's close released. Before, Configuration built its debug settings from
+the page only when the first write was answered: with the page closed by then they were not sent
+at all, and with the page opened again they went out as that visit's values. A debug settings write
+the flight controller refuses now fails the save before the EEPROM write; before, the EEPROM write
+followed. After a save that worked, the page reads the flight controller again if it is still open;
+if it was closed, its next visit reads. Both pages also end their read when they are left before it
+is answered; before, the next read of the chain was still sent after the page had gone, and on
+Configuration a visit opened again at once could then refuse Save until Reload. In the EdgeTX
+simulator without a flight controller these two saves behave as on the other pages that use the
+shared save.
 
 Stats, both Beepers pages and Blackbox Logging send a single write, built when Save is pressed, then
 one EEPROM write. They ignore Save and Reload while that runs as well, so every page under Setup >
