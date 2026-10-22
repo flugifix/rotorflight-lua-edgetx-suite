@@ -170,7 +170,8 @@ jobs:
   startup-compile:
     # The configuration tool compiles the installed suite at start (src/rfsuite/lib/precompile.lua).
     # This runs the real module on an in-memory card across consecutive starts: a fresh install
-    # without a user folder and a stamp that cannot be written.
+    # without a user folder, a stamp that cannot be written, macOS metadata files beside the
+    # sources and a source that does not compile.
     name: Start-up compile pass
     runs-on: ubuntu-latest
 

@@ -291,6 +291,60 @@ do
     table.concat(first.warnings, "; "))
 end
 
+-- A card the pass has already finished on: current bytecode beside every source, and the stamp.
+local function compiledCard()
+  local card = installedCard()
+  card.addDir(USER)
+  card.put(USER .. "/precompiled.txt", IDENTITY)
+  card.put(CORE .. "/init.luac", "bytecode", 100)
+  card.put(WIDGET .. "/main.luac", "bytecode", 100)
+  return card
+end
+
+-- Copied from macOS: an AppleDouble file beside each source. Neither start queues them.
+do
+  local card = compiledCard()
+  card.put(CORE .. "/._init.lua", APPLEDOUBLE, 100)
+  card.put(WIDGET .. "/._main.lua", APPLEDOUBLE, 100)
+  card.put(CORE .. "/._build.txt", APPLEDOUBLE, 100)
+  local first = launch(card)
+  local second = launch(card)
+  check("AppleDouble files: first start loads nothing", #first.loads == 0,
+    table.concat(first.loads, ", "))
+  check("AppleDouble files: second start loads nothing", #second.loads == 0,
+    table.concat(second.loads, ", "))
+  check("AppleDouble files: nothing is reported", #first.warnings == 0 and #second.warnings == 0,
+    table.concat(first.warnings, "; ") .. table.concat(second.warnings, "; "))
+end
+
+-- The filter leaves real sources to the existing checks: a new source and one changed after its
+-- bytecode are compiled, beside AppleDouble files, and then left alone.
+do
+  local card = compiledCard()
+  card.put(CORE .. "/._init.lua", APPLEDOUBLE, 100)
+  card.put(CORE .. "/added.lua", VALID, 200)
+  card.put(WIDGET .. "/main.lua", VALID, 300)
+  local first = launch(card)
+  local second = launch(card)
+  local loaded = table.concat(first.loads, ", ")
+  check("real sources beside AppleDouble: the new and the changed source are compiled",
+    #first.loads == 2 and string.find(loaded, "added.lua", 1, true) and string.find(loaded, "main.lua", 1, true),
+    loaded)
+  check("real sources beside AppleDouble: then nothing", #second.loads == 0, table.concat(second.loads, ", "))
+end
+
+-- A real source that does not compile is still tried on every start, and is now reported once per
+-- start, naming the file, instead of passing for finished preparation.
+do
+  local card = compiledCard()
+  card.put(CORE .. "/broken.lua", BROKEN, 200)
+  local first = launch(card)
+  check("broken source: it is tried", #first.loads == 1, #first.loads .. " loads")
+  check("broken source: one warning", #first.warnings == 1, table.concat(first.warnings, "; "))
+  check("broken source: the warning names the file", hasWarning(first, "broken.lua"),
+    table.concat(first.warnings, "; "))
+end
+
 if failures > 0 then
   print(string.format("%d expectation(s) failed against %s", failures, modulePath))
   os.exit(1)

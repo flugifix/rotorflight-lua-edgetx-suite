@@ -53,6 +53,8 @@ local TIME_FIELDS = { "year", "mon", "day", "hour", "min", "sec" }
 
 local state = nil
 
+-- Returns the chunk, or nil and the reason it did not load. Nil without a reason means there
+-- was no loader to ask, which is not a failure of the file.
 local function loadUncached(path, mode)
   local utils = _G.rfsuite and _G.rfsuite.utils
   local loader = utils and utils.loadScriptUncached
@@ -61,9 +63,12 @@ local function loadUncached(path, mode)
     -- the tool state, which is the opposite of what this pass is for.
     return nil
   end
-  local ok, chunk = pcall(loader, path, mode)
+  local ok, chunk, err = pcall(loader, path, mode)
   if not ok then
-    return nil
+    return nil, tostring(chunk)
+  end
+  if chunk == nil then
+    return nil, tostring(err or "no chunk")
   end
   return chunk
 end
@@ -209,6 +214,13 @@ local function takeEntry(cursor)
   local name = cursor.entries[cursor.index]
   cursor.index = cursor.index + 1
 
+  if string.sub(name, 1, 2) == "._" then
+    -- macOS leaves an AppleDouble metadata file named "._<name>" beside every file it copies
+    -- onto a FAT card. "._init.lua" ends in .lua but holds no source, so it never compiles and
+    -- would be queued again on every start.
+    return 0
+  end
+
   if string.find(name, ".", 1, true) == nil then
     -- No directory in the installed tree carries a dot and every file has an extension, so
     -- this tells the two apart without a stat call per entry. The fourth argument makes it a
@@ -276,8 +288,15 @@ local function compile()
     end
 
     -- "c" compiles even when the bytecode looks newer than the source. The chunk is of no
-    -- use here and is dropped, so the collector can take it back.
-    loadUncached(path, state.force and "tc" or "t")
+    -- use here and is dropped, so the collector can take it back. A file that does not load
+    -- is counted and reported once when the pass ends, not per file.
+    local chunk, err = loadUncached(path, state.force and "tc" or "t")
+    if chunk == nil and err ~= nil then
+      state.failed = state.failed + 1
+      if state.firstFailure == nil then
+        state.firstFailure = path .. ": " .. err
+      end
+    end
 
     state.done = state.done + 1
     if state.done % GC_EVERY == 0 then
@@ -300,6 +319,8 @@ function Precompile.start(version)
     cursor = nil,
     files = {},
     done = 0,
+    failed = 0,
+    firstFailure = nil,
     walking = true,
     finished = false
   }
@@ -328,6 +349,10 @@ function Precompile.step()
 
   state.finished = true
   collectgarbage("collect")
+  if state.failed > 0 then
+    warn("precompile: %d of %d files did not compile, first %s", state.failed, #state.files,
+      state.firstFailure)
+  end
   if state.force and state.identity ~= nil then
     writeStamp(state.identity)
   end
