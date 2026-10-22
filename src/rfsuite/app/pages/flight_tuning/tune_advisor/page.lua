@@ -152,6 +152,7 @@ local function ensureDeps()
   if not Controls then Controls = loadModule("ui/controls.lua") end
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not TuneAdvisorApi then TuneAdvisorApi = loadModule("tasks/msp/api/tune_advisor.lua") end
+  if not RcTuningApi then RcTuningApi = loadModule("tasks/msp/api/rc_tuning.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not t then t = Common and Common.pageT("flight_tuning_tune_advisor") or nil end
 end
@@ -467,7 +468,6 @@ end
 
 local function readRcTuning()
   if ui.rcTuningPending then return end
-  if not RcTuningApi then RcTuningApi = loadModule("tasks/msp/api/rc_tuning.lua") end
   local api = RcTuningApi
   local queue = getQueue()
   if not api or not queue then return end
