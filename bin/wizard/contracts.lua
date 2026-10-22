@@ -24,7 +24,6 @@ return function(h)
   local function settle(w) w.buildRequested=nil;drain(w);w.statusAt=getTime() end
   case("CORE.api-12-10-gate",function()
     local manifest=load("app/manifest.lua")
-    local version=load("lib/api_version.lua")
     local entries={}
     for _,entry in ipairs(manifest.menus.wizards_menu.pages) do
       if entry.id=="helicopter_setup" then entries[#entries+1]=entry end
@@ -32,12 +31,21 @@ return function(h)
     for _,entry in ipairs(manifest.menus.helicopter_setup_menu.pages) do entries[#entries+1]=entry end
     eq(#entries,22,"CORE all wizard entry points are covered by the API contract")
     for _,entry in ipairs(entries) do
-      local required=entry.minApiVersion
-      eq(type(required)=="table" and table.concat(required,".") or "", "12.0.10",
-        "CORE "..entry.id.." requires API 12.10")
-      check(not version.isAtLeast("12.09",required),"CORE "..entry.id.." rejects API 12.09")
-      check(version.isAtLeast("12.10",required),"CORE "..entry.id.." accepts API 12.10")
+      eq(type(entry.minApiVersion)=="table" and table.concat(entry.minApiVersion,".") or "","12.0.9",
+        "CORE "..entry.id.." stays reachable on the Suite's packaged API")
     end
+    local session=_G.rfsuite.session
+    local old=session.apiVersion
+    session.apiVersion="12.09"
+    local w=world();settle(w)
+    check(w.apiTooOld and w.cards and w.cards[1].title==L.apiTooOldTitle,"CORE an FC below API 12.10 gets the reason instead of the steps")
+    eq(w.cards[1].rows[1].get(),"12.09","CORE the reason names the FC's API version")
+    for _,m in ipairs(q.sent) do check(m.command~=120 and m.command~=42,"CORE an FC below API 12.10 gets no configuration reads") end
+    check(not w.validate(),"CORE the API card never completes")
+    session.apiVersion="12.10";w=world();settle(w)
+    check(not w.apiTooOld,"CORE API 12.10 opens the steps")
+    session.apiVersion="13.0";check(w:apiSupported(),"CORE a later major version is accepted")
+    session.apiVersion=old
   end)
   case("PORTS.board-printed-labels",function()
     local w=world();settle(w)

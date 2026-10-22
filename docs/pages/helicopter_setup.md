@@ -16,7 +16,9 @@ The Wizards group is hidden until *System* → *Settings* → *General* → *Pre
 *Setup Assistant* is enabled (`visibleWhen = "previewSetupWizard"` on the parent).
 The page is greyed out until the flight controller answers
 (`enabledWhen = "fblConnected"`), locked while armed (`lockedWhileArmed = true`),
-and requires MSP API 12.10 or later (`minApiVersion = {12, 0, 10}`). It works from
+and offered from MSP API 12.09 (`minApiVersion = {12, 0, 9}`), the Suite's packaged API. The setup
+steps themselves need MSP API 12.10 (Rotorflight 4.7): on an older flight controller the page shows
+**Firmware too old** with the reported version and reads no configuration. It works from
 the TOOLS menu and when the tool is hosted by the dashboard widget.
 
 Receiver setup requires an already working receiver/MSP link. Run automatic

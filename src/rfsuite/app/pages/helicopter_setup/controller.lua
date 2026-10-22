@@ -23,6 +23,14 @@ function M.new(runtime, transport, mathModule, labels)
     step = 1, card = 1, ready = false, active = true, holds = {}, live = {}, checks = {},
     progress = 0, message = labels.loading, generation = 0, selectedServo = 0, percent = 10 }
   function w:session() return _G.rfsuite and _G.rfsuite.session or {} end
+  -- The setup steps use MSP added in API 12.10 (Rotorflight 4.7). The version is the "major.minor"
+  -- string the Suite reports; an unknown version is left to the Suite's own connect check.
+  function w:apiSupported()
+    local major, minor = string.match(tostring(self:session().apiVersion or ""), "^(%d+)%.(%d+)$")
+    if not major then return true end
+    major, minor = tonumber(major), tonumber(minor)
+    return major > 12 or (major == 12 and minor >= 10)
+  end
   function w:channelSnapshot(api)
     local at
     if api=="rc" then at=self.rcAt elseif api=="rx_channels" then at=self.rxChannelsAt else return nil end
@@ -534,6 +542,14 @@ function M.new(runtime, transport, mathModule, labels)
       end)
       return
     end
+    -- An FC below API 12.10 gets the reason instead of reads it cannot answer.
+    if not self:apiSupported() then
+      self:run(function()
+        self.ready, self.transition, self.buildRequested, self.apiTooOld = true, nil, true, true
+        self.message = self.L.apiTooOld; self:rebuild()
+      end)
+      return
+    end
     for _, api in ipairs({ "servo_override", "mixer_override", "motor_override" }) do
       local name = api
       self:run(function() self.bus.apis[name] = assert(loadScript(BASE .. "tasks/msp/api/" .. name .. ".lua", "t"))() end)
@@ -688,6 +704,14 @@ function M.new(runtime, transport, mathModule, labels)
       self.buildRequested = nil
       if self.overview then self:rebuild(); return end
       if self.historyMode then self:buildHistory();self:rebuild();return end
+      if self.apiTooOld then
+        self.cards={self:cardDef(self.L.apiTooOldTitle,self.L.apiTooOld,{
+          self:value(self.L.fcApi,function() return tostring(self:session().apiVersion or "--") end)
+        })}
+        self.cards[1].summary=self.L.apiTooOld
+        self.card=1;self.validate=function() self.message=self.L.apiTooOld;return false end
+        self:rebuild();return
+      end
       if self:buildModelPreparation() then self:rebuild();return end
       self.entryRebootGate = self.returnToSuite and self.step > 10 and self.rebootPending or nil
       if self.entryRebootGate then
