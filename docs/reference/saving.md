@@ -299,8 +299,8 @@ Controls that saves to the flight controller does: a second Save there used to s
 again with a second EEPROM write.
 
 On Stats and both Beepers pages, that write and its EEPROM write are sent by the tool's shared save
-rather than by the page, so the save finishes when the page is left while it is on its way -- by
-Back, by Menu, or by the tool opened from the dashboard closing. While it runs, the page is covered
+rather than by the page, so none of the page's code runs when the save answers after the page was
+left -- by Back, by Menu, or by the tool opened from the dashboard closing. While it runs, the page is covered
 by the save's progress. A save that worked reads *Settings saved.* and the notice clears itself
 after two seconds; one that failed reads *Not saved* and stays up until it is closed (a failed write
 said nothing before). Afterwards the page reads the flight controller again if it is still open; if
