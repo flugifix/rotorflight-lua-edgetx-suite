@@ -13,13 +13,23 @@ local function read(path)
   if value and value >= 0 and value <= MAX and value % 1 == 0 then return value, true end
   return nil, true
 end
+local function location(identity, modelFile)
+  if type(identity) ~= "string" or #identity > 64 or not string.match(identity, "^[%w_-]+$") then return nil end
+  local root = type(modelFile) == "string" and string.match(modelFile, "^(.*)/[^/]+$")
+  local directory = (root or "/SCRIPTS/TOOLS/rfsuite.user") .. "/wizard-history"
+  return directory, directory .. "/" .. identity .. ".lua"
+end
+-- The completed-step mask of one flight controller, or 0. For the menu's done marks only.
+function M.mask(identity, modelFile)
+  local _, path = location(identity, modelFile)
+  if not path then return 0 end
+  local mask, found = read(path)
+  if not found then mask = read(path .. ".tmp") end
+  return mask or 0
+end
 function M.new(identity, modelFile)
   local h = { mask = 0, count = 0 }
-  if type(identity) == "string" and #identity <= 64 and string.match(identity, "^[%w_-]+$") then
-    local root = type(modelFile) == "string" and string.match(modelFile, "^(.*)/[^/]+$")
-    h.directory = (root or "/SCRIPTS/TOOLS/rfsuite.user") .. "/wizard-history"
-    h.path = h.directory .. "/" .. identity .. ".lua"
-  end
+  h.directory, h.path = location(identity, modelFile)
   function h:publish(mask)
     self.mask, self.count = mask, 0
     for bit = 0,18 do if (mask & (1 << bit)) ~= 0 then self.count = self.count + 1 end end

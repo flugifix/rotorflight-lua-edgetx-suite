@@ -152,6 +152,20 @@ do
     end
   end
   eq(numbered, 19, "all nineteen step entries in the wizard menu are numbered")
+  -- Done marks: each step tile reads its bit of the connected FC's completion record.
+  local steps = {}
+  for _, entry in ipairs(manifest.menus.helicopter_setup_menu.pages) do
+    local n = tonumber(string.match(entry.id or "", "^step_(%d%d)$") or "")
+    if n then steps[n] = entry end
+  end
+  local session = _G.rfsuite.session
+  local kept = session.helicopterSetupHistory
+  session.helicopterSetupHistory = { id = session.mcu_id, mask = 5 }
+  check(type(steps[1].doneWhen) == "function" and steps[1].doneWhen() == true and steps[2].doneWhen() == false
+    and steps[3].doneWhen() == true, "MENU step tiles follow the connected FC's completion record")
+  session.helicopterSetupHistory = { id = "another-board", mask = 7 }
+  check(steps[1].doneWhen() == false, "MENU another FC's record never marks a tile")
+  session.helicopterSetupHistory = kept
 end
 local function beginWorld()
   q.messages,q.sent = {},{}

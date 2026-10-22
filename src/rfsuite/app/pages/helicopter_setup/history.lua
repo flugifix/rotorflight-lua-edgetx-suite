@@ -21,7 +21,15 @@ function M.attach(w, store)
     self.prerequisiteDetails = missing > 0 and self.L.historyPrerequisitesHint .. "\n" .. table.concat(lines, "\n") or nil
     if self.history.invalid then self.historyHint = self.L.historyUnreadable end
   end
-  function w:loadHistory() self.history:load(); self:updateHistoryHints() end
+  -- The menu marks a step tile done from the same record (manifest `doneWhen`); it reads the
+  -- session copy, and a changed record flips one condition so the menu rebuilds its cards.
+  function w:shareHistory()
+    local s = self:session()
+    if type(s.mcu_id) ~= "string" then return end
+    s.helicopterSetupHistory = { id = s.mcu_id, mask = self.history.mask }
+    if self.menuChanged then self.menuChanged() end
+  end
+  function w:loadHistory() self.history:load(); self:updateHistoryHints(); self:shareHistory() end
   function w:persistHistory(mask, after, allowSkip)
     self:release(); self.transition, self.message = true, self.L.historySaving
     self:run(function()
@@ -30,7 +38,7 @@ function M.attach(w, store)
       if saved then
         self.historyFailure, self.historyRetry, self.historySkip = nil, nil, nil
         self.message = self.L.ready
-        self:updateHistoryHints(); after()
+        self:updateHistoryHints(); self:shareHistory(); after()
       else
         self.historyFailure, self.message = true, self.L.historySaveFailed
         self.historyRetry = function() self.historyFailure=nil;self:persistHistory(mask,after,allowSkip) end

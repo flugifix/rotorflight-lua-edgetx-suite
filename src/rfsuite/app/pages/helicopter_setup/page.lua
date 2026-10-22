@@ -71,6 +71,12 @@ function M.wakeup(ctx)
     modules[14].attach(w, modules[12], modules[13])
     modules[16].attach(w, modules[15])
     w.requestClose, w.requestRebuild = context.requestClose, context.requestRebuild
+    w.menuChanged = function()
+      local menu = context.menu
+      if menu and menu.setCondition then
+        menu.setCondition("helicopterSetupHistory", not (menu.conditions and menu.conditions.helicopterSetupHistory))
+      end
+    end
     w.armedEpoch = modules[9].changeCount()
     w:load(); return
   end
