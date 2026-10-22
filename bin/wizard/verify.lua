@@ -514,7 +514,11 @@ for _=1,5000 do
     if active and (item.type=="choice" or item.toggle) and item.set and
       (item.values[1]==L.no or item.values[1]=="@i18n(app.modules.helicopter_setup.no)@") and
       (item.values[2]==L.yes or item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@") then
-      measure("page input",function() item.set(2) end)
+      if item.toggle then
+        if item.text()==item.values[1] then measure("page input",item.press) end
+      else
+        measure("page input",function() item.set(2) end)
+      end
     end
     if active and item.type=="button" and item.press then
       local caption=type(item.text)=="function" and item.text() or item.text
