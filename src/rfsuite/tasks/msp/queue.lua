@@ -44,6 +44,14 @@ local function getEnv()
   return Env or nil
 end
 
+-- EdgeTX's instruction-limit stop. lib/log_sink.lua publishes the check; it is not loaded in every
+-- Lua state this queue runs in, so the same test stands in for it when it is absent.
+local function isCpuLimitError(err)
+  local fn = _G.rfsuite and _G.rfsuite.isCpuLimitError
+  if type(fn) == "function" then return fn(err) == true end
+  return type(err) == "string" and string.find(err, "CPU limit", 1, true) ~= nil
+end
+
 local DEFAULT_RETRY_BACKOFF_SECONDS = 1.0
 local DEFAULT_TIMEOUT_SECONDS = 2.0
 local DEFAULT_COMMAND_INTERVAL_SECONDS = 0.25
@@ -512,9 +520,12 @@ function Queue:processQueue(now)
     -- message current: an answered request was sent again, a message given up was given up
     -- again on every call, and everything queued behind it waited. The same holds for the
     -- simulator and wire replies below and for the errorHandler where a message is given up.
+    -- EdgeTX's instruction-limit stop is the exception: it is raised on, as before, so the message
+    -- stays current and is handled again on a later pass.
     if type(msg.processReply) == "function" then
       local ok, herr = pcall(msg.processReply, msg, buf)
       if not ok then
+        if isCpuLimitError(herr) then error(herr, 0) end
         self.logf("warn", "reply handler raised cmd=%s rw=%s client=%s src=cache err=%s",
           tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
           tostring(herr))
@@ -564,6 +575,7 @@ function Queue:processQueue(now)
       if type(msg.processReply) == "function" then
         local ok, herr = pcall(msg.processReply, msg, msg.buf)
         if not ok then
+          if isCpuLimitError(herr) then error(herr, 0) end
           self.logf("warn", "reply handler raised cmd=%s rw=%s client=%s src=sim err=%s",
             tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
             tostring(herr))
@@ -658,6 +670,7 @@ function Queue:processQueue(now)
       msg.__retryCount = self.retryCount
       local ok, herr = pcall(msg.processReply, msg, msg.buf)
       if not ok then
+        if isCpuLimitError(herr) then error(herr, 0) end
         self.logf("warn", "reply handler raised cmd=%s rw=%s client=%s src=wire err=%s",
           tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
           tostring(herr))
@@ -743,6 +756,7 @@ function Queue:processQueue(now)
     if type(msg.errorHandler) == "function" then
       local ok, herr = pcall(msg.errorHandler, msg, reason)
       if not ok then
+        if isCpuLimitError(herr) then error(herr, 0) end
         self.logf("warn", "error handler raised cmd=%s rw=%s client=%s reason=%s err=%s",
           tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client), reason,
           tostring(herr))
