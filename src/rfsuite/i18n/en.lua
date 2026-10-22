@@ -3184,6 +3184,7 @@ return {
       battery_profile = "BATTERY PROFILE",
       battery_profile_warn = "Warn",
       battery_profile_armed = "CHANGEABLE ONLY WHEN DISARMED",
+      battery_profile_not_ready = "CHANGEABLE ONLY WHEN CONNECTED",
       battery_profile_busy = "SENDING...",
       battery_profile_ok = "SET AND SAVED",
       battery_profile_failed = "NOT SAVED",

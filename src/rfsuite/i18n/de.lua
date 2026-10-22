@@ -3179,6 +3179,7 @@ return {
       battery_profile = "AKKUPROFIL",
       battery_profile_warn = "Warn",
       battery_profile_armed = "NUR ENTSCHÄRFT ÄNDERBAR",
+      battery_profile_not_ready = "NUR VERBUNDEN ÄNDERBAR",
       battery_profile_busy = "WIRD GESENDET...",
       battery_profile_ok = "GESETZT UND GESPEICHERT",
       battery_profile_failed = "NICHT GESPEICHERT",
