@@ -3269,34 +3269,45 @@ end
 
 -- ── Init / Run ────────────────────────────────────────────────────────────────
 
+-- The entry ids that lead from a root entry down to the page `menuId`, depth first through the
+-- menus the entries open. A menu is entered once per search, so a manifest that links menus in a
+-- circle cannot loop.
+local function findMenuPath(menuId, entries, path, seen)
+  local menus = manifest and manifest.menus or {}
+  for i = 1, #entries do
+    local entry = entries[i]
+    path[#path + 1] = entry.id
+    if entry.menuId == menuId then return true end
+    local sub = entry.menuId and menus[entry.menuId] or nil
+    if type(sub) == "table" and type(sub.pages) == "table" and not seen[entry.menuId] then
+      seen[entry.menuId] = true
+      if findMenuPath(menuId, sub.pages, path, seen) then return true end
+    end
+    path[#path] = nil
+  end
+  return false
+end
+
 -- Open the page `menuId` the way the pilot would reach it: through the root entry that leads to
--- it, and for a page one level down, through that entry's own menu. The page's conditions are
--- the menu's -- a page the menu would not offer now is not opened -- and a step that fails puts
--- the menu back at its root. Answers whether the page is open.
+-- it, then through each menu below it. The page's conditions are the menu's -- a page the menu
+-- would not offer now is not opened -- and a step that fails puts the menu back at its root.
+-- Answers whether the page is open.
 local function openLanding(menuId)
   local sections = manifest and manifest.sections or {}
-  local menus = manifest and manifest.menus or {}
   for i = 1, #sections do
     local section = sections[i]
-    local entries = section.pages or {}
-    for j = 1, #entries do
-      local entry = entries[j]
-      if entry.menuId == menuId then
-        return state.menu.openRootEntry(section.id, entry.id) == true
+    local path = {}
+    if findMenuPath(menuId, section.pages or {}, path, {}) then
+      local open = state.menu.openRootEntry(section.id, path[1]) == true
+      for k = 2, #path do
+        if not open then break end
+        open = state.menu.openEntry(path[k]) == true
       end
-      local sub = entry.menuId and menus[entry.menuId] or nil
-      local subEntries = type(sub) == "table" and sub.pages or {}
-      for k = 1, #subEntries do
-        if subEntries[k].menuId == menuId then
-          if state.menu.openRootEntry(section.id, entry.id) and state.menu.openEntry(subEntries[k].id) then
-            return true
-          end
-          while not state.menu.isRoot() do
-            if not state.menu.goBack() then break end
-          end
-          return false
-        end
+      if open then return true end
+      while not state.menu.isRoot() do
+        if not state.menu.goBack() then break end
       end
+      return false
     end
   end
   return false

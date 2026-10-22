@@ -25,9 +25,10 @@ step that points to the ELRS Link page. The call only parks the target; the next
 
 1. The menu goes up to its root. The page on screen is released by the next build like any page
    that is left, so its `onClose` runs and can switch its tests off or roll back a live change.
-2. The target is opened through the root entry that leads to it, and for a page one level down
-   through that entry's menu: the same path the pilot would take, so the page's conditions
-   (`visibleWhen`, `enabledWhen`, `minApiVersion`, the armed lock) are the menu's.
+2. The target is opened through the root entry that leads to it and then through each menu
+   below it, however deep: the same path the pilot would take, so the conditions on every
+   entry on the way (`visibleWhen`, `enabledWhen`, `minApiVersion`, the armed lock) are the
+   menu's. The tool's landing page, which a host opens it on, takes the same route.
 3. A page the menu would not offer at that moment is not opened, and the menu stays at its root.
 
 Back on the opened page returns to its own menu, not to the page that opened it. A page with
