@@ -2475,7 +2475,8 @@ return {
         reserve_alert = "Reserve alert",
         reserve_target = "Reserve target",
         loading_title = "Loading",
-        loading_message = "Reading SmartFuel config"
+        loading_message = "Reading SmartFuel config",
+        help_message = "Read-only snapshot; Reload reads the configuration again.\nSmart Fuel: Remaining fuel after reserve; - while the local estimate is unavailable. Clears and recovers without Reload.\nSmart mAh: Estimated consumption; - while unavailable. Other rows keep their snapshot until Reload."
       },
       diagnostics_elrs_link = {
         title = "ELRS Telemetry",
@@ -2624,12 +2625,11 @@ return {
         enabled = "In-flight tuning on this radio",
         enabled_note = "The master switch. Each model has one of its own under Setup > Controls, and both have to be on.",
         switch = "Interlock switch",
-        wiring_note = "One mixer line per channel: MAX at the named variable's weight, added, no switch.",
+        wiring_note = "One mixer line per channel: MAX at the variable's weight, added; a logical switch on the value line.",
         bank_ch = "Enable channel",
         value_ch = "Value channel",
         bank_gvar = "Enable variable",
         value_gvar = "Value variable",
-        pulse_ms = "Pulse length (ms)",
         trims = "Drive rows from the trims",
         trims_unreadable = "This radio did not report its trims, so no trim can be chosen here.",
         row_1 = "Row 1",
@@ -2669,6 +2669,8 @@ return {
         plan_same_gvar = "The two variables have to be different.",
         plan_same_channel = "The two channels have to be different.",
         plan_unsupported = "This radio does not offer the mixer writer.",
+        plan_ls = "Pulse timer",
+        plan_no_ls = "No logical switch is free to time the pulses; empty one first.",
         plan_done = "Model set up",
         plan_nothing = "The model already carries this setup; nothing to write.",
         plan_failed = "The radio refused part of the setup",
@@ -2685,7 +2687,6 @@ return {
         save_error_title = "Error",
         save_error_message = "Save failed",
         pointer_fc = "The set layout, the step size and the undo profile are in Setup > Controls.",
-        pulse_ms_note = "One press is one step. The board counts nothing before 100 ms of stillness and repeats only after 200 ms more.",
         gvar_in_use = "is in use by",
         gvar_name_clash = "is not the variable this setup drives"
       },

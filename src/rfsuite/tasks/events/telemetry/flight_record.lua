@@ -672,14 +672,15 @@ local function readSources()
   -- Lua state and hands the two values over directly. The sensor behind a value that was handed
   -- over is not asked at all.
   local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
+  local unavailable = smart and smart.unavailable
   local handedConsumption = smart and smart.consumption
   local consumedMah = nil
-  if handedConsumption == nil then consumedMah = get("smartconsumption") end
+  if not unavailable and handedConsumption == nil then consumedMah = get("smartconsumption") end
   local govState = get("governor")
   local pidProfile = get("pid_profile")
   local handedFuel = smart and smart.fuel
   local smartFuel, plainFuel = nil, nil
-  if handedFuel == nil then
+  if not unavailable and handedFuel == nil then
     smartFuel = get("smartfuel")
     if smartFuel == nil then plainFuel = get("fuel") end
   end
@@ -720,7 +721,13 @@ local function readSources()
   values.current = current or values.current
   values.watts = watts or values.watts
   values.altitude = altitude or values.altitude
-  values.consumedMah = handedConsumption or consumedMah or values.consumedMah
+  if unavailable then
+    values.consumedMah = nil
+    values.fuel = nil
+    values.fuelSeen = false
+  else
+    values.consumedMah = handedConsumption or consumedMah or values.consumedMah
+  end
   if type(voltage) == "number" then values.voltage = voltage end
 
   if values.cells == 0 then resolvePack(get) end

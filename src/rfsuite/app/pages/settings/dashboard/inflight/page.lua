@@ -9,7 +9,7 @@
 --
 -- Everything on this page belongs to the RADIO and applies to every model on it: which switch
 -- arms the overlay, which channels and global variables the transmitter's mixer devotes to the
--- adjustment pair, how long a pulse stands, and which trims stand in for the rows. One
+-- adjustment pair, and which trims stand in for the rows. One
 -- transmitter has one set of those, and a pilot who set them up once should not meet them again
 -- on his next machine. So they are in the radio's own preferences file under [inflight], saved
 -- the way every other Settings page saves, and no flight controller has to be connected for any
@@ -563,6 +563,13 @@ local function planQuestion(i18n, plan)
       t(i18n, "plan_add", "Add to"), entry.channel, tostring(entry.text))
   end
 
+  -- The logical switch that times each pulse, named the way the radio's own list names it, and
+  -- only where an empty slot is about to be written: a slot that already holds it is left alone.
+  if plan.ls ~= nil then
+    lines[#lines + 1] = string.format("%s L%02d: |GV%d| > 0",
+      t(i18n, "plan_ls", "Pulse timer"), plan.ls.slot + 1, plan.ls.gvar or 0)
+  end
+
   for i = 1, #plan.gvars do
     local entry = plan.gvars[i]
     lines[#lines + 1] = string.format("%s GV%d %s -100..100",
@@ -587,6 +594,8 @@ local function refusalText(i18n, reason)
     return t(i18n, "plan_same_gvar", "The two variables have to be different.")
   elseif reason == "same_channel" then
     return t(i18n, "plan_same_channel", "The two channels have to be different.")
+  elseif reason == "no_ls" then
+    return t(i18n, "plan_no_ls", "No logical switch is free to time the pulses; empty one first.")
   end
   return t(i18n, "plan_unsupported", "This radio does not offer the mixer writer.")
 end
@@ -830,9 +839,8 @@ end
 --- The notes the wiring section draws whatever the model holds; see sectionHeldBack. The last two
 -- size the line drawn while the variables are read (appendGvarNote).
 local function wiringNotes(i18n)
-  return t(i18n, "wiring_note", "One mixer line per channel: MAX at the named variable's weight, added, no switch."),
-    t(i18n, "pulse_ms_note",
-      "One press is one step. The board counts nothing before 100 ms of stillness and repeats only after 200 ms more."),
+  return t(i18n, "wiring_note",
+      "One mixer line per channel: MAX at the variable's weight, added; a logical switch on the value line."),
     t(i18n, "reading_radio", "Reading the radio..."),
     widestWarning(i18n)
 end
@@ -857,7 +865,7 @@ local function appendGvarNote(children, x, y, w, readingNote, widestNote)
 end
 
 local function buildWiring(children, x, y, w, i18n)
-  local wiringNote, pulseNote, readingNote, widestNote = wiringNotes(i18n)
+  local wiringNote, readingNote, widestNote = wiringNotes(i18n)
   local cursorY = y
   cursorY = cursorY + appendNote(children, x, cursorY, w, wiringNote)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
@@ -868,9 +876,6 @@ local function buildWiring(children, x, y, w, i18n)
     t(i18n, "bank_gvar", "Enable variable"), "bank_gvar", 0, Setup.GVAR_MAX_INDEX, nil, gvarEdited)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
     t(i18n, "value_gvar", "Value variable"), "value_gvar", 0, Setup.GVAR_MAX_INDEX, nil, gvarEdited)
-  cursorY = cursorY + appendNumber(children, x, cursorY, w,
-    t(i18n, "pulse_ms", "Pulse length (ms)"), "pulse_ms", Setup.PULSE_MS_MIN, Setup.PULSE_MS_MAX, 10)
-  cursorY = cursorY + appendNote(children, x, cursorY, w, pulseNote)
 
   -- The variables are fixed defaults now, so the model is walked to say when one of them is
   -- already spoken for rather than to choose a free pair. It is a warning and not a refusal: a

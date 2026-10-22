@@ -1,0 +1,373 @@
+-- Checks the start-up compile pass (src/rfsuite/lib/precompile.lua) across consecutive starts,
+-- offline:
+--
+--   lua5.3 bin/package/verify_precompile.lua
+--   lua5.3 bin/package/verify_precompile.lua --verbose
+--   lua5.3 bin/package/verify_precompile.lua --module <pre-fix-precompile.lua>
+--
+-- The last form runs the same expectations against another copy of the module, so a pre-fix
+-- source can prove the checks go red without changing the working tree.
+--
+-- The SD card is an in-memory file system written for this check rather than the accounting
+-- stubs: those create missing parent folders on a write-open, and whether a missing folder is
+-- created is exactly what one of the cases is about. Like the radio, io.open(path, "w") here
+-- fails when the parent folder does not exist, mkdir() creates one level, and a successful
+-- compile writes the .luac with the timestamp of its source. A source compiles when the desktop
+-- Lua can parse it. These are controlled card states, not a timing measurement.
+-- Exit status: 0 green, 1 failed expectations, 2 invalid arguments.
+
+local ROOT = "."
+do
+  local this = arg and arg[0]
+  local dir = type(this) == "string" and string.match(this, "^(.*)[/\\][^/\\]*$") or nil
+  if dir then ROOT = string.match(dir, "^(.*)[/\\]bin[/\\]package$") or (dir .. "/../..") end
+end
+
+local modulePath = ROOT .. "/src/rfsuite/lib/precompile.lua"
+local verbose = false
+local i = 1
+while i <= #arg do
+  if arg[i] == "--verbose" then
+    verbose = true
+  elseif arg[i] == "--module" and arg[i + 1] then
+    i = i + 1
+    modulePath = arg[i]
+  else
+    io.stderr:write("usage: lua5.3 bin/package/verify_precompile.lua [--verbose] [--module <file>]\n")
+    os.exit(2)
+  end
+  i = i + 1
+end
+
+local hostIo = io
+local moduleSource
+do
+  local f = hostIo.open(modulePath, "rb")
+  if not f then
+    hostIo.stderr:write("cannot read " .. modulePath .. "\n")
+    os.exit(2)
+  end
+  moduleSource = f:read("a")
+  f:close()
+end
+
+local CORE = "/SCRIPTS/TOOLS/rfsuite-core"
+local WIDGET = "/WIDGETS/rfsuite"
+local USER = "/SCRIPTS/TOOLS/rfsuite.user"
+local IDENTITY = "0123456789abcdef 0.2.0"
+
+-- The first bytes of a macOS AppleDouble file: binary, and no Lua source.
+local APPLEDOUBLE = "\0\5\22\7\0\2\0\0Mac OS X        \0\2\0\0\0\9\0\0\0\50"
+
+local VALID = "local M = {}\nreturn M\n"
+local BROKEN = "local M = {\nreturn M\n"
+
+-- A card: folders, files with a modification time, and a clock that moves one second per write.
+local function newCard()
+  local card = { dirs = {}, files = {}, clock = 1000, mkdirAvailable = true }
+
+  function card.now()
+    card.clock = card.clock + 1
+    return card.clock
+  end
+
+  function card.addDir(path)
+    local parts = {}
+    for part in string.gmatch(path, "[^/]+") do
+      parts[#parts + 1] = part
+      card.dirs["/" .. table.concat(parts, "/")] = true
+    end
+  end
+
+  function card.put(path, data, time)
+    card.addDir(string.match(path, "^(.*)/[^/]+$"))
+    card.files[path] = { data = data, time = time or card.now() }
+  end
+
+  return card
+end
+
+-- A card with the suite unpacked onto it, as the release archive leaves it: sources only, the
+-- build identity beside the core, no user folder.
+local function installedCard()
+  local card = newCard()
+  card.addDir("/SCRIPTS/TOOLS")
+  card.put(CORE .. "/build.txt", IDENTITY .. "\n", 100)
+  card.put(CORE .. "/init.lua", VALID, 100)
+  card.put(WIDGET .. "/main.lua", VALID, 100)
+  return card
+end
+
+local function timeTable(seconds)
+  -- Six fields, as fstat answers; only the order matters to the module.
+  return {
+    year = 2026, mon = 10, day = 22,
+    hour = seconds // 3600 % 24, min = seconds // 60 % 60, sec = seconds % 60,
+  }
+end
+
+-- Installs the radio's globals for one start and returns what the start recorded.
+local function installGlobals(card)
+  local record = { loads = {}, warnings = {} }
+
+  local function parentOf(path)
+    return string.match(path, "^(.*)/[^/]+$")
+  end
+
+  _G.dir = function(path)
+    if not card.dirs[path] then
+      error("no such folder " .. path)
+    end
+    local names, seen = {}, {}
+    local prefix = path .. "/"
+    for p in pairs(card.dirs) do
+      local rest = string.sub(p, 1, #prefix) == prefix and string.sub(p, #prefix + 1) or nil
+      if rest and rest ~= "" and not string.find(rest, "/", 1, true) and not seen[rest] then
+        seen[rest] = true
+        names[#names + 1] = rest
+      end
+    end
+    for p in pairs(card.files) do
+      if parentOf(p) == path then
+        names[#names + 1] = string.sub(p, #prefix + 1)
+      end
+    end
+    table.sort(names)
+    local n = 0
+    return function()
+      n = n + 1
+      return names[n]
+    end
+  end
+
+  _G.fstat = function(path)
+    local file = card.files[path]
+    if not file then
+      return nil
+    end
+    return { size = #file.data, time = timeTable(file.time) }
+  end
+
+  if card.mkdirAvailable then
+    _G.mkdir = function(path)
+      if card.dirs[path] then
+        error("exists")
+      end
+      if not card.dirs[parentOf(path)] then
+        error("no parent")
+      end
+      card.dirs[path] = true
+    end
+  else
+    _G.mkdir = nil
+  end
+
+  _G.io = {
+    open = function(path, mode)
+      if mode == "r" then
+        local file = card.files[path]
+        return file and { data = file.data, pos = 1 } or nil
+      end
+      if mode == "w" then
+        if not card.dirs[parentOf(path)] then
+          return nil
+        end
+        return { path = path, out = {} }
+      end
+      return nil
+    end,
+    read = function(f, n)
+      local chunk = string.sub(f.data, f.pos, f.pos + n - 1)
+      f.pos = f.pos + #chunk
+      return chunk
+    end,
+    write = function(f, s)
+      f.out[#f.out + 1] = s
+    end,
+    close = function(f)
+      if f.path then
+        card.files[f.path] = { data = table.concat(f.out), time = card.now() }
+      end
+    end,
+  }
+
+  _G.rfsuite = {
+    utils = {
+      loadScriptUncached = function(path, mode)
+        record.loads[#record.loads + 1] = path
+        local file = card.files[path]
+        if not file then
+          return nil, "not found"
+        end
+        local chunk, err = load(file.data, "=" .. path, "t")
+        if not chunk then
+          return nil, err
+        end
+        card.files[path .. "c"] = { data = "bytecode", time = file.time }
+        return chunk
+      end,
+    },
+  }
+
+  -- The suite's own logger, so a line is judged as the log page keeps it: the ring truncates
+  -- what it stores, and a stub that kept the whole line would hide that.
+  local hostPrint = print
+  _G.print = function() end
+  assert(loadfile(ROOT .. "/src/rfsuite/lib/log.lua", "t", _G))()
+  _G.print = hostPrint
+
+  return record
+end
+
+-- One start of the configuration tool: a fresh module, run until it reports finished.
+local function launch(card)
+  local record = installGlobals(card)
+  local chunk = assert(load(moduleSource, "=" .. modulePath, "t", _G))
+  local Precompile = chunk()
+  local hostPrint = print
+  _G.print = function() end
+  Precompile.start("0.2.0")
+  local steps = 0
+  while true do
+    Precompile.step()
+    steps = steps + 1
+    local _, _, finished = Precompile.getProgress()
+    if finished or steps > 10000 then
+      break
+    end
+  end
+  _G.print = hostPrint
+  _G.io = hostIo
+  for _, entry in ipairs(_G.rfsuite.log_history or {}) do
+    if entry.tag == "rfsuite.precompile" then
+      record.warnings[#record.warnings + 1] = entry.level .. " " .. entry.msg
+    end
+  end
+  return record
+end
+
+local failures = 0
+
+local function check(name, ok, detail)
+  if ok then
+    if verbose then print("ok    " .. name) end
+  else
+    failures = failures + 1
+    print("FAIL  " .. name .. (detail and (": " .. detail) or ""))
+  end
+end
+
+local function hasWarning(record, text)
+  for _, line in ipairs(record.warnings) do
+    if string.find(line, text, 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
+-- Fresh install, no user folder: the first start compiles everything and leaves the stamp, the
+-- second compiles nothing.
+do
+  local card = installedCard()
+  local first = launch(card)
+  local second = launch(card)
+  check("fresh install: first start compiles both sources", #first.loads == 2, #first.loads .. " loads")
+  check("fresh install: the user folder is created", card.dirs[USER] == true)
+  check("fresh install: the stamp is written", card.files[USER .. "/precompiled.txt"] ~= nil)
+  check("fresh install: second start compiles nothing", #second.loads == 0, #second.loads .. " loads")
+  check("fresh install: nothing is reported", #first.warnings == 0 and #second.warnings == 0,
+    table.concat(first.warnings, "; ") .. table.concat(second.warnings, "; "))
+end
+
+-- The same with the user folder already there: unchanged behaviour.
+do
+  local card = installedCard()
+  card.addDir(USER)
+  local first = launch(card)
+  local second = launch(card)
+  check("existing user folder: first start compiles both sources", #first.loads == 2, #first.loads .. " loads")
+  check("existing user folder: second start compiles nothing", #second.loads == 0, #second.loads .. " loads")
+end
+
+-- A card where the folder cannot be created: the pass still finishes, and says that its stamp
+-- did not land instead of staying silent.
+do
+  local card = installedCard()
+  card.mkdirAvailable = false
+  local first = launch(card)
+  check("stamp not writable: the first start compiles both sources", #first.loads == 2, #first.loads .. " loads")
+  check("stamp not writable: the failed write is reported", hasWarning(first, "precompiled.txt"),
+    table.concat(first.warnings, "; "))
+end
+
+-- A card the pass has already finished on: current bytecode beside every source, and the stamp.
+local function compiledCard()
+  local card = installedCard()
+  card.addDir(USER)
+  card.put(USER .. "/precompiled.txt", IDENTITY)
+  card.put(CORE .. "/init.luac", "bytecode", 100)
+  card.put(WIDGET .. "/main.luac", "bytecode", 100)
+  return card
+end
+
+-- Copied from macOS: an AppleDouble file beside each source. Neither start queues them.
+do
+  local card = compiledCard()
+  card.put(CORE .. "/._init.lua", APPLEDOUBLE, 100)
+  card.put(WIDGET .. "/._main.lua", APPLEDOUBLE, 100)
+  card.put(CORE .. "/._build.txt", APPLEDOUBLE, 100)
+  local first = launch(card)
+  local second = launch(card)
+  check("AppleDouble files: first start loads nothing", #first.loads == 0,
+    table.concat(first.loads, ", "))
+  check("AppleDouble files: second start loads nothing", #second.loads == 0,
+    table.concat(second.loads, ", "))
+  check("AppleDouble files: nothing is reported", #first.warnings == 0 and #second.warnings == 0,
+    table.concat(first.warnings, "; ") .. table.concat(second.warnings, "; "))
+end
+
+-- The filter leaves real sources to the existing checks: a new source and one changed after its
+-- bytecode are compiled, beside AppleDouble files, and then left alone.
+do
+  local card = compiledCard()
+  card.put(CORE .. "/._init.lua", APPLEDOUBLE, 100)
+  card.put(CORE .. "/added.lua", VALID, 200)
+  card.put(WIDGET .. "/main.lua", VALID, 300)
+  local first = launch(card)
+  local second = launch(card)
+  local loaded = table.concat(first.loads, ", ")
+  check("real sources beside AppleDouble: the new and the changed source are compiled",
+    #first.loads == 2 and string.find(loaded, "added.lua", 1, true) and string.find(loaded, "main.lua", 1, true),
+    loaded)
+  check("real sources beside AppleDouble: then nothing", #second.loads == 0, table.concat(second.loads, ", "))
+end
+
+-- A real source that does not compile is still tried on every start, and is now reported once per
+-- start, naming the file, instead of passing for finished preparation.
+do
+  local card = compiledCard()
+  card.put(CORE .. "/broken.lua", BROKEN, 200)
+  local first = launch(card)
+  check("broken source: it is tried", #first.loads == 1, #first.loads .. " loads")
+  check("broken source: one warning", #first.warnings == 1, table.concat(first.warnings, "; "))
+  check("broken source: the warning names the file", hasWarning(first, "broken.lua"),
+    table.concat(first.warnings, "; "))
+end
+
+-- The log ring keeps the first 100 characters of a line, and the longest page path in the tree
+-- is 73: the file has to come first for the warning to name it.
+do
+  local deep = "app/pages/flight_tuning/advanced/rates_advanced/cyclic_behaviour/page.lua"
+  local card = compiledCard()
+  card.put(CORE .. "/" .. deep, BROKEN, 200)
+  local first = launch(card)
+  check("deep broken source: the stored warning names the whole path", hasWarning(first, deep),
+    table.concat(first.warnings, "; "))
+end
+
+if failures > 0 then
+  print(string.format("%d expectation(s) failed against %s", failures, modulePath))
+  os.exit(1)
+end
+print("precompile: all expectations hold against " .. modulePath)
