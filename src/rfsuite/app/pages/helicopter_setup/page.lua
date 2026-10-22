@@ -5,7 +5,8 @@ local PATH = "app/pages/helicopter_setup/"
 local modules, stage, w, context, viewJob, scene, sceneKey = {}, 1
 local deps = { "tasks/msp/runtime.lua", PATH .. "transport.lua", PATH .. "math.lua", PATH .. "labels.lua",
   PATH .. "controller.lua", PATH .. "forms.lua", PATH .. "workflow.lua", PATH .. "view.lua", "lib/armed.lua", PATH .. "diagrams.lua", PATH .. "navigation.lua",
-  "lib/system_state.lua", "lib/sensors.lua", PATH .. "feedback.lua", PATH .. "history_store.lua", PATH .. "history.lua", PATH .. "attitude_view.lua" }
+  "lib/system_state.lua", "lib/sensors.lua", PATH .. "feedback.lua", PATH .. "history_store.lua", PATH .. "history.lua", PATH .. "attitude_view.lua",
+  PATH .. "servo_grid.lua" }
 local loadingPoints = {{24,0},{24,0}}
 local loadingFraction = 0
 local keys = { "sensors", "receiver", "modes", "profiles", "rates", "swash", "servoType", "governor", "motor",
@@ -67,6 +68,10 @@ function M.wakeup(ctx)
   if not w then
     w = modules[5].new(modules[1], modules[2], modules[3], modules[4])
     w.newAttitudeView = modules[17].new
+    w.newServoGrid = modules[18].append
+    -- Steps lay out for the screen class: the servo step puts the tail beside the swash servos
+    -- on a large screen and on a card of its own on a compact one.
+    w.wideScreen = context.w ~= nil and context.w >= 700
     modules[6].attach(w); modules[7].attach(w); modules[11].attach(w, context)
     modules[14].attach(w, modules[12], modules[13])
     modules[16].attach(w, modules[15])

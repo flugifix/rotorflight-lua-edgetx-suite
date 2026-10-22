@@ -1,38 +1,99 @@
+-- Servo direction and centre on one page, as the Configurator wizard shows it: every servo is
+-- held at its centre while the page is open, one at a time is moved up 20 degrees for the
+-- direction question, and the centre is nudged in microseconds.
 return function(w)
   local L = w.L
-  local cards = {}
-  local function holdAll() for _, i in ipairs(w:servos()) do w:hold("servo", i, 0) end end
-  for _, servo in ipairs(w:servos()) do
-    local index = servo
-    local s = w.data.servo_configurations.servos[index]
-    local title = L.servo .. " " .. (index + 1)
-    if index ~= 3 then
-      cards[#cards + 1] = w:cardDef(title, L.servoDirectionHint, {
-        w:button(function() return w.holds["servo"..index] and w.holds["servo"..index].value==400 and L.releaseTest or L.testUp end, function() w:toggleHold("servo", index, 400) end),
-        w:button(L.reverse, function() s.flags = s.flags ~ 1; w.checks["servoUp"..index]=nil; w:touch("servo_configurations", false, true) end),
-        { kind = "choice", label = L.movesUp, values = { L.no, L.yes },
-          get = function() return w.checks["servoUp" .. index] and 2 or 1 end,
-          set = function(v)
-            w.checks["servoUp" .. index] = v == 2
-            if v == 2 then w:hold("servo", index, 0) end
-          end },
-        w:value(L.output, function() return w.data.servo.servos[index + 1] or "--" end)
-      }, holdAll, "servoMove")
-    end
-    local centre = s.mid > 860 and 1520 or 760
-    cards[#cards + 1] = w:cardDef(title, L.servoCentreHint, {
-      { kind = "number", label = L.centreUs, min = centre - (centre == 760 and 200 or 400),
-        max = centre + (centre == 760 and 200 or 400), get = function() return s.mid end,
-        set = function(v) s.mid = v; w:touch("servo_configurations", false, true) end },
-      w:value(L.centreOffset, function() return math.abs(s.mid - centre) > 100 and L.checkMechanics or L.ready end),
-      w:check("servoCentre" .. index, L.armCentred)
-    }, holdAll, "servoCentre")
+  local TEST = 400 -- override units: 1000 is 50 degrees on a PWM servo
+  local FAR = 100  -- a centre further than this from the band's should move the arm a spline
+  w.servoTest = w.servoTest or {}
+  local t = w.servoTest
+  local roles = {
+    { L.rolePitch, L.roleRoll, L.roleCollective },
+    { L.roleCentreLine, L.roleLeft, L.roleRight },
+    { L.roleCentreLine, L.roleLeft, L.roleRight },
+    { L.roleCentreLine, L.roleLeft, L.roleRight },
+    { L.roleFront, L.roleLeft },
+    { L.roleFrontLeft, L.roleFrontRight }
+  }
+  local function holdAll()
+    t.testing = nil
+    for _, i in ipairs(w:servos()) do w:hold("servo", i, 0) end
   end
+  local function centreOf(s) return s.mid > 860 and 1520 or 760 end
+  local function column(index)
+    local s = w.data.servo_configurations.servos[index]
+    local tail = index == 3
+    local c = { index = index, tail = tail, title = L.servo .. " " .. (index + 1) }
+    c.role = tail and L.roleTail or (roles[w.data.mixer_config.swash_type] or {})[index + 1] or ""
+    c.testing = function() return t.testing == index end
+    c.confirmed = function() return tail or w.checks["servoUp" .. index] == true end
+    c.far = function() return math.abs(s.mid - centreOf(s)) > FAR end
+    c.live = function()
+      local v = w.data.servo and w.data.servo.servos and w.data.servo.servos[index + 1]
+      return (v and (v .. " us") or "--") .. ((s.flags & 1) ~= 0 and ("  " .. L.reversed) or "")
+    end
+    c.status = function()
+      if c.far() then return L.servoFar end
+      if tail then return "" end
+      if c.testing() then return L.servoQuestion end
+      return c.confirmed() and L.directionOk or L.directionOpen
+    end
+    c.centre = function() return tostring(s.mid) end
+    c.offset = function() local centre = centreOf(s); return string.format(L.offsetFrom, s.mid - centre, centre) end
+    c.test = function()
+      if t.testing ~= nil then w:hold("servo", t.testing, 0) end
+      if t.testing == index then t.testing = nil; return end
+      t.testing = index
+      w:hold("servo", index, TEST)
+    end
+    c.up = function()
+      w.checks["servoUp" .. index] = true
+      t.testing = nil
+      w:hold("servo", index, 0)
+    end
+    -- Reversed: flip only the reverse bit and keep the test running so the change shows.
+    c.down = function()
+      s.flags = s.flags ~ 1
+      w.checks["servoUp" .. index] = nil
+      w:touch("servo_configurations", false, true)
+    end
+    c.nudge = function(delta)
+      local centre = centreOf(s)
+      local range = centre == 760 and 200 or 400
+      local v = math.max(centre - range, math.min(centre + range, s.mid + delta))
+      if v ~= s.mid then s.mid = v; w:touch("servo_configurations", false, true) end
+    end
+    return c
+  end
+  local swash, tailColumn = {}, nil
+  for _, i in ipairs(w:servos()) do
+    if i == 3 then tailColumn = column(i) else swash[#swash + 1] = column(i) end
+  end
+  local function card(cols)
+    local d = w:cardDef(L.servoDirectionCentre, L.servoGridHint, {}, holdAll)
+    d.grid, d.summary = cols, L.servoGridQuick
+    return d
+  end
+  local cards = {}
+  if w.wideScreen then
+    local all = {}
+    for _, c in ipairs(swash) do all[#all + 1] = c end
+    if tailColumn then all[#all + 1] = tailColumn end
+    if #all > 0 then cards[1] = card(all) end
+  else
+    if #swash > 0 then cards[#cards + 1] = card(swash) end
+    if tailColumn then cards[#cards + 1] = card({ tailColumn }) end
+  end
+  if #cards == 0 then
+    cards[1] = w:cardDef(L.servoDirectionCentre, L.servoGridHint, { w:value(L.servo, function() return L.unavailable end) })
+  end
+  -- Done as in the Configurator: every swash servo's direction is confirmed, and no centre is
+  -- further than FAR from its band's centre.
   w.validate = function()
-    for _, i in ipairs(w:servos()) do
-      if i ~= 3 and not w:ack("servoUp" .. i) then return false end
-      if not w:ack("servoCentre" .. i) then return false end
-    end; return true
+    for _, c in ipairs(swash) do if not w:ack("servoUp" .. c.index) then return false end end
+    for _, c in ipairs(swash) do if c.far() then w.message = L.servoFar; return false end end
+    if tailColumn and tailColumn.far() then w.message = L.servoFar; return false end
+    return true
   end
   return cards
 end

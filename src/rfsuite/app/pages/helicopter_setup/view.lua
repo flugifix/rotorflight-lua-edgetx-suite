@@ -116,14 +116,17 @@ function M.new(w, ctx, diagrams)
     -- The title sits above the form rows, so on large screens it takes the full width instead of
     -- wrapping into the summary below it.
     all[#all + 1] = label(10, large and 50 or 27, width-20, card.title, large and MIDSIZE or SMLSIZE)
+    if not (card.grid and not large) then
     all[#all + 1] = label(10, large and 94 or 48, large and formX-30 or width-20, card.summary or card.detail)
-    all[#all].h = large and (illustrated and 98 or height-controlH-154) or rowY-52
+    all[#all].h = large and (card.grid and 30 or illustrated and 98 or height-controlH-154) or rowY-52
+    end
     if illustrated then
       local artY = large and 204 or rowY+4
       local artH = large and 174 or height-controlH-35-artY
       diagrams.append(all, w, card, 6, artY, formX-18, artH)
     end
     end
+    if card.grid then w.newServoGrid(all, w, card, width, height, large, controlH, current) end
     for i, r in ipairs(card.rows) do
       local y = rowY + (i-1)*rowH
       local function editable() return current() and (not r.enabled or r.enabled()) end

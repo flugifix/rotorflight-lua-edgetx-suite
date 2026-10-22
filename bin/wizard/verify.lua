@@ -171,6 +171,7 @@ local function beginWorld()
   q.messages,q.sent = {},{}
   local w = load(PATH .. "controller.lua").new(runtime,load(PATH .. "transport.lua"),H,L)
   w.newAttitudeView=load(PATH .. "attitude_view.lua").new
+  w.newServoGrid=load(PATH .. "servo_grid.lua").append
   load(PATH .. "forms.lua").attach(w);load(PATH .. "workflow.lua").attach(w);load(PATH .. "navigation.lua").attach(w)
   w.requestRebuild = function() w.rebuilds = (w.rebuilds or 0)+1 end
   w:load()
@@ -268,6 +269,7 @@ end
 for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
   for n,name in ipairs(steps) do
     w.step, w.stepKey, w.rebootPending, w.transition = n,name,nil,nil
+    w.wideScreen = size[1] >= 700
     measure("definition",function() w.cards = load(PATH .. "steps/" .. name .. ".lua")(w) end)
     if n==2 then
       w.data.rx_channels={channels={1500,1500,1500,1500,1500,1500,1500,1500}}
@@ -471,6 +473,10 @@ _G.rfsuite.session.helicopterSetupRecovery=nil
 -- Walk the actual page through its rendered callbacks. Construction and every
 -- reactive getter share this measured frame, as they do in the dashboard host.
 local frameClosed,frameVisited=false,{}
+-- The suite's servo fixture has the tail 120 us off centre; a pilot centres it in step 13.
+local centred={};for i,v in ipairs(api("servo_configurations").simulatorResponse) do centred[i]=v end
+centred[50],centred[51]=1500 & 255,1500 >> 8
+fixtures[120]=centred
 local pausedModelChoice=false
 local frameCtx={children={},x=0,y=0,w=480,h=272,menu={getCurrentMenuId=function() return "helicopter_setup_page" end},requestRebuild=function() end,
   requestClose=function() frameClosed=true end}
@@ -501,6 +507,10 @@ for _=1,5000 do
     if active and item.type=="button" and item.press then
       local caption=type(item.text)=="function" and item.text() or item.text
       local key=type(caption)=="string" and string.match(caption,"^@i18n%(app%.modules%.helicopter_setup%.([%w_]+)%)@$")
+      local shown=type(item.visible)~="function" or item.visible()
+      if shown and (key=="servoTestUp" or key=="answerUp" or caption==L.servoTestUp or caption==L.answerUp) then
+        measure("page input",item.press)
+      end
       if key=="continue" or key=="saveNext" or key=="finish" or key=="completeSetup" or
         caption==L.continue or caption==L.saveNext or caption==L.finish or caption==L.completeSetup then
         measure("page input",item.press)
@@ -511,6 +521,7 @@ for _=1,5000 do
   -- native tree. Sweep it before allowing the next page build to replace it.
   measure("retained page sweep",function() resolve(frameCtx.children) end)
 end
+fixtures[120]=nil
 check(pausedModelChoice,"actual page includes a four-second input pause")
 check(frameClosed,"actual rendered page completes the whole wizard")
 local frameCount=0;for _ in pairs(frameVisited) do frameCount=frameCount+1 end
@@ -531,6 +542,7 @@ local visited={}
 for _=1,3000 do
   w:tick();pump();ticks=ticks+5
   if w.ready and w.cards and not w.transition and not w.error then
+    if w.step==13 then for _,s in pairs(w.data.servo_configurations.servos) do s.mid=s.mid>860 and 1520 or 760 end end
     visited[w.step]=true;w:next()
   end
   if w.closed or w.error then break end

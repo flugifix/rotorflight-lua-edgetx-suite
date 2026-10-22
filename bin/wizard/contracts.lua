@@ -100,7 +100,10 @@ return function(h)
       w.data.mode_ranges.mode_ranges[1]={id=0,auxChannelIndex=0,range={start=1800,["end"]=2100}}
       for _=1,1500 do
         w:tick();h.pump();h.advance(1)
-        if w.cards and not w.transition and not w.error then w:next() end
+        if w.cards and not w.transition and not w.error then
+          if w.step==13 then for _,s in pairs(w.data.servo_configurations.servos) do s.mid=s.mid>860 and 1520 or 760 end end
+          w:next()
+        end
         if w.overview or w.error then break end
       end
       check(w.overview and not w.error,"CORE completed individual step returns to overview")
@@ -802,17 +805,33 @@ return function(h)
     check(not w.calibratedEsc,"S11 revisiting requires fresh ESC procedure")
   end)
   case("S13.servo-direction-centre",function()
-    local w=world();local c=step(w,"servos");c[1].enter()
+    local w=world();w.wideScreen=false;local c=step(w,"servos");c[1].enter()
     eq(w.holds.servo0.value,0,"S13 centre held on entry")
-    c[1].rows[1].press();eq(w.holds.servo0.value,400,"S13 +20 degree servo test")
-    c[1].rows[1].press();eq(w.holds.servo0.value,0,"S13 test toggles to centre")
-    local s=w.data.servo_configurations.servos[0];s.flags=6;c[1].rows[2].press()
+    local one,two=c[1].grid[1],c[1].grid[2]
+    one.test();eq(w.holds.servo0.value,400,"S13 +20 degree servo test")
+    two.test();eq(w.holds.servo0.value,0,"S13 testing another servo re-centres the first")
+    eq(w.holds.servo1.value,400,"S13 one servo tested at a time")
+    two.test();eq(w.holds.servo1.value,0,"S13 test toggles to centre")
+    local s=w.data.servo_configurations.servos[0];s.flags=6;one.test();one.down()
     eq(s.flags,7,"S13 reverse preserves other flags")
-    c[1].rows[1].press();c[1].rows[3].set(2)
-    eq(w.holds.servo0.value,0,"S13 affirmative answer centres tested servo")
+    check(one.testing(),"S13 reverse keeps the test running")
+    one.up();eq(w.holds.servo0.value,0,"S13 affirmative answer centres tested servo")
     check(w.checks.servoUp0,"S13 answer recorded")
-    c[2].rows[1].set(1700)
-    eq(c[2].rows[2].get(),L.checkMechanics,"S13 large offset explains mechanical remedy")
+    s.mid=1520;for _=1,50 do one.nudge(10) end
+    eq(s.mid,1920,"S13 centre nudge stays inside the pulse band")
+    eq(one.status(),L.servoFar,"S13 large offset explains mechanical remedy")
+    for _,col in ipairs(c[1].grid) do w.checks["servoUp"..col.index]=true end
+    for _,servo in pairs(w.data.servo_configurations.servos) do servo.mid=servo.mid>860 and 1520 or 760 end
+    check(w.validate(),"S13 confirmed directions and centres within 100 us complete the step")
+    w.data.servo_configurations.servos[3].mid=1650
+    check(not w.validate() and w.message==L.servoFar,"S13 a far tail centre keeps the step open")
+    w.data.servo_configurations.servos[3].mid=1520;w.checks.servoUp1=nil
+    check(not w.validate(),"S13 an unconfirmed direction keeps the step open")
+    eq(#c,2,"S13 compact screens give the tail a card of its own")
+    w.wideScreen=true;w.data.mixer_config.swash_type=2;local wide=step(w,"servos")
+    eq(#wide,1,"S13 large screens show every servo on one page")
+    eq(#wide[1].grid,4,"S13 the tail is the fourth column on large screens")
+    eq(wide[1].grid[1].role,L.roleCentreLine,"S13 a column names the servo's role")
   end)
   case("S14-S15.axis-direction-and-trims",function()
     local w=world();local c=step(w,"direction");c[1].enter()
@@ -1272,6 +1291,10 @@ return function(h)
     eq(power,250,"CORE motor refresh follows changed power setting")
   end)
   case("CORE.suite-step-entries",function()
+    -- The suite's servo fixture has the tail 120 us off centre; a pilot centres it in step 13.
+    local centred={};for i,v in ipairs(h.api("servo_configurations").simulatorResponse) do centred[i]=v end
+    centred[50],centred[51]=1500 & 255,1500 >> 8
+    h.fixtures[120]=centred
     local fs=assert(loadfile("bin/wizard/history_fixture.lua"))()();fs:install()
     local registry=load("app/pages/init.lua")
     local original=loadScript
@@ -1337,6 +1360,9 @@ return function(h)
             if active and item.type=="choice" and item.values[1]=="@i18n(app.modules.helicopter_setup.no)@" and
               item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@" then item.set(2) end
             local caption=type(item.text)=="function" and item.text() or item.text
+            local shown=type(item.visible)~="function" or item.visible()
+            if active and shown and item.type=="button" and (caption=="@i18n(app.modules.helicopter_setup.servoTestUp)@" or
+              caption=="@i18n(app.modules.helicopter_setup.answerUp)@") then item.press() end
             if active and item.type=="button" and (caption=="@i18n(app.modules.helicopter_setup.continue)@" or
               caption=="@i18n(app.modules.helicopter_setup.saveNext)@" or caption=="@i18n(app.modules.helicopter_setup.saveStep)@" or
               caption=="@i18n(app.modules.helicopter_setup.backToSuite)@") then item.press() end
@@ -1363,6 +1389,7 @@ return function(h)
     local recorded=load("app/pages/helicopter_setup/history_store.lua").new("test-board");recorded:load()
     eq(recorded.mask,(1<<19)-1,"CORE all nineteen individual Suite visits record their validated completion")
     loadScript=original;fs:restore()
+    h.fixtures[120]=nil
   end)
   case("CORE.radio-model-preparation",function()
     local w=world();settle(w)
