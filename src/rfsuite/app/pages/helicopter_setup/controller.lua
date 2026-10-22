@@ -407,6 +407,7 @@ function M.new(runtime, transport, mathModule, labels)
     end
     if self.modelPreparationCard then
       if not self:ack("modelReady") then return end
+      if self.systemStatus == nil or self.systemConfig == nil then self.message = self.L.sensorsRequired; return end
       self.modelPreparationDone,self.modelPreparationCard=true,nil
       self.cards,self.buildRequested=nil,true;self:rebuild();return
     end

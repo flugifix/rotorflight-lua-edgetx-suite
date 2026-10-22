@@ -1076,6 +1076,10 @@ return function(h)
     eq(rows[3].get(),L.sensorLive,"CORE a decoded status word reads as live")
     eq(rows[4].get(),L.sensorMissing,"CORE a sensor without value after four reads reads as missing")
     check(string.find(w.cards[1].detail,L.sensorsHint,1,true)~=nil,"CORE the help says where to add a missing sensor")
+    w.checks.modelReady=true;w.systemStatus,w.systemConfig={word=0},nil;w:next()
+    check(w.modelPreparationCard and w.message==L.sensorsRequired,"CORE a missing FC state sensor keeps the steps closed")
+    w.systemConfig={word=0};w:next()
+    check(not w.modelPreparationCard,"CORE both FC state sensors live open the steps")
   end)
   case("S14-S15.axis-direction-and-trims",function()
     local w=world();local c=step(w,"direction");c[1].enter()
@@ -1553,6 +1557,12 @@ return function(h)
     centred[50],centred[51]=1500 & 255,1500 >> 8
     h.fixtures[120]=centred
     local fs=assert(loadfile("bin/wizard/history_fixture.lua"))()();fs:install()
+    -- The model card needs both packed FC state sensors live, as the radio reports them.
+    local sources={getValue=getValue,getFieldInfo=getFieldInfo,getSourceValue=getSourceValue,model=model}
+    getValue=function() return 8 end
+    getFieldInfo=function(name) if name=="STAT" or name=="SCFG" or name=="RxBt" then return {id=1} end end
+    getSourceValue=function(name) return 8,name=="telem99" or name=="STAT" or name=="SCFG" end
+    model={getSensor=function(index) if index<99 then return {name="STAT"} end end}
     local registry=load("app/pages/init.lua")
     local original=loadScript
     local loaded={}
@@ -1647,6 +1657,7 @@ return function(h)
     eq(recorded.mask,(1<<19)-1,"CORE all nineteen individual Suite visits record their validated completion")
     loadScript=original;fs:restore()
     h.fixtures[120]=nil
+    getValue,getFieldInfo,getSourceValue,model=sources.getValue,sources.getFieldInfo,sources.getSourceValue,sources.model
   end)
   case("CORE.radio-model-preparation",function()
     local w=world();settle(w)

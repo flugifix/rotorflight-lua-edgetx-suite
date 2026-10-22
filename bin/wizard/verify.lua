@@ -185,6 +185,9 @@ local function beginWorld()
   w.newServoGrid=load(PATH .. "servo_grid.lua").append
   load(PATH .. "forms.lua").attach(w,load("lib/port_labels.lua"));load(PATH .. "workflow.lua").attach(w);load(PATH .. "navigation.lua").attach(w)
   w.requestRebuild = function() w.rebuilds = (w.rebuilds or 0)+1 end
+  -- Controller-only worlds have no telemetry poller: both packed FC state words are live.
+  local packed = load("lib/system_state.lua")
+  w.systemStatus, w.systemConfig = packed.decode("system_status", 0), packed.decode("system_config", 0)
   w:load()
   return w
 end

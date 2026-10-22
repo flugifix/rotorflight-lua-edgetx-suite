@@ -29,6 +29,7 @@ local L = {
   sensorMissing = "@i18n(app.modules.helicopter_setup.sensorMissing)@",
   sensorChecking = "@i18n(app.modules.helicopter_setup.sensorChecking)@",
   sensorsHint = "@i18n(app.modules.helicopter_setup.sensorsHint)@",
+  sensorsRequired = "@i18n(app.modules.helicopter_setup.sensorsRequired)@",
   activeModel = "@i18n(app.modules.helicopter_setup.activeModel)@",
   modelChecked = "@i18n(app.modules.helicopter_setup.modelChecked)@",
   backToSuite = "@i18n(app.modules.helicopter_setup.backToSuite)@",

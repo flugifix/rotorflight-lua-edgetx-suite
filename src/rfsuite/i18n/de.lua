@@ -113,6 +113,7 @@ return {
         sensorMissing = "Fehlt",
         sensorChecking = "Prüfe",
         sensorsHint = "Der Wizard liest zwei Rotorflight-Telemetriesensoren, System Status und System Config, um ungespeicherte Einstellungen, einen ausstehenden Neustart oder einen verlorenen Empfängerlink anzuzeigen. Fehlt einer: ihn unter Configuration > Setup > Telemetry zu den Telemetriesensoren des FC hinzufügen, dann im Modell neue Sensoren suchen lassen. System > Tools > Diagnostics > System Status zeigt beide.",
+        sensorsRequired = "Beide FC-Zustandssensoren müssen aktiv sein, bevor die Schritte beginnen. Siehe ?.",
         activeModel = "Aktives Modell",
         modelChecked = "Modell geprüft",
         backToSuite = "Zur Suite",

@@ -66,8 +66,9 @@ history/reset page needs no model-configuration confirmation. The Configurator's
 The same card checks two prerequisites up front: the Rotorflight telemetry sensors
 *System Status* and *System Config*. Each row reads **Live**, **Checking** or, after
 four reads without a value, **Missing**. The wizard uses them for its hints about unsaved
-settings, a pending restart and a lost receiver link; **?** says where to add a missing
-one (*Configuration* > *Setup* > *Telemetry*, then discover new sensors in the model).
+settings, a pending restart and a lost receiver link, and **Continue** stays refused until both
+are live; **?** says where to add a missing one (*Configuration* > *Setup* > *Telemetry*, then
+discover new sensors in the model).
 
 ## Navigation
 

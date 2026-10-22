@@ -113,6 +113,7 @@ return {
         sensorMissing = "Missing",
         sensorChecking = "Checking",
         sensorsHint = "The wizard reads two Rotorflight telemetry sensors, System Status and System Config, to show unsaved settings, a pending restart or a lost receiver link. If one is Missing: add it to the FC's telemetry sensors under Configuration > Setup > Telemetry, then let the model discover new sensors. System > Tools > Diagnostics > System Status shows both.",
+        sensorsRequired = "Both FC state sensors must be live before the steps. See ?.",
         activeModel = "Active model",
         modelChecked = "Model checked",
         backToSuite = "Back to Suite",
