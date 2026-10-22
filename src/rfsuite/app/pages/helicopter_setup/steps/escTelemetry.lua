@@ -29,7 +29,7 @@ return function(w)
     w:cardDef(L.telemetryCheck, L.telemetryCheckHint, {
       w:value(L.voltage, function() local m = motor(); return m and string.format("%.2f V", m.voltage / 1000) or "--" end),
       w:value(L.current, function() local m = motor(); return m and string.format("%.2f A", m.current / 1000) or "--" end),
-      w:value(L.temperature, function() local m = motor(); return m and string.format("%.1f C", m.temperature / 10) or "--" end),
+      w:value(L.temperature, function() local m = motor(); return m and string.format("%.1f°C", m.temperature / 10) or "--" end),
       w:value(L.rpm, function() local m = motor(); return m and m.rpm or "--" end)
     })
   }
