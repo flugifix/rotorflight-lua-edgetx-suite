@@ -45,7 +45,8 @@ reports *The model already carries this setup; nothing to write.*
 **The value line is switched by a logical switch**, `|GVx| > 0` on the value variable with a
 delay of 0.1 s and a duration of 0.2 s. It is what ends each pulse: the radio's mixer lets 200 ms
 of a press through, timed by the radio itself, so a slow pass of the widget cannot stretch a
-press into a second step. The button takes a slot that already holds exactly that switch, or
+press into a second step. Each press holds the value variable for a fixed 310 ms, long enough for
+that window to run out in full. The button takes a slot that already holds exactly that switch, or
 else the last empty logical switch nothing on the model refers to, and names it in the
 confirmation (*Pulse timer L64: |GV5| > 0*). It never writes over a logical switch that holds
 anything else; a model with no slot left is refused with *No logical switch is free to time the
