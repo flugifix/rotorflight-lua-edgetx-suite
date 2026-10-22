@@ -218,7 +218,9 @@ local Menu = _G.rfsuite.require("widgets/dashboard/fullscreen_menu.lua")
 if type(Menu) ~= "table" or type(Menu.resolve) ~= "function" then Menu = nil end
 
 local function newCtx(log, state)
-  local widget = { state = state, zone = { x = 0, y = 0, w = width, h = height }, preferences = { general = {} } }
+  -- A connected widget, so the rows that write to the flight controller are drawn and checked.
+  local widget = { state = state, zone = { x = 0, y = 0, w = width, h = height }, preferences = { general = {} },
+    connectionReady = true }
   local ctx = { keys = {} }
   ctx.action = function(after) log.actions[#log.actions + 1] = after end
   ctx.condition = function() return false end

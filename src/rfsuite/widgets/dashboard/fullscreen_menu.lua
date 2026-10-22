@@ -46,7 +46,7 @@ end
 -- What is checked is the row itself: an action, or the button that opens a view. The options of a
 -- `choice` that names a `view` are pressed in that view, which keeps its own rules -- the runtime
 -- refuses a battery pick made while armed, and a battery profile's press queues nothing while
--- armed -- and its close has to work whatever the state.
+-- armed or before the connection is ready -- and its close has to work whatever the state.
 local function refused(widget, entry, option)
   if option ~= nil and entry.view ~= nil then return false end
   if isEntryVisible(entry, widget) then return false end
@@ -441,7 +441,9 @@ function BUILD.battery_profile(widget, t)
               -- The profile in force: the battery_profile sensor (BatP) is 1-based.
               current = (state.batteryProfile == (i + 1)),
               press = function(report)
-                if w.state and w.state.armed == true then return end
+                -- The page can stay up when the link drops, and a key can open it on the
+                -- connection screen: queue nothing until the connection is ready, as while armed.
+                if w.connectionReady ~= true or (w.state and w.state.armed == true) then return end
                 local mspModule = requireModule("tasks/msp/runtime.lua")
                 if mspModule and mspModule.getState then
                   local mState = mspModule.getState()

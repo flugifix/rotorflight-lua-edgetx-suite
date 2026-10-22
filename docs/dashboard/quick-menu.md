@@ -55,8 +55,10 @@ where the table says it is not listed. BATTERY PROFILE is not chosen there; the 
 it where it is offered.
 
 **ERASE BLACKBOX and BATTERY PROFILE are not offered before the connection is ready or while
-the model is armed** because nothing
-they send would arrive: while the model is armed the suite sends no configuration messages to
+the model is armed.** Before the connection is ready the suite has not yet read the board it is
+talking to, so it has nothing to write for; a profile pressed on the battery profile page then
+queues nothing either. While the model is
+armed nothing they send would arrive: the suite sends no configuration messages to
 the flight controller and drops the ones waiting, so an erase or a profile change pressed in the
 air would never reach the board. A menu that was already open when the model armed still shows
 what it showed; a press on an entry that is no longer offered does nothing, keeps full screen,
@@ -172,7 +174,7 @@ Over a theme that takes full screen, the same X, entries and picker answers clos
 and show the theme again instead; the theme's own close control, or a long press on the return
 key, leaves full screen. With a view open, a page key on **Quick menu**, its default on the
 radio-wide [Keys](../pages/settings/dashboard/keys.md) page, or on **Theme** closes the quick
-menu or opens it over another view; one the theme binds to the view on top closes that view
+menu or opens it over another view (over the battery profile page it goes back to the menu); one the theme binds to the view on top closes that view
 instead. A page key set there to another action does that action, and on **Nothing** nothing:
 the view stays. A key bound to the quick menu also opens and closes it, and a short
 press on the return key closes the menu or the picker, and on the battery

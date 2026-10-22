@@ -90,6 +90,12 @@ local STUBS = {
   ["tasks/msp/api/dataflash_summary.lua"] = function()
     return { command = 70, simulatorResponse = {}, parse = function() return nil end }
   end,
+  ["tasks/msp/api/battery_profile.lua"] = function()
+    return { writeCommand = 1, buildWritePayload = function() return {} end }
+  end,
+  ["tasks/msp/api/eeprom_write.lua"] = function()
+    return { writeCommand = 250, buildWritePayload = function() return {} end }
+  end,
 }
 
 local function requireStub(path)
@@ -263,6 +269,25 @@ local function caseOfflineHidesAndRefuses(menu)
   return nil
 end
 
+-- The battery profile page takes its presses itself, past the row's own condition, and a key or a
+-- lost link can leave it on screen before the connection is ready: a press there queues nothing.
+local function caseProfilePressNeedsReadyConnection(menu)
+  resetWorld()
+  local w = newWidget()
+  w.state.battery_config = { batteryCapacity_0 = 1000 }
+  local entry = menu.entry(w, "battery_profile")
+  if entry == nil then return "no battery profile entry" end
+  local options = entry.options(w)
+  if #options ~= 1 then return "expected one profile option, got " .. #options end
+  options[1].press(function() end)
+  if #adds == 0 then return "a connected press queued nothing, so the case cannot see a refusal" end
+  resetWorld()
+  w.connectionReady = nil
+  options[1].press(function() end)
+  if #adds ~= 0 then return "a press before the connection is ready queued " .. #adds .. " message(s)" end
+  return nil
+end
+
 -- Agreeing closes the question before the work's own action runs, so a theme's `after` -- handed
 -- in through ctx.run -- acts on the surface the press was written for, the menu, and not on the
 -- question that was on top of it.
@@ -319,6 +344,7 @@ local CASES = {
   { id = "ERASE performs the press",                 fn = caseAgreePerforms },
   { id = "an unraisable question refuses the press", fn = caseNoQuestionRefuses },
   { id = "offline hides and refuses the erase row",  fn = caseOfflineHidesAndRefuses },
+  { id = "a profile press needs a ready connection",  fn = caseProfilePressNeedsReadyConnection },
   { id = "agreeing closes the question first",       fn = caseAgreeClosesQuestionFirst },
   { id = "a choice confirm guards its options",      fn = caseChoiceConfirmGuardsOptions },
 }
