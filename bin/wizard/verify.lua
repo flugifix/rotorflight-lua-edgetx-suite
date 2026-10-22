@@ -62,6 +62,7 @@ for _, name in ipairs({ "status","boxnames","boxids","mode_ranges","mode_ranges_
   "tail_motor_output","governor_profile","rc","attitude","motor","motor_telemetry","rx_channels","rc_command" }) do
   local a = api(name); byCommand[a.command] = a
 end
+local defaultRx, rxSweep = fixtures[114], false
 local failCommand, legacy, legacyMixer = nil, false, false
 local function pump()
   local m = table.remove(q.messages,1); if not m then return end
@@ -92,6 +93,13 @@ local function pump()
   end
   if b and recordFault and m.command==recordFault.command and m.payload[1]==recordFault.index and recordFault.short then b[#b]=nil end
   b = b or fixtures[m.command] or (byCommand[m.command] and byCommand[m.command].simulatorResponse) or {}
+  -- The walks move the four sticks end to end between replies, as a pilot does on the stick travel card.
+  if m.command==114 and fixtures[114]==defaultRx then
+    rxSweep=not rxSweep
+    local swept={};for i,v in ipairs(b) do swept[i]=v end
+    for i=1,7,2 do swept[i],swept[i+1]=(rxSweep and 2000 or 1000)&255,(rxSweep and 2000 or 1000)>>8 end
+    b=swept
+  end
   if m.processReply then m.processReply(m,b) end
 end
 local function measure(name, fn)

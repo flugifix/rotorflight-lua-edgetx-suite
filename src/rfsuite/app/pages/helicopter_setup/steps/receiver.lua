@@ -24,6 +24,16 @@ return function(w)
   w.onLive = function(api, d)
     if api ~= "rx_channels" then return end
     local map = w.data.rx_map
+    local rc = w.data.rc_config
+    local span = rc and rc.rc_deflection or 0
+    for n = 1, 4 do
+      local v = d.channels[(map[keys[n]] or n - 1) + 1]
+      if type(v) == "number" and v > 500 and span > 0 then
+        local pct, t = math.floor((v - rc.rc_center) * 100 / span + 0.5), r.travel[n]
+        if pct < 0 and -pct > t[1] then t[1] = math.min(-pct, 100) end
+        if pct > 0 and pct > t[2] then t[2] = math.min(pct, 100) end
+      end
+    end
     local throttle = d.channels[(map.throttle or 4) + 1]
     if r.record and throttle and throttle > 500 then r.low, r.high = math.min(r.low, throttle), math.max(r.high, throttle) end
     local s = r.detect
@@ -51,17 +61,30 @@ return function(w)
     end
     r.detect = nil; w:touch("rx_map"); w.message = L.detected
   end
+  -- Stick travel: the furthest each control has gone either way, in percent of the FC's stick
+  -- range, the way the firmware scales it (rc.c: (rcInput - rc_center) / rc_deflection).
+  r.travel = r.travel or { {0, 0}, {0, 0}, {0, 0}, {0, 0} }
+  local TRAVEL = 95
+  local function travelOk()
+    for n = 1, 4 do if r.travel[n][1] < TRAVEL or r.travel[n][2] < TRAVEL then return false end end
+    return true
+  end
   w.validate = function()
     local raw = w.data.rx_channels
     local ok = raw and #raw.channels >= 5 and (w.data.status.arming_disable_flags & 4) == 0
-    if not ok then w.message = L.noReceiver end
-    return ok and not r.detect
+    if not ok then w.message = L.noReceiver; return false end
+    if r.detect then return false end
+    if not travelOk() then w.message = L.sticksShort; return false end
+    return true
   end
   local function mapped(n)
     return function()
       local channels = (w.data.rx_channels or {}).channels or {}
       return channels[(w.data.rx_map[keys[n]] or n - 1) + 1] or "--"
     end
+  end
+  local function travel(n)
+    return function() return string.format(L.travelPair, r.travel[n][1], r.travel[n][2]) end
   end
   local function input(n)
     local get=mapped(n)
@@ -101,6 +124,11 @@ return function(w)
     w:cardDef(L.checkSticks, L.sticksHint, {
       w:value(L.rollRight, input(1)), w:value(L.pitchForward, input(2)), w:value(L.yawRight, input(3)), w:value(L.collectiveUp, input(4))
     }, nil, "sticks"),
+    w:cardDef(L.stickTravel, L.travelHint, {
+      w:value(L.travelRoll, travel(1)), w:value(L.travelPitch, travel(2)), w:value(L.travelYaw, travel(3)),
+      w:value(L.travelCollective, travel(4)),
+      w:button(L.travelReset, function() r.travel = { {0, 0}, {0, 0}, {0, 0}, {0, 0} } end)
+    }),
     w:cardDef(L.throttleRange, L.throttleHint, {
       w:value(L.throttle, mapped(5)),
       w:button(L.record, function()
@@ -133,6 +161,7 @@ return function(w)
   cards[1].summary=L.receiverQuick
   cards[2].summary=L.channelQuick
   cards[3].summary=L.sticksQuick
-  cards[4].summary=L.throttleQuick
+  cards[4].summary=L.travelQuick
+  cards[5].summary=L.throttleQuick
   return cards
 end

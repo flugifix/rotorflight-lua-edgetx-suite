@@ -410,9 +410,25 @@ return function(h)
     for _,channel in ipairs({1,2,3,5,7}) do values[channel]=2000;h.measure("RX learning",function() w.onLive("rx_channels",raw()) end) end
     check(w.rx.detect==nil and w.data.rx_map.throttle==4,"REVIEW subsequent controls need no extra baseline reply")
     w.data.rx_map.throttle=4;values[5]=1000;raw()
-    cards[4].rows[2].press();values[5]=2000;w.onLive("rx_channels",raw());cards[4].rows[4].press()
+    cards[5].rows[2].press();values[5]=2000;w.onLive("rx_channels",raw());cards[5].rows[4].press()
     eq(w.data.rc_config.rc_min_throttle,1020,"REVIEW throttle recording includes the current OFF switch endpoint")
     eq(w.data.rc_config.rc_max_throttle,1980,"REVIEW one ON switch transition completes the range")
+    -- Stick travel: percent of the FC's stick range, both ways, per control.
+    w.data.rc_config.rc_center,w.data.rc_config.rc_deflection=1500,500
+    eq(cards[4].title,L.stickTravel,"S02 the stick travel card follows the stick check")
+    cards[4].rows[5].press()
+    for i=1,4 do values[i]=1500 end;w.onLive("rx_channels",raw())
+    eq(cards[4].rows[1].get(),string.format(L.travelPair,0,0),"S02 centred sticks have no travel yet")
+    for i=1,4 do values[i]=1000 end;w.onLive("rx_channels",raw())
+    for i=1,4 do values[i]=2000 end;values[w.data.rx_map.collective+1]=1950;w.onLive("rx_channels",raw())
+    eq(cards[4].rows[1].get(),string.format(L.travelPair,100,100),"S02 full roll travel reads 100 both ways")
+    eq(cards[4].rows[4].get(),string.format(L.travelPair,100,90),"S02 a collective short of its end reads its travel")
+    w.rx.detect=nil;w.data.status.arming_disable_flags=0
+    check(not w.validate() and w.message==L.sticksShort,"S02 a control under 95 percent keeps the step open")
+    values[w.data.rx_map.collective+1]=2000;w.onLive("rx_channels",raw())
+    check(w.validate(),"S02 full travel on every control completes the step")
+    cards[4].rows[5].press()
+    eq(cards[4].rows[2].get(),string.format(L.travelPair,0,0),"S02 measure again clears the travel")
   end)
   case("REVIEW.mode-first-flick",function()
     local w=world();settle(w);w.step=3;w.data.boxids.box_ids={0}
@@ -504,15 +520,15 @@ return function(h)
     eq(w.data.rx_map.throttle,4,"S02 throttle detected")
     eq(w.data.rx_map.aux1,6,"S02 arm switch detected as AUX1")
     check(w.rx.detect==nil and w.dirty.rx_map,"S02 permutation completes")
-    values[5]=1100;reply();c[4].rows[2].press();values[5]=1399;reply();c[4].rows[4].press()
+    values[5]=1100;reply();c[5].rows[2].press();values[5]=1399;reply();c[5].rows[4].press()
     check(w.message==L.travelShort,"S02 travel below 300 rejected")
-    values[5]=1900;reply();c[4].rows[4].press()
+    values[5]=1900;reply();c[5].rows[4].press()
     eq(w.data.rc_config.rc_min_throttle,1120,"S02 low range margin")
     eq(w.data.rc_config.rc_max_throttle,1880,"S02 high range margin")
-    c[5].rows[3].press();w.data.rx_channels={channels={1500,1500,1500,1500,1030}}
-    eq(c[5].rows[4].get(),L.yes,"S02 default 1041 minus deadband allows 1030")
+    c[6].rows[3].press();w.data.rx_channels={channels={1500,1500,1500,1500,1030}}
+    eq(c[6].rows[4].get(),L.yes,"S02 default 1041 minus deadband allows 1030")
     w.data.rx_channels.channels[5]=0
-    eq(c[5].rows[4].get(),L.no,"S02 absent throttle is not low confirmation")
+    eq(c[6].rows[4].get(),L.no,"S02 absent throttle is not low confirmation")
   end)
   case("S03.mode-status-versus-switch",function()
     local w=world();w.data.boxids.box_ids={0,53,47}
