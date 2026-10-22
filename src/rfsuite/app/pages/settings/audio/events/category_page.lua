@@ -141,6 +141,11 @@ local CONFIG_SCHEMA = {
   -- starts at 0 like the others, which is the value that was not expressible before.
   { key = "fuel_repeat_below_zero", type = "number", default = 1, min = 0, max = 10, section = "fuel" },
   { key = "fuel_haptic_below_zero", type = "bool", default = false, section = "fuel" },
+  -- A second, finer callout step below a level (lib/audio.lua, fuelThresholdList). Choices out of
+  -- FUEL_FINER_BELOW_VALUES and FUEL_FINER_STEP_VALUES below; 0 is Off, so a preferences.ini
+  -- without the keys speaks the steps it always did.
+  { key = "fuel_finer_below", type = "number", default = 0, section = "fuel" },
+  { key = "fuel_finer_step", type = "number", default = 5, section = "fuel" },
   -- What is said once when a model connects has a page of its own, whatever quantity each
   -- announcement reads. The keys are the ones these settings always had, so an existing
   -- preferences file reads exactly as it did; only the page that draws and saves them changed.
@@ -405,6 +410,9 @@ local SECTIONS = {
     items = {
       { kind = "bool", key = "fuel_alerts", labelKey = "fuel_alerts", labelFallback = "SmartFuel" },
       { kind = "choice", key = "fuel_callout_percent", labelKey = "fuel_callout_percent", labelFallback = "Callout %" },
+      -- The step below the level the row above it names; drawn greyed while that row is Off.
+      { kind = "choice", key = "fuel_finer_below", labelKey = "fuel_finer_below", labelFallback = "Finer below" },
+      { kind = "choice", key = "fuel_finer_step", labelKey = "fuel_finer_step", labelFallback = "Finer step" },
       -- The same two rows the other categories carry, under the same subheader. The empty
       -- alert is the only one on this page that has a condition to hold, so the pair reads
       -- the same as the "below 0%" wording it replaces and means exactly what it did.
@@ -533,6 +541,8 @@ local ROW_HELP = {
     return {
       fuel_alerts = t(i18n, "help_fuel_alerts"),
       fuel_callout_percent = t(i18n, "help_fuel_callout_percent"),
+      fuel_finer_below = t(i18n, "help_fuel_finer_below"),
+      fuel_finer_step = t(i18n, "help_fuel_finer_step"),
       fuel_repeat_below_zero = t(i18n, "help_fuel_repeat_below_zero"),
       fuel_haptic_below_zero = t(i18n, "help_fuel_haptic_below_zero"),
       fuel_empty_raise = t(i18n, "help_fuel_empty_raise"),
@@ -599,6 +609,18 @@ local ROW_HELP = {
 }
 
 local FUEL_CALLOUT_VALUES = { [0] = true, [5] = true, [10] = true, [20] = true, [25] = true, [50] = true }
+-- The same two lists lib/audio.lua accepts (FUEL_FINER_BELOW, FUEL_FINER_STEP); 0 is Off.
+-- The levels are shown as numbers with the unit, as the TX power maximum is, so their options
+-- are built once here; only Off is a word, and its label is set when a page is built.
+local FUEL_FINER_BELOW_LIST = { 0, 10, 15, 20, 25, 30, 40, 50 }
+local FUEL_FINER_BELOW_VALUES = {}
+local FUEL_FINER_BELOW_OPTIONS = {}
+for i = 1, #FUEL_FINER_BELOW_LIST do
+  local level = FUEL_FINER_BELOW_LIST[i]
+  FUEL_FINER_BELOW_VALUES[level] = true
+  FUEL_FINER_BELOW_OPTIONS[i] = { value = level, label = tostring(level) .. "%" }
+end
+local FUEL_FINER_STEP_VALUES = { [1] = true, [2] = true, [5] = true }
 
 -- The own maximum of the TX power alert, in mW: the power steps ExpressLRS offers above its lowest
 -- (TXModuleParameters.cpp, strPowerLevels), which is also the list the Urban theme's own power
@@ -688,6 +710,10 @@ function M.new(sectionKey)
       repeatSetters = nil,
       fuelCalloutGet = nil,
       fuelCalloutSet = nil,
+      fuelFinerBelowGet = nil,
+      fuelFinerBelowSet = nil,
+      fuelFinerStepGet = nil,
+      fuelFinerStepSet = nil,
       fuelHapticGet = nil,
       fuelHapticSet = nil,
       announceGet = nil,
@@ -818,6 +844,74 @@ function M.new(sectionKey)
       end
     end
     return ui.runtime.fuelCalloutSet
+  end
+
+  -- *Finer below*: Off, or the level below which the callout speaks every *Finer step*.
+  local function getFuelFinerBelowOptions(i18n)
+    FUEL_FINER_BELOW_OPTIONS[1].label = t(i18n, "fuel_finer_off", "Off")
+    return FUEL_FINER_BELOW_OPTIONS
+  end
+
+  local function getFuelFinerBelowGetter()
+    if ui.runtime.fuelFinerBelowGet then return ui.runtime.fuelFinerBelowGet end
+    ui.runtime.fuelFinerBelowGet = function()
+      local value = tonumber(ui.config.fuel_finer_below) or 0
+      if not FUEL_FINER_BELOW_VALUES[value] then return 0 end
+      return value
+    end
+    return ui.runtime.fuelFinerBelowGet
+  end
+
+  local function getFuelFinerBelowSetter()
+    if ui.runtime.fuelFinerBelowSet then return ui.runtime.fuelFinerBelowSet end
+    ui.runtime.fuelFinerBelowSet = function(value)
+      if ui.config.fuel_alerts ~= true then return end
+      local nextValue = tonumber(value) or 0
+      if not FUEL_FINER_BELOW_VALUES[nextValue] then nextValue = 0 end
+      if ui.config.fuel_finer_below ~= nextValue then
+        ui.config.fuel_finer_below = nextValue
+        -- A rebuild, so the *Finer step* row below is drawn greyed or live to match.
+        ui.runtime.markDirty()
+      end
+    end
+    return ui.runtime.fuelFinerBelowSet
+  end
+
+  local function getFuelFinerStepOptions(i18n)
+    return {
+      { value = 1, label = t(i18n, "fuel_callout_1", "Every 1%") },
+      { value = 2, label = t(i18n, "fuel_callout_2", "Every 2%") },
+      { value = 5, label = t(i18n, "fuel_callout_5", "Every 5%") },
+    }
+  end
+
+  local function getFuelFinerStepGetter()
+    if ui.runtime.fuelFinerStepGet then return ui.runtime.fuelFinerStepGet end
+    ui.runtime.fuelFinerStepGet = function()
+      local value = tonumber(ui.config.fuel_finer_step) or 5
+      if not FUEL_FINER_STEP_VALUES[value] then return 5 end
+      return value
+    end
+    return ui.runtime.fuelFinerStepGet
+  end
+
+  -- Editable only while *Finer below* names a level: with it Off the step is never used.
+  local function fuelFinerActive()
+    return (tonumber(ui.config.fuel_finer_below) or 0) ~= 0
+  end
+
+  local function getFuelFinerStepSetter()
+    if ui.runtime.fuelFinerStepSet then return ui.runtime.fuelFinerStepSet end
+    ui.runtime.fuelFinerStepSet = function(value)
+      if ui.config.fuel_alerts ~= true or not fuelFinerActive() then return end
+      local nextValue = tonumber(value) or 5
+      if not FUEL_FINER_STEP_VALUES[nextValue] then nextValue = 5 end
+      if ui.config.fuel_finer_step ~= nextValue then
+        ui.config.fuel_finer_step = nextValue
+        ui.runtime.markDirty()
+      end
+    end
+    return ui.runtime.fuelFinerStepSet
   end
 
   -- The repeat rows all offer the same list, because the number means the same thing on every
@@ -974,6 +1068,10 @@ function M.new(sectionKey)
         if field.max and value > field.max then value = field.max end
         if key == "fuel_callout_percent" then
           if not FUEL_CALLOUT_VALUES[value] then value = 10 end
+        elseif key == "fuel_finer_below" then
+          if not FUEL_FINER_BELOW_VALUES[value] then value = 0 end
+        elseif key == "fuel_finer_step" then
+          if not FUEL_FINER_STEP_VALUES[value] then value = 5 end
         elseif key == "tpwr_max" then
           if not TX_POWER_MAX_VALUES[value] then value = 100 end
         end
@@ -1212,8 +1310,23 @@ function M.new(sectionKey)
           cursorY = cursorY + Controls.STATIC_SECTION_H
         elseif item.kind == "choice" then
           local options, selected, onSelect
+          local comboOpts = nil
           if k == "fuel_callout_percent" then
             options, selected, onSelect = getFuelCalloutOptions(i18n), getFuelCalloutGetter()(), getFuelCalloutSetter()
+          elseif k == "fuel_finer_below" then
+            options, selected, onSelect = getFuelFinerBelowOptions(i18n), getFuelFinerBelowGetter()(), getFuelFinerBelowSetter()
+          elseif k == "fuel_finer_step" then
+            options, selected, onSelect = getFuelFinerStepOptions(i18n), getFuelFinerStepGetter()(), getFuelFinerStepSetter()
+            -- Its own options table rather than helpOpts', which is nil without a help text and
+            -- would take the greying with it.
+            local helpText = helpTexts[k]
+            if type(helpText) ~= "string" or helpText == "" then helpText = nil end
+            comboOpts = {
+              active = fuelFinerActive,
+              helpText = helpText,
+              helpTitle = helpText and labelText,
+              onHelp = helpText and onHelp
+            }
           elseif k == "voltage_announce" then
             options, selected, onSelect = getAnnounceOptions(i18n), getAnnounceGetter()(), getAnnounceSetter()
           elseif k == "tpwr_max" then
@@ -1227,7 +1340,7 @@ function M.new(sectionKey)
             options,
             selected,
             onSelect,
-            helpOpts(helpTexts, k, labelText, onHelp)
+            comboOpts or helpOpts(helpTexts, k, labelText, onHelp)
           )
         elseif item.kind == "number" then
           if not getterCache then

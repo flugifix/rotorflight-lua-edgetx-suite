@@ -25,6 +25,7 @@ layer described below, and the menu and the picker open over it.
 | `widgets/dashboard/runtime.lua` | The fullscreen branch of `widget.refresh`, which asks `views.resolve()` which view to show, and `viewJobStep`, which builds it. |
 | `widgets/dashboard/fullscreen_menu.lua` | The quick menu view. |
 | `widgets/dashboard/battery_pick_menu.lua` | The battery picker view. It draws the quick menu's `battery_pick` record, whose options and close are what its presses run. |
+| `widgets/dashboard/battery_profile_menu.lua` | The battery profile page. It draws the quick menu's `battery_profile` record, whose options are what its presses run, with the outcome of the last one in its foot line. |
 | `widgets/dashboard/confirm_menu.lua` | The confirmation view. It draws the question an entry's `confirm` raises (see [Confirmations](#confirmations)); its two buttons run or discard the press held behind the question. |
 | `widgets/dashboard/fullscreen_controls.lua` | The tool control, the menu glyph and the X the widget draws over a fullscreen theme that binds no control of its own, and the tool control alone on the connect splash at full screen. |
 | `widgets/dashboard/tool_host.lua` | The suite's tool, run inside the widget while it is open — see [The tool](#the-tool). |
@@ -52,10 +53,12 @@ The shipped registry, in this order:
 | --- | --- | --- |
 | `battery_pick` | `widgets/dashboard/battery_pick_menu.lua` | `batteryPickPending` |
 | `confirm` | `widgets/dashboard/confirm_menu.lua` | — |
+| `battery_profile` | `widgets/dashboard/battery_profile_menu.lua` | — |
 | `menu` | `widgets/dashboard/fullscreen_menu.lua` | — |
 
 `confirm` has no `openWhen`: it only ever opens from `views.confirm`, which an entry's own
-`confirm` reaches — see [Confirmations](#confirmations).
+`confirm` reaches — see [Confirmations](#confirmations). `battery_profile` has none either: it
+opens from the quick menu's BATTERY PROFILE row.
 
 Each widget gets its own copy of the list, entries included. A view's module is loaded by the
 job that first builds it and kept on that widget's entry; the state pass reads a view's own
@@ -178,13 +181,15 @@ whose condition does not hold now, and so does the answer to its question. A sur
 again only when its key changes, so a menu built before the condition changed — open when the
 model armed — still draws the row; the refused press does nothing, follows with no action, and
 has the surface built again without it. The options and the `close` of an entry that names a
-`view` are pressed in that view and are not asked: the battery picker keeps its own rules.
+`view` are pressed in that view and are not asked: the battery picker keeps its own rules, and a
+battery profile's press queues nothing while the model is armed.
 
 | Condition | True while |
 | --- | --- |
 | `previewInflightTuning` | the in-flight tuning preview switch is on and the widget carries the overlay's state for this model |
 | `batteryPickHasPacks` | the model is disarmed and the battery registry has a pack for it |
-| `modelDisarmed` | the model is not armed (`state.armed`); MAIN MENU, ERASE BLACKBOX and BATTERY PROFILE ask it |
+| `modelDisarmed` | the model is not armed (`state.armed`); MAIN MENU and ERASE BLACKBOX ask it |
+| `batteryProfileOffered` | the model is not armed and the flight controller's battery configuration (`state.battery_config`) has a capacity above zero for at least one of the six profiles; the BATTERY PROFILE row asks it |
 | `flightLogOffered` | the *Flight Log* preview switch is on (`preferences.general.preview_flight_log`, the switch the tool's own menu asks) and the model is not armed |
 | `batteryPickPending` | the battery prompt is waiting for an answer (`state.batteryPick.pending`) and no pick has been recorded yet |
 
@@ -314,8 +319,11 @@ built, so the next pass builds the view now on top. The shipped buttons:
 | Quick menu | BATTERY | `openView:battery_pick` |
 | Quick menu | MAIN MENU | `openTool` |
 | Quick menu | FLIGHT LOG, where the pilot has put it in the menu | `openTool:tools_flight_log_page` |
-| Quick menu | each BATTERY PROFILE option | `done` |
+| Quick menu | BATTERY PROFILE | `openView:battery_profile` |
 | Quick menu | the header's X | `done` |
+| Battery profile page | each profile | `none` — the page stays open and its foot line shows the outcome |
+| Battery profile page | the header's < | `closeView` |
+| Battery profile page | the header's X | `done` |
 | Picker | each pack, and NO BATTERY | `done` |
 | Picker | the header's X | `done` |
 | Over a fullscreen theme that binds no control | the menu glyph | `openView:menu` |

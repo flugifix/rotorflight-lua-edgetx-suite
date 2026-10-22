@@ -83,11 +83,13 @@ draws no close button: a **long press on RTN** leaves full screen. What opens wh
   page, each with the least and the most the flight reached.
 - **The battery panel**, card or gauge, opens the *Battery* page.
 - **The extra tile**, picture or profile numbers, opens *Profile & Tuning*: the in-flight tuning
-  surface and, while the model is disarmed, the battery profiles.
+  surface and, while the model is disarmed, the battery profiles, each with its cell count
+  and warning voltage under its capacity where the flight controller reports them.
 - **The status bar** opens *Status*: the arm state with what stands in its way, the governor, the
   throttle, the speed controller's live verdict and the event log.
 
-These pages, the quick menu and the battery picker are the ones Urban draws, in Grid's colours;
+These pages, the quick menu, the battery picker and the battery profile page are the ones
+Urban draws, in Grid's colours;
 the [Urban page](urban-theme.md#full-screen) describes each of them, the *Link view switch* that
 opens the *ELRS* page on a switch, and what the keys do. Every place that takes a press has the
 radio's frame around it while *Frames on tap areas* is on.

@@ -12,15 +12,19 @@ return function(ctx)
   local t = Common and Common.pageT("setup_alignment") or function(_, _, fb) return fb end
   local i18n = ctx.i18n
 
-  local help_p1 = t(i18n, "help_p1", "Set board roll, pitch and yaw mounting offsets.")
-  local help_p2 = t(i18n, "help_p2", "Set magnetometer alignment and save to write EEPROM.")
-  local help_p3 = t(i18n, "help_p3", "The visual follows live attitude from MSP.")
-  local help_lv = t(i18n, "live_view_help", "Toggle Live View to enable real-time updates. Turning it off keeps focus stable during edits.")
-
-  local parts = { help_p1, help_p2, help_p3, help_lv }
+  local parts = {
+    t(i18n, "help_roll", "Roll: sets the board roll mounting offset."),
+    t(i18n, "help_pitch", "Pitch: sets the board pitch mounting offset."),
+    t(i18n, "help_yaw", "Yaw: sets the board yaw mounting offset."),
+    t(i18n, "help_mag", "Mag: sets the magnetometer orientation."),
+    t(i18n, "live_view_help", "Live View: follows the attitude reported by the flight controller for 60 seconds."),
+    t(i18n, "help_refresh", "Refresh: reads the attitude once and redraws the model."),
+    t(i18n, "auto_align_help",
+      "Auto-align: hold the model level, start, then lift the tail at least 20 degrees. The result applies at once.")
+  }
 
   return {
     title = t(i18n, "help_title", "Alignment Help"),
-    message = table.concat(parts, "\n\n")
+    message = table.concat(parts, "\n")
   }
 end

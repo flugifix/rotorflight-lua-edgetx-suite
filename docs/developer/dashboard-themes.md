@@ -843,8 +843,8 @@ screen changes:
 | `ctx.keys` | a table the theme fills with actions for the keys, `exit`, `pageDown`, `pageUp`, `mdl`, `sys` and `tele`; see below |
 | `ctx.condition(name)` | whether a named condition holds, from the list in [dashboard views](dashboard-views.md#conditions) |
 | `ctx.entries()` | the quick menu's entries, as `fullscreen_menu.lua` returns them: the ones the pilot has put in it, in the pilot's order |
-| `ctx.menu(children, entries)` | the quick menu's builder: appends the menu for `entries` (the menu's own when omitted) to `children`; a list handed in chooses and orders the menu's own entries by `id`, and an item whose id the menu does not have is left out |
-| `ctx.entry(id)` | the quick menu's record `id` — `erase_blackbox`, `inflight_tuning`, `battery_pick`, `tool`, `flight_log`, `battery_profile` — or `nil`; whether or not the pilot has put it in the quick menu |
+| `ctx.menu(children, entries)` | the quick menu's builder: appends the menu for `entries` (the menu's own when omitted) to `children`; a list handed in chooses and orders the menu's own entries by `id`, and an item whose id the menu does not have is left out; BATTERY PROFILE is drawn as the menu's last row where it is offered, whatever the list names |
+| `ctx.entry(id)` | the quick menu's record `id` — `erase_blackbox`, `inflight_tuning`, `battery_pick`, `tool`, `flight_log`, `battery_profile` — or `nil`; whether or not the pilot has put it in the quick menu (`battery_profile` is never in the pilot's list: the quick menu draws it as a row of its own) |
 | `ctx.list(name)` | the records of a named menu, in its order: `"quick"` is the quick menu as the pilot has arranged it on *Settings* → *Dashboard* → *Quick Settings*; any other name gives an empty list |
 | `ctx.visible(entry)` | whether the entry is offered now — the test the quick menu makes before drawing the row |
 | `ctx.run(entry, option, after)` | the entry's work, or `option`'s when one is given, and then what follows it — the menu's own record and option of that id, whatever table is handed in; `after` replaces the entry's own follow-up, `nil` keeps it |
@@ -866,9 +866,10 @@ record's options as they stand now (NO BATTERY by `none`, the picker's close by 
 entry's `close`), and runs those — never a `press` out of the table it was handed. An entry or
 an option the menu does not have is refused, and so is an entry the menu does not offer now
 (`ctx.visible` would answer false for it) -- except the picks and the close of an entry that
-names a `view`, which the battery picker runs whatever the state. `ctx.visible` and `ctx.info` answer for the menu's
+names a `view`, which the battery picker and the battery profile page run whatever the state; a
+battery profile's own press queues nothing while the model is armed. `ctx.visible` and `ctx.info` answer for the menu's
 record of that id as well, and a list handed to `ctx.menu` draws the menu's records of the ids
-it names, in its order, and nothing else.
+it names, in its order, and nothing else but the BATTERY PROFILE row the menu always draws.
 
 What a theme can show beside an entry is read on each build:
 
@@ -878,13 +879,15 @@ What a theme can show beside an entry is read on each build:
   its messages are queued, `"ok"` once the last of them has been answered, `"failed"` if any of
   them was given up (out of retries, timed out, or dropped by a clear of the queue). A new
   outcome rebuilds the screen. Work that sends nothing has none, and the quick menu's own
-  buttons never set one — the quick menu closes at once and shows none.
+  buttons never set one — the quick menu closes at once and shows none. The widget's battery
+  profile page does set one for each profile pressed, and shows it in its foot line.
 
 The outcome belongs to the visit to fullscreen it was started in, and lapses with the stack:
 on `done`, on `exitFullscreen`, on leaving fullscreen and on a reconnect, and when another
-theme is selected. ERASE BLACKBOX and a battery profile are followed by `done`, so a theme that
-wants to show how they went runs them with an `after` of its own, `ctx.run(entry, nil,
-"none")`, and closes the surface itself. A message that is dropped without being answered or
+theme is selected. ERASE BLACKBOX is followed by `done`, so a theme that
+wants to show how it went runs it with an `after` of its own, `ctx.run(entry, nil,
+"none")`, and closes the surface itself. A battery profile is followed by `none`, so the surface
+that ran it stays up and can show its outcome. A message that is dropped without being answered or
 reported — the queue drops one that carries no simulator reply while it runs in the simulator —
 leaves the outcome at `"busy"`.
 
@@ -930,7 +933,7 @@ In this mode the widget answers six keys (a theme without the key answers none, 
 | Key | With a view on top | With the theme showing |
 | --- | --- | --- |
 | PAGE down, PAGE up | the quick menu on top: close it; any other view: open the menu over it | `ctx.keys.pageDown` / `ctx.keys.pageUp` if set, else open the menu |
-| RTN, short | the view's `back` — the picker: its close box; the menu: close it | `ctx.keys.exit` if set, else nothing |
+| RTN, short | the view's `back` — the picker: its close box; the battery profile page: its back box, back to the menu; the menu: close it | `ctx.keys.exit` if set, else nothing |
 | RTN, long | leaves fullscreen, in the firmware | leaves fullscreen, in the firmware |
 | MDL, SYS, TELE, short | nothing | `ctx.keys.mdl` / `ctx.keys.sys` / `ctx.keys.tele` if set, else nothing |
 
@@ -969,12 +972,13 @@ views = {
   { id = "link",         module = "link.lua" },            -- a view of the theme's own
   { id = "menu",         module = "menu.lua" },            -- the quick menu, drawn by the theme
   { id = "battery_pick", module = "picker.lua" },          -- the battery picker, drawn by the theme
+  { id = "battery_profile", module = "profiles.lua" },     -- the battery profile page, drawn by the theme
 },
 ```
 
 | Key | What it says |
 | --- | --- |
-| `id` | The view's name. An id the widget already has — `menu`, `battery_pick` — replaces that view's **look** and nothing else; any other id is a view of the theme's own. A repeated id counts once. |
+| `id` | The view's name. An id the widget already has — `menu`, `battery_pick`, `battery_profile` — replaces that view's **look** and nothing else; any other id is a view of the theme's own. A repeated id counts once. |
 | `module` | The file that draws it, relative to the theme folder. |
 | `openWhen` | Optional. What opens the view on its own: the name of a condition, a switch position (`{ switch = "SA", pos = "up" }`, `{ switch = "L01" }`), a switch the theme's own settings name (`{ switch = { pref = "<key>", default = "SA" }, pos = "down" }`), or a function of the state. See [what else a theme's view may open on](dashboard-views.md#what-else-a-themes-view-may-open-on); the view opens when it rises, [not while it holds](dashboard-views.md#views-that-open-themselves). Ignored where the id replaces a look. |
 | `where` | Optional. `"fullscreen"` (the default), `"zone"` for a view that takes the widget zone instead ([zone views](dashboard-views.md#zone-views)), or `"both"`. |
@@ -1005,6 +1009,13 @@ picker that is `ctx.entry("battery_pick")`: `entry.options()` are the packs and 
 each run with `ctx.run(entry, option)`, and `ctx.run(entry, entry.close)` is its close — the
 theme never writes the pick or the prompt's state itself. RTN on it is the widget picker's own
 close. A theme that replaces the picker's look owes it a way out, as the widget's picker has.
+For the battery profile page it is `ctx.entry("battery_profile")`: `entry.options()` are the
+profiles, each with its capacity as `label` and, where the flight controller reports them, its
+cell count and warning voltage as `detail`, and each is run with `ctx.run(entry, option, "none")`
+so the page stays up and `ctx.status("battery_profile")` can be shown on it. While the model is
+armed the options are drawn without a press and `entry.armedNote` says why. Its way back to the
+menu is `ctx.action("closeView")`, its way out `ctx.action("done")`; RTN on it is the widget
+page's own back.
 
 `bin/themes/validate.lua` checks the `views` of any theme, whether it takes fullscreen or not:
 every module is built — a fullscreen view with a recording `ctx` whose presses are fired, a zone

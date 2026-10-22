@@ -367,7 +367,9 @@ return {
     -- rows were set at: measured x 1.25, rounded up to the next 50, from the higher of the two
     -- measurements (7205, taken with the ESC Load rows).
     ["page.settings_audio_events_esc_page.build"] = { target = 9050, measured = 7205, proposed = 6000 },
-    ["page.settings_audio_events_fuel_page.build"] = { target = 5550, measured = 5189 },
+    -- Raised when the page gained its two finer-step rows under Callout % (two choice rows).
+    -- Target at the margin the sibling rows were set at: measured x 1.25, rounded up to the next 50.
+    ["page.settings_audio_events_fuel_page.build"] = { target = 7600, measured = 6068, proposed = 5550 },
     ["page.settings_audio_events_governor_page.build"] = { target = 6300, measured = 6008 },
     -- Raised when the page gained the telemetry dropouts alert (a switch and two number rows), the
     -- RSSI and Downlink alerts (two subheaders, two switches and six number rows), the SNR and
