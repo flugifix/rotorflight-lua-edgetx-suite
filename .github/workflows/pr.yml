@@ -67,6 +67,24 @@ jobs:
       - name: Account instructions per pass
         run: lua5.3 bin/accounting/measure.lua --check
 
+  startup-compile:
+    # The configuration tool compiles the installed suite at start (src/rfsuite/lib/precompile.lua).
+    # This runs the real module on an in-memory card across consecutive starts: a fresh install
+    # without a user folder, a stamp that cannot be written, macOS metadata files beside the
+    # sources and a source that does not compile.
+    name: Start-up compile pass
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Lua 5.3
+        run: sudo apt-get update && sudo apt-get install -y lua5.3
+
+      - name: Check consecutive starts reuse the compiled suite
+        run: lua5.3 bin/package/verify_precompile.lua
+
   i18n-precompiler:
     name: i18n precompiler
     runs-on: ubuntu-latest
