@@ -32,7 +32,7 @@ Hidden until *System* → *Settings* → *General* → *Preview* → *In-flight 
 | In-flight tuning on this radio | The master switch. With it off nothing drives on any model. Each model has one of its own on the flight controller page, and both have to be on. Off by default. |
 | Interlock switch | The switch that brings the surface up and makes it live. *None* by default, which leaves the overlay unreachable. |
 | *(the line under it)* | What the setup check found when it last walked the model: *Setup OK*, *Setup not checked*, or the faults it names — or *Reading the radio...* while the page opened from the dashboard is still reading (see Notes). A fault refuses the interlock, so the surface does not go live while one stands. |
-| Set up the model | Writes the two mixer lines, the global variable details and the trim modes this model needs — and only the ones that differ from what the model already carries. It shows what it would remove and what it would add first, and writes nothing until that is confirmed. Where the model already carries all of it, it says so instead of asking. It writes the values as they stand on the page, saved or not. |
+| Set up the model | Writes the two mixer lines, the logical switch that times each press, the global variable details and the trim modes this model needs — and only the ones that differ from what the model already carries. It shows what it would remove and what it would add first, and writes nothing until that is confirmed. Where the model already carries all of it, it says so instead of asking. It writes the values as they stand on the page, saved or not. |
 
 *Set up the model* is a comparator, not a rewrite. A channel that already carries nothing but
 the line the overlay needs is left alone; a variable whose name, range, precision and unit are
@@ -42,6 +42,18 @@ keeps its link.
 So the button is only ever offered work that is left, and on a model that is fully set up it
 reports *The model already carries this setup; nothing to write.*
 
+**The value line is switched by a logical switch**, `|GVx| > 0` on the value variable with a
+delay of 0.1 s and a duration of 0.2 s. It is what ends each pulse: the radio's mixer lets 200 ms
+of a press through, timed by the radio itself, so a slow pass of the widget cannot stretch a
+press into a second step. Each press holds the value variable for a fixed 310 ms, long enough for
+that window to run out in full. The button takes a slot that already holds exactly that switch, or
+else the last empty logical switch nothing on the model refers to, and names it in the
+confirmation (*Pulse timer L64: |GV5| > 0*). It never writes over a logical switch that holds
+anything else; a model with no slot left is refused with *No logical switch is free to time the
+pulses; empty one first.* **A model set up by an earlier version** carries a value line with no
+switch, which the check reports as *Mixer line missing or wrong* — press *Set up the model* once
+more.
+
 Every write is read back before it is counted. The radio's Lua writers answer nothing and do
 nothing when a mixer table is full or an index is out of range, so a line is counted as written
 only once it has been read off the model again — the number in *Model set up (n)* is the number
@@ -49,7 +61,8 @@ of changes that are demonstrably on the model.
 
 ### Channels and variables
 
-One mixer line per channel: `MAX` at the named variable's weight, added, no switch.
+One mixer line per channel: `MAX` at the named variable's weight, added. The enable line has no
+switch; the value line is switched by the logical switch above.
 
 | Setting | What it does |
 | --- | --- |
@@ -57,7 +70,6 @@ One mixer line per channel: `MAX` at the named variable's weight, added, no swit
 | Value channel | The channel that steps the parameter. 5 to 16, default 12. |
 | Enable variable | The global variable put on the enable channel. 0 to 9, where 0 is none; default 6. |
 | Value variable | The global variable put on the value channel. 0 to 9, where 0 is none; default 5. |
-| Pulse length (ms) | How long a press holds the value channel in its window. 100 to 250 in steps of 10, default 180. One press is one step: the flight controller counts nothing before 100 ms of stillness and repeats only after 200 ms more, so the pulse has to outlast the first and end before the second. The pulse ends on the first pass of the widget at or after this length, so on a radio that runs the widget slowly the channel stands for a whole pass, whatever is set here. |
 
 A variable already driven by another mixer line is named under the fields as a warning, not a
 refusal: a pilot who knows what that line does may still want it.
