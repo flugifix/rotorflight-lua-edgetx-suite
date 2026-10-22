@@ -183,6 +183,23 @@ function MenuRegistry.new(manifest, i18n, options)
     return entry.lockedWhileArmed == true and self.conditions.modelArmed == true
   end
 
+  -- Whether the entry is marked as done. `doneWhen` names a condition, or is a function of the
+  -- conditions, the same way `visibleWhen` is; the menu only draws the mark and never decides
+  -- what "done" means for the page behind the entry.
+  local function isEntryDone(entry)
+    if type(entry) ~= "table" then
+      return false
+    end
+    local conditionKey = entry.doneWhen
+    if type(conditionKey) == "string" then
+      return self.conditions[conditionKey] == true
+    end
+    if type(conditionKey) == "function" then
+      return conditionKey(self.conditions, entry) == true
+    end
+    return false
+  end
+
   -- Whether the entry is on the menu at all, which is a different question from whether it can
   -- be entered. `hideWhenDisabled` cannot answer it: that flag hides an entry for ANY reason it
   -- is disabled, so an entry that must disappear on one condition and merely grey out on another
@@ -429,7 +446,8 @@ function MenuRegistry.new(manifest, i18n, options)
             icon = resolveIconPath(iconRoot, p.icon, p.menuId),
             isMenu = p.menuId ~= nil,
             enabled = enabled,
-            lockedByArm = isEntryLockedByArm(p)
+            lockedByArm = isEntryLockedByArm(p),
+            done = isEntryDone(p)
           }
         }
         end
@@ -587,7 +605,8 @@ function MenuRegistry.new(manifest, i18n, options)
           icon = resolveIconPath(iconRoot, p.icon, p.menuId),
           isMenu = p.menuId ~= nil,
           enabled = enabled,
-          lockedByArm = isEntryLockedByArm(p)
+          lockedByArm = isEntryLockedByArm(p),
+          done = isEntryDone(p)
         }
       }
     end

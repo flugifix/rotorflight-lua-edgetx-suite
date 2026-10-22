@@ -1,0 +1,1 @@
+- **SmartFuel (tasks/events/telemetry_bg/smart)**: Require a valid configured maximum cell voltage before inferring a missing cell count, clear unavailable local fuel and consumption instead of retaining stale readings, and restart estimation after valid data stabilizes.

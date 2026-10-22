@@ -274,6 +274,19 @@ and removes the held mark; each must turn a case red in all three themes. Both P
 put on Theme radio-wide, start on Nothing and can save, reload and clear an explicit Quick menu binding in either scope.
 Controls and preference-card writes are stubbed; native touch delivery is outside this offline check.
 
+The SmartFuel validity check runs in both `pr.yml` and `checks.yml`:
+
+```sh
+lua5.3 bin/smartfuel/verify_invalid_max.lua
+lua5.3 bin/smartfuel/verify_readers.lua
+```
+
+It checks local estimation against controlled sensor/configuration inputs, including loss and
+recovery of a valid maximum cell voltage, stale-value suppression and known-count priority.
+The reader checks exercise the dashboard, home screen and already-built diagnostic labels,
+including recovery without a page rebuild. Both checks run offline with desktop Lua 5.3;
+they do not measure radio timing or hardware behavior.
+
 Release notes wait under `release-notes/`, one file per pull request, until the release is cut:
 `python bin/release/collect_release_notes.py` files them under the version in
 `src/rfsuite/lib/version.lua`, and the result is committed before the tag. The format is in

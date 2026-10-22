@@ -71,7 +71,7 @@ local MODEL_SCHEMA = {
   -- one press moves them, and which PID profile the undo restores.
   --
   -- What is true of the transmitter whatever is plugged into it -- the interlock switch, the two
-  -- channels and global variables the mixer devotes to the adjustment pair, the pulse length and
+  -- channels and global variables the mixer devotes to the adjustment pair, and
   -- the trims -- belongs to the radio and is seeded in lib/preferences.lua, also under
   -- [inflight]. Those keys are never read out of a per-model store, so seeding them here only
   -- wrote them into every model file and showed a reader numbers nothing used.
