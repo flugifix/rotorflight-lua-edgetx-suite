@@ -71,6 +71,64 @@ local function read(dynamicLabel)
   assert(got.dynamic == dynamicLabel and got.fields.dynamic.enabled == (dynamicLabel ~= "Off"))
 end
 read("AUX9"); read("Off")
+-- After a complete walk the module's field ids are kept: a forced read of the same module asks for
+-- the four fields directly, past the fields that are not among them.
+do
+  Config.invalidate(nil)
+  local crsf, push, put, sent = transport(); local identity = Config.currentIdentity()
+  local entries = {
+    [2] = field(2, "Packet Rate", { "D250", "500Hz" }, 1),
+    [4] = field(4, "Telem Ratio", { "Std", "Race" }, 1),
+    [6] = field(6, "Max Power", { "25", "1000" }, 1, "mW"),
+    [7] = field(7, "Dynamic", { "Off", "Dyn" }, 1),
+  }
+  local function conversation(force, moved)
+    local first = #sent + 1
+    assert(Config.request(identity, { owner = "test", force = force }))
+    local at = 10 * (#sent + 1)
+    if force then drain(crsf) end
+    Config.step({ owner = "test", identity = identity, crsf = crsf, push = push, now = at })
+    put(0x29, info(8)); Config.step({ owner = "test", identity = identity, crsf = crsf, push = push, now = at + 0.1 })
+    -- The module answers every read at once, so a read is never sent twice.
+    local answered = #sent
+    for i = 1, 40 do
+      if Config.snapshot(identity).status ~= "reading" then break end
+      for k = answered + 1, #sent do
+        if sent[k][1] == 0x2C then
+          local id = sent[k][2][3]
+          put(0x2B, (moved and moved[id]) or entries[id] or field(id, "Field " .. id, { "A", "B" }, 0))
+        end
+      end
+      answered = #sent
+      Config.step({ owner = "test", identity = identity, crsf = crsf, push = push, now = at + i * 0.1 })
+    end
+    local reads = {}
+    for i = first, #sent do
+      if sent[i][1] == 0x2C then reads[#reads + 1] = sent[i][2][3] end
+    end
+    return table.concat(reads, ","), Config.snapshot(identity)
+  end
+  local walked, got = conversation(false)
+  assert(walked == "1,2,3,4,5,6,7" and got.status == "ready" and got.reason == nil,
+    "first read did not walk to the last of the four fields: " .. walked)
+  local direct
+  direct, got = conversation(true)
+  assert(direct == "2,4,6,7" and got.status == "ready" and got.maxPower == "1000",
+    "forced read of a known module did not ask for its four fields directly: " .. direct)
+  -- A kept id that names another field now: the ids are forgotten and the list is walked again,
+  -- until the field that is still missing is found; the ids found are kept for the next read.
+  local moved = { [2] = field(2, "Antenna Mode", { "Gemini", "Ant 1" }, 0),
+    [3] = field(3, "Packet Rate", { "D250", "500Hz" }, 1) }
+  local again
+  again, got = conversation(true, moved)
+  assert(again == "2,4,6,7,1,2,3" and got.status == "ready" and got.packetRate == "500Hz",
+    "a moved field was not found by walking the list again: " .. again)
+  local kept
+  kept, got = conversation(true, moved)
+  assert(kept == "3,4,6,7" and got.status == "ready" and got.reason == nil,
+    "the ids found by the second walk were not kept: " .. kept)
+  Config.invalidate(nil)
+end
 do
   local hidden = field(1, "Dynamic", { "Off", "Dyn" }, 1)
   hidden[6] = 128 + 9

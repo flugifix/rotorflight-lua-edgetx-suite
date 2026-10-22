@@ -21,6 +21,11 @@ local lease, generation, active, last = nil, 0, nil, nil
 local quarantine = false
 local quarantineUntil = nil
 local powerDecoder = nil
+-- Field ids per module, for the life of this Lua state. Ids are given out in registration order,
+-- and what is registered depends on the hardware and the build, so the first read of a module walks
+-- the list by name; later reads ask for the fields it found directly. The key is the module's name,
+-- versions and field count off its device information: the same key is the same numbering.
+local idsByModule = {}
 
 local function getPowerDecoder()
   if powerDecoder then return powerDecoder end
@@ -145,10 +150,49 @@ local function finish(st, status, reason, now)
   lease = nil
 end
 
+-- Keeps the ids a complete walk found. A walk cut short by the send budget is not complete: a
+-- field it did not reach may still exist.
+local function remember(st)
+  if st.plan then return end
+  local ids = {}
+  for kind, field in pairs(st.fields) do ids[kind] = field.id end
+  if next(ids) then idsByModule[st.moduleIdentity] = ids end
+end
+
+-- The kept ids of a module in reading order, or nil.
+local function planFor(key)
+  local ids = idsByModule[key]
+  if not ids then return nil end
+  local plan = {}
+  for _, id in pairs(ids) do plan[#plan + 1] = id end
+  table.sort(plan)
+  return plan
+end
+
+local function planHeld(st)
+  for kind, id in pairs(idsByModule[st.moduleIdentity] or {}) do
+    if not st.fields[kind] or st.fields[kind].id ~= id then return false end
+  end
+  return true
+end
+
 local function nextField(st)
-  st.field = st.field + 1
   st.chunk, st.expectedRemain, st.requestAt, st.buf = 0, nil, nil, {}
+  if st.plan then
+    st.planAt = st.planAt + 1
+    if st.plan[st.planAt] then st.field = st.plan[st.planAt]; return end
+    if planHeld(st) then
+      finish(st, next(st.values) and "ready" or "unavailable",
+        next(st.values) and "partial" or "no_matching_fields", st.now)
+      return
+    end
+    -- A kept id no longer names the field it named: forget the ids and walk the list again.
+    idsByModule[st.moduleIdentity], st.plan, st.field = nil, nil, 1
+    return
+  end
+  st.field = st.field + 1
   if st.field > st.fieldCount or st.field > MAX_FIELDS then
+    remember(st)
     finish(st, next(st.values) and "ready" or "unavailable",
       next(st.values) and "partial" or "no_matching_fields", st.now)
   end
@@ -176,6 +220,7 @@ local function takeField(st)
     end
   end
   if st.values.packetRate and st.values.telemetryRatio and st.values.maxPower and st.values.dynamic then
+    remember(st)
     finish(st, "ready", nil, st.now)
   else
     nextField(st)
@@ -259,6 +304,9 @@ function M.cancel(owner, reason)
 end
 
 function M.invalidate(identityKey)
+  if identityKey == nil then
+    for key in pairs(idsByModule) do idsByModule[key] = nil end
+  end
   if identityKey == nil or (last and last.identity ~= identityKey) then last = nil end
   if active and (identityKey == nil or active.identity ~= identityKey) then M.cancel(active.owner, "invalidated") end
 end
@@ -334,7 +382,8 @@ function M.step(context)
       if key then
         st.moduleIdentity, st.moduleName, st.fieldCount = key, name, math.min(count, MAX_FIELDS)
         st.pingAt = nil
-        st.field, st.chunk, st.buf, st.phase = 1, 0, {}, "read"
+        st.plan, st.planAt = planFor(key), 1
+        st.field, st.chunk, st.buf, st.phase = st.plan and st.plan[1] or 1, 0, {}, "read"
         st.requestAt, st.expectedRemain = nil, nil
         if st.fieldCount <= 0 then finish(st, "unavailable", "no_fields", now) end
         break

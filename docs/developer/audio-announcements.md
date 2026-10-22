@@ -71,7 +71,10 @@ quarantines copied replies left in that owner's queue: a quarantine pass pops ex
 Parameter Entry (`0x2B`) and never pops Device Info (`0x29`). A normal pass pops at most two
 replies and sends at most one request. A read stops after four accepted discovery pings, 48 total
 push attempts across discovery and parameter reads, 48 fields, eight chunks per field, or 512
-bytes per field. The alert cancels its owned read while armed or before the connection sequence is
+bytes per field. The first read of a module walks the parameter list by name; the field ids it
+found are kept per module (name, versions and field count off its device information) while the
+provider is loaded, and later reads ask for those fields directly. A kept id that names another
+field is forgotten and the list is walked again. The alert cancels its owned read while armed or before the connection sequence is
 complete, and starts a fresh owned read after those conditions clear.
 
 The provider is one shared singleton, and it stays loaded only while the standby screen or the
