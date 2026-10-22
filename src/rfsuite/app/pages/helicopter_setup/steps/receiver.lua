@@ -103,7 +103,10 @@ return function(w)
     w:cardDef(L.receiver, L.receiverHint, {
       protocol,
       w:button(L.receiverUsb, function() w.message=L.receiverUsbHint end),
-      w:button(L.saveReboot, function() w:serialReceiver(); w:reboot() end)
+      w:button(L.saveReboot, function() w:serialReceiver(); w:reboot() end),
+      w:value(L.receiverElrs, function()
+        return protocol.get()>0 and w.data.rx_config.serialrx_provider==9 and L.receiverElrsLink or "--"
+      end)
     }),
     w:cardDef(L.channelOrder, L.channelHint, {
       w:button(function() return r.detect and L.cancelDetect or L.detect end, detect),

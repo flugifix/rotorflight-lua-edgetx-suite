@@ -504,6 +504,49 @@ return function(h)
     w.data.rc=profileValue;w.rcAt=getTime();h.measure("profile learning",function() w.onLive("rc",profileValue) end)
     check(w.profile.record and w.profile.channel==0,"REVIEW profile switch also learns the first post-click movement")
   end)
+  case("S02.elrs-link-guidance",function()
+    local w=world();settle(w)
+    w.data.feature_config.enabledFeatures=1<<3
+    w.data.rx_config.serialrx_provider=9
+    local card=step(w,"receiver")[1]
+    local row=card.rows[4]
+    check(row and row.kind=="value","S02 ELRS guidance is a value row on the protocol card")
+    if row then
+      eq(row.label,L.receiverElrs,"S02 always-present guidance label scopes CRSF and ELRS")
+      eq(row.get(),L.receiverElrsLink,"S02 CRSF wire value 9 shows ELRS Link guidance")
+      w.data.rx_config.serialrx_provider=2
+      eq(row.get(),"--","S02 other protocols have neutral ELRS guidance without a row gap")
+      w.data.rx_config.serialrx_provider=9;w.data.feature_config.enabledFeatures=1<<25
+      eq(row.get(),"--","S02 inactive serial receiver does not show ELRS guidance")
+      w.data.feature_config.enabledFeatures=1<<3
+      eq(row.get(),L.receiverElrsLink,"S02 ELRS guidance follows protocol changes without rebuilding")
+      check(row.press==nil and row.set==nil,"S02 ELRS guidance cannot navigate or write settings")
+    end
+    for _,locale in ipairs({"en","de"}) do
+      local b=load("i18n/"..locale..".lua");local s=b.app.modules.helicopter_setup
+      local path=table.concat({b.app.header_system,b.app.modules.tools.name,b.app.modules.diagnostics.name,
+        b.app.modules.elrs_link.name}," > ")
+      check(string.find(s.receiverHint,path,1,true)~=nil,"S02 "..locale.." help uses the Suite ELRS menu path")
+      check(utf8.len(s.receiverHint)<600,"S02 "..locale.." receiver help stays below 600 characters")
+      check(s.receiverElrs and s.receiverElrsLink,"S02 "..locale.." ELRS row strings are translated")
+      for _,key in ipairs({"receiverElrs","receiverElrsLink"}) do
+        eq(load("app/pages/helicopter_setup/labels.lua")[key],"@i18n(app.modules.helicopter_setup."..key..")@",
+          "S02 "..key.." is bound through labels")
+      end
+      if locale=="en" then
+        for _,text in ipairs({"packet rate","telemetry ratio","ExpressLRS module","FC","write either side after asking",
+          "Telemetry must run for the Suite's sensors"}) do
+          check(string.find(s.receiverHint,text,1,true)~=nil,"S02 ELRS help explains "..text)
+        end
+      end
+    end
+    w.card,w.step=1,2;local help
+    w.openHelp=function(text) help=text end
+    local scene=h.view.new(w,{w=480,h=272},h.diagrams)
+    while not scene:step() do end
+    for _,item in ipairs(scene.children) do if item.type=="button" and item.text=="?" then item.press() end end
+    check(help and string.find(help,card.detail,1,true)~=nil,"S02 question mark opens the full receiver guidance")
+  end)
   case("S02.protocol-ids-presets-feature-group",function()
     local w=world();local entries=w:receiverProtocols();local ids={}
     for _,e in ipairs(entries) do ids[e[2]]=e[1] end
@@ -865,6 +908,45 @@ return function(h)
     check(overrides>=4,"S11 the hold keeps refreshing the override")
     check(reads>=2,"S11 the motor output is read while the hold runs")
     check(longest<=2,"S11 no long run of overrides without an output read")
+  end)
+  case("S09.new-esc-guidance",function()
+    local w=world();settle(w);local card=step(w,"motor")[1]
+    check(type(card.summary)=="string" and card.summary==L.motorQuick,
+      "S09 motor card shows a short new ESC instruction beside full help")
+    eq(#card.rows,4,"S09 ESC guidance keeps the compact motor form at four rows")
+    local manifest=load("app/manifest.lua")
+    for _,locale in ipairs({"en","de"}) do
+      local b=load("i18n/"..locale..".lua");local s=b.app.modules.helicopter_setup
+      local path=table.concat({b.app.header_configuration,b.app.modules.setup.name,b.app.modules.esc_motors.name,
+        b.app.modules.esc_motors.esc_tools}," > ")
+      check(string.find(s.motorHint,path,1,true)~=nil,"S09 "..locale.." help uses the Suite ESC Tools menu path")
+      check(utf8.len(s.motorHint)<600,"S09 "..locale.." motor help stays below 600 characters")
+      for _,entry in ipairs(manifest.menus.esc_tools_menu.pages) do
+        check(string.find(s.motorHint,entry.title,1,true)~=nil,"S09 "..locale.." ESC help includes "..entry.title)
+      end
+      for _,key in ipairs({"motorQuick"}) do
+        check(type(s[key])=="string","S09 "..locale.." "..key.." is translated")
+        eq(load("app/pages/helicopter_setup/labels.lua")[key],"@i18n(app.modules.helicopter_setup."..key..")@",
+          "S09 "..key.." is bound through labels")
+      end
+      if locale=="en" then
+        for _,text in ipairs({"new ESC first","BEC voltage","motor timing","ESC governor off when using the FC governor",
+          "direction","FC's ESC telemetry protocol matches"}) do
+          check(string.find(s.motorHint,text,1,true)~=nil,"S09 ESC help explains "..text)
+        end
+      end
+    end
+    w.card,w.step=1,9;local help
+    w.openHelp=function(text) help=text end
+    local scene=h.view.new(w,{w=480,h=272},h.diagrams)
+    while not scene:step() do end
+    local shown=false
+    for _,item in ipairs(scene.children) do
+      if item.type=="label" and item.text==L.motorQuick then shown=true end
+      if item.type=="button" and item.text=="?" then item.press() end
+    end
+    check(shown,"S09 new ESC instruction is rendered on the motor card")
+    check(help and string.find(help,card.detail,1,true)~=nil,"S09 question mark opens the full ESC guidance")
   end)
   case("S09.bidirectional-dshot-switch",function()
     local w=world();settle(w);local c=step(w,"motor");local row=c[1].rows[3]

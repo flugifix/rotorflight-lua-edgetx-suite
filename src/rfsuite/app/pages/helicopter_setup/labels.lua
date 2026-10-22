@@ -66,6 +66,9 @@ local L = {
   saveChanges = "@i18n(app.modules.helicopter_setup.saveChanges)@",
   discardChanges = "@i18n(app.modules.helicopter_setup.discardChanges)@",
 
+  receiverElrs = "@i18n(app.modules.helicopter_setup.receiverElrs)@",
+  receiverElrsLink = "@i18n(app.modules.helicopter_setup.receiverElrsLink)@",
+  motorQuick = "@i18n(app.modules.helicopter_setup.motorQuick)@",
   receiverUsb = "@i18n(app.modules.helicopter_setup.receiverUsb)@",
   receiverUsbHint = "@i18n(app.modules.helicopter_setup.receiverUsbHint)@",
   calibrationFailed = "@i18n(app.modules.helicopter_setup.calibrationFailed)@",

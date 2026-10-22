@@ -7,7 +7,7 @@ return function(w)
     local p = w.data.motor_config.motor_pwm_protocol
     return p >= 5 and p <= 7
   end
-  return {
+  local cards = {
     w:cardDef(L.motor, L.motorHint, {
       w:enum("motor_config", "motor_pwm_protocol", L.protocol, w:motorProtocols(), true),
       w:n("motor_config", "motor_pole_count_0", L.motorPoles, 2, 255, true),
@@ -29,4 +29,6 @@ return function(w)
       w:n("motor_config", "tail_rotor_gear_ratio_1", L.tailOutputGear, 1, 50000, true)
     })
   }
+  cards[1].summary=L.motorQuick
+  return cards
 end
