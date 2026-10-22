@@ -743,6 +743,7 @@ return {
         flag_set_name = "Set Model Name on the Radio",
         loading_title = "Model Configuration",
         loading_message = "Reading from the flight controller",
+        save_error_title = "Error",
         help_message = "Settings the flight controller stores for this model: three parameters it applies to the radio's timers or global variables on connect, and the radio-side features it asks for. Whether those are applied is decided here too. From RF 2.3 the craft itself carries the model-name decision; on older firmware the radio does, and the switch then applies to every model on this radio."
       },
       settings_general = {

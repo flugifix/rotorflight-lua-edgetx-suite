@@ -743,6 +743,7 @@ return {
         flag_set_name = "Modellnamen am Sender setzen",
         loading_title = "Modellkonfiguration",
         loading_message = "Wird vom Flight Controller gelesen",
+        save_error_title = "Fehler",
         help_message = "Einstellungen, die der Flight Controller für dieses Modell speichert: drei Parameter, die er beim Verbinden auf Timer oder globale Variablen des Senders anwendet, und die Sender-Funktionen, die er anfordert. Ob sie angewendet werden, wird ebenfalls hier entschieden. Ab RF 2.3 trägt der Heli die Entscheidung über den Modellnamen selbst; auf älterer Firmware der Sender, und der Schalter gilt dann für alle Modelle dieses Senders."
       },
       settings_general = {
