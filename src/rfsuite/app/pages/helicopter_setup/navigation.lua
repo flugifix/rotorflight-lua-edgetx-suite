@@ -54,7 +54,8 @@ function M.attach(w, ctx)
   local FC_SENSORS = { 120, 121 }
   function w:fcSensorsListed()
     local d = self.data.telemetry_config
-    if type(d) ~= "table" or d.telem_sensor_slot_1 == nil then return nil end
+    -- Only a complete reply counts: all 40 slots parsed and the raw buffer long enough to write back.
+    if type(d) ~= "table" or type(d.buffer) ~= "table" or #d.buffer < 52 or d.telem_sensor_slot_40 == nil then return nil end
     for _, id in ipairs(FC_SENSORS) do
       local found = false
       for i = 1, 40 do if d["telem_sensor_slot_" .. i] == id then found = true end end

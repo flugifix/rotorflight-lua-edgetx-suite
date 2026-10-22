@@ -81,7 +81,7 @@ function M.new(w)
         linkRate=parsed.crsf_telemetry_link_rate,linkRatio=parsed.crsf_telemetry_link_ratio}
       session.telemetryConfigBuffer=parsed.buffer
       self.started=true;task.start(task.MODE_PROBE)
-    end)
+    end,true)
   end
   function c:sync(mode)
     if not self:usable() or self:busy() then return end
@@ -127,7 +127,7 @@ function M.new(w)
         local current=kind=="rate" and task.getRateField() or task.getRatioField()
         local index=indices[value]
         if current and index~=nil and index~=current.selectedIndex then
-          self:bind();w.linkNotice=nil;self.started=true;task.selectOption(kind,index)
+          self:bind();w.linkNotice=nil;self.started=true;self.rewalk=true;task.selectOption(kind,index)
         end
       end}
   end
@@ -154,6 +154,8 @@ function M.new(w)
     end
     -- STATUS and wizard transactions retain priority; the task never becomes wizard dirty data.
     if not w.bus:idle() then return end
+    -- A picker write leaves the task's fields as they were; walk the module again once it is done.
+    if self.rewalk and not self:busy() then self.rewalk,self.asked=nil,nil end
     if not self.asked then self.asked=true;self:probe();return end
     if self:busy() then task.wakeup() end
     if self.card.link=="settings" then w.message=self:status() end

@@ -532,6 +532,46 @@ return function(h)
     w.data.rc=profileValue;w.rcAt=getTime();h.measure("profile learning",function() w.onLive("rc",profileValue) end)
     check(w.profile.record and w.profile.channel==0,"REVIEW profile switch also learns the first post-click movement")
   end)
+  case("S02.elrs-review-fixes",function()
+    local w=world();settle(w);w.step=2
+    local session=w:session();local oldType=session.telemetryType
+    session.telemetryType="crsf"
+    w.data.feature_config.enabledFeatures=1<<3;w.data.rx_config.serialrx_provider=9
+    local starts,running,choices={},false,{}
+    local rate={options={"500 Hz","333 Hz"},selectedIndex=1}
+    local ratio={options={"1:4","1:8"},selectedIndex=0}
+    local fake={MODE_PROBE=0,MODE_ROTORFLIGHT_TO_ELRS=1,MODE_ELRS_TO_ROTORFLIGHT=2,
+      start=function(mode) starts[#starts+1]=mode;running=true end,wakeup=function() running=false end,
+      reset=function() running=false end,isRunning=function() return running end,
+      getStatus=function() return "idle" end,getStatusText=function() return "task status" end,
+      getRateField=function() return rate end,getRatioField=function() return ratio end,
+      selectOption=function(kind,index) choices[#choices+1]={kind,index};running=true end,setOwner=function() end}
+    local realLoad=w.loadModule
+    w.loadModule=function(self,path)
+      if string.find(path,"elrslink_task",1,true) then return fake end
+      return realLoad(self,path)
+    end
+    local cards=step(w,"receiver")
+    local index;for i,c in ipairs(cards) do if c.link=="settings" then index=i end end
+    -- A refused telemetry read on the card is not a wizard failure.
+    h.setFailCommand(73);w.card=index;cards[index].enter();w:tick();drain(w);h.setFailCommand(nil)
+    check(not w.error,"S02 a refused link read on the ELRS card does not fail the wizard")
+    -- A picker write is followed by a fresh walk of the module.
+    h.fixtures[73]=h.api("telemetry_config").simulatorResponse
+    w.cards=cards;w.card=index;cards[index].enter();w:tick();drain(w);w:tick();drain(w)
+    local probes=#starts
+    local picker;for _,row in ipairs(cards[index].rows) do if row.kind=="choice" then picker=row;break end end
+    check(picker~=nil,"S02 the settings card offers a module picker")
+    picker.set(2);w:tick();drain(w);w:tick();drain(w);w:tick();drain(w)
+    check(#choices==1 and #starts>probes,"S02 a picker write is followed by a fresh module walk")
+    h.fixtures[73]=nil;session.telemetryType=oldType
+  end)
+  case("CORE.fc-sensor-list-complete",function()
+    local w=world();settle(w)
+    local short={};for i=1,14 do short[i]=0 end
+    w.data.telemetry_config={buffer=short,telem_sensor_slot_1=3,telem_sensor_slot_2=4}
+    eq(w:fcSensorsListed(),nil,"CORE a short FC telemetry reply reads as unread, not as missing")
+  end)
   case("S02.elrs-inline-task",function()
     local w=world();settle(w);w.step=2
     local session=w:session()
