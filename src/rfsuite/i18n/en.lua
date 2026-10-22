@@ -3064,7 +3064,10 @@ return {
         tpl_power = "Power",
         tpl_battery = "Battery",
         tpl_link = "Link",
-        tpl_governor = "Governor"
+        tpl_governor = "Governor",
+        date_unknown = "Unknown",
+        model_default = "Default",
+        parse_failed = "Failed to parse log file"
       }
     }
   },

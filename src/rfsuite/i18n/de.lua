@@ -3059,7 +3059,10 @@ return {
         tpl_power = "Leistung",
         tpl_battery = "Akku",
         tpl_link = "Funk",
-        tpl_governor = "Governor"
+        tpl_governor = "Governor",
+        date_unknown = "Unbekannt",
+        model_default = "Standard",
+        parse_failed = "Die Logdatei kann nicht ausgewertet werden."
       }
     }
   },
