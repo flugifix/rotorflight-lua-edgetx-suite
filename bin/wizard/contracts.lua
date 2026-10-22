@@ -570,7 +570,7 @@ return function(h)
     eq(session.crsfTelemetryConfig.linkRate,250,"S02 telemetry read caches the FC declared rate in session")
     eq(session.crsfTelemetryConfig.linkRatio,8,"S02 telemetry read caches the FC declared ratio in session")
     eq(session.telemetryConfigBuffer[9],250,"S02 telemetry read retains the raw FC write buffer")
-    check(w.data.telemetry_config==nil and next(w.dirty)==nil,"S02 telemetry read stays outside the wizard draft")
+    check(next(w.dirty)==nil,"S02 telemetry read stays outside the wizard draft")
     session.crsfTelemetryConfig={mode=1,linkRate=333,linkRatio=8}
     session.elrsLinkConfig={packetRate=500,telemetryRatio=4,packetRateLabel="500 Hz",telemetryRatioLabel="1:4"}
     local rows=w.cards[index].rows
@@ -696,7 +696,7 @@ return function(h)
     eq(write.client,"helicopter-elrs","S02 FC write has its own queue owner")
     eq(write.payload[9]+256*write.payload[10],500,"S02 FC write uses the module packet rate")
     eq(write.payload[11]+256*write.payload[12],4,"S02 FC write uses the module telemetry ratio")
-    check(next(w.dirty)==nil and w.data.telemetry_config==nil,"S02 task FC writes never become wizard draft state")
+    check(next(w.dirty)==nil,"S02 task FC writes never become wizard draft state")
     q:add({command=1,client="unrelated"})
     task.reset()
     eq(#q.messages,1,"S02 reset removes the task's queued FC write")
@@ -1246,6 +1246,20 @@ return function(h)
     check(w.modelPreparationCard and w.message==L.sensorsRequired,"CORE a missing FC state sensor keeps the steps closed")
     w.systemConfig={word=0};w:next()
     check(not w.modelPreparationCard,"CORE both FC state sensors live open the steps")
+    -- The FC side: its telemetry list carries 120 and 121, or the card offers to add them.
+    local buf={};for i=1,52 do buf[i]=0 end;buf[13],buf[14]=3,4
+    w.data.telemetry_config={buffer=buf};for i=1,40 do w.data.telemetry_config["telem_sensor_slot_"..i]=buf[12+i] end
+    eq(w:fcSensorsListed(),false,"CORE an FC list without 120/121 reads as missing")
+    w.modelPreparationRequired,w.modelPreparationDone=true,nil;w:buildModelPreparation()
+    local add=w.cards[1].rows[5]
+    eq(add.label(),L.addFcSensors,"CORE the model card offers to add the sensors to the FC")
+    check(add.enabled(),"CORE the add button is offered while the FC lacks them")
+    q.sent={};add.press();drain(w)
+    local written
+    for _,m in ipairs(q.sent) do if m.command==74 then written=m.payload end end
+    check(written and written[13]==3 and written[14]==4 and written[15]==120 and written[16]==121,
+      "CORE adding writes the FC's own buffer with 120/121 in the first free slots")
+    check(w:fcSensorsListed()==true and add.label()==L.fcSensorsListed,"CORE after adding the card reads both listed")
   end)
   case("S14-S15.axis-direction-and-trims",function()
     local w=world();local c=step(w,"direction");c[1].enter()

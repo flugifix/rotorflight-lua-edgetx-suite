@@ -59,7 +59,7 @@ local fixtures = {
 fixtures[52] = {}; for _ = 1,42*14 do fixtures[52][#fixtures[52]+1] = 0 end
 fixtures[170] = {}; for _ = 0,28 do u16(fixtures[170],1000);u16(fixtures[170],-1000);u16(fixtures[170],1000) end
 local byCommand = {}
-for _, name in ipairs({ "board_info","status","boxnames","boxids","mode_ranges","mode_ranges_extra","adjustment_ranges",
+for _, name in ipairs({ "board_info","telemetry_config","status","boxnames","boxids","mode_ranges","mode_ranges_extra","adjustment_ranges",
   "feature_config","board_alignment_config","serial_config","rx_map","rx_config","rc_config","motor_config",
   "esc_sensor_config","governor_config","mixer_config","mixer_input","servo_configurations","servo","rc_tuning",
   "tail_motor_output","governor_profile","rc","attitude","motor","motor_telemetry","rx_channels","rc_command" }) do

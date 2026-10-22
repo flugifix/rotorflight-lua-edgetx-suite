@@ -49,6 +49,41 @@ function M.attach(w, ctx)
     if value ~= nil then return self.L.sensorLive end
     return (self.systemReads or 0) >= 4 and self.L.sensorMissing or self.L.sensorChecking
   end
+  -- The FC's own telemetry list (MSP telemetry_config): true when System Status (120) and System
+  -- Config (121) are both in it, false when one is missing, nil when it was not read.
+  local FC_SENSORS = { 120, 121 }
+  function w:fcSensorsListed()
+    local d = self.data.telemetry_config
+    if type(d) ~= "table" or d.telem_sensor_slot_1 == nil then return nil end
+    for _, id in ipairs(FC_SENSORS) do
+      local found = false
+      for i = 1, 40 do if d["telem_sensor_slot_" .. i] == id then found = true end end
+      if not found then return false end
+    end
+    return true
+  end
+  -- Puts the missing sensors into free slots of the FC's raw telemetry buffer (the API's write
+  -- builder knows no slots, so the FC's own bytes are written back), then saves and restarts.
+  function w:addFcSensors()
+    local d = self.data.telemetry_config
+    if not self:usable() or self:fcSensorsListed() ~= false or type(d.buffer) ~= "table" then return end
+    local payload = {}
+    for i, v in ipairs(d.buffer) do payload[i] = v end
+    for _, id in ipairs(FC_SENSORS) do
+      local present = false
+      for i = 13, 52 do if payload[i] == id then present = true end end
+      if not present then
+        local free
+        for i = 13, 52 do if free == nil and payload[i] == 0 then free = i end end
+        if free == nil then self.message = self.L.noSensorSlot; return end
+        payload[free] = id
+        d["telem_sensor_slot_" .. (free - 12)] = id
+      end
+    end
+    d.buffer = payload
+    self:action("telemetry_config", payload)
+    self:reboot()
+  end
   function w:buildModelPreparation()
     if self.recoveryRequired then
       self.cards={self:cardDef(self.L.recoveryTitle,self.L.recoveryHint,{
@@ -64,7 +99,11 @@ function M.attach(w, ctx)
       self:check("modelReady",self.L.modelChecked),
       -- Prerequisites checked up front: the two packed FC state sensors the hints depend on.
       self:value(self.L.fcStatusSensor,function() return self:sensorState(self.systemStatus) end),
-      self:value(self.L.fcConfigSensor,function() return self:sensorState(self.systemConfig) end)
+      self:value(self.L.fcConfigSensor,function() return self:sensorState(self.systemConfig) end),
+      self:button(function()
+        local listed = self:fcSensorsListed()
+        return listed and self.L.fcSensorsListed or listed == nil and self.L.fcSensorsUnread or self.L.addFcSensors
+      end, function() self:addFcSensors() end, function() return self:fcSensorsListed() == false end)
     })}
     self.cards[1].summary=self.L.modelPreparationIntro
     self.card,self.modelPreparationCard=1,true

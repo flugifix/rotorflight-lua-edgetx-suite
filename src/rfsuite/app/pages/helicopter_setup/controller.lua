@@ -1,7 +1,7 @@
 local M = {}
 local BASE = "/SCRIPTS/TOOLS/rfsuite-core/"
 local READS = { "status", "boxnames", "boxids", "mode_ranges", "mode_ranges_extra", "adjustment_ranges",
-  "feature_config", "board_info", "board_alignment_config", "serial_config", "rx_map", "rx_config", "rc_config",
+  "feature_config", "board_info", "telemetry_config", "board_alignment_config", "serial_config", "rx_map", "rx_config", "rc_config",
   "motor_config", "esc_sensor_config", "governor_config", "mixer_config", "mixer_input",
   "servo_configurations", "servo", "rc_tuning", "tail_motor_output" }
 local STEPS = { "sensors", "receiver", "modes", "profiles", "rates", "swash", "servoType", "governor", "motor",
@@ -588,7 +588,7 @@ function M.new(runtime, transport, mathModule, labels)
           -- The ARM box bit is identified by BOXIDS below, never assumed to be bit zero.
           self:acceptStatus(d)
         end
-      end, api == "tail_motor_output" or api == "board_info", api == "tail_motor_output" and {0} or nil) end
+      end, api == "tail_motor_output" or api == "board_info" or api == "telemetry_config", api == "tail_motor_output" and {0} or nil) end
       self:run(function() self.saved[api] = copy(self.data[api]) end)
     end
     -- Loading many API blocks can take seconds over telemetry. Read the lock

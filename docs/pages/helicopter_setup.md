@@ -71,8 +71,11 @@ The same card checks two prerequisites up front: the Rotorflight telemetry senso
 *System Status* and *System Config*. Each row reads **Live**, **Checking** or, after
 four reads without a value, **Missing**. The wizard uses them for its hints about unsaved
 settings, a pending restart and a lost receiver link, and **Continue** stays refused until both
-are live; **?** says where to add a missing one (*Configuration* > *Setup* > *Telemetry*, then
-discover new sensors in the model).
+are live. On API 12.10 both are in the flight controller's default telemetry list, so a missing
+one is usually on the radio side: the Rotorflight model template has both, or the model can
+discover new sensors. A last row reads the flight controller's own telemetry list over MSP; if
+either sensor was taken out of it, **Add both to FC telemetry** writes them into free slots of
+the flight controller's own buffer, saves and restarts it.
 
 ## Navigation
 
