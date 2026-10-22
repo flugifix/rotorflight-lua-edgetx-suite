@@ -108,6 +108,12 @@ special functions, the radio's own telemetry screens, and the telemetry log on t
 also why they can be switched off: each one occupies a telemetry slot, which is a price worth
 nothing on a machine where nothing reads them.
 
+When local SmartFuel needs to estimate the cell count and the maximum cell voltage is missing
+or invalid, the suite clears its current fuel and estimated consumption instead of reusing an
+older value. It pauses updates to `SmFt` and `SmCp`; consumers outside the suite follow the
+radio's normal sensor timeout. Valid historical flight statistics remain available. Estimation
+resumes after valid configuration arrives and the input has stabilized.
+
 Two things follow that are worth knowing:
 
 - **A model has to carry the sensor before anything on the radio can use it.** As with any
