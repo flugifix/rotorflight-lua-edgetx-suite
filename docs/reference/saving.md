@@ -304,8 +304,8 @@ worked reads *Settings saved.* and the notice clears itself after two seconds; o
 *Not saved* and stays up until it is closed (a failed write said nothing before). Back pressed
 while the save runs is not asked about unsaved changes; the page is left once the notice has gone.
 When the tool opened from the dashboard closes during the save, the save still finishes, and its
-replies no longer reach what the page's close released. Afterwards the page reads the flight
-controller again if it is still open; if it was closed, its next visit reads. Before, the page
+replies no longer reach what the page's close released. After a save that worked, the page reads
+the flight controller again if it is still open; if it was closed, its next visit reads. Before, the page
 queued the EEPROM write from the write's reply and its read from the EEPROM write's reply, so a page
 left in between ran that reply against the state its close had released; the MSP queue catches such
 a raise and logs it as a warning. On Stats the flight count kept for the flight record is now set
