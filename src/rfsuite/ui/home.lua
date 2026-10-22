@@ -3886,6 +3886,13 @@ function M.run(event, touchState)
     -- screen is released by the next build like any page that is left; the target is then opened
     -- through its root entry, so its conditions are the menu's. A page the menu would not offer
     -- now is not opened, and the menu stays at its root.
+    if state.pendingPageOpen and not state.isClosing and not transitionedMenuThisTick and
+      (state.leavePromptVisible or state.saveOverlayVisible or state.pendingSaveAction ~= nil) then
+      -- A save prompt or a save in progress belongs to the page on screen; leaving under it would
+      -- answer it for the wrong page. The request is dropped, and the pilot asks again.
+      logf("info", "page %s not opened, a save prompt or save is in progress", tostring(state.pendingPageOpen))
+      state.pendingPageOpen = nil
+    end
     if state.pendingPageOpen and not state.isClosing and not transitionedMenuThisTick then
       local target = state.pendingPageOpen
       state.pendingPageOpen = nil
