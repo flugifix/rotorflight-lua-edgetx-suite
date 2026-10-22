@@ -479,6 +479,7 @@ return {
         inputRoll = "Give roll right",
         inputPitch = "Give pitch forward",
         inputCollective = "Give collective up",
+        inputYaw = "Give yaw right",
         stickNow = "%s %d%%",
         stickCentre = "Centre",
         dirRight = "Right",

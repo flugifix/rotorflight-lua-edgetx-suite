@@ -19,6 +19,16 @@ function M.attach(w)
   end
   function w:button(label, press, enabled) return { kind = "button", label = label, press = press, enabled = enabled } end
   function w:value(label, get) return { kind = "value", label = label, get = get } end
+  -- Where a stick is now: a direction and its travel, or centre (rc_command, -500..500).
+  local stickWords = { [1] = { "dirRight", "dirLeft" }, [2] = { "dirForward", "dirBack" },
+    [3] = { "dirRight", "dirLeft" }, [4] = { "dirUp", "dirDown" } }
+  function w:stickNow(axis)
+    local command = self.data.rc_command and self.data.rc_command.commands[axis]
+    if type(command) ~= "number" then return "--" end
+    local percent = math.floor(math.abs(command) / 5 + 0.5)
+    if percent < 5 then return self.L.stickCentre end
+    return string.format(self.L.stickNow, self.L[stickWords[axis][command > 0 and 1 or 2]], math.min(percent, 100))
+  end
   -- A yes/no answer is a toggle button, not a list: the page gets no wakeup while a native
   -- list is open, so a running test would outlive its status window behind it.
   function w:check(key, label)

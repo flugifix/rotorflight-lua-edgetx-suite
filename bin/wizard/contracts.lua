@@ -846,6 +846,10 @@ return function(h)
     eq(c[3].rows[1].get(),string.format(L.stickNow,L.dirUp,100),"S14 collective up reads as up")
     w.data.rc_command={commands={10,0,0,0}}
     eq(c[1].rows[1].get(),L.stickCentre,"S14 a stick near centre reads as centre")
+    w.data.rc_command={commands={0,0,300,0}}
+    local tailCards=step(w,"tail")
+    eq(tailCards[2].rows[1].label,L.inputYaw,"S17 the tail direction card names the yaw input")
+    eq(tailCards[2].rows[1].get(),string.format(L.stickNow,L.dirRight,60),"S17 yaw right reads as right")
     eq(c[1].summary,L.rearCheck,"S14 left/right is defined from behind the helicopter")
     w.checks.control1=true;local before=w.data.mixer_input.inputs[1].rate;c[1].rows[3].press()
     eq(w.data.mixer_input.inputs[1].rate,-before,"S14 reverse input scale")

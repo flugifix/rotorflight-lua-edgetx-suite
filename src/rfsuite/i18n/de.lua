@@ -479,6 +479,7 @@ return {
         inputRoll = "Roll rechts geben",
         inputPitch = "Nick vor geben",
         inputCollective = "Pitch hoch geben",
+        inputYaw = "Heck rechts geben",
         stickNow = "%s %d%%",
         stickCentre = "Mitte",
         dirRight = "Rechts",

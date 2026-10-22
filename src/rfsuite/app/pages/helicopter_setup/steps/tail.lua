@@ -34,7 +34,7 @@ return function(w)
       w:check("tailCentre", L.tailCentred)
     }, function() hold(0) end, "tail"),
     w:cardDef(L.tailDirection, L.tailDirectionHint, {
-      w:value(L.stick, function() return w.data.rc_command and w.data.rc_command.commands[3] or "--" end),
+      w:value(L.inputYaw, function() return w:stickNow(3) end),
       w:button(L.wrongReverse, function() w:invertInput(3); w.checks.tailDirection = nil end),
       w:check("tailDirection", L.directionCorrect)
     }, function() hold(2502) end,"tail"),

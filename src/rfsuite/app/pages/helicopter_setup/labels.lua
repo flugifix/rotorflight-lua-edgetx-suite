@@ -395,6 +395,7 @@ local L = {
   inputRoll = "@i18n(app.modules.helicopter_setup.inputRoll)@",
   inputPitch = "@i18n(app.modules.helicopter_setup.inputPitch)@",
   inputCollective = "@i18n(app.modules.helicopter_setup.inputCollective)@",
+  inputYaw = "@i18n(app.modules.helicopter_setup.inputYaw)@",
   stickNow = "@i18n(app.modules.helicopter_setup.stickNow)@",
   stickCentre = "@i18n(app.modules.helicopter_setup.stickCentre)@",
   dirRight = "@i18n(app.modules.helicopter_setup.dirRight)@",
