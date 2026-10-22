@@ -2996,7 +2996,7 @@ return {
         help_p1 = "Ist das Flugbuch unter Einstellungen eingeschaltet, wird pro Flug eine Zeile auf die Karte geschrieben.",
         help_p2 = "Ein Flug ist die Zeit zwischen Scharfschalten und Entschaerfen. Ein kuerzeres Scharfschalten ist keiner.",
         help_p3 = "Ein gewaehlter Akku steht in der Zeile des Fluges, sein erster Flug zaehlt einen Zyklus.",
-        help_p4 = "Ein Akku ohne Modellliste gilt fuer jedes Modell, sonst nur fuer die genannten Namen.",
+        help_p4 = "Modelle: mit Alle Modelle gilt der Akku fuer jedes Modell, sonst nur fuer die eingeschalteten Modelle.",
         help_p5 = "Beide Dateien sind reiner Text. Eine Aenderung schreibt nur die eine Zeile neu.",
         help_p6 = "Der aktuelle Reiter ist markiert. Ein Akku wird im ganzen Bildschirm bearbeitet, bis Speichern oder Abbrechen.",
         help_p7 = "Ist die Abfrage an, bietet das Dashboard die Akkus dieses Modells nach dem Verbinden einmal im Vollbild an.",

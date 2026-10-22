@@ -765,7 +765,7 @@ end
 -- "," separates the names and "*" stands for every model. Only ";", which separates the fields of
 -- a registry line, and control characters are removed. Each name is trimmed on its own, so
 -- "a, b" and "a,b" are the same list, and an empty one is dropped rather than kept as a name that
--- nothing can ever match.
+-- nothing can ever match. The joined list is kept whole, however many models it names.
 function M.sanitizeModelList(value)
   local cleaned = string.gsub(tostring(value or ""), "[;%c]", "")
   local names = {}
@@ -777,7 +777,7 @@ function M.sanitizeModelList(value)
     if at == nil then break end
     from = at + 1
   end
-  return string.sub(table.concat(names, ","), 1, 32)
+  return table.concat(names, ",")
 end
 
 M.trim = trim

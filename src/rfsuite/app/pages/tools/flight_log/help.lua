@@ -18,7 +18,8 @@ return function(ctx)
   local help_p1 = t(i18n, "help_p1", "A line per flight is written to the card once the log is switched on under Settings.")
   local help_p2 = t(i18n, "help_p2", "A flight is the time between arming and disarming. An arm shorter than the minimum is not one.")
   local help_p3 = t(i18n, "help_p3", "A pack picked under Batteries goes into the flight's line and its first flight counts one cycle.")
-  local help_p4 = t(i18n, "help_p4", "A pack with no model list is offered for every craft, otherwise only for the names listed.")
+  local help_p4 = t(i18n, "help_p4",
+    "Models: with All models on, the pack is offered for every craft, otherwise only for the models switched on.")
   local help_p5 = t(i18n, "help_p5", "Both files are plain text. An edit rewrites one line and leaves the rest of the file alone.")
   local help_p6 = t(i18n, "help_p6", "The tab you are on is marked. Editing a pack takes the whole screen until Save or Cancel.")
   local help_p7 = t(i18n, "help_p7", "With the prompt on, the dashboard offers this model's packs in fullscreen once after connecting.")
@@ -30,6 +31,6 @@ return function(ctx)
 
   return {
     title = t(i18n, "help_title", "Flight Log Help"),
-    message = table.concat(parts, "\n\n")
+    message = table.concat(parts, "\n")
   }
 end

@@ -3001,7 +3001,7 @@ return {
         help_p1 = "A line per flight is written to the card once the log is switched on under Settings.",
         help_p2 = "A flight is the time between arming and disarming. An arm shorter than the minimum is not one.",
         help_p3 = "A pack picked under Batteries goes into the flight's line and its first flight counts one cycle.",
-        help_p4 = "A pack with no model list is offered for every craft, otherwise only for the names listed.",
+        help_p4 = "Models: with All models on, the pack is offered for every craft, otherwise only for the models switched on.",
         help_p5 = "Both files are plain text. An edit rewrites one line and leaves the rest of the file alone.",
         help_p6 = "The tab you are on is marked. Editing a pack takes the whole screen until Save or Cancel.",
         help_p7 = "With the prompt on, the dashboard offers this model's packs in fullscreen once after connecting.",
