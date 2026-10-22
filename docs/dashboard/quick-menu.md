@@ -24,7 +24,7 @@ take fullscreen opens the quick menu directly.
 One exception is the [in-flight tuning overlay](inflight-tuning.md): while the interlock
 switch has brought it up, it takes full screen instead and the quick menu is not drawn.
 
-The other is the battery prompt. With *Ask which pack after connecting* on (the
+The other is the battery prompt. With *Write a flight log* on (the
 [Flight Log](../pages/tools/flight_log.md) page, *Settings*), full screen shows the battery
 picker instead of the quick menu once per connection, until the pilot has picked a pack,
 closed it or armed the model.
