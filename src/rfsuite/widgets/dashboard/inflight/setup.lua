@@ -1683,27 +1683,32 @@ local SPECIAL_FUNCTION_COUNT = 64
 local TIMER_COUNT = 3
 
 --- Every number the model's lines, switches, functions, flight modes and timers hold where a
--- logical switch can be named -- as a switch or as a source -- read as a set of magnitudes (an
--- inverted switch, `!L01`, names the same slot).
+-- logical switch can be named, read as two sets of magnitudes (an inverted switch, `!L01`, names
+-- the same slot): `switch`, compared with the slot's switch number, and `source`, compared with
+-- its source number. Switch and source numbers are two ranges that overlap, so a number is only
+-- held against the range it was read from.
 --
--- Taken wider than it has to be on purpose: a logical switch's `v2` or a special function's
--- `value` is a switch or a source only for some functions, and is counted here for all of them. A
--- number that merely looks like a logical switch costs the search one candidate; a slot that IS
--- named and is taken anyway makes whatever names it act every time a step is pulsed.
+-- Taken wider than it has to be on purpose: a logical switch's `v1`/`v2` or a special function's
+-- `value` is a switch or a source only for some functions, and is counted here in both sets for
+-- all of them. A number that merely looks like a logical switch costs the search one candidate; a
+-- slot that IS named and is taken anyway makes whatever names it act every time a step is pulsed.
 local function namedNumbers(radio)
-  local named = {}
-  local function note(value)
+  local named = { switch = {}, source = {} }
+  local function add(set, value)
     value = tonumber(value)
-    if value ~= nil and value ~= 0 then named[math.abs(value)] = true end
+    if value ~= nil and value ~= 0 then set[math.abs(value)] = true end
   end
+  local function noteSwitch(value) add(named.switch, value) end
+  local function noteSource(value) add(named.source, value) end
+  local function note(value) noteSwitch(value) noteSource(value) end
   -- A line's weight, offset and curve value are a number or a source: Lua reads a source there as
   -- its index moved past +-1024 (datastructs_private.h, sourceNumValToLuaInt).
   local function noteValue(value)
     value = tonumber(value)
-    if value ~= nil and math.abs(value) >= 1024 then note(math.abs(value) - 1024) end
+    if value ~= nil and math.abs(value) >= 1024 then noteSource(math.abs(value) - 1024) end
   end
   local function noteLine(line)
-    note(line.switch) note(line.source)
+    noteSwitch(line.switch) noteSource(line.source)
     noteValue(line.weight) noteValue(line.offset) noteValue(line.curveValue)
   end
   for channel = 1, MIX_SCAN_CHANNELS do
@@ -1726,19 +1731,19 @@ local function namedNumbers(radio)
   end
   for k = 0, M.LOGICAL_SWITCH_COUNT - 1 do
     local ls = radio.logicalSwitch(k)
-    if ls and (tonumber(ls.func) or 0) ~= 0 then note(ls["and"]) note(ls.v1) note(ls.v2) end
+    if ls and (tonumber(ls.func) or 0) ~= 0 then noteSwitch(ls["and"]) note(ls.v1) note(ls.v2) end
   end
   for k = 0, SPECIAL_FUNCTION_COUNT - 1 do
     local cf = radio.customFunction(k)
-    if cf and (tonumber(cf.switch) or 0) ~= 0 then note(cf.switch) note(cf.value) end
+    if cf and (tonumber(cf.switch) or 0) ~= 0 then noteSwitch(cf.switch) note(cf.value) end
   end
   for fm = 1, MAX_FLIGHT_MODES - 1 do
     local data = radio.flightModeData(fm)
-    if data then note(data.switch) end
+    if data then noteSwitch(data.switch) end
   end
   for n = 0, TIMER_COUNT - 1 do
     local timer = radio.timer(n)
-    if timer then note(timer.switch) end
+    if timer then noteSwitch(timer.switch) end
   end
   return named
 end
@@ -1782,7 +1787,7 @@ local function pulseGate(radio, settings)
   local sourceBase = type(radio.lsSourceBase) == "function" and radio.lsSourceBase() or nil
   for j = #empty, 1, -1 do
     local k = empty[j]
-    if not named[base + k] and not (sourceBase ~= nil and named[sourceBase + k]) then
+    if not named.switch[base + k] and not (sourceBase ~= nil and named.source[sourceBase + k]) then
       return answer(k, true)
     end
   end
