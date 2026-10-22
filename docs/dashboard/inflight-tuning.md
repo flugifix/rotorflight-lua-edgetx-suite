@@ -32,7 +32,10 @@ Two pages, one for each half:
 - [*System* → *Settings* → *Dashboard* → *In-Flight Tuning*](../pages/settings/dashboard/inflight.md)
   — the radio's half: the master switch, the interlock switch, the channels, the variables,
   the pulse length and the trims. It carries **Set up the model**, which writes the mixer
-  lines, the variable details and the trim modes after showing what it would change.
+  lines, the logical switch that times each press, the variable details and the trim modes
+  after showing what it would change. A model set up by an earlier version needs it once more:
+  its value line has no logical switch yet, and the setup check refuses the interlock with
+  **Mixer line missing or wrong** until it has one.
 - [*Configuration* → *Setup* → *Controls* → *In-Flight Tuning*](../pages/setup/controls/inflight.md)
   — the flight controller's half: the model's own switch, the set layout, the step sizes and
   the backup PID profile. It carries **Set up the flight controller**, which writes the
@@ -139,12 +142,16 @@ One parameter at a time, not a grid:
   cannot arrive at the cost of the pass that ends the pulse.
 - **The row list** on the right is the six rows of the bank. A tap selects the row the step
   controls act on; the trims act on them directly.
-- **The step controls** at the bottom. One tap is one pulse is one step. Held, the flight
-  controller repeats at its own rate. There is never a value that follows the finger. A hold is
+- **The step controls** at the bottom. One tap is one pulse is one step: the logical switch on
+  the value line lets 200 ms of the press through, however slowly the widget runs. Held, the
+  control pulses again after each pulse and a short gap -- about two steps a second, less even
+  than the flight controller's own repeat, and every pulse exactly one step. There is never a
+  value that follows the finger. While a control is held, a bank chip and the walk and bank
+  trims wait for it to be let go, as they wait for a pulse. A hold is
   not cut short when the dashboard reloads its theme underneath the surface -- the change into
   flight, a changed setting, a pack with a different cell count: the surface is drawn again once
   the control has been let go. That wait lasts at most five seconds from the start of the hold
-  -- 25 steps: if a redraw is still waiting then, the surface is drawn and the hold ends, so a
+  -- about ten steps: if a redraw is still waiting then, the surface is drawn and the hold ends, so a
   release the radio never reports does not keep the redraw waiting. Every hold ends after those
   same five seconds, with or without a redraw, and the surface says **hold ended after 5 s -
   press again** (**5 s over - press again** where the line is too narrow); lift the finger and press again to go on. The radio does not report every

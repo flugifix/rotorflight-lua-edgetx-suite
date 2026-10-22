@@ -84,17 +84,11 @@ M.DEFAULTS = {
   -- reaches, and the model is walked to WARN that one of them is spoken for rather than to choose.
   bank_gvar = 6,
   value_gvar = 5,
-  -- Long enough that the flight controller sees the channel stand still, and short enough that it
-  -- does not count the stillness twice. It takes no step until the value has been steady inside
-  -- one window for TRIGGER_DELAY, 100 ms, and repeats every REPEAT_DELAY, 200 ms after that
-  -- (fc/rc_adjustments.c) -- so a press has to hold its plateau past 100 ms and let go before 300.
-  -- What the board sees is not this number, though: it is this number plus up to one widget pass,
-  -- since the pulse is cleared on the first pass at or AFTER its deadline, plus the link's own
-  -- jitter -- on a receiver sending the AUX channels round-robin at 250 Hz, some 32 ms either way.
-  -- 180 puts the plateau at 148..262 ms in the worst case, about 40 ms clear of both edges. The
-  -- earlier default of 250 sat on the upper one at 250..332 ms, over the repeat; 150 cleared the
-  -- lower by 50 ms and left nothing for a pass that ran late.
-  pulse_ms = 180,
+  -- How long the value variable stands for one press. It is no longer what the flight controller
+  -- sees: the logical switch gating the value line (M.PULSE_LS_DELAY, M.PULSE_LS_DURATION) lets the
+  -- code through for 200 ms on the radio's own timer, whatever the widget pass does. The variable
+  -- only has to stand until that window is over, and M.PULSE_MS_MIN is that bound.
+  pulse_ms = 310,
   trims = true,
   -- Walk-and-adjust with three trims is the arrangement the pilot flew and asked to keep, and it
   -- is the one that works on every radio: the six-trim layout needs six trims, and the TX15, the
@@ -127,21 +121,46 @@ M.DEFAULTS = {
   step_headspeed = 50
 }
 
-M.PULSE_MS_MIN = 100
--- The largest setting whose own overrun cannot reach the board's SECOND step. The second step
--- lands 300 ms into a held plateau (TRIGGER_DELAY 100 ms, then REPEAT_DELAY 200 ms counted from
--- the first), and the overlay clears the pulse on the first pass at or AFTER its deadline, so a
--- plateau stands for its setting plus up to one pass. At EdgeTX's 50 ms widget pass, 250 leaves
--- that overrun the whole of the remaining 50 ms; anything longer would let one late pass turn a
--- press into two steps, which is the failure a pilot cannot see happening. A stored value above
--- this is clamped on load.
+-- The plateau the flight controller sees is timed by a logical switch, not by the widget.
 --
--- What the cap bounds is what the SETTING adds, not what a slow pass does. A widget pass is not
--- always 50 ms: with the tuning surface up a colour radio can run it at about 300 ms, and then
--- the plateau is one whole pass whatever is set between 100 and 250 -- which is where the second
--- step lands, so a pass longer than that can still turn one press into two. No value of this cap
--- changes that; a press is bounded by its own pulse, never by how long a trim reads as held.
-M.PULSE_MS_MAX = 250
+-- The board takes no step until the value channel has stood still inside one window for
+-- TRIGGER_DELAY, 100 ms, and steps again REPEAT_DELAY, 200 ms, after the first (fc/rc_adjustments.c)
+-- -- so a plateau has to last more than 100 ms and end before 300. A pulse the widget ends itself
+-- ends on the first pass at or after its deadline, and with the tuning surface up a colour radio can
+-- run that pass at about 300 ms: the plateau is then one whole pass long and one press is two steps.
+--
+-- So the value line is switched by a logical switch `|GVx| > 0` with a delay of 0.1 s and a duration
+-- of 0.2 s, and the radio's mixer task ends the plateau (radio/src/switches.cpp, the duration
+-- timer; it counts down in logicalSwitchesTimerTick, every 100 ms from mixer.cpp, outside the Lua
+-- task). The delay expires on one of those ticks and the same evaluation loads the duration, so the
+-- plateau is two ticks, 200 ms, give or take the 10 ms the switches are evaluated at -- about 100 ms
+-- clear of both edges. With no delay the plateau would start at a random point inside a tick and
+-- last anywhere from 100 to 200 ms.
+M.PULSE_LS_DELAY = 1
+M.PULSE_LS_DURATION = 2
+
+-- How long the value variable must stand for that window to run out in full. The variable is
+-- written at any point inside a tick; the switch sees it within 10 ms, the delay runs out on the
+-- next tick, at most 110 ms later, and the duration two ticks after that: 310 ms. Cleared earlier,
+-- the switch is reset during its delay and nothing steps, or the channel is cut inside the window
+-- (the line's weight is the variable). Cleared later, nothing happens -- the window is already
+-- over -- so the pass that clears it may run as late as it likes. A stored value below this,
+-- written by a build that timed the plateau in the widget, is raised to it on load.
+M.PULSE_MS_MIN = 310
+-- A longer setting only makes a held step control repeat more slowly; the board still sees 200 ms.
+M.PULSE_MS_MAX = 400
+
+-- How long the value variable stays at 0 after a pulse before the next one may start, for a tap, a
+-- trim and every repeat of a held step control alike. The switch re-arms only after it has seen the
+-- variable at 0 once its window is over, so the gap is what makes the next pulse a new one; and it
+-- has to be long enough that the next plateau begins one tick later than it could otherwise --
+-- 400 ms after the last one began rather than 300 -- because the board does not sample the channel
+-- at all for REPEAT_DELAY after a step. A plateau starting while that wait still runs is read as
+-- the same plateau going on, and the first sample after the wait would step it at once and then
+-- possibly again. The variable is cleared no earlier than 310 ms after the write, the last plateau
+-- began no later than 110 ms after it, so a gap over 100 ms moves the next one onto the later tick;
+-- 150 leaves a pass-length of margin.
+M.PULSE_GAP_MS = 150
 
 -- What one press moves a parameter by on the board. Four rungs rather than a free number: the
 -- firmware stores the step in one byte per slot and the four cover the range a pilot asks for --
@@ -159,6 +178,8 @@ M.CHANNEL_MIN = 5
 M.CHANNEL_MAX = 16
 -- F4 and F7 radios carry nine global variables, H7 fifteen. Nine is what every target has.
 M.GVAR_MAX_INDEX = 9
+-- radio/src/dataconstants.h, MAX_LOGICAL_SWITCHES: the same on every colour radio.
+M.LOGICAL_SWITCH_COUNT = 64
 M.TRIM_COUNT = 6
 M.PROFILE_MAX = 6
 
@@ -528,7 +549,8 @@ function M.radio()
       local have = mixLineOf(channel - 1, line0)
       if have == nil then return false, "unverified" end
       if tonumber(have.source) ~= tonumber(value.source)
-          or tonumber(have.weight) ~= tonumber(value.weight) then
+          or tonumber(have.weight) ~= tonumber(value.weight)
+          or tonumber(have.switch) ~= tonumber(value.switch or 0) then
         return false, "wrong line"
       end
       return true
@@ -564,6 +586,76 @@ function M.radio()
     -- one that does before a plan is built, so the button can say so instead of failing halfway.
     canWrite = function()
       return modelApi("insertMix") ~= nil and modelApi("deleteMix") ~= nil
+        and modelApi("setLogicalSwitch") ~= nil
+    end,
+
+    -- The logical switches, for the one that times the pulse. `k` counts from 0, as the firmware
+    -- does (L01 is 0).
+    logicalSwitch = function(k)
+      local fn = modelApi("getLogicalSwitch")
+      if not fn then return nil end
+      local ok, ls = pcall(fn, k)
+      if not ok or type(ls) ~= "table" then return nil end
+      return ls
+    end,
+
+    -- The switch number of L01: what a mixer line's `switch` holds for a logical switch is this
+    -- plus the switch's index. Asked of the firmware by name; past that, the logical switches are
+    -- the last block of switch positions before ON (dataconstants.h, SWSRC_LAST_LOGICAL_SWITCH).
+    lsBase = function()
+      local idx = tonumber((callGlobal("getSwitchIndex", "L01")))
+      if idx ~= nil and idx > 0 then return idx end
+      local last = tonumber(_G and _G.SWSRC_LAST)
+      if last ~= nil then return last - M.LOGICAL_SWITCH_COUNT + 1 end
+      return nil
+    end,
+
+    -- The same switch as a SOURCE (a mixer line or an input can take L01 as its source), whose
+    -- number Lua is not told by name; "ls1" is its field (api_general.cpp, luaMultipleFields).
+    lsSourceBase = function()
+      local info = callGlobal("getFieldInfo", "ls1")
+      if type(info) == "table" then return tonumber(info.id) end
+      return nil
+    end,
+
+    lsFuncAPos = function()
+      return tonumber(_G and _G.LS_FUNC_APOS)
+    end,
+
+    -- api_model.cpp's luaModelSetLogicalSwitch clears the whole slot before it sets the fields it
+    -- is given, so `def` carries every field the switch needs. It answers nothing, so the write is
+    -- read back field by field.
+    setLogicalSwitch = function(k, def)
+      local fn = modelApi("setLogicalSwitch")
+      if not fn then return false, "unsupported" end
+      local ok, err = pcall(fn, k, def)
+      if not ok then return false, tostring(err) end
+      local read = modelApi("getLogicalSwitch")
+      if not read then return false, "unverified" end
+      local okRead, have = pcall(read, k)
+      if not okRead or type(have) ~= "table" then return false, "unverified" end
+      for key, wanted in pairs(def) do
+        if tonumber(have[key]) ~= wanted then return false, "not written: " .. tostring(key) end
+      end
+      return true
+    end,
+
+    -- What the rest of the model names a logical switch by: the special functions, the timers. The
+    -- mixer, input, flight mode and logical switch readers above answer for the rest.
+    customFunction = function(k)
+      local fn = modelApi("getCustomFunction")
+      if not fn then return nil end
+      local ok, cf = pcall(fn, k)
+      if not ok or type(cf) ~= "table" then return nil end
+      return cf
+    end,
+
+    timer = function(n)
+      local fn = modelApi("getTimer")
+      if not fn then return nil end
+      local ok, timer = pcall(fn, n)
+      if not ok or type(timer) ~= "table" then return nil end
+      return timer
     end
   }
 end
@@ -884,6 +976,54 @@ function M.migrateTrims(settings, trims)
 end
 
 -- ---------------------------------------------------------------------------
+-- The logical switch that times the pulse
+-- ---------------------------------------------------------------------------
+
+--- The logical switch the value line has to be switched by: `|GVx| > 0`, delayed and timed (see
+-- M.PULSE_LS_DELAY). |a| > x because a step code is signed (a decrement is the negative of its
+-- increment). For a global variable `v1` is its mix source number and `v2` the raw value it is
+-- compared with (switches.cpp, getLogicalSwitch: `y = ls->v2` once v1 is a global variable).
+-- Every field is given, since the writer clears the slot first. nil where the radio does not say
+-- what it needs to know.
+local function gateDefinition(radio, gvarIndex)
+  if type(radio.lsFuncAPos) ~= "function" then return nil end
+  local func = radio.lsFuncAPos()
+  local source = radio.sourceIndex("GV" .. tostring(gvarIndex))
+  if func == nil or source == nil then return nil end
+  return {
+    func = func, v1 = source, v2 = 0, v3 = 0, ["and"] = 0,
+    delay = M.PULSE_LS_DELAY, duration = M.PULSE_LS_DURATION
+  }
+end
+
+--- Whether a logical switch read off the model is exactly that switch. `v3` is not compared: the
+-- firmware reads it for no function of this family.
+local function isGate(ls, def)
+  if type(ls) ~= "table" or type(def) ~= "table" then return false end
+  return tonumber(ls.func) == def.func and tonumber(ls.v1) == def.v1 and tonumber(ls.v2) == def.v2
+    and (tonumber(ls["and"]) or 0) == 0 and tonumber(ls.delay) == def.delay
+    and tonumber(ls.duration) == def.duration
+end
+
+--- Which logical switch (0-based) the mixer switch `swsrc` names, or nil when it names none.
+local function lsIndexOf(radio, swsrc)
+  if type(radio.lsBase) ~= "function" then return nil end
+  local base = radio.lsBase()
+  swsrc = tonumber(swsrc)
+  if base == nil or swsrc == nil then return nil end
+  local k = swsrc - base
+  if k < 0 or k >= M.LOGICAL_SWITCH_COUNT then return nil end
+  return k
+end
+
+--- Whether the mixer switch `swsrc` is a logical switch that times the pulse for this variable.
+local function switchIsGate(radio, swsrc, gvarIndex)
+  local k = lsIndexOf(radio, swsrc)
+  if k == nil or type(radio.logicalSwitch) ~= "function" then return false end
+  return isGate(radio.logicalSwitch(k), gateDefinition(radio, gvarIndex))
+end
+
+-- ---------------------------------------------------------------------------
 -- The setup check
 -- ---------------------------------------------------------------------------
 
@@ -902,7 +1042,7 @@ local function checkGvarDetails(radio, index, faults, prefix)
   end
 end
 
-local function checkMixLine(radio, channel, gvarIndex, faults, prefix)
+local function checkMixLine(radio, channel, gvarIndex, faults, prefix, gated)
   local count = radio.mixesCount(channel)
   if count == nil then return false end
   if count == 0 then
@@ -928,7 +1068,15 @@ local function checkMixLine(radio, channel, gvarIndex, faults, prefix)
   if tonumber(mix.multiplex) ~= MIX_MULTIPLEX_ADD then
     faults[#faults + 1] = prefix .. "_mix_multiplex"
   end
-  if tonumber(mix.switch) ~= 0 then
+  -- The bank line is always on: the enable channel has to stand in its band for as long as the
+  -- interlock is closed. The value line is switched by the logical switch that times the pulse, and
+  -- a value line without it is the line the widget would have to time itself -- one press, two
+  -- steps, on a slow pass.
+  if gated then
+    if not switchIsGate(radio, mix.switch, gvarIndex) then
+      faults[#faults + 1] = prefix .. "_mix_switch"
+    end
+  elseif tonumber(mix.switch) ~= 0 then
     faults[#faults + 1] = prefix .. "_mix_switch"
   end
   -- Three more fields the line has to carry, each held against it only where the reader answered at
@@ -1108,7 +1256,7 @@ function M.check(drive, settings, trims)
   end
   if (settings.value_gvar or 0) > 0 then
     checkGvarDetails(radio, settings.value_gvar, faults, "value")
-    looked = checkMixLine(radio, settings.value_ch, settings.value_gvar, faults, "value") or looked
+    looked = checkMixLine(radio, settings.value_ch, settings.value_gvar, faults, "value", true) or looked
   end
 
   -- A trim driving a row must be OFF as a trim in every flight mode, the way M.plan switches it off.
@@ -1478,7 +1626,7 @@ end
 -- answers in: api_model.cpp puts an inserted weight through luaIntToSourceNumval and reads it back
 -- through sourceNumValToLuaInt, and those two are inverses. So a line written from this table is a
 -- line the check reads back as correct, with no second convention in between.
-local function gvarMixLine(radio, gvarIndex)
+local function gvarMixLine(radio, gvarIndex, switch)
   local sourceIndex = radio.sourceIndex("GV" .. tostring(gvarIndex))
   if sourceIndex == nil then return nil end
   local mixsrcMax = radio.mixsrcMax()
@@ -1488,7 +1636,7 @@ local function gvarMixLine(radio, gvarIndex)
     source = mixsrcMax,
     weight = MIX_WEIGHT_GVAR_BASE + sourceIndex,
     offset = 0,
-    switch = 0,
+    switch = switch or 0,
     multiplex = MIX_MULTIPLEX_ADD,
     curveType = 0,
     curveValue = 0,
@@ -1533,11 +1681,112 @@ local function channelAlreadySet(radio, channel, mix)
   if tonumber(have.source) ~= tonumber(mix.source) then return false end
   if tonumber(have.weight) ~= tonumber(mix.weight) then return false end
   if tonumber(have.multiplex) ~= MIX_MULTIPLEX_ADD then return false end
-  if tonumber(have.switch) ~= 0 then return false end
+  if tonumber(have.switch) ~= tonumber(mix.switch) then return false end
   if (tonumber(have.offset) or 0) ~= 0 then return false end
   if (tonumber(have.curveType) or 0) ~= 0 then return false end
   if (tonumber(have.flightModes) or 0) ~= 0 then return false end
   return true
+end
+
+-- EdgeTX's MAX_SPECIAL_FUNCTIONS and MAX_TIMERS on every colour radio (radio/src/dataconstants.h).
+local SPECIAL_FUNCTION_COUNT = 64
+local TIMER_COUNT = 3
+
+--- Every number the model's lines, switches, functions, flight modes and timers hold where a
+-- logical switch can be named -- as a switch or as a source -- read as a set of magnitudes (an
+-- inverted switch, `!L01`, names the same slot).
+--
+-- Taken wider than it has to be on purpose: a logical switch's `v2` or a special function's
+-- `value` is a switch or a source only for some functions, and is counted here for all of them. A
+-- number that merely looks like a logical switch costs the search one candidate; a slot that IS
+-- named and is taken anyway makes whatever names it act every time a step is pulsed.
+local function namedNumbers(radio)
+  local named = {}
+  local function note(value)
+    value = tonumber(value)
+    if value ~= nil and value ~= 0 then named[math.abs(value)] = true end
+  end
+  for channel = 1, MIX_SCAN_CHANNELS do
+    local count = radio.mixesCount(channel)
+    if count == nil then break end
+    for line0 = 0, count - 1 do
+      local mix = radio.mix(channel, line0)
+      if mix then note(mix.switch) note(mix.source) end
+    end
+  end
+  if type(radio.inputsCount) == "function" and type(radio.input) == "function" then
+    for input0 = 0, INPUT_SCAN_COUNT - 1 do
+      local count = radio.inputsCount(input0)
+      if count == nil then break end
+      for line0 = 0, count - 1 do
+        local line = radio.input(input0, line0)
+        if line then note(line.switch) note(line.source) end
+      end
+    end
+  end
+  for k = 0, M.LOGICAL_SWITCH_COUNT - 1 do
+    local ls = radio.logicalSwitch(k)
+    if ls and (tonumber(ls.func) or 0) ~= 0 then note(ls["and"]) note(ls.v1) note(ls.v2) end
+  end
+  for k = 0, SPECIAL_FUNCTION_COUNT - 1 do
+    local cf = radio.customFunction(k)
+    if cf and (tonumber(cf.switch) or 0) ~= 0 then note(cf.switch) note(cf.value) end
+  end
+  for fm = 1, MAX_FLIGHT_MODES - 1 do
+    local data = radio.flightModeData(fm)
+    if data then note(data.switch) end
+  end
+  for n = 0, TIMER_COUNT - 1 do
+    local timer = radio.timer(n)
+    if timer then note(timer.switch) end
+  end
+  return named
+end
+
+--- The logical switch the value line is to be switched by, or nil and why there is none.
+--
+-- Nothing the pilot set up is ever written over. In this order: the switch the value line already
+-- carries, when it is exactly the one this needs; else any slot that already is; else the LAST
+-- empty slot nothing on the model names -- the rule the Volume page's chain uses for its own
+-- logical switch, so the two do not reach for slots on different terms. A slot holding anything
+-- else is the pilot's, and a model with no slot left is refused rather than overwritten.
+--
+-- Answers { slot, switch, create, def }: `slot` 0-based, `switch` what the mixer line holds for it,
+-- `create` true where the slot is empty and has to be written.
+local function pulseGate(radio, settings)
+  if type(radio.logicalSwitch) ~= "function" or type(radio.lsBase) ~= "function" then
+    return nil, "unsupported"
+  end
+  local def = gateDefinition(radio, settings.value_gvar)
+  local base = radio.lsBase()
+  if def == nil or base == nil then return nil, "unsupported" end
+  local function answer(k, create)
+    return { slot = k, switch = base + k, create = create, def = def, gvar = settings.value_gvar }
+  end
+
+  if (radio.mixesCount(settings.value_ch) or 0) >= 1 then
+    local mix = radio.mix(settings.value_ch, 0)
+    local k = mix and lsIndexOf(radio, mix.switch)
+    if k ~= nil and isGate(radio.logicalSwitch(k), def) then return answer(k, false) end
+  end
+
+  local empty = {}
+  for k = 0, M.LOGICAL_SWITCH_COUNT - 1 do
+    local ls = radio.logicalSwitch(k)
+    if isGate(ls, def) then return answer(k, false) end
+    if ls and tonumber(ls.func) == 0 then empty[#empty + 1] = k end
+  end
+  if #empty == 0 then return nil, "no_ls" end
+
+  local named = namedNumbers(radio)
+  local sourceBase = type(radio.lsSourceBase) == "function" and radio.lsSourceBase() or nil
+  for j = #empty, 1, -1 do
+    local k = empty[j]
+    if not named[base + k] and not (sourceBase ~= nil and named[sourceBase + k]) then
+      return answer(k, true)
+    end
+  end
+  return nil, "no_ls"
 end
 
 --- Everything the write would do, as a list, before any of it is done.
@@ -1602,12 +1851,21 @@ function M.plan(radio, settings, trims)
     end
   end
 
+  -- The logical switch that times the pulse, found before anything is listed: a model with no slot
+  -- for it is refused as a whole, since a value line without it is the line that steps twice.
+  local gate, gateRefused = pulseGate(radio, settings)
+  if gate == nil then
+    plan.refused = gateRefused
+    return plan
+  end
+  if gate.create then plan.ls = gate end
+
   -- The two configured channels, and nothing else on this model is looked at, let alone written.
   -- Within a channel the deletions are listed HIGHEST INDEX FIRST, which is the order they have to
   -- be carried out in: deleting a line renumbers every line above it.
   local wanted = {
-    { channel = settings.bank_ch, gvar = bankGvar, role = "bank" },
-    { channel = settings.value_ch, gvar = valueGvar, role = "value" }
+    { channel = settings.bank_ch, gvar = bankGvar, role = "bank", switch = 0 },
+    { channel = settings.value_ch, gvar = valueGvar, role = "value", switch = gate.switch }
   }
   for i = 1, #wanted do
     local entry = wanted[i]
@@ -1616,7 +1874,7 @@ function M.plan(radio, settings, trims)
       plan.refused = "unsupported"
       return plan
     end
-    local mix = gvarMixLine(radio, entry.gvar)
+    local mix = gvarMixLine(radio, entry.gvar, entry.switch)
     if mix == nil then
       plan.refused = "unsupported"
       return plan
@@ -1672,7 +1930,8 @@ function M.plan(radio, settings, trims)
 
   -- Nothing queued means the model already is what the write would make it, and the button says so
   -- instead of putting up a confirmation for a write with no content in it.
-  if #plan.gvars == 0 and #plan.deletions == 0 and #plan.insertions == 0 and #plan.trims == 0 then
+  if #plan.gvars == 0 and #plan.deletions == 0 and #plan.insertions == 0 and #plan.trims == 0
+      and plan.ls == nil then
     plan.nothing = true
   end
 
@@ -1713,6 +1972,18 @@ function M.applyPlan(radio, plan)
     step("gvar", entry.index, ok, err)
     logDrive("setup: GV%d named %s, %d..%d prec %d -> %s", entry.index, entry.name,
       GVAR_DETAIL_MIN, GVAR_DETAIL_MAX, GVAR_DETAIL_PREC, tostring(ok))
+  end
+
+  -- The logical switch before the line that names it. A line switched by an empty slot would be a
+  -- line that is never on, which is safe; the order is kept anyway, so that no state in between
+  -- names something that is not there yet.
+  if plan.ls ~= nil then
+    local ok, err = radio.setLogicalSwitch(plan.ls.slot, plan.ls.def)
+    step("ls", plan.ls.slot, ok, err)
+    logDrive("setup: L%02d gets |GV%d| > 0, delay %d, duration %d -> %s", plan.ls.slot + 1,
+      plan.ls.gvar, M.PULSE_LS_DELAY, M.PULSE_LS_DURATION, tostring(ok))
+    -- A line naming a slot that refused the write would be a line that never steps.
+    if ok ~= true then return report end
   end
 
   for i = 1, #plan.deletions do
