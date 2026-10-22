@@ -704,7 +704,8 @@ function M.new(runtime, transport, mathModule, labels)
       self.buildRequested = nil
       if self.overview then self:rebuild(); return end
       if self.historyMode then self:buildHistory();self:rebuild();return end
-      if self.apiTooOld then
+      -- A pending power-cycle acknowledgement comes first, so its marker can still be cleared.
+      if self.apiTooOld and not self.recoveryRequired then
         self.cards={self:cardDef(self.L.apiTooOldTitle,self.L.apiTooOld,{
           self:value(self.L.fcApi,function() return tostring(self:session().apiVersion or "--") end)
         })}

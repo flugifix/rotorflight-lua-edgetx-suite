@@ -42,6 +42,11 @@ return function(h)
     eq(w.cards[1].rows[1].get(),"12.09","CORE the reason names the FC's API version")
     for _,m in ipairs(q.sent) do check(m.command~=120 and m.command~=42,"CORE an FC below API 12.10 gets no configuration reads") end
     check(not w.validate(),"CORE the API card never completes")
+    session.helicopterSetupRecovery=session.mcu_id;w=world();settle(w)
+    check(w.recoveryCard,"CORE a pending recovery is shown before the API card")
+    w.checks.recoveryPowerCycle=true;w:next();drain(w)
+    check(session.helicopterSetupRecovery==nil and w.cards and w.cards[1].title==L.apiTooOldTitle,
+      "CORE after the recovery acknowledgement the API card follows")
     session.apiVersion="12.10";w=world();settle(w)
     check(not w.apiTooOld,"CORE API 12.10 opens the steps")
     session.apiVersion="13.0";check(w:apiSupported(),"CORE a later major version is accepted")
