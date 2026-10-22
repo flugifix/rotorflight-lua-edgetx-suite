@@ -1695,12 +1695,22 @@ local function namedNumbers(radio)
     value = tonumber(value)
     if value ~= nil and value ~= 0 then named[math.abs(value)] = true end
   end
+  -- A line's weight, offset and curve value are a number or a source: Lua reads a source there as
+  -- its index moved past +-1024 (datastructs_private.h, sourceNumValToLuaInt).
+  local function noteValue(value)
+    value = tonumber(value)
+    if value ~= nil and math.abs(value) >= 1024 then note(math.abs(value) - 1024) end
+  end
+  local function noteLine(line)
+    note(line.switch) note(line.source)
+    noteValue(line.weight) noteValue(line.offset) noteValue(line.curveValue)
+  end
   for channel = 1, MIX_SCAN_CHANNELS do
     local count = radio.mixesCount(channel)
     if count == nil then break end
     for line0 = 0, count - 1 do
       local mix = radio.mix(channel, line0)
-      if mix then note(mix.switch) note(mix.source) end
+      if mix then noteLine(mix) end
     end
   end
   if type(radio.inputsCount) == "function" and type(radio.input) == "function" then
@@ -1709,7 +1719,7 @@ local function namedNumbers(radio)
       if count == nil then break end
       for line0 = 0, count - 1 do
         local line = radio.input(input0, line0)
-        if line then note(line.switch) note(line.source) end
+        if line then noteLine(line) end
       end
     end
   end
