@@ -44,7 +44,7 @@ function M.append(all, w, card, width, height, large, controlH, current)
   if large then
     -- Row: name and centre | test or answer | nudges | status.
     local rowH = math.floor((height - controlH - 40 - top) / n)
-    local lw, tw, nw = 250, 170, 4 * 44 + 3 * gap
+    local lw, tw, nw = 262, 160, 4 * 44 + 3 * gap
     local sw = width - 20 - lw - tw - nw - 3 * gap
     for k, c in ipairs(cols) do
       local y = top + (k - 1) * rowH
