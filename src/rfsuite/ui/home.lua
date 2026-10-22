@@ -2449,7 +2449,8 @@ local function stepGridBuild(grid)
       i == state.focusIndex,
       getCardPressHandler(card.id),
       card.data.enabled,
-      card.data.lockedByArm and ARMED_BADGE_TEXT or nil
+      card.data.lockedByArm and ARMED_BADGE_TEXT or nil,
+      card.data.done == true
     )
     grid.slots[i] = card
     grid.pos = { card = i + 1, tiles = #tiles }
@@ -3059,7 +3060,8 @@ local function buildScene()
           flatIndex == state.focusIndex,
           getRootCardPressHandler(group.id, card.id),
           card.data.enabled,
-          card.data.lockedByArm and ARMED_BADGE_TEXT or nil
+          card.data.lockedByArm and ARMED_BADGE_TEXT or nil,
+          card.data.done == true
         )
 
         local bottom = tileY + tileSize
@@ -3199,7 +3201,8 @@ local function buildScene()
           i == state.focusIndex,
           getCardPressHandler(card.id),
           card.data.enabled,
-          card.data.lockedByArm and ARMED_BADGE_TEXT or nil
+          card.data.lockedByArm and ARMED_BADGE_TEXT or nil,
+          card.data.done == true
         )
       end
     end

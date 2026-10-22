@@ -81,6 +81,27 @@ function Tiles.appendBadge(children, cx, cy, radius, text)
   }
 end
 
+-- The done mark: a green disc with a check drawn as two strokes. Drawn rather than written,
+-- because the radio fonts carry no check-mark glyph.
+local function appendDoneBadge(children, x, y, size)
+  local diameter = math.max(14, math.floor(size * 0.22))
+  local radius = math.floor(diameter / 2)
+  local cx, cy = x + size - BADGE_INSET - radius, y + BADGE_INSET + radius
+  children[#children + 1] = {
+    type = "circle",
+    x = cx, y = cy, radius = radius,
+    color = GREEN or COLOR_THEME_ACTIVE,
+    filled = true
+  }
+  local s = math.max(3, math.floor(radius * 0.55))
+  children[#children + 1] = {
+    type = "line",
+    pts = { { cx - s, cy }, { cx - math.floor(s / 3), cy + math.floor(s * 2 / 3) }, { cx + s, cy - math.floor(s * 2 / 3) } },
+    thickness = math.max(2, math.floor(radius / 4)),
+    color = WHITE or COLOR_THEME_PRIMARY2
+  }
+end
+
 function Tiles.computeColumns(width, minCardWidth, maxColumns)
   local cols = math.floor(width / minCardWidth)
   if cols < 1 then cols = 1 end
@@ -102,8 +123,8 @@ end
 -- `focused` is accepted for API compatibility but visual focus is handled by LVGL.
 -- `badge` is the glyph of an optional corner badge, already resolved by the caller; nil draws
 -- none. It is a string rather than a flag so this file stays a pure renderer with no i18n of
--- its own.
-function Tiles.append(children, x, y, size, iconFile, text, focused, pressHandler, enabled, badge)
+-- its own. `done` draws the done mark in the same corner when there is no badge.
+function Tiles.append(children, x, y, size, iconFile, text, focused, pressHandler, enabled, badge, done)
   local isEnabled = enabled ~= false
 
   children[#children + 1] = {
@@ -149,6 +170,8 @@ function Tiles.append(children, x, y, size, iconFile, text, focused, pressHandle
   -- Last, so it is the topmost child and nothing above draws over it.
   if type(badge) == "string" and badge ~= "" then
     appendCornerBadge(children, x, y, size, badge)
+  elseif done == true then
+    appendDoneBadge(children, x, y, size)
   end
 end
 
