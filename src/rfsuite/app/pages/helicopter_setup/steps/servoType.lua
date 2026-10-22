@@ -70,16 +70,14 @@ return function(w)
       cards[#cards+1]=card
     end
   end
-  -- Geometry correction is bit 1 of each servo's flags (bit 0 is reverse). The firmware reads it
-  -- on every servo update, so it needs no restart. It is offered for the cyclic servos only.
-  local cyclic={}
-  for _,index in ipairs(w:servos()) do if index~=3 then cyclic[#cyclic+1]=index end end
-  if #cyclic>0 then
-    local card=w:cardDef(L.geometryCorrection,L.geometryHint,{
+  -- Geometry correction is bit 1; bit 0 reverses the servo. The firmware reads it
+  -- on every servo update, so each group can change it without a restart.
+  local function geometryCard(indices, title)
+    local card=w:cardDef(title,L.geometryHint,{
       {kind="choice",label=L.geometryCorrection,values={L.off,L.on},
         get=function()
           local result
-          for _,index in ipairs(cyclic) do
+          for _,index in ipairs(indices) do
             local on=(w.data.servo_configurations.servos[index].flags & 2)~=0 and 2 or 1
             if result and result~=on then return 0 end
             result=on
@@ -88,7 +86,7 @@ return function(w)
         end,
         set=function(v)
           if v~=1 and v~=2 then return end
-          for _,index in ipairs(cyclic) do
+          for _,index in ipairs(indices) do
             local s=w.data.servo_configurations.servos[index]
             s.flags=v==2 and (s.flags | 2) or (s.flags & ~2)
           end
@@ -98,6 +96,12 @@ return function(w)
     card.summary=L.geometryQuick
     cards[#cards+1]=card
   end
+  local cyclic,tail={},{}
+  for _,index in ipairs(w:servos()) do
+    if index==3 then tail[#tail+1]=index else cyclic[#cyclic+1]=index end
+  end
+  if #tail>0 and not w:motorised() then geometryCard(tail,L.tailGeometryCorrection) end
+  if #cyclic>0 then geometryCard(cyclic,L.geometryCorrection) end
   if #cards==0 then cards[1]=w:cardDef(L.servoType,L.servoTypeHint,{w:value(L.servo,function() return L.unavailable end)}) end
   return cards
 end

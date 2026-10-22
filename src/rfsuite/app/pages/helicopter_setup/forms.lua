@@ -1,6 +1,6 @@
 local M = {}
 local AUX_KEYS={"aux1","aux2","aux3"}
-function M.attach(w)
+function M.attach(w, PortLabels)
   M.protocols(w)
   function w:channelNumber(aux)
     local raw=aux<3 and self.data.rx_map[AUX_KEYS[aux+1]] or nil
@@ -55,7 +55,9 @@ function M.attach(w)
       local p = "port_" .. i .. "_"
       local id, mask = self.data.serial_config[p .. "identifier"], self.data.serial_config[p .. "function_mask"]
       if id and id ~= 20 and (mask == 0 or (mask & bit) ~= 0) then
-        ids[#ids + 1] = i; values[#values + 1] = id==30 and "SOFTSERIAL1" or id==31 and "SOFTSERIAL2" or "UART" .. (id + 1)
+        local name = id==30 and "SOFTSERIAL1" or id==31 and "SOFTSERIAL2" or id==40 and "LPUART1" or "UART" .. (id + 1)
+        local printed = PortLabels.label(self.data.board_info and self.data.board_info.board_design, id)
+        ids[#ids + 1] = i; values[#values + 1] = printed and (printed .. " [" .. name .. "]") or name
       end
     end
     if #ids == 0 then values[1] = self.L.noPort end

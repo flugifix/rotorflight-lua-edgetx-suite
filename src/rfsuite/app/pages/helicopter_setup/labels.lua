@@ -230,6 +230,7 @@ local L = {
   servoHzHint = "@i18n(app.modules.helicopter_setup.servoHzHint)@",
   servoHzQuick = "@i18n(app.modules.helicopter_setup.servoHzQuick)@",
   geometryCorrection = "@i18n(app.modules.helicopter_setup.geometryCorrection)@",
+  tailGeometryCorrection = "@i18n(app.modules.helicopter_setup.tailGeometryCorrection)@",
   geometryHint = "@i18n(app.modules.helicopter_setup.geometryHint)@",
   geometryQuick = "@i18n(app.modules.helicopter_setup.geometryQuick)@",
   pulseLimited = "@i18n(app.modules.helicopter_setup.pulseLimited)@",

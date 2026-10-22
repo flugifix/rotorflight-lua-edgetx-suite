@@ -22,6 +22,55 @@ return function(h)
     check(false,"contract transport completes")
   end
   local function settle(w) w.buildRequested=nil;drain(w);w.statusAt=getTime() end
+  case("CORE.api-12-10-gate",function()
+    local manifest=load("app/manifest.lua")
+    local version=load("lib/api_version.lua")
+    local entries={}
+    for _,entry in ipairs(manifest.menus.wizards_menu.pages) do
+      if entry.id=="helicopter_setup" then entries[#entries+1]=entry end
+    end
+    for _,entry in ipairs(manifest.menus.helicopter_setup_menu.pages) do entries[#entries+1]=entry end
+    eq(#entries,22,"CORE all wizard entry points are covered by the API contract")
+    for _,entry in ipairs(entries) do
+      local required=entry.minApiVersion
+      eq(type(required)=="table" and table.concat(required,".") or "", "12.0.10",
+        "CORE "..entry.id.." requires API 12.10")
+      check(not version.isAtLeast("12.09",required),"CORE "..entry.id.." rejects API 12.09")
+      check(version.isAtLeast("12.10",required),"CORE "..entry.id.." accepts API 12.10")
+    end
+  end)
+  case("PORTS.board-printed-labels",function()
+    local w=world();settle(w)
+    eq(w.data.board_info and w.data.board_info.board_design,"F7C1","PORTS startup caches board design from MSP")
+    local reads=0
+    for _,m in ipairs(q.sent) do if m.command==4 then reads=reads+1 end end
+    eq(reads,1,"PORTS board design is read once at startup")
+    w.data.serial_config={}
+    for i,id in ipairs({0,3,30,31,40}) do
+      w.data.serial_config["port_"..i.."_identifier"]=id
+      w.data.serial_config["port_"..i.."_function_mask"]=0
+    end
+    local function choices()
+      return {step(w,"escTelemetry")[1].rows[2],w:port(L.port,64)}
+    end
+    for _,row in ipairs(choices()) do
+      eq(row.values[1],"S.BUS [UART1]","PORTS known board names UART1")
+      eq(row.values[2],"Port A [UART4]","PORTS ESC and receiver choices use printed UART4 name")
+      eq(row.values[3],"SOFTSERIAL1","PORTS softserial1 keeps its identifier name")
+      eq(row.values[4],"SOFTSERIAL2","PORTS softserial2 keeps its identifier name")
+      eq(row.values[5],"LPUART1","PORTS low-power UART uses identifier 40")
+    end
+    for _,design in ipairs({"UNKNOWN",""}) do
+      w.data.board_info={board_design=design}
+      for _,row in ipairs(choices()) do
+        eq(row.values[2],"UART4","PORTS unknown board keeps plain UART4 in both choices")
+      end
+    end
+    w.data.board_info=nil
+    eq(w:port(L.port,64).values[2],"UART4","PORTS missing board design keeps plain UART4")
+    h.setFailCommand(4);w=h.beginWorld();drain(w);h.setFailCommand(nil)
+    check(w.ready and not w.error,"PORTS unavailable board info does not block startup")
+  end)
   case("CORE.paged-startup",function()
     local w=world();settle(w)
     if h.mutation=="bulk-read" then
@@ -716,6 +765,55 @@ return function(h)
     servos[2].flags=0;eq(row.get(),0,"S07 differing geometry flags read as mixed")
     row.set(1);eq(servos[0].flags,1,"S07 clearing geometry correction keeps the reverse bit")
     eq(row.get(),1,"S07 geometry correction reads off again")
+  end)
+  case("S07.tail-geometry-correction",function()
+    local w=world();local c=step(w,"servoType");local tail
+    for _,card in ipairs(c) do if L.tailGeometryCorrection and card.title==L.tailGeometryCorrection then tail=card end end
+    check(tail~=nil,"S07 servo tail has its own geometry choice")
+    if tail then
+      local row=tail.rows[1];local servos=w.data.servo_configurations.servos
+      servos[0].flags=5;servos[1].flags=2;servos[2].flags=0
+      for _,flags in ipairs({0,1,4,5}) do
+        servos[3].flags=flags
+        eq(row.get(),1,"S07 tail geometry reads off")
+        row.set(2);eq(servos[3].flags,flags | 2,"S07 tail geometry sets bit 1 and preserves other bits")
+        eq(row.get(),2,"S07 tail geometry reads on")
+        row.set(1);eq(servos[3].flags,flags,"S07 tail geometry clears bit 1 and preserves reverse")
+      end
+      eq(servos[0].flags,5,"S07 tail geometry leaves cyclic servo 0 alone")
+      eq(servos[1].flags,2,"S07 tail geometry leaves cyclic servo 1 alone")
+      eq(servos[2].flags,0,"S07 tail geometry leaves cyclic servo 2 alone")
+      check(w.dirty.servo_configurations and w.live.servo_configurations and not w.rebootPending,
+        "S07 tail geometry is live without a restart")
+      check(tail.detail==L.geometryHint and tail.summary==L.geometryQuick,"S07 tail geometry carries the shared explanation")
+    end
+    for _,mode in ipairs({1,2}) do
+      w.data.mixer_config.tail_rotor_mode=mode;c=step(w,"servoType")
+      local count=0
+      for _,card in ipairs(c) do
+        if L.tailGeometryCorrection and card.title==L.tailGeometryCorrection then count=count+1 end
+      end
+      eq(count,0,"S07 motorised tail has no tail geometry choice")
+    end
+  end)
+  case("S07.geometry-guidance",function()
+    for _,locale in ipairs({"en","de"}) do
+      local labels=load("i18n/"..locale..".lua").app.modules.helicopter_setup
+      check(utf8.len(labels.geometryHint)<600,"S07 "..locale.." geometry help stays below 600 characters")
+      for line in string.gmatch(labels.geometryHint,"[^\n]+") do
+        check(utf8.len(line)<=200,"S07 "..locale.." geometry help lines stay within 200 characters")
+      end
+      check(string.find(labels.geometryHint,locale=="en" and "Leave it off" or "Aus lassen",1,true)~=nil,
+        "S07 "..locale.." geometry help explains when to leave it off")
+      check(string.find(labels.geometryHint,locale=="en" and "tail limits" or "Hecklimits",1,true)~=nil,
+        "S07 "..locale.." geometry help asks for limit checks")
+      local lines=0
+      for line in string.gmatch(labels.geometryQuick,"[^\n]+") do
+        lines=lines+1
+        check(utf8.len(line)<=28,"S07 "..locale.." geometry summary fits the left column")
+      end
+      check(lines<=2,"S07 "..locale.." geometry summary uses at most two lines")
+    end
   end)
   case("S07.servo-bands-and-reboot",function()
     local w=world();w.checks.unplugged=true

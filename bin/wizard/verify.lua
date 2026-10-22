@@ -49,6 +49,9 @@ local function status()
   return p
 end
 local fixtures = {
+  -- MSP_BOARD_INFO with length-prefixed strings, board design F7C1.
+  [4] = {83,55,88,50,0,0,0,1,9,83,84,77,51,50,70,55,88,50,
+    8,78,69,88,85,83,95,70,55,4,70,55,67,49,4,82,68,77,83},
   [101] = status(), [103] = {240,5,240,5,240,5,240,5}, [104] = {232,3,232,3,0,0,0,0,0,0,0,0,0,0,0,0},
   [113] = {0,0,0,0,0,0,0,0,0,0}, [114] = {220,5,220,5,220,5,220,5,232,3,232,3,220,5,208,7},
   [108] = {0,0,0,0,0,0}, [139] = {0}, [0x5F14] = {0,0}
@@ -56,7 +59,7 @@ local fixtures = {
 fixtures[52] = {}; for _ = 1,42*14 do fixtures[52][#fixtures[52]+1] = 0 end
 fixtures[170] = {}; for _ = 0,28 do u16(fixtures[170],1000);u16(fixtures[170],-1000);u16(fixtures[170],1000) end
 local byCommand = {}
-for _, name in ipairs({ "status","boxnames","boxids","mode_ranges","mode_ranges_extra","adjustment_ranges",
+for _, name in ipairs({ "board_info","status","boxnames","boxids","mode_ranges","mode_ranges_extra","adjustment_ranges",
   "feature_config","board_alignment_config","serial_config","rx_map","rx_config","rc_config","motor_config",
   "esc_sensor_config","governor_config","mixer_config","mixer_input","servo_configurations","servo","rc_tuning",
   "tail_motor_output","governor_profile","rc","attitude","motor","motor_telemetry","rx_channels","rc_command" }) do
@@ -180,7 +183,7 @@ local function beginWorld()
   local w = load(PATH .. "controller.lua").new(runtime,load(PATH .. "transport.lua"),H,L)
   w.newAttitudeView=load(PATH .. "attitude_view.lua").new
   w.newServoGrid=load(PATH .. "servo_grid.lua").append
-  load(PATH .. "forms.lua").attach(w);load(PATH .. "workflow.lua").attach(w);load(PATH .. "navigation.lua").attach(w)
+  load(PATH .. "forms.lua").attach(w,load("lib/port_labels.lua"));load(PATH .. "workflow.lua").attach(w);load(PATH .. "navigation.lua").attach(w)
   w.requestRebuild = function() w.rebuilds = (w.rebuilds or 0)+1 end
   w:load()
   return w
