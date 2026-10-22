@@ -19,8 +19,10 @@ function M.attach(w)
   end
   function w:button(label, press, enabled) return { kind = "button", label = label, press = press, enabled = enabled } end
   function w:value(label, get) return { kind = "value", label = label, get = get } end
+  -- A yes/no answer is a toggle button, not a list: the page gets no wakeup while a native
+  -- list is open, so a running test would outlive its status window behind it.
   function w:check(key, label)
-    return { kind = "choice", label = label, values = { self.L.no, self.L.yes },
+    return { kind = "toggle", label = label, values = { self.L.no, self.L.yes },
       get = function() return self.checks[key] and 2 or 1 end,
       set = function(v) self.checks[key] = v == 2 end }
   end

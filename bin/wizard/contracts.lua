@@ -1337,7 +1337,7 @@ return function(h)
               modelGateSeen=true
               eq(#loaded,0,"CORE model gate precedes step definition loading")
             end
-            if item.type=="choice" and item.values[1]=="@i18n(app.modules.helicopter_setup.no)@" and item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@" then
+            if (item.type=="choice" or item.toggle) and item.values[1]=="@i18n(app.modules.helicopter_setup.no)@" and item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@" then
               item.set(2)
             end
           end
@@ -1366,7 +1366,7 @@ return function(h)
           if closed then break end
           for _,item in ipairs(ctx.children) do
             local active=type(item.active)~="function" or item.active()
-            if active and item.type=="choice" and item.values[1]=="@i18n(app.modules.helicopter_setup.no)@" and
+            if active and (item.type=="choice" or item.toggle) and item.values[1]=="@i18n(app.modules.helicopter_setup.no)@" and
               item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@" then item.set(2) end
             local caption=type(item.text)=="function" and item.text() or item.text
             local shown=type(item.visible)~="function" or item.visible()

@@ -288,6 +288,11 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
         if size[1]>=700 and item.type=="label" and item.y==50 and item.text==card.title and card.art~="attitude" then
           check(item.w>=size[1]-40,name.." card title spans the full width on large screens")
         end
+        if item.type=="choice" and item.values and #item.values==2 then
+          check(not ((item.values[1]==L.no or item.values[1]=="@i18n(app.modules.helicopter_setup.no)@") and
+            (item.values[2]==L.yes or item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@")),
+            name.." a yes/no answer is a toggle, not a native list")
+        end
         if size[1]>=700 and card.grid and item.type=="label" and item.y==94 then
           check(item.w>=size[1]-40,name.." grid summary spans the full width on large screens")
         end
@@ -501,12 +506,12 @@ for _=1,5000 do
       local number=string.match(item.text,"^(%d+)/19")
       if number then frameVisited[tonumber(number)]=true end
     end
-    if active and item.type=="choice" and item.set and
+    if active and (item.type=="choice" or item.toggle) and item.set and
       (item.title==L.modelChecked or item.title=="@i18n(app.modules.helicopter_setup.modelChecked)@") and
       not pausedModelChoice then
       ticks=ticks+400;pausedModelChoice=true
     end
-    if active and item.type=="choice" and item.set and
+    if active and (item.type=="choice" or item.toggle) and item.set and
       (item.values[1]==L.no or item.values[1]=="@i18n(app.modules.helicopter_setup.no)@") and
       (item.values[2]==L.yes or item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@") then
       measure("page input",function() item.set(2) end)

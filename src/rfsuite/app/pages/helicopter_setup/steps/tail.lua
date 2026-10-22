@@ -2,7 +2,7 @@ return function(w)
   local L = w.L
   if w:motorised() then
     local rows = {
-      { kind = "choice", label = L.bladesRemoved, values = { L.no, L.yes },
+      { kind = "toggle", label = L.bladesRemoved, values = { L.no, L.yes },
         get = function() return w.bladesOff and 2 or 1 end, set = function(v) w.bladesOff = v == 2; if v == 1 then w:stopMotor() end end },
       { kind = "number", label = L.powerPercent, min = 5, max = 50, get = function() return w.percent end,
         set = function(v) w.percent = v end },
