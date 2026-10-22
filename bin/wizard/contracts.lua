@@ -1337,8 +1337,8 @@ return function(h)
               modelGateSeen=true
               eq(#loaded,0,"CORE model gate precedes step definition loading")
             end
-            if (item.type=="choice" or item.toggle) and item.values[1]=="@i18n(app.modules.helicopter_setup.no)@" and item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@" then
-              if item.toggle then if item.text()==item.values[1] then item.press() end else item.set(2) end
+            if item.type=="button" and type(item.text)=="function" and item.text()=="@i18n(app.modules.helicopter_setup.no)@" then
+              item.press()
             end
           end
           for _,item in ipairs(ctx.children) do
@@ -1366,10 +1366,8 @@ return function(h)
           if closed then break end
           for _,item in ipairs(ctx.children) do
             local active=type(item.active)~="function" or item.active()
-            if active and (item.type=="choice" or item.toggle) and item.values[1]=="@i18n(app.modules.helicopter_setup.no)@" and
-              item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@" then
-              if item.toggle then if item.text()==item.values[1] then item.press() end else item.set(2) end
-            end
+            if active and item.type=="button" and type(item.text)=="function" and
+              item.text()=="@i18n(app.modules.helicopter_setup.no)@" then item.press() end
             local caption=type(item.text)=="function" and item.text() or item.text
             local shown=type(item.visible)~="function" or item.visible()
             if active and shown and item.type=="button" and (caption=="@i18n(app.modules.helicopter_setup.servoTestUp)@" or

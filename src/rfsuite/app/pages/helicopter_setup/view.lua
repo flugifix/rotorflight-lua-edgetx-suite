@@ -148,8 +148,8 @@ function M.new(w, ctx, diagrams)
         elseif r.kind == "toggle" then
           local function set(v) w:applyEdit(function() if editable() then r.set(v) end end) end
           all[#all + 1] = { type = "button", x = formX+formW-editW, y = y, w = editW, h = controlH,
-            text = function() return r.values[r.get()] end, toggle = true, title = r.label, values = r.values,
-            set = set, press = function() if enabled() then set(r.get() == 2 and 1 or 2) end end, active = enabled }
+            text = function() return r.values[r.get()] end,
+            press = function() if enabled() then set(r.get() == 2 and 1 or 2) end end, active = enabled }
         elseif r.kind == "choice" then
           all[#all + 1] = { type = "choice", x = formX+formW-editW, y = y, w = editW, h = controlH,
             title = r.label, values = r.values, get = r.get,

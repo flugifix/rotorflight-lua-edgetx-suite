@@ -266,6 +266,14 @@ for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
   exported[#exported+1]={step=0,name="disconnected",task="disconnected",width=size[1],height=size[2],children=resolve(disconnected.children)}
   historyPreview.disconnectExit=nil
 end
+-- Properties each widget type already used on the radio; lvgl.build raises "Invalid property" on others.
+RADIO_PROPS={}
+for t,keys in pairs({label="color,font,h,pos,text,type,visible,w,x,y,align",
+  momentaryButton="active,h,press,release,text,type,w,x,y",numberEdit="active,display,get,h,max,min,set,type,w,x,y",
+  button="active,font,h,press,text,type,visible,w,x,y",choice="active,get,h,set,title,type,values,w,x,y",
+  rectangle="color,filled,h,thickness,type,w,x,y",line="color,pts,thickness,type,visible"}) do
+  RADIO_PROPS[t]={};for k in string.gmatch(keys,"[^,]+") do RADIO_PROPS[t][k]=true end
+end
 for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
   for n,name in ipairs(steps) do
     w.step, w.stepKey, w.rebootPending, w.transition = n,name,nil,nil
@@ -287,6 +295,11 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
         if item.y and item.h then check(item.y+item.h<=size[2],name.." fits height") end
         if size[1]>=700 and item.type=="label" and item.y==50 and item.text==card.title and card.art~="attitude" then
           check(item.w>=size[1]-40,name.." card title spans the full width on large screens")
+        end
+        local known=RADIO_PROPS[item.type]
+        check(known~=nil,name.." widget type "..tostring(item.type).." is known on the radio")
+        for key in pairs(item) do
+          if known and not known[key] then check(false,name.." "..item.type.." property '"..tostring(key).."' is known on the radio") end
         end
         if item.type=="choice" and item.values and #item.values==2 then
           check(not ((item.values[1]==L.no or item.values[1]=="@i18n(app.modules.helicopter_setup.no)@") and
@@ -506,19 +519,15 @@ for _=1,5000 do
       local number=string.match(item.text,"^(%d+)/19")
       if number then frameVisited[tonumber(number)]=true end
     end
-    if active and (item.type=="choice" or item.toggle) and item.set and
+    if active and item.type=="choice" and item.set and
       (item.title==L.modelChecked or item.title=="@i18n(app.modules.helicopter_setup.modelChecked)@") and
       not pausedModelChoice then
       ticks=ticks+400;pausedModelChoice=true
     end
-    if active and (item.type=="choice" or item.toggle) and item.set and
-      (item.values[1]==L.no or item.values[1]=="@i18n(app.modules.helicopter_setup.no)@") and
-      (item.values[2]==L.yes or item.values[2]=="@i18n(app.modules.helicopter_setup.yes)@") then
-      if item.toggle then
-        if item.text()==item.values[1] then measure("page input",item.press) end
-      else
-        measure("page input",function() item.set(2) end)
-      end
+    local answer=item.type=="button" and type(item.text)=="function" and item.text()
+    if active and (answer==L.no or answer=="@i18n(app.modules.helicopter_setup.no)@") then
+      if not pausedModelChoice then ticks=ticks+400;pausedModelChoice=true end
+      measure("page input",item.press)
     end
     if active and item.type=="button" and item.press then
       local caption=type(item.text)=="function" and item.text() or item.text
