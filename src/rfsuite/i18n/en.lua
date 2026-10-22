@@ -540,6 +540,7 @@ return {
         modeSwitches = "Mode switches",
         spinTest = "ESC & spin test",
         servoDirectionCentre = "Servo direction & centre",
+        servoTile = "Servo setup",
         controlDirections = "Control directions",
         bladePitch = "Blade pitch",
         gyroCheck = "Gyro check",

@@ -540,6 +540,7 @@ return {
         modeSwitches = "Modusschalter",
         spinTest = "ESC und Drehtest",
         servoDirectionCentre = "Servorichtung und Mitte",
+        servoTile = "Servos einstellen",
         controlDirections = "Steuerrichtungen",
         bladePitch = "Blattpitch",
         gyroCheck = "Kreiselprüfung",
