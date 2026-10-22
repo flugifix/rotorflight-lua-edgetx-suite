@@ -4035,9 +4035,17 @@ function M.run(event, touchState)
       -- hand-over is available here exactly as it is in the dashboard widget, and is preferred
       -- over the sensor for the same reason.
       local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
-      local fuel = (smart and smart.fuel)
-        or (Sensors and (Sensors.getValue("smartfuel") or Sensors.getValue("fuel")))
-        or -1
+      local fuel
+      if smart and smart.unavailable then
+        fuel = -1
+        state.telemetryState.fuel = nil
+        state.telemetryState.consumedMah = nil
+        state.telemetryState.fuelTelemetrySeen = false
+      else
+        fuel = (smart and smart.fuel)
+          or (Sensors and (Sensors.getValue("smartfuel") or Sensors.getValue("fuel")))
+          or -1
+      end
 
       if type(fuel) == "number" and fuel >= 0 then
         if fuel > 100 then fuel = 100 end
@@ -4143,7 +4151,9 @@ function M.run(event, touchState)
             ts.escLoad = nil
           end
           ts.altitude = Sensors.getValue("altitude") or ts.altitude
-          ts.consumedMah = (smart and smart.consumption) or Sensors.getValue("smartconsumption") or ts.consumedMah
+          if not (smart and smart.unavailable) then
+            ts.consumedMah = (smart and smart.consumption) or Sensors.getValue("smartconsumption") or ts.consumedMah
+          end
 
           local cellCountValue = Sensors.getValue("battery_cell_count")
           if type(cellCountValue) == "number" and cellCountValue > 0 then

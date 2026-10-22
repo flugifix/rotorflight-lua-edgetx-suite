@@ -164,7 +164,7 @@ end
 -- value that is no longer being produced must not shadow the sensor chain behind it: the local
 -- source can be switched from voltage to current mid-session, and the consumption the voltage
 -- path estimates then stops existing while the flight controller's own count carries on.
-local function handOver(fuel, consumption)
+local function handOver(fuel, consumption, unavailable)
   local session = getSession()
   if type(session) ~= "table" then return end
   local values = session.smartfuel
@@ -174,6 +174,13 @@ local function handOver(fuel, consumption)
   end
   values.fuel = fuel
   values.consumption = consumption
+  -- An explicitly invalid estimate must not fall back to the last published sensor value.
+  -- Keep that absence through recovery's stabilization, until a new estimate is ready.
+  if unavailable then
+    values.unavailable = true
+  elseif type(fuel) == "number" then
+    values.unavailable = nil
+  end
 end
 
 local function clearHandOver()
@@ -615,6 +622,8 @@ function Smart.wakeup()
 
   local batteryConfig = session.battery_config
   if type(batteryConfig) ~= "table" then
+    Smart.reset()
+    handOver(nil, nil, true)
     return
   end
 
@@ -637,10 +646,19 @@ function Smart.wakeup()
 
   local voltage = tonumber(getSensor("voltage"))
   
-  -- Neither a configured nor a detected count: infer one from the pack voltage
-  if not firmwareActive and cellCount <= 0 and voltage and voltage > 2 then
-    local maxCellV = (tonumber(batteryConfig.vbatmaxcellvoltage) or 410) / 100
-    cellCount = math.max(1, math.floor((voltage / maxCellV) + 0.5))
+  -- Neither a configured nor a detected count: infer only with the board's valid maximum.
+  -- BATTERY_CONFIG carries centivolts, in the firmware's 1.00..5.00 V range. A missing or
+  -- invalid maximum is not a chemistry default, and must not leave the old estimate visible.
+  if not firmwareActive and cellCount <= 0 then
+    local maxCellV = tonumber(batteryConfig.vbatmaxcellvoltage)
+    if not (maxCellV and maxCellV >= 100 and maxCellV <= 500) then
+      Smart.reset()
+      handOver(nil, nil, true)
+      return
+    end
+    if voltage and voltage > 2 then
+      cellCount = math.max(1, math.floor((voltage / (maxCellV / 100)) + 0.5))
+    end
   end
 
   local reserve = resolveReservePercent(session, batteryConfig)
@@ -735,9 +753,8 @@ function Smart.wakeup()
     end
   end
 
-  -- Only a wakeup that got this far writes the hand-over. One that returned earlier -- no
-  -- battery configuration yet, no pack voltage, or simply inside the wakeup interval -- leaves
-  -- the last pair standing, which is what the two sensors do as well.
+  -- An invalid count inference publishes explicit absence above. Other early returns,
+  -- including the cadence guard, keep the hand-over until the next computing wakeup.
   handOver(percent, consumed)
 end
 

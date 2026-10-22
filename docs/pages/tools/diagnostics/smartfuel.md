@@ -41,8 +41,10 @@ A sensor that has no current value reads `-`.
 
 ## Notes
 
-- **The values do not refresh by themselves.** The page draws what it had when it was opened, so
+- **Reload refreshes the configuration and sensor snapshot.** The page keeps that snapshot so
   that it can be scrolled; *Reload* in the header reads the configuration again and redraws.
+  The two Smart rows also clear to `-` when the local estimate becomes unavailable and show
+  the recovered values when estimation resumes, without rebuilding the page or resetting its scroll.
 - **The page logs what it reads.** A read that fails reaches the *Session Logs* page at any
   *Debug Level*; the start and end of each load and each read it queues and receives, from *DEBUG*
   up, so opening the page leaves nothing in the log while logging is off.
