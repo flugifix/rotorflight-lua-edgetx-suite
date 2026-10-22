@@ -53,6 +53,8 @@ local TIME_FIELDS = { "year", "mon", "day", "hour", "min", "sec" }
 
 local state = nil
 
+-- Returns the chunk, or nil and the reason it did not load. Nil without a reason means there
+-- was no loader to ask, which is not a failure of the file.
 local function loadUncached(path, mode)
   local utils = _G.rfsuite and _G.rfsuite.utils
   local loader = utils and utils.loadScriptUncached
@@ -61,9 +63,12 @@ local function loadUncached(path, mode)
     -- the tool state, which is the opposite of what this pass is for.
     return nil
   end
-  local ok, chunk = pcall(loader, path, mode)
+  local ok, chunk, err = pcall(loader, path, mode)
   if not ok then
-    return nil
+    return nil, tostring(chunk)
+  end
+  if chunk == nil then
+    return nil, tostring(err or "no chunk")
   end
   return chunk
 end
@@ -152,13 +157,42 @@ local function readStampFile(path, limit)
   return text
 end
 
-local function writeStamp(identity)
-  local f = io.open(STAMP_PATH, "w")
-  if not f then
+-- One line through the suite's logger, reached through the global it publishes so that this
+-- file keeps no dependency of its own.
+local function warn(fmt, ...)
+  local Log = type(_G) == "table" and _G.rfsuite and _G.rfsuite.Log
+  if type(Log) == "table" and type(Log.emitf) == "function" then
+    pcall(Log.emitf, "rfsuite.precompile", "warn", fmt, ...)
+  end
+end
+
+-- mkdir() is a bare global of the firmware's filesystem library and creates one level at a
+-- time. Creating a folder that already exists fails harmlessly, so it is not checked first.
+local function makeDir(path)
+  if type(mkdir) ~= "function" then
     return
   end
-  io.write(f, identity)
-  io.close(f)
+  pcall(mkdir, path)
+end
+
+-- The install archive carries files only, no directory entries, so the user folder exists on
+-- a fresh card only once something has saved into it -- and io.open(path, "w") does not create
+-- a missing parent. Without the folder the stamp is never written, and every start forces the
+-- whole pass again. The stamp is read back with the same comparison Precompile.start makes, so
+-- a write that did not land is reported rather than paid for on every start.
+local function writeStamp(identity)
+  makeDir(string.match(STAMP_PATH, "^(.*)/[^/]+/[^/]+$"))
+  makeDir(string.match(STAMP_PATH, "^(.*)/[^/]+$"))
+
+  local f = io.open(STAMP_PATH, "w")
+  if f then
+    io.write(f, identity)
+    io.close(f)
+  end
+
+  if readStampFile(STAMP_PATH, STAMP_LIMIT) ~= identity then
+    warn("could not write rfsuite.user/precompiled.txt, every start compiles everything")
+  end
 end
 
 local function beginDirectory(path)
@@ -179,6 +213,13 @@ end
 local function takeEntry(cursor)
   local name = cursor.entries[cursor.index]
   cursor.index = cursor.index + 1
+
+  if string.sub(name, 1, 2) == "._" then
+    -- macOS leaves an AppleDouble metadata file named "._<name>" beside every file it copies
+    -- onto a FAT card. "._init.lua" ends in .lua but holds no source, so it never compiles and
+    -- would be queued again on every start.
+    return 0
+  end
 
   if string.find(name, ".", 1, true) == nil then
     -- No directory in the installed tree carries a dot and every file has an extension, so
@@ -247,8 +288,16 @@ local function compile()
     end
 
     -- "c" compiles even when the bytecode looks newer than the source. The chunk is of no
-    -- use here and is dropped, so the collector can take it back.
-    loadUncached(path, state.force and "tc" or "t")
+    -- use here and is dropped, so the collector can take it back. A file that does not load
+    -- is counted and reported once when the pass ends, not per file.
+    local chunk, err = loadUncached(path, state.force and "tc" or "t")
+    if chunk == nil and err ~= nil then
+      state.failed = state.failed + 1
+      if state.firstFailure == nil then
+        state.firstFailure = path
+        state.firstError = err
+      end
+    end
 
     state.done = state.done + 1
     if state.done % GC_EVERY == 0 then
@@ -271,6 +320,9 @@ function Precompile.start(version)
     cursor = nil,
     files = {},
     done = 0,
+    failed = 0,
+    firstFailure = nil,
+    firstError = nil,
     walking = true,
     finished = false
   }
@@ -299,6 +351,17 @@ function Precompile.step()
 
   state.finished = true
   collectgarbage("collect")
+  if state.failed > 0 then
+    -- The log ring keeps the first 100 characters of a line, so the file comes first and
+    -- without the core's own prefix: the deepest page path still fits, the reason may not.
+    local name = state.firstFailure
+    local prefix = ROOTS[1] .. "/"
+    if string.sub(name, 1, #prefix) == prefix then
+      name = string.sub(name, #prefix + 1)
+    end
+    warn("%s did not compile (%d of %d failed): %s", name, state.failed, #state.files,
+      state.firstError)
+  end
   if state.force and state.identity ~= nil then
     writeStamp(state.identity)
   end

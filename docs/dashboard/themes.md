@@ -34,6 +34,12 @@ A theme's own settings, such as the voltage range its gauges span, are under
   *Connecting FBL...* with a line saying what it is still waiting for, in place of its preflight
   screen.
 
+When local SmartFuel cannot determine the cell count because the maximum cell voltage is
+missing or invalid, current fuel and estimated consumption become unavailable. The dashboard
+stops using the previous estimate or falling back to an older sensor reading. Valid historical
+flight statistics are retained. See [SmartFuel](../pages/setup/power/smartfuel.md) for recovery
+and the distinction between local and flight-controller estimates.
+
 ### Automatic voltage bounds
 
 Unless the theme has saved voltage bounds, the dashboard scales its voltage range to the
@@ -59,6 +65,12 @@ flight timer, the blackbox state, the PID and rate profile, the flight count, th
 and a voltage gauge. In flight it is reduced to the flight time, the link quality and the voltage
 gauge; after the flight it shows the last flight's time, the total time, the lowest voltage per
 cell and the lowest link quality.
+
+In fullscreen, Default shows the dashboard at the full screen size with the same layouts.
+The controls at the top right open the suite tool (while disarmed), open the quick menu,
+and leave fullscreen with **X**. A long press on the return key also leaves fullscreen.
+The page keys open the quick menu over the dashboard; closing that menu returns to the
+dashboard.
 
 ![Default before, during and after the flight](../images/dashboard/themes/default.png)
 

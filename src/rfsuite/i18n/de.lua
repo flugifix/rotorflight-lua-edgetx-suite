@@ -2982,7 +2982,8 @@ return {
         reserve_alert = "Reservealarm",
         reserve_target = "Reserveziel",
         loading_title = "Laden",
-        loading_message = "Lese SmartFuel-Konfiguration"
+        loading_message = "Lese SmartFuel-Konfiguration",
+        help_message = "Schreibgeschützte Momentaufnahme; Reload liest die Konfiguration erneut.\nSmartFuel: Restkapazität nach Reserve; - bei fehlender lokaler Schätzung. Ausfall und Wiederkehr erscheinen ohne Reload.\nSmart-mAh: Geschätzter Verbrauch; - bei fehlender Schätzung. Andere Zeilen bleiben bis Reload unverändert."
       },
       diagnostics_elrs_link = {
         title = "ELRS-Telemetrie",
@@ -3159,12 +3160,11 @@ return {
         enabled = "In-Flight-Tuning an diesem Sender",
         enabled_note = "Der Hauptschalter. Jedes Modell hat einen eigenen unter Setup > Steuerung; beide müssen an sein.",
         switch = "Freigabeschalter",
-        wiring_note = "Eine Mischerzeile je Kanal: MAX mit dem Gewicht der genannten Variable, addiert, ohne Schalter.",
+        wiring_note = "Eine Mischerzeile je Kanal: MAX mit dem Gewicht der Variable, addiert; ein Logikschalter auf der Wertzeile.",
         bank_ch = "Freigabekanal",
         value_ch = "Wertkanal",
         bank_gvar = "Freigabevariable",
         value_gvar = "Wertvariable",
-        pulse_ms = "Pulslänge (ms)",
         trims = "Reihen über die Trimmungen bedienen",
         trims_unreadable = "Dieses Funkgerät hat seine Trimmungen nicht gemeldet, hier ist keine wählbar.",
         row_1 = "Reihe 1",
@@ -3204,6 +3204,8 @@ return {
         plan_same_gvar = "Die beiden Variablen müssen verschieden sein.",
         plan_same_channel = "Die beiden Kanäle müssen verschieden sein.",
         plan_unsupported = "Dieser Sender bietet den Schreibzugriff auf den Mischer nicht.",
+        plan_ls = "Pulstakt",
+        plan_no_ls = "Kein Logikschalter ist frei, um die Pulse zu takten; zuerst einen leeren.",
         plan_done = "Modell eingerichtet",
         plan_nothing = "Das Modell hat diese Einrichtung schon; es ist nichts zu schreiben.",
         plan_failed = "Der Sender hat einen Teil der Einrichtung abgelehnt",
@@ -3220,7 +3222,6 @@ return {
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen",
         pointer_fc = "Belegung, Schrittweite und Sicherungsprofil stehen unter Setup > Steuerung.",
-        pulse_ms_note = "Ein Druck ist ein Schritt. Der Regler zählt erst nach 100 ms Ruhe und wiederholt erst 200 ms später.",
         gvar_in_use = "wird benutzt von",
         gvar_name_clash = "ist nicht die Variable, die diese Einrichtung ansteuert"
       },

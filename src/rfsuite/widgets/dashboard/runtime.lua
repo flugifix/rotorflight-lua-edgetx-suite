@@ -765,11 +765,11 @@ local JOB_FAULT_LIMIT = 3
 -- the state pass), counted from the start of the hold. The rebuild waits because it would delete
 -- the button under the finger; but a release EdgeTX never reports would then keep it waiting for
 -- as long as the surface is up. Past this the rebuild runs, and lets go of the hold first, as
--- every rebuild that is not held back does. The flight controller steps a held value every
--- 200 ms after the first 100 ms (fc/rc_adjustments.c), so five seconds is 25 steps: at the
--- largest step of every row but the head speed, 10, that is 250 units -- the whole range of most
--- parameters, which run 0-250 or 0-255. A hold that long has crossed the range or lost its
--- release. A hold with no rebuild waiting is not ended here: the drive ends every hold itself after
+-- every rebuild that is not held back does. A held control steps once per pulse and the gap after
+-- it (widgets/dashboard/inflight/drive.lua, fastTick), about two steps a second, so five seconds is
+-- ten steps or so: at the largest step of every row but the head speed, 10, about 100 units. A hold
+-- that long has moved a parameter a long way or lost its release. A hold with no rebuild waiting is
+-- not ended here: the drive ends every hold itself after
 -- the same five seconds (HOLD_LIMIT_SECONDS in widgets/dashboard/inflight/drive.lua). That limit
 -- counts from the press, this one from the first pass that sees the hold, so the drive's fires
 -- first and this cap stays as the second line; keep the two numbers equal.
@@ -3048,15 +3048,21 @@ local function readTelemetry(state, audioState)
   -- before SmartFuel has one -- on an older flight controller, and in the window before the
   -- pack voltage has settled.
   local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
-  setField("consumedMah", (smart and smart.consumption) or getSensor("smartconsumption") or state.consumedMah)
-
-  local fuel = (smart and smart.fuel) or getSensor("smartfuel") or getSensor("fuel")
-  if type(fuel) == "number" then
-    local f = fuel
-    if f < 0 then f = 0 end
-    if f > 100 then f = 100 end
-    state.fuelTelemetrySeen = true
-    setField("fuel", f)
+  if smart and smart.unavailable then
+    -- Explicit absence clears the held display too; setField deliberately ignores nil.
+    if state.fuel ~= nil or state.consumedMah ~= nil or state.fuelTelemetrySeen then telemetryChanged = true end
+    state.fuel, state.consumedMah = nil, nil
+    state.fuelTelemetrySeen = false
+  else
+    setField("consumedMah", (smart and smart.consumption) or getSensor("smartconsumption") or state.consumedMah)
+    local fuel = (smart and smart.fuel) or getSensor("smartfuel") or getSensor("fuel")
+    if type(fuel) == "number" then
+      local f = fuel
+      if f < 0 then f = 0 end
+      if f > 100 then f = 100 end
+      state.fuelTelemetrySeen = true
+      setField("fuel", f)
+    end
   end
 
   if type(voltageValue) == "number" then
