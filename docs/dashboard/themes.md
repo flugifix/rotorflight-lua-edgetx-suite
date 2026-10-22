@@ -66,6 +66,12 @@ and a voltage gauge. In flight it is reduced to the flight time, the link qualit
 gauge; after the flight it shows the last flight's time, the total time, the lowest voltage per
 cell and the lowest link quality.
 
+In fullscreen, Default shows the dashboard at the full screen size with the same layouts.
+The controls at the top right open the suite tool (while disarmed), open the quick menu,
+and leave fullscreen with **X**. A long press on the return key also leaves fullscreen.
+The page keys open the quick menu over the dashboard; closing that menu returns to the
+dashboard.
+
 ![Default before, during and after the flight](../images/dashboard/themes/default.png)
 
 ### RF Status

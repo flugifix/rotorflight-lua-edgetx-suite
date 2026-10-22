@@ -5,6 +5,7 @@ local init = {
   postflight = "postflight.lua",
   configure = "configure.lua",
   standalone = false,
+  fullscreen = "theme",
 }
 
 return init
