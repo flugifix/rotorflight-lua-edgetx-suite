@@ -32,8 +32,8 @@ step that points to the ELRS Link page. The call only parks the target; the next
    entry on the way (`visibleWhen`, `enabledWhen`, `minApiVersion`, the armed lock) are the
    menu's. The tool's landing page, which a host opens it on, takes the same route.
 3. A page the menu would not offer at that moment is not opened, and the menu stays at its root.
-4. While a save prompt is on screen or a save is in progress, the request is dropped: leaving
-   then would answer the prompt for the wrong page.
+4. While the unsaved-changes prompt or the save overlay is on screen, or a save action is
+   pending, the request is dropped: leaving then would answer the prompt for the wrong page.
 
 Back on the opened page returns to its own menu, not to the page that opened it. A page with
 unsaved edits should settle them before it calls `openPage`, because leaving releases it.
