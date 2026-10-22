@@ -119,13 +119,7 @@ return function(w)
     w:cardDef(L.receiver, L.receiverHint, {
       protocol,
       w:button(L.receiverUsb, function() w.message=L.receiverUsbHint end),
-      w:button(L.saveReboot, function() w:serialReceiver(); w:reboot() end),
-      -- With a host that can open pages the pointer is a button, otherwise the path in the help.
-      type(w.openPage) == "function" and w:button(L.openElrsLink, function() w:openSuitePage("diagnostics_elrs_link_page") end,
-        function() return protocol.get()>0 and w.data.rx_config.serialrx_provider==9 end) or
-      w:value(L.receiverElrs, function()
-        return protocol.get()>0 and w.data.rx_config.serialrx_provider==9 and L.receiverElrsLink or "--"
-      end)
+      w:button(L.saveReboot, function() w:serialReceiver(); w:reboot() end)
     }),
     w:cardDef(L.channelOrder, L.channelHint, {
       w:button(function() return r.detect and L.cancelDetect or L.detect end, detect),
@@ -185,5 +179,19 @@ return function(w)
   cards[3].summary=L.sticksQuick
   cards[4].summary=L.travelQuick
   cards[5].summary=L.throttleQuick
+  -- Keep the cards present when the protocol is edited; the rows report applicability live.
+  for _,kind in ipairs({"overview","settings"}) do
+    local card=w:cardDef(kind=="overview" and L.linkTitle or L.linkSettings,L.linkHint,{
+      w:value(L.linkStatus,function() return L.linkNeedsCrsf end)
+    })
+    card.link,card.summary=kind,L.linkQuick
+    card.enter=function()
+      if not w.linkController then
+        w.linkController=w:loadModule("app/pages/helicopter_setup/elrs_link.lua").new(w)
+      end
+      w.linkController:enter(card)
+    end
+    cards[#cards+1]=card
+  end
   return cards
 end

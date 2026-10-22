@@ -532,48 +532,198 @@ return function(h)
     w.data.rc=profileValue;w.rcAt=getTime();h.measure("profile learning",function() w.onLive("rc",profileValue) end)
     check(w.profile.record and w.profile.channel==0,"REVIEW profile switch also learns the first post-click movement")
   end)
-  case("S02.elrs-link-guidance",function()
-    local w=world();settle(w)
-    w.data.feature_config.enabledFeatures=1<<3
-    w.data.rx_config.serialrx_provider=9
-    local card=step(w,"receiver")[1]
-    local row=card.rows[4]
-    check(row and row.kind=="value","S02 ELRS guidance is a value row on the protocol card")
-    if row then
-      eq(row.label,L.receiverElrs,"S02 always-present guidance label scopes CRSF and ELRS")
-      eq(row.get(),L.receiverElrsLink,"S02 CRSF wire value 9 shows ELRS Link guidance")
-      w.data.rx_config.serialrx_provider=2
-      eq(row.get(),"--","S02 other protocols have neutral ELRS guidance without a row gap")
-      w.data.rx_config.serialrx_provider=9;w.data.feature_config.enabledFeatures=1<<25
-      eq(row.get(),"--","S02 inactive serial receiver does not show ELRS guidance")
-      w.data.feature_config.enabledFeatures=1<<3
-      eq(row.get(),L.receiverElrsLink,"S02 ELRS guidance follows protocol changes without rebuilding")
-      check(row.press==nil and row.set==nil,"S02 ELRS guidance cannot navigate or write settings")
+  case("S02.elrs-inline-task",function()
+    local w=world();settle(w);w.step=2
+    local session=w:session()
+    local oldType=session.telemetryType
+    h.fixtures[73]=h.api("telemetry_config").simulatorResponse
+    session.telemetryType="crsf"
+    w.data.feature_config.enabledFeatures=1<<3;w.data.rx_config.serialrx_provider=9
+    local starts,wakes,resets,choices={},0,0,{}
+    local running=false
+    local rate={options={"F500","D500","500 Hz","333 Hz","250 Hz"},selectedIndex=2}
+    local ratio={options={"1:2","1:4","1:8","1:16","1:32"},selectedIndex=1}
+    local fake={MODE_PROBE=0,MODE_ROTORFLIGHT_TO_ELRS=1,MODE_ELRS_TO_ROTORFLIGHT=2,
+      start=function(mode) starts[#starts+1]=mode;running=true end,
+      wakeup=function() wakes=wakes+1;running=false end,
+      reset=function() resets=resets+1;running=false end,
+      isRunning=function() return running end,
+      getStatus=function() return "idle" end,getStatusText=function() return "task status" end,
+      getRateField=function() return rate end,getRatioField=function() return ratio end,
+      selectOption=function(kind,index) choices[#choices+1]={kind,index} end,
+      setOwner=function(client,guard) eq(client,"helicopter-elrs","S02 task owns a separate MSP client") end}
+    local question,shown,loads=nil,true,0
+    local realLoad=w.loadModule
+    w.loadModule=function(self,path)
+      if string.find(path,"elrslink_task",1,true) then loads=loads+1;return fake end
+      if path=="ui/confirm_dialog.lua" then return {show=function(ctx) question=ctx;return shown end} end
+      return realLoad and realLoad(self,path) or load(path)
     end
-    for _,locale in ipairs({"en","de"}) do
-      local b=load("i18n/"..locale..".lua");local s=b.app.modules.helicopter_setup
-      local path=table.concat({b.app.header_system,b.app.modules.tools.name,b.app.modules.diagnostics.name,
-        b.app.modules.elrs_link.name}," > ")
-      check(string.find(s.receiverHint,path,1,true)~=nil,"S02 "..locale.." help uses the Suite ELRS menu path")
-      check(utf8.len(s.receiverHint)<600,"S02 "..locale.." receiver help stays below 600 characters")
-      check(s.receiverElrs and s.receiverElrsLink,"S02 "..locale.." ELRS row strings are translated")
-      for _,key in ipairs({"receiverElrs","receiverElrsLink"}) do
-        eq(load("app/pages/helicopter_setup/labels.lua")[key],"@i18n(app.modules.helicopter_setup."..key..")@",
-          "S02 "..key.." is bound through labels")
-      end
-      if locale=="en" then
-        for _,text in ipairs({"packet rate","telemetry ratio","ExpressLRS module","FC","write either side after asking",
-          "Telemetry must run for the Suite's sensors"}) do
-          check(string.find(s.receiverHint,text,1,true)~=nil,"S02 ELRS help explains "..text)
+    local cards=step(w,"receiver")
+    local index
+    for i,c in ipairs(cards) do if c.link=="overview" then index=i end end
+    check(index~=nil,"S02 inline ELRS card replaces the pointer")
+    if not index then session.telemetryType=oldType;return end
+    eq(loads,0,"S02 task stays unloaded on other receiver cards")
+    w.card=index;h.measure("ELRS enter",cards[index].enter);drain(w)
+    w:tick();drain(w)
+    eq(session.crsfTelemetryConfig.linkRate,250,"S02 telemetry read caches the FC declared rate in session")
+    eq(session.crsfTelemetryConfig.linkRatio,8,"S02 telemetry read caches the FC declared ratio in session")
+    eq(session.telemetryConfigBuffer[9],250,"S02 telemetry read retains the raw FC write buffer")
+    check(w.data.telemetry_config==nil and next(w.dirty)==nil,"S02 telemetry read stays outside the wizard draft")
+    session.crsfTelemetryConfig={mode=1,linkRate=333,linkRatio=8}
+    session.elrsLinkConfig={packetRate=500,telemetryRatio=4,packetRateLabel="500 Hz",telemetryRatioLabel="1:4"}
+    local rows=w.cards[index].rows
+    local overviewRows=rows
+    eq(rows[1].get(),string.format(L.linkPair,333,8),"S02 CRSF shows FC rate and ratio")
+    eq(rows[2].get(),string.format(L.linkModulePair,"500 Hz","1:4"),"S02 CRSF shows module rate and ratio")
+    eq(rows[3].get(),"task status","S02 task status text is displayed")
+    local probes=#starts;rows[4].press();drain(w)
+    eq(#starts,probes+1,"S02 Probe starts a fresh task after the automatic probe")
+    eq(starts[#starts],0,"S02 Probe starts MODE_PROBE")
+    local before=wakes;h.measure("ELRS wakeup",function() w:tick() end);check(wakes>before,"S02 current ELRS card wakes its task")
+    w:navigate(2,index+1);check(resets>0,"S02 leaving a link card resets the task")
+    drain(w);w:tick();drain(w);w:tick();drain(w)
+    rows=w.cards[index+1].rows
+    local function ask(row,mode)
+      local count=#starts;question=nil;row.press()
+      check(question~=nil,"S02 sync asks for confirmation")
+      eq(#starts,count,"S02 sync press writes nothing before confirmation")
+      question.onCancel();eq(#starts,count,"S02 declined sync writes nothing")
+      eq(w.linkNotice,L.linkCancelled,"S02 decline reports nothing written")
+      row.press();question.onConfirm();eq(starts[#starts],mode,"S02 confirmed sync starts the requested mode")
+      running=false
+    end
+    ask(rows[1],1);ask(rows[2],2)
+    shown=false;local count=#starts;rows[1].press()
+    eq(#starts,count,"S02 impossible confirmation writes nothing")
+    eq(w.linkNotice,L.linkNoDialog,"S02 impossible confirmation explains nothing written")
+    eq(w.message,L.linkNoDialog,"S02 impossible confirmation is visible on the settings card")
+    shown=true;rows[1].press();local deferred=question
+    w:release();w.statusAt=getTime();deferred.onConfirm()
+    eq(#starts,count,"S02 a confirmation from a released visit writes nothing")
+    rows[1].press();h.advance(301);question.onConfirm()
+    eq(#starts,count,"S02 confirmation rechecks STATUS freshness")
+    w.statusAt=getTime();w.dirty.rx_config=true;rows[2].press()
+    eq(#starts,count,"S02 FC save cannot commit unsaved wizard changes")
+    w.dirty={}
+    rows[1].press();question.onConfirm()
+    eq(starts[#starts],1,"S02 a fresh confirmation works again after release")
+    check(type(w.linkTick)=="function","S02 resuming after release restores task wakeup")
+    running=false
+    check(rows[3].kind=="choice" and rows[4].kind=="choice","S02 walked module fields offer two pickers")
+    eq(table.concat(rows[3].values,","),table.concat({L.link333,L.link500,L.linkD500},","),"S02 rate picker is the project subset")
+    rate.selectedIndex=3;rows[3].set(2);eq(choices[#choices][2],2,"S02 500 Hz never selects F500 or D500")
+    rows[3].set(3);eq(choices[#choices][2],1,"S02 D500 uses the module option index")
+    rows[4].set(4);eq(choices[#choices][2],4,"S02 ratio uses the module option index")
+    w.cards[index].rows=overviewRows
+    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+      for _,i in ipairs({index,index+1}) do
+        w.card=i
+        local card=w.cards[i]
+        local scene=h.view.new(w,{w=size[1],h=size[2]},h.diagrams)
+        while not scene:step() do end
+        local firstButtonY=size[2]-(size[1]>=700 and 44 or size[1]>=480 and 32 or 26)-6
+        for _,item in ipairs(scene.children) do
+          if item.y and item.h then check(item.y+item.h<=size[2],"S02 ELRS widgets fit "..size[1].."x"..size[2]) end
+          if item.type=="choice" then check(item.y+item.h<firstButtonY,"S02 ELRS pickers stay above navigation") end
         end
+        eq(#card.rows,4,"S02 ELRS cards have four rows at every screen size")
       end
     end
-    w.card,w.step=1,2;local help
-    w.openHelp=function(text) help=text end
-    local scene=h.view.new(w,{w=480,h=272},h.diagrams)
-    while not scene:step() do end
-    for _,item in ipairs(scene.children) do if item.type=="button" and item.text=="?" then item.press() end end
-    check(help and string.find(help,card.detail,1,true)~=nil,"S02 question mark opens the full receiver guidance")
+    w.card=index+1
+    for _,fault in ipairs({"provider","feature","telemetry"}) do
+      w.data.rx_config.serialrx_provider=fault=="provider" and 2 or 9
+      w.data.feature_config.enabledFeatures=fault=="feature" and 0 or 1<<3
+      session.telemetryType=fault=="telemetry" and "sport" or "crsf"
+      local n=#starts;local picked=#choices
+      rows[1].press();rows[3].set(1);w:tick()
+      eq(w.message,L.linkNeedsCrsf,"S02 non-CRSF settings explain why: "..fault)
+      check(not rows[1].enabled() and not rows[2].enabled(),"S02 non-CRSF sync buttons are inactive: "..fault)
+      eq(#starts,n,"S02 non-CRSF cannot start a task: "..fault)
+      eq(#choices,picked,"S02 non-CRSF cannot change module options: "..fault)
+      eq(rows[3].get(),0,"S02 unavailable picker has a safe value: "..fault)
+    end
+    w.data.rx_config.serialrx_provider=9;w.data.feature_config.enabledFeatures=1<<3;session.telemetryType="crsf"
+    w:navigate(2,1);drain(w);before=wakes;w:tick()
+    eq(wakes,before,"S02 other cards never wake the link task")
+    w.card=index;w.cards=step(w,"receiver");w.cards[index].enter();drain(w)
+    local resetBefore=resets;w:close();check(resets>resetBefore,"S02 closing the wizard resets the task")
+    session.telemetryType=oldType;h.fixtures[73]=nil
+    session.crsfTelemetryConfig,session.elrsLinkConfig,session.telemetryConfigBuffer=nil,nil,nil
+    for _,locale in ipairs({"en","de"}) do
+      local s=load("i18n/"..locale..".lua").app.modules.helicopter_setup
+      check(utf8.len(s.linkHint)<600,"S02 link detail stays below 600 characters")
+      for line in string.gmatch(s.linkHint,"[^\n]+") do check(utf8.len(line)<=200,"S02 link detail lines stay below 200 characters") end
+      check(not s.receiverElrs and not s.receiverElrsLink and not s.openElrsLink,"S02 obsolete pointer strings removed")
+    end
+  end)
+  case("S02.elrs-task-ownership",function()
+    local w=world();settle(w)
+    local session=w:session()
+    local oldType,oldConnected,oldRequire=session.telemetryType,session.isConnected,_G.rfsuite.require
+    local oldVersion,oldLoader=getVersion,loadScript
+    session.telemetryType,session.isConnected="crsf",true
+    _G.rfsuite.require=function(path)
+      if path=="lib/armed.lua" then return {isArmed=function() return false end,changeCount=function() return 0 end} end
+      return oldRequire and oldRequire(path)
+    end
+    getVersion=function() return "2.12","simu" end
+    loadScript=function(path,...)
+      if string.find(path,"lib/crsf.lua",1,true) then
+        return function() return {popFrame=function() return nil end} end
+      end
+      return oldLoader(path,...)
+    end
+    local task=load("app/pages/tools/diagnostics/elrs_link/elrslink_task.lua")
+    check(type(task.setOwner)=="function","S02 shared task supports visit-owned MSP cancellation")
+    if not task.setOwner then
+      session.telemetryType,session.isConnected,_G.rfsuite.require=oldType,oldConnected,oldRequire
+      getVersion,loadScript=oldVersion,oldLoader;return
+    end
+    local current=true
+    task.setOwner("helicopter-elrs",function() return current and w:usable() end)
+    local function start()
+      w.statusAt=getTime()
+      session.crsfTelemetryConfig={mode=1,linkRate=333,linkRatio=8}
+      session.telemetryConfigBuffer=h.api("telemetry_config").simulatorResponse
+      task.start(task.MODE_ELRS_TO_ROTORFLIGHT)
+      for _=1,3 do h.measure("ELRS task",task.wakeup);h.advance(60) end
+      return q.messages[#q.messages]
+    end
+    q.messages={};local write=start()
+    eq(write.command,74,"S02 module sync writes FC telemetry configuration")
+    eq(write.client,"helicopter-elrs","S02 FC write has its own queue owner")
+    eq(write.payload[9]+256*write.payload[10],500,"S02 FC write uses the module packet rate")
+    eq(write.payload[11]+256*write.payload[12],4,"S02 FC write uses the module telemetry ratio")
+    check(next(w.dirty)==nil and w.data.telemetry_config==nil,"S02 task FC writes never become wizard draft state")
+    q:add({command=1,client="unrelated"})
+    task.reset()
+    eq(#q.messages,1,"S02 reset removes the task's queued FC write")
+    eq(q.messages[1].client,"unrelated","S02 reset preserves other queue clients")
+    write.processReply();eq(#q.messages,1,"S02 late write reply cannot enqueue EEPROM after reset")
+    eq(session.crsfTelemetryConfig.linkRate,333,"S02 cancelled FC write never claims a saved session value")
+    q.messages={};write=start();q.messages={};write.processReply()
+    local save=q.messages[1]
+    eq(save.command,h.api("eeprom_write").writeCommand,"S02 acknowledged FC write queues EEPROM")
+    eq(save.client,"helicopter-elrs","S02 EEPROM uses the same task queue owner")
+    task.reset();eq(#q.messages,0,"S02 reset also removes the pending EEPROM write")
+    save.processReply();eq(session.crsfTelemetryConfig.linkRate,333,"S02 late EEPROM reply cannot update the session after reset")
+    q.messages={};write=start();h.advance(301);task.wakeup()
+    eq(#q.messages,0,"S02 expired STATUS cancels the task's pending FC write")
+    write.processReply();eq(#q.messages,0,"S02 expired STATUS cannot be followed by EEPROM")
+    q.messages={};write=start();q.messages={};current=false;write.processReply()
+    eq(#q.messages,0,"S02 leaving before the FC reply prevents EEPROM")
+    current=true
+    -- Complete a fresh transaction through both acknowledgements.
+    task.reset();write=start();q.messages={};write.processReply();save=q.messages[1];q.messages={};save.processReply()
+    eq(session.crsfTelemetryConfig.linkRate,500,"S02 FC rate is published only after EEPROM acknowledgement")
+    eq(session.crsfTelemetryConfig.linkRatio,4,"S02 FC ratio is published only after EEPROM acknowledgement")
+    check(not task.isRunning(),"S02 acknowledged FC save completes the task")
+    task.reset()
+    session.telemetryType,session.isConnected,_G.rfsuite.require=oldType,oldConnected,oldRequire
+    session.crsfTelemetryConfig,session.telemetryConfigBuffer,session.elrsLinkConfig=nil,nil,nil
+    getVersion,loadScript=oldVersion,oldLoader
   end)
   case("S02.protocol-ids-presets-feature-group",function()
     local w=world();local entries=w:receiverProtocols();local ids={}
@@ -941,19 +1091,9 @@ return function(h)
     local w=world();settle(w);w.step=2
     local opened
     w.openPage=function(id) opened=id end
-    w.data.feature_config.enabledFeatures=w.data.feature_config.enabledFeatures|(1<<3)
-    w.data.rx_config.serialrx_provider=9
     local rx=step(w,"receiver")
-    local button
-    for _,row in ipairs(rx[1].rows) do if row.label==L.openElrsLink then button=row end end
-    check(button~=nil and button.kind=="button","HOST a host that opens pages gets an ELRS Link button")
-    check(button.enabled(),"HOST the ELRS Link button is offered for CRSF")
-    button.press();eq(opened,"diagnostics_elrs_link_page","HOST the button opens the ELRS Link page")
-    w.data.rx_config.serialrx_provider=2
-    check(not button.enabled(),"HOST the ELRS Link button is idle for another receiver")
-    opened=nil;w.dirty.rx_config=true;w.data.rx_config.serialrx_provider=9;button.press()
-    check(opened==nil and w.message==L.saveFirst,"HOST an unsaved change keeps the wizard open")
-    w.dirty.rx_config=nil;w.step=9
+    eq(#rx[1].rows,3,"HOST receiver card keeps protocol, USB and reboot without a diagnostics pointer")
+    w.step=9
     local motor=step(w,"motor")
     local esc
     for _,row in ipairs(motor[1].rows) do if row.label==L.openEscTools then esc=row end end

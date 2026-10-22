@@ -67,6 +67,7 @@ function M.wakeup(ctx)
   end
   if not w then
     w = modules[5].new(modules[1], modules[2], modules[3], modules[4])
+    w.i18n = context.i18n
     w.newAttitudeView = modules[17].new
     w.newServoGrid = modules[18].append
     -- Steps lay out for the screen class: the servo step puts the tail beside the swash servos

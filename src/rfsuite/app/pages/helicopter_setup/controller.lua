@@ -22,6 +22,9 @@ function M.new(runtime, transport, mathModule, labels)
   local w = { runtime = runtime, math = mathModule, L = labels, data = {}, saved = {}, dirty = {},
     step = 1, card = 1, ready = false, active = true, holds = {}, live = {}, checks = {},
     progress = 0, message = labels.loading, generation = 0, selectedServo = 0, percent = 10 }
+  function w:loadModule(path)
+    return assert(loadScript(BASE .. path, "t"))()
+  end
   function w:session() return _G.rfsuite and _G.rfsuite.session or {} end
   -- The setup steps use MSP added in API 12.10 (Rotorflight 4.7). The version is the "major.minor"
   -- string the Suite reports; an unknown version is left to the Suite's own connect check.
@@ -227,6 +230,7 @@ function M.new(runtime, transport, mathModule, labels)
     self:write(api, function() return d[api] end)
   end
   function w:release(all)
+    if self.stopLink then self:stopLink() end
     local held, motor = self.holds, self.motorHold
     self.holds, self.motorHold, self.listen, self.legacyHold = {}, nil, nil, nil
     if self.rx then self.rx.detect, self.rx.record = nil, nil end
@@ -643,6 +647,7 @@ function M.new(runtime, transport, mathModule, labels)
     return list
   end
   function w:tick()
+    if self.linkTick then self:linkTick() end
     if self.attitudeView then
       self.attitudeView:update(self.data.attitude,self.attitudeAt,now(),
         self.active and self.ready and self.locked and not self.transition and not self.error and self:allowed())
