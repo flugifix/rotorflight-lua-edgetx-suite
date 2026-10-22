@@ -35,7 +35,10 @@ function M.attach(w, state, sensors)
     if (self.cleanupPending or 0)>0 then return self.L.releasingTests end
     if self.recoveryRequired then return self.L.recoveryAwaiting end
     if self.historyMode then return self.history.invalid and self.L.historyUnreadable or self.message or "" end
-    if self.legacyHold then return self.L.persistent end
+    -- The untimed-override warning stays until another message answers what the pilot just did.
+    local m = self.message
+    if self.legacyHold and (m == nil or m == self.L.persistent or m == self.L.holding or m == self.L.neutralHold or
+      m == self.L.ready or m == self.L.saved) then return self.L.persistent end
     if not self.error and not self.transition and (self.message == self.L.ready or self.message == self.L.saved) then
       if self.systemHint and not self.systemProfiles then return self.systemHint end
       return self.prerequisiteHint or self.historyHint or self.systemHint or self.message

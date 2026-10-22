@@ -1,10 +1,19 @@
 return function(w)
   local L = w.L
   local cards = {}
-  for _, a in ipairs({ {1, L.rollRight, L.rollHint,L.rightDown}, {2, L.pitchForward, L.pitchHint,L.frontDown}, {4, L.collectiveUp, L.collectiveHint,L.allUp} }) do
+  -- The first row names the input the check needs and shows where the stick is now.
+  local words = { [1] = { L.dirRight, L.dirLeft }, [2] = { L.dirForward, L.dirBack }, [4] = { L.dirUp, L.dirDown } }
+  local function stickNow(axis)
+    local command = w.data.rc_command and w.data.rc_command.commands[axis]
+    if type(command) ~= "number" then return "--" end
+    local percent = math.floor(math.abs(command) / 5 + 0.5)
+    if percent < 5 then return L.stickCentre end
+    return string.format(L.stickNow, words[axis][command > 0 and 1 or 2], math.min(percent, 100))
+  end
+  for _, a in ipairs({ {1, L.rollRight, L.rollHint,L.rightDown,L.inputRoll}, {2, L.pitchForward, L.pitchHint,L.frontDown,L.inputPitch}, {4, L.collectiveUp, L.collectiveHint,L.allUp,L.inputCollective} }) do
     local axis = a[1]
     cards[#cards + 1] = w:cardDef(a[2], a[3], {
-      w:value(L.stick, function() return w.data.rc_command and w.data.rc_command.commands[axis] or "--" end),
+      w:value(a[5], function() return stickNow(axis) end),
       w:value(L.expected,function() return a[4] end),
       w:button(L.wrongReverse, function() w:invertInput(axis); w.checks["control" .. axis] = nil end),
       w:check("control" .. axis, L.directionCorrect)

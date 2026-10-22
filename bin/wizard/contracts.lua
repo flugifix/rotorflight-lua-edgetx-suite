@@ -324,6 +324,9 @@ return function(h)
     w.message=L.failed;eq(w:feedbackText(),L.failed,"CORE operation failure wins over packed hint")
     w.message=L.ready;w.legacyHold=true
     eq(w:feedbackText(),L.persistent,"CORE permanent override warning wins over packed hint")
+    w.message=L.confirmCheck
+    eq(w:feedbackText(),L.confirmCheck,"CORE a refused check is not hidden by the override warning")
+    w.message=L.ready
     w.legacyHold=nil;w.transition=true
     eq(w:feedbackText(),L.ready,"CORE packed hint does not obscure active transaction")
     w.transition=nil;values.system_config=1<<12;poll();poll()
@@ -837,6 +840,12 @@ return function(h)
     local w=world();local c=step(w,"direction");c[1].enter()
     for _,i in ipairs({1,2,4}) do eq(w.holds["mixer"..i].value,2502,"S14 passthrough axis "..i) end
     eq(c[1].rows[2].get(),L.rightDown,"S14 roll expectation stays visible beside the controls")
+    eq(c[1].rows[1].label,L.inputRoll,"S14 the first row names the input the check needs")
+    w.data.rc_command={commands={-225,0,0,500}}
+    eq(c[1].rows[1].get(),string.format(L.stickNow,L.dirLeft,45),"S14 the stick shows its direction and travel")
+    eq(c[3].rows[1].get(),string.format(L.stickNow,L.dirUp,100),"S14 collective up reads as up")
+    w.data.rc_command={commands={10,0,0,0}}
+    eq(c[1].rows[1].get(),L.stickCentre,"S14 a stick near centre reads as centre")
     eq(c[1].summary,L.rearCheck,"S14 left/right is defined from behind the helicopter")
     w.checks.control1=true;local before=w.data.mixer_input.inputs[1].rate;c[1].rows[3].press()
     eq(w.data.mixer_input.inputs[1].rate,-before,"S14 reverse input scale")
