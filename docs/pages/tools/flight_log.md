@@ -63,6 +63,8 @@ Back cancels it. A pack already in the list is opened with the `>` button, which
 holds together with how many logged flights name it and when it was last used, and offers *Edit*
 and *Delete*. Deleting asks first.
 
+![The pack editor, scrolled to its models](../../images/tools/flight_log/pack-editor.png)
+
 | Field | What it holds |
 | --- | --- |
 | Id | The name the flight's line and the model's own choice refer to the pack by. Letters, digits, `_` and `-`; anything else is dropped. It has to be unique, and a new pack is offered the lowest number the registry has free. |
