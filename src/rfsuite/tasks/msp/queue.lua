@@ -555,8 +555,14 @@ function Queue:processQueue(now)
     if not simBuf and isWriteMessage(msg) then simBuf = {} end
     if not simBuf then
       msg.__retryCount = self.retryCount
+      -- Called as the give-up path below calls it: under pcall, an instruction-limit stop raised on.
       if type(msg.errorHandler) == "function" then
-        msg.errorHandler(msg, "no_simulator_response")
+        local ok, herr = pcall(msg.errorHandler, msg, "no_simulator_response")
+        if not ok then
+          if isCpuLimitError(herr) then error(herr, 0) end
+          self.logf("warn", "error handler raised cmd=%s rw=R client=%s reason=no_simulator_response err=%s",
+            tostring(msg.command), tostring(msg.client), tostring(herr))
+        end
       end
       self.logf("warn", "no simulator response cmd=%s client=%s",
         tostring(msg.command), tostring(msg.client))
