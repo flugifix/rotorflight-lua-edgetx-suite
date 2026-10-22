@@ -23,7 +23,8 @@ return function(w)
         function() return w.escStage == "full" and output() >= 1995 end),
       w:button(L.calibrationDone, function()
         if w.escStage == "low" and output() > 0 and output() <= 1005 then w.calibratedEsc = true; w.message = L.ready end
-      end)
+      end),
+      w:value(L.output, function() return output() end)
     })
   end
   cards[#cards + 1] = w:cardDef(L.throttle, L.spinHint, rows, nil, "heli")

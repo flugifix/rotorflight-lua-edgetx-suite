@@ -726,6 +726,22 @@ return function(h)
     w.data.motor_config.use_dshot_telemetry=0;w.data.esc_sensor_config.protocol=1
     check(not w:fastRpm(),"S08 serial ESC telemetry does not prove fast RPM")
   end)
+  case("S11.motor-output-read-during-hold",function()
+    local w=world();settle(w);w.step=11;local c=step(w,"throttle");w.cards=c;w.card=1
+    w.data.motor_config.motor_pwm_protocol=0;c=step(w,"throttle");w.cards=c
+    w.checks.escBlades=true;q.sent={}
+    c[1].rows[2].press()
+    check(w.motorHold~=nil,"S11 full throttle starts a motor hold")
+    for _=1,300 do w:tick();h.pump();h.advance(1) end
+    local reads,overrides,run,longest=0,0,0,0
+    for _,m in ipairs(q.sent) do
+      if m.command==104 then reads=reads+1;run=0 end
+      if m.command==195 then overrides=overrides+1;run=run+1;if run>longest then longest=run end end
+    end
+    check(overrides>=4,"S11 the hold keeps refreshing the override")
+    check(reads>=2,"S11 the motor output is read while the hold runs")
+    check(longest<=2,"S11 no long run of overrides without an output read")
+  end)
   case("S09.bidirectional-dshot-switch",function()
     local w=world();settle(w);local c=step(w,"motor");local row=c[1].rows[3]
     eq(row.kind,"choice","S09 bidirectional DShot is an on/off choice")

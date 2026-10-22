@@ -592,6 +592,7 @@ function M.new(runtime, transport, mathModule, labels)
       self.pollIndex == 1 and "status" or self.pollIndex == 2 and "servo" or
       ({ [1] = "attitude", [2] = "rx_channels", [3] = "rc", [4] = "rc", [10] = "motor", [11] = "motor",
         [12] = "motor_telemetry", [14] = "rc_command", [17] = self:motorised() and "motor" or "rc_command" })[self.step]
+    if self.motorHold then api = "motor" end
     if not api then return end
     self:read(api, function(d)
       self.data[api] = d
@@ -706,13 +707,16 @@ function M.new(runtime, transport, mathModule, labels)
     if self.motorHold then
       local h = self.motorHold
       if now() >= h.untilAt then self:stopMotor(); return end
-      if now() >= h.due then
+      -- A refresh takes about as long as its interval on a radio link, so without a turn of
+      -- its own the motor output read would never run while a hold is active.
+      if now() >= h.due and not h.pollTurn then
         if h.mode=="spin" then h.value=self.percent*10*h.direction end
         if h.mode=="idle" then h.value=self.data.mixer_config.tail_motor_idle end
-        h.due = now() + 25
+        h.due, h.pollTurn = now() + 25, true
         self.bus:add({ api = "motor_override", write = true, override = true,
           data = { index = h.index, value = h.value } }); return
       end
+      if h.pollTurn then h.pollTurn = nil; self.lastPoll = nil end
     end
     for _, h in pairs(self.holds) do
       if now() >= h.due then
