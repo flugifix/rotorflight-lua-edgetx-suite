@@ -208,20 +208,20 @@ function Record.keys()
 end
 
 -- The sampled values, kept here rather than read twice: a sensor that answers nothing this pass
--- leaves the previous reading standing, which is what the dashboard's own telemetry read does.
+-- leaves the previous reading standing. A statistic's source stays absent until it first answers.
 local values = {
-  throttlePercent = 0,
-  rpm = 0,
-  current = 0,
-  watts = 0,
-  altitude = 0,
-  consumedMah = 0,
-  escTemp = 0,
-  mcuTemp = 0,
-  fuel = 0,
-  voltage = 0,
-  becVoltage = 0,
-  lq = 0,
+  throttlePercent = nil,
+  rpm = nil,
+  current = nil,
+  watts = nil,
+  altitude = nil,
+  consumedMah = nil,
+  escTemp = nil,
+  mcuTemp = nil,
+  fuel = nil,
+  voltage = nil,
+  becVoltage = nil,
+  lq = nil,
   govState = 0,
   pidProfile = 0,
   lqSource = nil,
@@ -263,8 +263,10 @@ local function updatePowered()
     gate = POWERED_GOVERNOR_STATE[gov] == true
     need = POWERED_HOLD_SAMPLES
   else
-    gate = values.rpm >= SPINNING_RPM
-      and (values.throttlePercent >= DRIVEN_THROTTLE_PERCENT or values.current >= DRIVEN_CURRENT)
+    local rpm, throttle, current = values.rpm, values.throttlePercent, values.current
+    gate = type(rpm) == "number" and rpm >= SPINNING_RPM
+      and ((type(throttle) == "number" and throttle >= DRIVEN_THROTTLE_PERCENT)
+        or (type(current) == "number" and current >= DRIVEN_CURRENT))
     need = POWERED_HOLD_SAMPLES + POWERED_TAIL_SAMPLES
   end
 
@@ -306,8 +308,8 @@ end
 --- power: the floor of a flight rather than the floor of its spool-up. Without a governor state
 --- the minimum is offered the reading of POWERED_TAIL_SAMPLES samples ago, and the gate only
 --- opens once that reading has the hold window behind it and the tail window after it.
---- p1..p4 are not cleared at a flight edge: they are read only once the gate has held for eight
---- samples in a row, and every flight edge resets that count, so by then they hold this flight's.
+--- p1..p4 shift on every sample without a governor state, including absent readings. They are not
+--- cleared at a flight edge: the eight-sample hold flushes them before a minimum can be taken.
 local function trackMaxMinPowered(src, maxKey, minKey)
   local p1, p2, p3, p4
   return function(rec)
@@ -315,13 +317,13 @@ local function trackMaxMinPowered(src, maxKey, minKey)
     if type(v) == "number" then
       local b = rec[maxKey]
       if b == nil or v > b then rec[maxKey] = v end
-      if not values.govStateSeen then
-        v, p1, p2, p3, p4 = p1, p2, p3, p4, v
-      end
-      if values.powered then
-        b = rec[minKey]
-        if b == nil or v < b then rec[minKey] = v end
-      end
+    end
+    if not values.govStateSeen then
+      v, p1, p2, p3, p4 = p1, p2, p3, p4, v
+    end
+    if values.powered and type(v) == "number" then
+      local b = rec[minKey]
+      if b == nil or v < b then rec[minKey] = v end
     end
   end
 end
@@ -646,9 +648,9 @@ end
 -- then, as without a table, the record keeps its own clock.
 
 --- Read the tracked sensors. A sensor that answers nothing leaves the previous reading standing,
---- which is what the dashboard's telemetry read has always done, and the derivations below --
---- rounding the two temperatures and the throttle, inferring watts, clamping fuel -- are that
---- read's, moved rather than rewritten.
+--- or stays absent if it has not answered in this session. The derivations below --
+--- rounding the two temperatures and the throttle, inferring watts, clamping fuel -- follow the
+--- dashboard's telemetry read.
 local function readSources()
   if Sensors == nil then Sensors = loadModule("lib/sensors.lua") or false end
   if not Sensors or type(Sensors.getValue) ~= "function" then return false end
@@ -672,14 +674,15 @@ local function readSources()
   -- Lua state and hands the two values over directly. The sensor behind a value that was handed
   -- over is not asked at all.
   local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
+  local unavailable = smart and smart.unavailable
   local handedConsumption = smart and smart.consumption
   local consumedMah = nil
-  if handedConsumption == nil then consumedMah = get("smartconsumption") end
+  if not unavailable and handedConsumption == nil then consumedMah = get("smartconsumption") end
   local govState = get("governor")
   local pidProfile = get("pid_profile")
   local handedFuel = smart and smart.fuel
   local smartFuel, plainFuel = nil, nil
-  if handedFuel == nil then
+  if not unavailable and handedFuel == nil then
     smartFuel = get("smartfuel")
     if smartFuel == nil then plainFuel = get("fuel") end
   end
@@ -720,7 +723,13 @@ local function readSources()
   values.current = current or values.current
   values.watts = watts or values.watts
   values.altitude = altitude or values.altitude
-  values.consumedMah = handedConsumption or consumedMah or values.consumedMah
+  if unavailable then
+    values.consumedMah = nil
+    values.fuel = nil
+    values.fuelSeen = false
+  else
+    values.consumedMah = handedConsumption or consumedMah or values.consumedMah
+  end
   if type(voltage) == "number" then values.voltage = voltage end
 
   if values.cells == 0 then resolvePack(get) end
@@ -873,20 +882,21 @@ function Record.reset()
   -- the previous reading standing, so a model connected without it would inherit the reading:
   -- into its statistics, and into the powered gate -- a state such as throttle hold would keep
   -- the gate shut for the whole session, a headspeed and a throttle would open it on a head that
-  -- is not driven -- and its samples would land in the last session's profile. The readings go
-  -- back to the values a fresh start has.
-  values.throttlePercent = 0
-  values.rpm = 0
-  values.current = 0
-  values.watts = 0
-  values.altitude = 0
-  values.consumedMah = 0
-  values.escTemp = 0
-  values.mcuTemp = 0
-  values.fuel = 0
-  values.voltage = 0
-  values.becVoltage = 0
-  values.lq = 0
+  -- is not driven -- and its samples would land in the last session's profile. Statistic sources
+  -- including the gate's headspeed, throttle and current go back to absent; the governor state
+  -- and PID profile go back to zero.
+  values.throttlePercent = nil
+  values.rpm = nil
+  values.current = nil
+  values.watts = nil
+  values.altitude = nil
+  values.consumedMah = nil
+  values.escTemp = nil
+  values.mcuTemp = nil
+  values.fuel = nil
+  values.voltage = nil
+  values.becVoltage = nil
+  values.lq = nil
   values.govState = 0
   values.pidProfile = 0
   values.lqSource = nil

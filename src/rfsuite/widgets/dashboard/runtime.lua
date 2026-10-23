@@ -857,11 +857,11 @@ local JOB_FAULT_LIMIT = 3
 -- the state pass), counted from the start of the hold. The rebuild waits because it would delete
 -- the button under the finger; but a release EdgeTX never reports would then keep it waiting for
 -- as long as the surface is up. Past this the rebuild runs, and lets go of the hold first, as
--- every rebuild that is not held back does. The flight controller steps a held value every
--- 200 ms after the first 100 ms (fc/rc_adjustments.c), so five seconds is 25 steps: at the
--- largest step of every row but the head speed, 10, that is 250 units -- the whole range of most
--- parameters, which run 0-250 or 0-255. A hold that long has crossed the range or lost its
--- release. A hold with no rebuild waiting is not ended here: the drive ends every hold itself after
+-- every rebuild that is not held back does. A held control steps once per pulse and the gap after
+-- it (widgets/dashboard/inflight/drive.lua, fastTick), about two steps a second, so five seconds is
+-- ten steps or so: at the largest step of every row but the head speed, 10, about 100 units. A hold
+-- that long has moved a parameter a long way or lost its release. A hold with no rebuild waiting is
+-- not ended here: the drive ends every hold itself after
 -- the same five seconds (HOLD_LIMIT_SECONDS in widgets/dashboard/inflight/drive.lua). That limit
 -- counts from the press, this one from the first pass that sees the hold, so the drive's fires
 -- first and this cap stays as the second line; keep the two numbers equal.
@@ -2704,12 +2704,16 @@ local function takeFullscreenMode(self)
   local initTable, base, folder = loadThemeInit(self.themePath)
   local themeMode = type(initTable) == "table" and initTable.fullscreen == "theme"
   self._viewBase = themeMode and "theme" or nil
+  self._declaredKeys = type(initTable) == "table" and initTable.keys or nil
+  local ready = self.connectionReady == true or self.flightMode == "postflight" or self.flightMode == "offline"
+  holder.ready = ready
   self._viewCtx = nil
   self._cachedFullscreenKey = nil
   local Views = viewsModule()
   if Views then
+    Views.invalidate(self)
     local themeViews = nil
-    if type(self.theme.build) == "function" then
+    if ready and type(self.theme) == "table" and type(self.theme.build) == "function" then
       themeViews = themeViewList(initTable, base, folder, "fullscreen")
     end
     Views.register(self, themeViews)
@@ -2750,25 +2754,14 @@ local function fullscreenThemeKey(self)
   return key
 end
 
---- `widget.refresh` while a theme-mode fullscreen is up: the keys, then the pass itself.
----
---- EdgeTX hands a widget one event per call, and a pass that runs a job returns before the state
---- half, so a key read there would be lost whenever it arrived during a build. This reads it
---- ahead of that split instead, and the widget's own refresh is left as it is. It is put in place
---- by the fullscreen pass of a theme-mode widget, and it puts the widget's own refresh back on the
---- first pass without an event -- fullscreen has been left -- or once the theme no longer asks for
---- fullscreen, so no zone pass and no widget without a base layer ever runs it.
+--- Restore the refresh wrapper chain when theme fullscreen is left.
+-- Keys are routed by the widget's own refresh before jobs and connection splashes;
+-- the wrapper still preserves the existing zone-view lifecycle underneath it.
 local function themeModeRefresh(self, event, touchState)
   local ownRefresh = self._ownRefresh
   if event == nil or self._viewBase == nil then
     self.refresh = ownRefresh
     self._cachedFullscreenKey = nil
-  elseif event ~= 0 and self.theme ~= nil and inflightMode(self, true) == nil and self._toolHost == nil
-    and (self.connectionReady == true or self.flightMode == "postflight" or self.flightMode == "offline") then
-    -- Not while the tuning surface is up, the tool is open, before a theme is loaded, or on the
-    -- connect splash: none of them is a view or the base layer.
-    local Views = viewsModule()
-    if Views then Views.key(self, event) end
   end
   return ownRefresh(self, event, touchState)
 end
@@ -3383,15 +3376,21 @@ local function readTelemetry(state, audioState)
   -- before SmartFuel has one -- on an older flight controller, and in the window before the
   -- pack voltage has settled.
   local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
-  setField("consumedMah", (smart and smart.consumption) or getSensor("smartconsumption") or state.consumedMah)
-
-  local fuel = (smart and smart.fuel) or getSensor("smartfuel") or getSensor("fuel")
-  if type(fuel) == "number" then
-    local f = fuel
-    if f < 0 then f = 0 end
-    if f > 100 then f = 100 end
-    state.fuelTelemetrySeen = true
-    setField("fuel", f)
+  if smart and smart.unavailable then
+    -- Explicit absence clears the held display too; setField deliberately ignores nil.
+    if state.fuel ~= nil or state.consumedMah ~= nil or state.fuelTelemetrySeen then telemetryChanged = true end
+    state.fuel, state.consumedMah = nil, nil
+    state.fuelTelemetrySeen = false
+  else
+    setField("consumedMah", (smart and smart.consumption) or getSensor("smartconsumption") or state.consumedMah)
+    local fuel = (smart and smart.fuel) or getSensor("smartfuel") or getSensor("fuel")
+    if type(fuel) == "number" then
+      local f = fuel
+      if f < 0 then f = 0 end
+      if f > 100 then f = 100 end
+      state.fuelTelemetrySeen = true
+      setField("fuel", f)
+    end
   end
 
   if type(voltageValue) == "number" then
@@ -4475,6 +4474,20 @@ function Runtime.new(zone, options)
     -- every other one, so this is where "on screen" is known. The overlay drives only from here.
     self._foreground = true
 
+    -- A firmware fullscreen exit may arrive while a build or the connection
+    -- splash is still running. Clear the visit before either can return early.
+    if event == nil then
+      self.inflightFullscreen = nil
+      self._viewStack = nil
+      self._cachedFullscreenKey = nil
+      local job = self._job
+      if job and (job.fullscreen or job.fullscreenSplash) then
+        self._job = nil
+        self.built = false
+        self.renderKey = nil
+      end
+    end
+
     -- The suite's tool, opened from a fullscreen control, runs in place of the whole pass until
     -- it is closed (widgets/dashboard/tool_host.lua). It drives the MSP runtime and the event
     -- runner itself, so nothing below may run beside it; once it is closed the next pass finds
@@ -4496,6 +4509,28 @@ function Runtime.new(zone, options)
     -- JOB pass returns before the background half and a state pass reaches it only on the logic
     -- tick, and neither cadence is one a surface driving a flight controller can be read at.
     sampleInflight(self)
+
+    if event ~= nil and inflightMode(self, true) == nil then
+      local modeOf = self._fullscreenModeOf
+      local ready = self.connectionReady == true or self.flightMode == "postflight" or self.flightMode == "offline"
+      -- Not while a reload has the theme unloaded: the registry made then would lack the theme's
+      -- views and take an open one off the stack. The mode is taken once the theme is back.
+      if self.theme ~= nil and (modeOf == nil or modeOf[1] ~= self.theme or modeOf.ready ~= ready) then
+        takeFullscreenMode(self)
+      end
+      local Views = viewsModule()
+      local handled, exited
+      if event ~= 0 and Views then handled, exited = Views.key(self, event) end
+      if handled then
+        -- Zero is an idle fullscreen event. Nil would instead leave fullscreen;
+        -- forwarding the handled key would also activate LVGL's focused control.
+        event = 0
+        if exited or self._toolHost ~= nil then
+          self._passEndAt = nowSeconds()
+          return
+        end
+      end
+    end
 
     -- Route touch/key events to LVGL engine when active (e.g. fullscreen)
     if lvgl and type(lvgl.onEvent) == "function" and event ~= nil then
@@ -4710,7 +4745,12 @@ function Runtime.new(zone, options)
 
     -- `offline` is the post-flight phase with the link already gone, which is exactly the case
     -- this splash must not cover: the summary is what the pilot walked back to the bench for.
-    if not ready and self.flightMode ~= "postflight" and self.flightMode ~= "offline" then
+    local explicitView = false
+    if event ~= nil and self._viewStack ~= nil then
+      local Views = viewsModule()
+      explicitView = Views ~= nil and Views.top(self) ~= nil
+    end
+    if not ready and self.flightMode ~= "postflight" and self.flightMode ~= "offline" and not explicitView then
       local statusLine = self.statusLine or "Please wait..."
       -- Full screen and the zone are two splashes, because only the first carries the tool control.
       local fullscreenSplash = event ~= nil
@@ -4744,17 +4784,6 @@ function Runtime.new(zone, options)
 
     -- In EdgeTX, `event` is nil in normal widget mode, and an integer (including 0 for idle) in fullscreen.
     local isInteractive = (event ~= nil)
-    if not isInteractive then
-      -- Leaving fullscreen is the one exit the firmware does not always report -- a long press on
-      -- RTN closes it and Lua may never see the key -- so the ground surface is dropped whenever a
-      -- pass arrives without an event rather than when a close is observed. Ahead of the two
-      -- early returns below, so a pass that returns there drops it as well.
-      self.inflightFullscreen = nil
-      -- The fullscreen views that are open are a fullscreen state and are dropped on the way
-      -- out for the same reason the tuning surface is: a long press on RTN closes fullscreen
-      -- without Lua ever seeing the key. The whole stack is this one field.
-      self._viewStack = nil
-    end
 
     -- A theme reload that fell on a read pass waits for the next logic tick; the deferral itself
     -- is in performBackgroundWork. Queuing a scene job here would build against the theme that
@@ -4920,7 +4949,7 @@ function Runtime.new(zone, options)
     if not self.built and jobKind ~= nil then
       -- The failure surface at full screen carries what the connect splash carries there, since
       -- it is drawn by the same builder: see failedJobStep.
-      self._job = { kind = jobKind, step = jobStep, fullscreen = jobFullscreen,
+      self._job = { kind = jobKind, step = jobStep, fullscreen = jobFullscreen or (isInteractive and self._viewId ~= nil),
         fullscreenSplash = jobKind == "failed" and isInteractive or nil }
     end
 

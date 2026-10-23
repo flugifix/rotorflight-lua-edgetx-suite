@@ -387,6 +387,8 @@ local manifest = {
         { id = "dashboard_settings", title = "@i18n(app.modules.dashboard_settings.name)@", menuId = "settings_dashboard_settings_menu", icon = "@pages/settings/dashboard/settings/icon.png" },
         { id = "dashboard_quick_menu", title = "@i18n(app.modules.dashboard_quick_menu.name)@",
           menuId = "settings_dashboard_quick_menu_page", icon = "@pages/settings/shortcuts/icon.png" },
+        { id = "dashboard_keys", title = "@i18n(app.modules.dashboard_keys.name)@",
+          menuId = "settings_dashboard_keys_page", icon = "@pages/settings/shortcuts/icon.png" },
         { id = "dashboard_standby", title = "@i18n(app.modules.dashboard_standby.name)@",
           menuId = "settings_dashboard_standby_page", icon = "@pages/settings/dashboard/icon.png" },
         -- The other half of the same preview feature, and it carries the same condition:
@@ -411,6 +413,10 @@ local manifest = {
     },
     settings_dashboard_inflight_page = {
       title = "@i18n(app.modules.dashboard_inflight.name)@",
+      pages = {}
+    },
+    settings_dashboard_keys_page = {
+      title = "@i18n(app.modules.dashboard_keys.name)@",
       pages = {}
     },
     settings_dashboard_quick_menu_page = {

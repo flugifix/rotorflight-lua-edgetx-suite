@@ -181,10 +181,6 @@ local SCHEMA = {
       -- An arm shorter than this is a check rather than a flight, and reaches neither the log
       -- nor a battery's cycle count. 0 logs every arm.
       min_seconds = 30,
-      -- Offer the registry's packs for this model once the connect chain has run, in the
-      -- dashboard widget's fullscreen. Off by default: a pilot who keeps no registry would be
-      -- asked a question with no answers in it.
-      ask_on_connect = false,
       -- A pick also moves the flight controller onto that pack's battery profile. Off by
       -- default and deliberately so: it writes to the board, and which profile a pack belongs
       -- to is a statement the pilot makes in the registry rather than one this suite can infer.
@@ -200,7 +196,7 @@ local SCHEMA = {
       enabled = false,
     },
     -- Everything else the transmitter's half holds -- the interlock switch, the channel and
-    -- global-variable pair, the pulse length and the trim assignment -- is declared and
+    -- global-variable pair and the trim assignment -- is declared and
     -- defaulted by widgets/dashboard/inflight/setup.lua, which states that the radio half is
     -- duplicated nowhere. Keeping the section open is what honours that.
     open = true,
@@ -219,7 +215,9 @@ local SCHEMA = {
     -- `quick_menu`: the entries of the widget's quick menu and their order, as the pilot set them
     -- on Settings > Dashboard > Quick Settings. Absent means the menu's default; the empty string is
     -- a menu the pilot has emptied (widgets/dashboard/quick_menu_order.lua).
-    optional = { "model_overrides", "quick_menu", "standby_enabled", "standby_layout" },
+    -- `key_*`: the fullscreen keys, as the pilot set them on Settings > Dashboard > Keys. Absent
+    -- means the key's default (widgets/dashboard/keys.lua).
+    optional = { "model_overrides", "quick_menu", "key_page_down", "key_page_up", "key_mdl", "key_sys", "key_tele", "standby_enabled", "standby_layout" },
     -- A theme's own configuration is stored here under keys built from the theme's path
     -- (app/pages/settings/dashboard/lib.lua), so the set of key names is not knowable from
     -- a schema and the section keeps whatever it is handed.

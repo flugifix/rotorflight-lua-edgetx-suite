@@ -109,13 +109,16 @@ local function bytes_to_string(buf,pos,len)
     return s
 end
 
+-- EdgeTX builds Lua with 32-bit integers and single-precision floats.
+-- Use integer operations: division can round U32 values >=2^24 before byte extraction.
 local function pack_unsigned(v,len,big)
     v = tonumber(v) or 0
+    local n = math.tointeger(v) or math.tointeger(math.floor(v)) or 0
     local out = {}
     if big then
-        for i = len-1,0,-1 do out[#out+1] = math.floor(v / (256^i)) % 256 end
+        for i = len-1,0,-1 do out[#out+1] = (n >> (8 * i)) & 0xFF end
     else
-        for i = 0, len-1 do out[#out+1] = math.floor(v / (256^i)) % 256 end
+        for i = 0, len-1 do out[#out+1] = (n >> (8 * i)) & 0xFF end
     end
     return out
 end

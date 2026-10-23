@@ -22,6 +22,7 @@ local state = {
   loaded = false,
   rows = {},
   rowSignature = "",
+  smartUnavailable = false,
   requestRebuild = nil,
   lastRefreshAt = 0,
   refreshIntervalSec = nil, -- Disable auto refresh to allow scrolling
@@ -109,6 +110,16 @@ local function getSession()
 end
 
 local function readTelemetryNumeric(name)
+  if name == "smartfuel" or name == "smartconsumption" then
+    local session = getSession()
+    local smart = session and session.smartfuel
+    if smart then
+      if smart.unavailable then return nil end
+      local value = smart.fuel
+      if name == "smartconsumption" then value = smart.consumption end
+      if value ~= nil then return value end
+    end
+  end
   if not (Sensors and type(Sensors.getValue) == "function") then return nil end
   return Sensors.getValue(name)
 end
@@ -320,8 +331,8 @@ local function rebuildRows(i18n)
     { label = pageText(i18n, "tuning_source", "Tuning source"), value = usingFirmware and "Firmware MSP" or "Local prefs" },
     { label = pageText(i18n, "fuel_input", "Fuel input"), value = fuelInput },
     { label = pageText(i18n, "source_mah", "Source mAh"), value = formatSensor(protocol and protocol.consumption) },
-    { label = pageText(i18n, "smart_fuel", "Smart Fuel"), value = formatSensor(SMART_SENSORS.fuel) },
-    { label = pageText(i18n, "smart_mah", "Smart mAh"), value = formatSensor(SMART_SENSORS.consumption) },
+    { label = pageText(i18n, "smart_fuel", "Smart Fuel"), value = formatSensor(SMART_SENSORS.fuel), smart = true },
+    { label = pageText(i18n, "smart_mah", "Smart mAh"), value = formatSensor(SMART_SENSORS.consumption), smart = true },
     { label = pageText(i18n, "voltage_slew", "Voltage slew"), value = formatNumber(voltageDrop, 0) .. " mV/s" },
     { label = pageText(i18n, "charge_slew", "Charge slew"), value = formatNumber(chargeDrop / 100, 2) .. " %/s" },
     { label = pageText(i18n, "sag_gain", "Sag gain"), value = formatNumber(sagGain, 0) .. "%" },
@@ -374,6 +385,8 @@ function M.build(ctx)
   end
   
   rebuildRows(i18n)
+  local session = getSession()
+  state.smartUnavailable = session and session.smartfuel and session.smartfuel.unavailable == true
 
   local children = ctx.children
   local x = ctx.x
@@ -407,7 +420,7 @@ function M.build(ctx)
       x = valueX,
       y = thisY + 4,
       w = valueW - 6,
-      text = tostring(row.value),
+      text = row.smart and function() return row.value end or tostring(row.value),
       color = COLOR_THEME_PRIMARY1,
       align = RIGHT,
       font = SMLSIZE
@@ -438,8 +451,15 @@ function M.build(ctx)
 end
 
 function M.wakeup()
-  -- Automatic rebuild is disabled to allow scrolling.
-  -- The user must click the RELOAD button to update values.
+  -- Invalidation/recovery updates only the two cached Smart rows, without a rebuild
+  -- that would reset scrolling. Other diagnostic values still wait for RELOAD.
+  local session = getSession()
+  local unavailable = session and session.smartfuel and session.smartfuel.unavailable == true
+  if (unavailable or state.smartUnavailable) and state.rows[7] and state.rows[8] then
+    state.rows[7].value = formatSensor(SMART_SENSORS.fuel)
+    state.rows[8].value = formatSensor(SMART_SENSORS.consumption)
+  end
+  state.smartUnavailable = unavailable
 end
 
 function M.paint()
@@ -453,6 +473,7 @@ function M.closePage()
   state.loaded = false
   state.rows = {}
   state.rowSignature = ""
+  state.smartUnavailable = false
   state.requestRebuild = nil
   state.lastRefreshAt = 0
   state.loading = false

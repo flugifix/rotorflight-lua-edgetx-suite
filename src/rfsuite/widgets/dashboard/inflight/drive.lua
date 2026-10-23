@@ -67,8 +67,7 @@ end
 -- file. Re-exported here because the widget side, the screens and the probes reach for it
 -- through this module and there is no reason to make them all learn a second name.
 M.DEFAULTS = Setup.DEFAULTS
-M.PULSE_MS_MIN = Setup.PULSE_MS_MIN
-M.PULSE_MS_MAX = Setup.PULSE_MS_MAX
+M.PULSE_MS = Setup.PULSE_MS
 M.CHANNEL_MIN = Setup.CHANNEL_MIN
 M.CHANNEL_MAX = Setup.CHANNEL_MAX
 M.GVAR_MAX_INDEX = Setup.GVAR_MAX_INDEX
@@ -187,6 +186,7 @@ function M.newDrive(radio, settings)
   self.trimPulseUntil = nil
   self.trimCoolUntil = 0
   self.trims = nil
+  self.rowTrims = nil
   self.trimsResolved = false
   self.trimScan = nil
   self.navDir = 0
@@ -310,9 +310,9 @@ end
 -- forget a pressed object without that event -- lv_indev_wait_release() turns the release into
 -- LV_EVENT_PRESS_LOST, lv_indev_reset() sends it nowhere -- and EdgeTX's touch read calls both,
 -- under a backlight that is off and under a "Disable Touch" special function. Neither event
--- reaches a Lua script, so a lost release cannot be seen from here, only outlived. The flight
--- controller steps a held value every 200 ms after the first 100 ms (fc/rc_adjustments.c), so
--- five seconds is 25 steps -- the same bound, for the same reason, as the dashboard's limit on
+-- reaches a Lua script, so a lost release cannot be seen from here, only outlived. A held control
+-- steps once per pulse and gap (see fastTick), about two steps a second, so five seconds is ten
+-- steps or so -- the same bound, for the same reason, as the dashboard's limit on
 -- how long a held step keeps a rebuild waiting (HOLD_DEFER_SECONDS in widgets/dashboard/runtime.lua).
 -- A pilot who wants more presses again.
 local HOLD_LIMIT_SECONDS = 5
@@ -322,11 +322,22 @@ local HOLD_LIMIT_TICKS = HOLD_LIMIT_SECONDS * 100
 -- and the pilot has to be able to read why the steps stopped.
 local HOLD_LIMIT_NOTICE_TICKS = 300
 
+--- The fixed pulse length M.PULSE_MS, in ticks of the radio's 10 ms clock. The logical switch on
+-- the value line ends the plateau the board sees, and a variable cleared before that switch's
+-- window is over cuts the window or cancels it.
 function Drive:pulseTicks()
-  local ms = tonumber(self.settings and self.settings.pulse_ms) or M.DEFAULTS.pulse_ms
-  local ticks = math.floor((ms / 10) + 0.5)
-  if ticks < 1 then ticks = 1 end
-  return ticks
+  return math.floor((M.PULSE_MS / 10) + 0.5)
+end
+
+-- The gap at 0 after every pulse, in the same ticks; see Setup.PULSE_GAP_MS.
+local GAP_TICKS = math.floor(Setup.PULSE_GAP_MS / 10 + 0.5)
+
+--- Whether a step control or a trim owns the value variable: a magnitude on it, or a step control
+-- held. A held control's variable goes back to 0 between its pulses (see fastTick), and a bank or a
+-- row moved in that gap would put the next pulse on another parameter while the finger is still
+-- on the one it pressed -- so the hold counts as busy from its press to its release.
+function Drive:valueBusy()
+  return self.written ~= 0 or self.holdRow ~= nil
 end
 
 --- The function id sitting in the current cell, or nil when the cell carries no slot.
@@ -441,7 +452,7 @@ function Drive:ensureBankArmed()
   local want = self.bankValues and self.bankValues[self.bank]
   if want == nil then return false, "no_band" end
   if self.bankWritten == want then return false, "armed" end
-  if self.written ~= 0 then return false, "busy" end
+  if self:valueBusy() then return false, "busy" end
   return self:armBank(self.bank)
 end
 
@@ -452,7 +463,7 @@ end
 function Drive:setBank(bank)
   bank = tonumber(bank)
   if bank == nil or bank < 1 or bank > Functions.BANK_COUNT then return false, "range" end
-  if self.written ~= 0 then return false, "busy" end
+  if self:valueBusy() then return false, "busy" end
   self.bank = bank
   self.row = 1
   return self:armBank(bank)
@@ -481,7 +492,7 @@ end
 -- parameters, which is the one state a tuning surface must never be in.
 function Drive:navigate(up)
   if not self:tuning() then return false, "not_live" end
-  if self.written ~= 0 then return false, "busy" end
+  if self:valueBusy() then return false, "busy" end
   local bank, row = self:stepCell(up)
   if bank == nil then return false, "empty" end
   self.bank = bank
@@ -501,9 +512,10 @@ function Drive:selectRow(row)
   return true
 end
 
---- A press on the minus or plus control. Refused inside the cool-down, which is one pulse long:
--- the flight controller needs REPEAT_DELAY between steps, and two taps closer together than that
--- would look like one held position rather than two steps.
+--- A press on the minus or plus control. Refused inside the cool-down, the gap after a pulse: the
+-- logical switch on the value line re-arms only once it has seen the variable at 0, and the board
+-- does not sample the channel for REPEAT_DELAY after a step, so two pulses closer together than
+-- that would read as one plateau rather than two steps.
 --
 -- Refused just the same while a TRIM pulse or the cool-down after it is running. Both paths drive
 -- the one value variable, so a tap inside a trim's pulse either replaces its magnitude before the
@@ -542,16 +554,10 @@ end
 --- The release of a held control. The value falls away at the end of the pulse rather than here,
 -- so a control tapped faster than the flight controller's own trigger delay still produces a step.
 --
--- A hold outlasts its pulse, and the cool-down the pulse's end set runs out under the finger. So
--- the release of a hold starts one of its own: without it the next press -- a tap, or a trim on
--- the next pass -- would put its magnitude straight onto the hold's, with no 0 between them for
--- the flight controller to see. For a tap, and a hold let go inside its pulse, the pulse's own end
--- sets the later cool-down and this changes nothing.
+-- Nothing else is needed for the next press. A hold puts its magnitude on the variable one pulse
+-- at a time with the gap at 0 between them (fastTick), so whenever it is let go, either a pulse
+-- is running and sets the gap when it ends, or the gap is already running.
 function Drive:release()
-  if self.holdRow ~= nil then
-    local cool = self.radio.now() + self:pulseTicks()
-    if cool > (self.coolUntil or 0) then self.coolUntil = cool end
-  end
   self.holdRow = nil
   self.holdUp = nil
   self.holdSince = nil
@@ -930,7 +936,7 @@ end
 function Drive:navigateRow(up)
   if not self:bankTrimActive() then return self:navigate(up) end
   if not self:tuning() then return false, "not_live" end
-  if self.written ~= 0 then return false, "busy" end
+  if self:valueBusy() then return false, "busy" end
   local total = Functions.ROW_COUNT
   local index = self.row - 1
   for _ = 1, total do
@@ -954,7 +960,7 @@ end
 -- another parameter. A bank with no assigned cell at all is stepped over rather than shown empty.
 function Drive:navigateBank(up)
   if not self:tuning() then return false, "not_live" end
-  if self.written ~= 0 then return false, "busy" end
+  if self:valueBusy() then return false, "busy" end
   local count = Functions.BANK_COUNT
   local bank = self.bank
   for _ = 1, count do
@@ -1070,11 +1076,23 @@ function Drive:pollTrims()
     return nil, nil
   end
 
+  -- M.get clears this route when settings change and the trim block must be walked again.
+  -- Resolve the six row assignments after the sliced trim walk and legacy migration finish.
+  -- Keep the sampling order and cadence; only the repeated stored-position lookup goes away.
+  local rowTrims = self.rowTrims
+  if rowTrims == nil then
+    rowTrims = {}
+    for row = 1, Functions.ROW_COUNT do
+      rowTrims[row] = Setup.trimEntry(trims, settings.rowTrim and settings.rowTrim[row])
+    end
+    self.rowTrims = rowTrims
+  end
+
   -- The row with the largest magnitude wins when two trims are held at once. It is a choice
   -- rather than a reading: the shipped template SUMS its trims onto the value channel, and a sum
   -- of two lands outside every window, so two trims there produce no step at all.
   for row = 1, Functions.ROW_COUNT do
-    local trim = Setup.trimEntry(trims, settings.rowTrim and settings.rowTrim[row])
+    local trim = rowTrims[row]
     if trim then
       if self.radio.switchValue(trim.plus) == true then return row, true end
       if self.radio.switchValue(trim.minus) == true then return row, false end
@@ -1095,9 +1113,11 @@ end
 -- while, and very inaccurately".
 --
 -- So one press is one pulse, which is what the touch control has always done: the magnitude goes
--- on at the edge and stays on for `pulse_ms` -- until the first pass at or after it -- however
--- early the trim is let go. The cool-down after a pulse is the same length, so two presses closer
--- together than the board can tell apart are one step and not an arbitrary number of them.
+-- on at the edge and stays on for M.PULSE_MS -- until the first pass at or after it -- however
+-- early the trim is let go, and the logical switch on the value line lets 200 ms of it through. The
+-- cool-down after a pulse is the gap the next pulse needs to be counted as a new one
+-- (Setup.PULSE_GAP_MS), so two presses closer together than that are one step and not an arbitrary
+-- number of them.
 --
 -- And one press is ONE pulse however long the trim is held: a held trim does not repeat, and a
 -- new step needs the trim to come up and go down again. A trim is read once per widget pass, and a
@@ -1284,7 +1304,7 @@ function Drive:fastTick(now)
   if self.pulseUntil ~= nil and now >= self.pulseUntil then
     self.pulseUntil = nil
     self.pulseCode = nil
-    self.coolUntil = now + self:pulseTicks()
+    self.coolUntil = now + GAP_TICKS
   end
   -- The trim's pulse ends on its own clock, and it ends on every pass, whatever the trims were
   -- doing on it. A magnitude left standing by a pulse nothing is looking at any more is precisely
@@ -1292,7 +1312,7 @@ function Drive:fastTick(now)
   if self.trimPulseUntil ~= nil and now >= self.trimPulseUntil then
     self.trimPulseUntil = nil
     self.trimCode = nil
-    self.trimCoolUntil = now + self:pulseTicks()
+    self.trimCoolUntil = now + GAP_TICKS
   end
   -- A hold that has outlived HOLD_LIMIT_SECONDS is let go here, whether or not its release was
   -- ever reported, and the magnitude falls away below on the same pass. A release that does arrive
@@ -1304,11 +1324,22 @@ function Drive:fastTick(now)
     self:refuseStep("hold_limit", now, HOLD_LIMIT_NOTICE_TICKS)
   end
 
+  -- A held control repeats one pulse at a time. The logical switch on the value line ends every
+  -- plateau after 200 ms however long the variable stands, so a magnitude simply left on the wire
+  -- would step once and never again; it goes back to 0 for the gap, and the next pulse is a new
+  -- plateau the board counts once. The repeat is the pulse plus the gap plus however late the
+  -- passes run, slower and less even than the board's own 200 ms, and every step is exactly one.
+  if self.holdRow ~= nil and self.pulseUntil == nil and now >= (self.coolUntil or 0) then
+    local code = Functions.rowCode(self.holdRow, self.holdUp, self.rowValues, self.bank)
+    if code ~= nil then
+      self.pulseCode = code
+      self.pulseUntil = now + self:pulseTicks()
+    end
+  end
+
   local want = 0
   if self.pulseUntil ~= nil then
     want = self.pulseCode or 0
-  elseif self.holdRow ~= nil then
-    want = Functions.rowCode(self.holdRow, self.holdUp, self.rowValues, self.bank) or 0
   elseif self.trimPulseUntil ~= nil then
     want = self.trimCode or 0
   end
@@ -1488,7 +1519,7 @@ local function settingsSignature(settings)
     tostring(settings.radio_enabled), tostring(settings.model_enabled), tostring(settings.switch),
     tostring(settings.bank_ch),
     tostring(settings.value_ch), tostring(settings.bank_gvar), tostring(settings.value_gvar),
-    tostring(settings.pulse_ms), tostring(settings.trims), tostring(settings.backup_profile),
+    tostring(settings.trims), tostring(settings.backup_profile),
     tostring(settings.trim_mode), tostring(settings.nav_trim), tostring(settings.bank_trim),
     tostring(settings.adj_trim),
     tostring(settings.set_mode), tostring(settings.step),
@@ -1639,6 +1670,7 @@ function M.get(widget)
   elseif drive._signature ~= signature then
     drive:cleanup(false)
     drive.settings = settings
+    drive.rowTrims = nil
     drive._signature = signature
     -- and the setup verdict with it: a changed channel, variable or trim is a different question
     -- for the walk, and the answer gates the drive as well as filling the line on the screen.

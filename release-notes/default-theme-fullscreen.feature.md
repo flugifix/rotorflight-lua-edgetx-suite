@@ -1,0 +1,2 @@
+- **Default dashboard fullscreen (`widgets/dashboard/themes/default`)**:
+  - Show the Default dashboard in fullscreen with its existing layouts, quick menu, exit controls and disarmed Main menu access for #729.

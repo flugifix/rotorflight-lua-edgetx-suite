@@ -44,7 +44,14 @@ when the local source under *Power* → *Preferences* is *VOLTAGE* or *COMBINED*
 - The radio's own estimate takes the cell count configured on the flight controller's *Battery*
   page. Where that is 0 (auto-detect), it takes the count the flight controller detected when the
   pack was plugged in (sensor `Cel#`), and infers one from the pack voltage only where neither is
-  available.
+  available. Inferring the count needs the flight controller's maximum cell voltage in
+  its valid 1.00–5.00 V range. If that value is missing or invalid, the local estimate
+  becomes unavailable: the suite clears its current fuel and estimated consumption instead
+  of keeping an old reading. It resumes after valid data returns and voltage stabilizes.
+  Configured or detected cell counts still take priority; their estimate does not need
+  the maximum-cell-voltage fallback. Firmware-computed fuel is unaffected.
+- While the local estimate is unavailable, updates to the radio's `SmFt` and `SmCp` sensors
+  stop. Readers outside the suite follow the radio's normal telemetry timeout.
 
 ## Related
 

@@ -44,6 +44,14 @@ local function getEnv()
   return Env or nil
 end
 
+-- EdgeTX's instruction-limit stop. lib/log_sink.lua publishes the check; it is not loaded in every
+-- Lua state this queue runs in, so the same test stands in for it when it is absent.
+local function isCpuLimitError(err)
+  local fn = _G.rfsuite and _G.rfsuite.isCpuLimitError
+  if type(fn) == "function" then return fn(err) == true end
+  return type(err) == "string" and string.find(err, "CPU limit", 1, true) ~= nil
+end
+
 local DEFAULT_RETRY_BACKOFF_SECONDS = 1.0
 local DEFAULT_TIMEOUT_SECONDS = 2.0
 local DEFAULT_COMMAND_INTERVAL_SECONDS = 0.25
@@ -507,8 +515,21 @@ function Queue:processQueue(now)
       self.logf("debug", "rx cmd=%s src=cache len=%s client=%s",
         tostring(msg.command), tostring(bufLen(buf)), tostring(msg.client))
     end
+    -- A handler belongs to whoever queued the message -- often a page that has closed since --
+    -- and the message is released whatever the handler does. Called bare, a raise left the
+    -- message current: an answered request was sent again, a message given up was given up
+    -- again on every call, and everything queued behind it waited. The same holds for the
+    -- simulator and wire replies below and for the errorHandler where a message is given up.
+    -- EdgeTX's instruction-limit stop is the exception: it is raised on, as before, so the message
+    -- stays current and is handled again on a later pass.
     if type(msg.processReply) == "function" then
-      msg.processReply(msg, buf)
+      local ok, herr = pcall(msg.processReply, msg, buf)
+      if not ok then
+        if isCpuLimitError(herr) then error(herr, 0) end
+        self.logf("warn", "reply handler raised cmd=%s rw=%s client=%s src=cache err=%s",
+          tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
+          tostring(herr))
+      end
     end
     self.currentMessage = nil
     self.currentMessageStartTime = nil
@@ -524,8 +545,25 @@ function Queue:processQueue(now)
   local commandInterval = tonumber(msg.commandInterval) or self.commandInterval
   local maxRetries = tonumber(msg.maxRetries) or self.maxRetries
 
+  -- Nothing is sent in the simulator, so every message is answered here or not at all. A write
+  -- that carries no simulatorResponse gets an empty reply, which is what the board answers a
+  -- write with. A read without one cannot be answered: it ends through its errorHandler with
+  -- "no_simulator_response", so a caller waiting for it is told, and the warn line keeps the
+  -- missing fixture visible. Dropping either with no callback left the caller waiting for ever.
   if simulatorMode then
-    if not msg.simulatorResponse then
+    local simBuf = msg.simulatorResponse
+    if not simBuf and isWriteMessage(msg) then simBuf = {} end
+    if not simBuf then
+      msg.__retryCount = self.retryCount
+      -- Called as the give-up path below calls it: under pcall, an instruction-limit stop raised on.
+      if type(msg.errorHandler) == "function" then
+        local ok, herr = pcall(msg.errorHandler, msg, "no_simulator_response")
+        if not ok then
+          if isCpuLimitError(herr) then error(herr, 0) end
+          self.logf("warn", "error handler raised cmd=%s rw=R client=%s reason=no_simulator_response err=%s",
+            tostring(msg.command), tostring(msg.client), tostring(herr))
+        end
+      end
       self.logf("warn", "no simulator response cmd=%s client=%s",
         tostring(msg.command), tostring(msg.client))
       self.currentMessage = nil
@@ -538,11 +576,11 @@ function Queue:processQueue(now)
       self.lastTimeCommandSent = now
       self.retryCount = self.retryCount + 1
       msg.__retryCount = self.retryCount
-      msg.buf = msg.simulatorResponse
+      msg.buf = simBuf
       -- The third source, and it is tagged for the same reason `cache` is. This buffer is the
-      -- api module's own simulatorResponse constant: nothing was sent and no board answered. A
-      -- line calling it a reply would say the transport works on a card where the transport was
-      -- never used.
+      -- api module's own simulatorResponse constant, or the empty reply of a write that has none:
+      -- nothing was sent and no board answered. A line calling it a reply would say the transport
+      -- works on a card where the transport was never used.
       if self.wanted("trace") then
         self.logf("trace", "rx cmd=%s src=sim len=%s client=%s %s",
           tostring(msg.command), tostring(bufLen(msg.buf)), tostring(msg.client),
@@ -552,7 +590,13 @@ function Queue:processQueue(now)
           tostring(msg.command), tostring(bufLen(msg.buf)), tostring(msg.client))
       end
       if type(msg.processReply) == "function" then
-        msg.processReply(msg, msg.buf)
+        local ok, herr = pcall(msg.processReply, msg, msg.buf)
+        if not ok then
+          if isCpuLimitError(herr) then error(herr, 0) end
+          self.logf("warn", "reply handler raised cmd=%s rw=%s client=%s src=sim err=%s",
+            tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
+            tostring(herr))
+        end
       end
       self.currentMessage = nil
       self.currentMessageStartTime = nil
@@ -641,7 +685,13 @@ function Queue:processQueue(now)
     end
     if type(msg.processReply) == "function" then
       msg.__retryCount = self.retryCount
-      msg.processReply(msg, msg.buf)
+      local ok, herr = pcall(msg.processReply, msg, msg.buf)
+      if not ok then
+        if isCpuLimitError(herr) then error(herr, 0) end
+        self.logf("warn", "reply handler raised cmd=%s rw=%s client=%s src=wire err=%s",
+          tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
+          tostring(herr))
+      end
     end
     if not simulatorMode then
       drainAfterSuccess(self, msg.command)
@@ -721,7 +771,13 @@ function Queue:processQueue(now)
     -- same two reasons.
     local reason = self.errorReplySeen and "refused" or "max_retries"
     if type(msg.errorHandler) == "function" then
-      msg.errorHandler(msg, reason)
+      local ok, herr = pcall(msg.errorHandler, msg, reason)
+      if not ok then
+        if isCpuLimitError(herr) then error(herr, 0) end
+        self.logf("warn", "error handler raised cmd=%s rw=%s client=%s reason=%s err=%s",
+          tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client), reason,
+          tostring(herr))
+      end
     end
     self.logf("warn", "%s cmd=%s rw=%s client=%s attempts=%d%s",
       reason == "refused" and "refused" or "max retries",

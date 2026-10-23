@@ -258,6 +258,12 @@ local SPECIAL_FUNCTION_COUNT = 64
 -- What getSwitchIndex answers for the always-on switch. Nothing measured here depends on the
 -- value, only on its being a number other than zero.
 local ALWAYS_ON_SWITCH_INDEX = 121
+-- What getSwitchIndex answers for L01, the first logical switch. Any number clear of the switch
+-- positions below and of ALWAYS_ON_SWITCH_INDEX will do.
+local FIRST_LOGICAL_SWITCH_INDEX = 200
+-- The logical switch the in-flight overlay's value line is switched by (0 based: L64), as its
+-- setup writes it: |GV2| > 0, delay 0.1 s, duration 0.2 s (widgets/dashboard/inflight/setup.lua).
+local INFLIGHT_PULSE_LS = 63
 -- The switch positions the radio offers, indexed by their switch source number, and which of them
 -- are held. The names matter: the in-flight tuning drive finds the trim block by walking this list
 -- for the run of positions ending in plus and minus, so the arrows in front of it are spelled the
@@ -423,8 +429,17 @@ function Stubs.install(root)
         source = _G.MIXSRC_MAX,
         weight = 1024 + GVAR_SOURCE_BASE + gvar,
         multiplex = 0,
-        switch = 0
+        -- The value line is switched by the logical switch that times each pulse; the enable
+        -- line is always on.
+        switch = (channel == 11) and (FIRST_LOGICAL_SWITCH_INDEX + INFLIGHT_PULSE_LS) or 0
       }
+    end,
+    getLogicalSwitch = function(index)
+      if index == INFLIGHT_PULSE_LS then
+        return { func = _G.LS_FUNC_APOS, v1 = GVAR_SOURCE_BASE + 2, v2 = 0, v3 = 0, ["and"] = 0,
+          delay = 1, duration = 2 }
+      end
+      return { func = 0, v1 = 0, v2 = 0, v3 = 0, ["and"] = 0, delay = 0, duration = 0 }
     end,
     -- 31 is TRIM_MODE_NONE: no trim of this flight mode moves a stick's neutral.
     getFlightMode = function(_mode)
@@ -434,8 +449,12 @@ function Stubs.install(root)
 
   _G.getSwitchIndex = function(name)
     if name == "ON" then return ALWAYS_ON_SWITCH_INDEX end
+    if name == "L01" then return FIRST_LOGICAL_SWITCH_INDEX end
     return nil
   end
+
+  -- radio/src/myeeprom.h, LogicalSwitchesFunctions: |v| > offset.
+  _G.LS_FUNC_APOS = 5
 
   _G.setShmVar = function(id, value)
     Stubs.shmVars[id] = value

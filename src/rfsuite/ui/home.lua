@@ -1472,6 +1472,7 @@ local function returnToRootOnDisconnect()
 
   closeHelpDialogIfOpen()
   state.pendingMenuOpen = nil
+  state.pendingPageOpen = nil
   -- Nothing can be saved over a link that has gone, so the question is not asked: the page goes
   -- with the rest of the menu.
   state.leavePromptVisible = false
@@ -2449,7 +2450,8 @@ local function stepGridBuild(grid)
       i == state.focusIndex,
       getCardPressHandler(card.id),
       card.data.enabled,
-      card.data.lockedByArm and ARMED_BADGE_TEXT or nil
+      card.data.lockedByArm and ARMED_BADGE_TEXT or nil,
+      card.data.done == true
     )
     grid.slots[i] = card
     grid.pos = { card = i + 1, tiles = #tiles }
@@ -3059,7 +3061,8 @@ local function buildScene()
           flatIndex == state.focusIndex,
           getRootCardPressHandler(group.id, card.id),
           card.data.enabled,
-          card.data.lockedByArm and ARMED_BADGE_TEXT or nil
+          card.data.lockedByArm and ARMED_BADGE_TEXT or nil,
+          card.data.done == true
         )
 
         local bottom = tileY + tileSize
@@ -3091,6 +3094,9 @@ local function buildScene()
         -- finished -- needs the same route the back key takes. Passing it here rather than having
         -- the page reach into the menu keeps the navigation in one place.
         requestClose = function() leaveCurrentPage(false) end,
+        -- Another page by its menu id, for a page that points the pilot on (a wizard that sends
+        -- him to the page where a setting lives). Parked like a tile press and taken by run().
+        openPage = function(menuId) if type(menuId) == "string" then state.pendingPageOpen = menuId end end,
         -- The unsaved-changes question, for a page about to drop an edit of its own accord.
         askUnsavedChanges = function(answers) return askUnsavedChanges(pageModule, answers) end,
         openHelp = function(message, title, subtitle)
@@ -3199,7 +3205,8 @@ local function buildScene()
           i == state.focusIndex,
           getCardPressHandler(card.id),
           card.data.enabled,
-          card.data.lockedByArm and ARMED_BADGE_TEXT or nil
+          card.data.lockedByArm and ARMED_BADGE_TEXT or nil,
+          card.data.done == true
         )
       end
     end
@@ -3262,34 +3269,45 @@ end
 
 -- ── Init / Run ────────────────────────────────────────────────────────────────
 
+-- The entry ids that lead from a root entry down to the page `menuId`, depth first through the
+-- menus the entries open. A menu is entered once per search, so a manifest that links menus in a
+-- circle cannot loop.
+local function findMenuPath(menuId, entries, path, seen)
+  local menus = manifest and manifest.menus or {}
+  for i = 1, #entries do
+    local entry = entries[i]
+    path[#path + 1] = entry.id
+    if entry.menuId == menuId then return true end
+    local sub = entry.menuId and menus[entry.menuId] or nil
+    if type(sub) == "table" and type(sub.pages) == "table" and not seen[entry.menuId] then
+      seen[entry.menuId] = true
+      if findMenuPath(menuId, sub.pages, path, seen) then return true end
+    end
+    path[#path] = nil
+  end
+  return false
+end
+
 -- Open the page `menuId` the way the pilot would reach it: through the root entry that leads to
--- it, and for a page one level down, through that entry's own menu. The page's conditions are
--- the menu's -- a page the menu would not offer now is not opened -- and a step that fails puts
--- the menu back at its root. Answers whether the page is open.
+-- it, then through each menu below it. The page's conditions are the menu's -- a page the menu
+-- would not offer now is not opened -- and a step that fails puts the menu back at its root.
+-- Answers whether the page is open.
 local function openLanding(menuId)
   local sections = manifest and manifest.sections or {}
-  local menus = manifest and manifest.menus or {}
   for i = 1, #sections do
     local section = sections[i]
-    local entries = section.pages or {}
-    for j = 1, #entries do
-      local entry = entries[j]
-      if entry.menuId == menuId then
-        return state.menu.openRootEntry(section.id, entry.id) == true
+    local path = {}
+    if findMenuPath(menuId, section.pages or {}, path, {}) then
+      local open = state.menu.openRootEntry(section.id, path[1]) == true
+      for k = 2, #path do
+        if not open then break end
+        open = state.menu.openEntry(path[k]) == true
       end
-      local sub = entry.menuId and menus[entry.menuId] or nil
-      local subEntries = type(sub) == "table" and sub.pages or {}
-      for k = 1, #subEntries do
-        if subEntries[k].menuId == menuId then
-          if state.menu.openRootEntry(section.id, entry.id) and state.menu.openEntry(subEntries[k].id) then
-            return true
-          end
-          while not state.menu.isRoot() do
-            if not state.menu.goBack() then break end
-          end
-          return false
-        end
+      if open then return true end
+      while not state.menu.isRoot() do
+        if not state.menu.goBack() then break end
       end
+      return false
     end
   end
   return false
@@ -3385,6 +3403,7 @@ function M.init(opts)
   state.armedFeedbackText = nil
   state.connStatusNoticeVisible = false
   state.pendingMenuOpen = nil
+  state.pendingPageOpen = nil
   state.isClosing = false
   state.closeTicks = nil
   state.closeMemStart = nil
@@ -3664,6 +3683,7 @@ function M.run(event, touchState)
         state.leavePromptVisible = false
         state.leavePromptAnswers = nil
         state.pendingMenuOpen = nil
+        state.pendingPageOpen = nil
         closeHelpDialogIfOpen()
         
         -- Release all pages in the registry (queues override/rollback resets). Its writes stay --
@@ -3862,6 +3882,32 @@ function M.run(event, touchState)
       scheduleBuildUI(true)
     end
 
+    -- A page asked for another page (ctx.openPage). Leaving goes up to the root, so the page on
+    -- screen is released by the next build like any page that is left; the target is then opened
+    -- through its root entry, so its conditions are the menu's. A page the menu would not offer
+    -- now is not opened, and the menu stays at its root.
+    if state.pendingPageOpen and not state.isClosing and not transitionedMenuThisTick and
+      (state.leavePromptVisible or state.saveOverlayVisible or state.pendingSaveAction ~= nil) then
+      -- A save prompt or a save in progress belongs to the page on screen; leaving under it would
+      -- answer it for the wrong page. The request is dropped, and the pilot asks again.
+      logf("info", "page %s not opened, a save prompt or save is in progress", tostring(state.pendingPageOpen))
+      state.pendingPageOpen = nil
+    end
+    if state.pendingPageOpen and not state.isClosing and not transitionedMenuThisTick then
+      local target = state.pendingPageOpen
+      state.pendingPageOpen = nil
+      while not state.menu.isRoot() do
+        if not state.menu.goBack() then break end
+      end
+      if not openLanding(target) then
+        logf("info", "page %s not offered, the menu stays at its root", target)
+      end
+      state.landingMenuId = nil
+      state.focusIndex = 0
+      transitionedMenuThisTick = true
+      scheduleBuildUI(true)
+    end
+
     -- A menu whose entries are made while the tool runs -- the dashboard theme menu, one tile per
     -- installed theme -- is built one step per pass (app/menu_registry.lua, stepCurrentMenu), so
     -- no single pass carries the whole build: opened from the dashboard, every pass is a widget
@@ -4035,9 +4081,17 @@ function M.run(event, touchState)
       -- hand-over is available here exactly as it is in the dashboard widget, and is preferred
       -- over the sensor for the same reason.
       local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
-      local fuel = (smart and smart.fuel)
-        or (Sensors and (Sensors.getValue("smartfuel") or Sensors.getValue("fuel")))
-        or -1
+      local fuel
+      if smart and smart.unavailable then
+        fuel = -1
+        state.telemetryState.fuel = nil
+        state.telemetryState.consumedMah = nil
+        state.telemetryState.fuelTelemetrySeen = false
+      else
+        fuel = (smart and smart.fuel)
+          or (Sensors and (Sensors.getValue("smartfuel") or Sensors.getValue("fuel")))
+          or -1
+      end
 
       if type(fuel) == "number" and fuel >= 0 then
         if fuel > 100 then fuel = 100 end
@@ -4143,7 +4197,9 @@ function M.run(event, touchState)
             ts.escLoad = nil
           end
           ts.altitude = Sensors.getValue("altitude") or ts.altitude
-          ts.consumedMah = (smart and smart.consumption) or Sensors.getValue("smartconsumption") or ts.consumedMah
+          if not (smart and smart.unavailable) then
+            ts.consumedMah = (smart and smart.consumption) or Sensors.getValue("smartconsumption") or ts.consumedMah
+          end
 
           local cellCountValue = Sensors.getValue("battery_cell_count")
           if type(cellCountValue) == "number" and cellCountValue > 0 then

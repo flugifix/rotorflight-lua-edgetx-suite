@@ -159,6 +159,7 @@ return {
       dashboard_settings = { name = "Settings" },
       dashboard_overrides = { name = "Per-Model Settings" },
       dashboard_inflight = { name = "In-Flight Tuning" },
+      dashboard_keys = { name = "Keys" },
       dashboard_quick_menu = { name = "Quick Settings" },
       dashboard_standby = { name = "Standby screen" },
       profile = { name = "Profile" },
@@ -523,7 +524,7 @@ return {
         why_brake_fmt = "Stops bounce back %d%%. More P brakes them (or add B).",
         why_ok = "The heli answers the stick as asked.",
         help_title = "Tune Advisor",
-        help_message = "Fly in rate mode, then read the advice one axis at a time; make one change and fly again.\nAxis: Roll, Pitch or Yaw; everything below is for this axis.\nFlight data: rate flight measured so far, and whether it is collecting now.\nResponse: how fast the heli turns compared with what the stick asks.\nStops: how far it bounces back after you centre the stick.\nSuggested changes: what to change, named by page and setting.\nWhy: the reason for each change.\n*: clears the collected data after asking."
+        help_message = "Fly in rate mode, then read the advice one axis at a time; make one change and fly again.\n#n (heading): the rate profile the advice is for.\nAxis: Roll, Pitch or Yaw; everything below is for this axis.\nFlight data: rate flight measured so far, and whether it is collecting now.\nResponse: how fast the heli turns compared with what the stick asks.\nStops: how far it bounces back after you centre the stick.\nSuggested changes: what to change, named by page and setting.\nWhy: the reason for each change.\n*: clears the collected data after asking."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
         title = "Cyclic Behaviour",
@@ -744,7 +745,8 @@ return {
         flag_set_name = "Set Model Name on the Radio",
         loading_title = "Model Configuration",
         loading_message = "Reading from the flight controller",
-        help_message = "Settings the flight controller stores for this model: three parameters it applies to the radio's timers or global variables on connect, and the radio-side features it asks for. Whether those are applied is decided here too. From RF 2.3 the craft itself carries the model-name decision; on older firmware the radio does, and the switch then applies to every model on this radio."
+        save_error_title = "Error",
+        help_message = "Model settings stored on the flight controller and applied to the radio on connect.\nParameter 1 Type: None, a timer or a global variable; slots 2 and 3 work the same.\nParameter 1 Value: Value for the timer or global variable; slots 2 and 3 work the same.\nSynchronize Model Parameters: Apply parameters on connect, for every model on this radio.\nSet Model Name on the Radio: Rename the radio's model after the craft; from RF 2.3 the craft stores this choice, on older firmware this radio does, for every model."
       },
       settings_general = {
         section_safety = "Safety & Prompts",
@@ -1879,8 +1881,8 @@ return {
         save_error_title = "Error",
         save_error_message = "Save failed",
         help_title = "Modes Help",
-        help_p1 = "Flight modes allow you to map radio channels (AUX) to specific features on the flight controller (such as Stabilize, Governor, etc.).",
-        help_p2 = "Add a range, select the channel and logic, and adjust the Start and End number fields. Press 'Set' to automatically configure limits using your current radio switch position."
+        help_p1 = "Ranges activate modes while AUX channels are in their windows. Save writes all changed ranges.",
+        help_p2 = "Mode: Shows ranges for a mode from the flight controller's list.\nActive ranges: Shows this mode's range count out of the controller's slots.\nRange: Each row sets AUX (AUTO: move a switch to detect its channel), OR/AND with other ranges and Start/End in us; + Add adds a range, X deletes it.\nSet: Uses the current channel position +/-50 us as the window after confirmation."
       },
       setup_adjustments = {
         title = "Adjustments",
@@ -2475,7 +2477,8 @@ return {
         reserve_alert = "Reserve alert",
         reserve_target = "Reserve target",
         loading_title = "Loading",
-        loading_message = "Reading SmartFuel config"
+        loading_message = "Reading SmartFuel config",
+        help_message = "Read-only snapshot; Reload reads the configuration again.\nSmart Fuel: Remaining fuel after reserve; - while the local estimate is unavailable. Clears and recovers without Reload.\nSmart mAh: Estimated consumption; - while unavailable. Other rows keep their snapshot until Reload."
       },
       diagnostics_elrs_link = {
         title = "ELRS Telemetry",
@@ -2624,12 +2627,11 @@ return {
         enabled = "In-flight tuning on this radio",
         enabled_note = "The master switch. Each model has one of its own under Setup > Controls, and both have to be on.",
         switch = "Interlock switch",
-        wiring_note = "One mixer line per channel: MAX at the named variable's weight, added, no switch.",
+        wiring_note = "One mixer line per channel: MAX at the variable's weight, added; a logical switch on the value line.",
         bank_ch = "Enable channel",
         value_ch = "Value channel",
         bank_gvar = "Enable variable",
         value_gvar = "Value variable",
-        pulse_ms = "Pulse length (ms)",
         trims = "Drive rows from the trims",
         trims_unreadable = "This radio did not report its trims, so no trim can be chosen here.",
         row_1 = "Row 1",
@@ -2669,6 +2671,8 @@ return {
         plan_same_gvar = "The two variables have to be different.",
         plan_same_channel = "The two channels have to be different.",
         plan_unsupported = "This radio does not offer the mixer writer.",
+        plan_ls = "Pulse timer",
+        plan_no_ls = "No logical switch is free to time the pulses; empty one first.",
         plan_done = "Model set up",
         plan_nothing = "The model already carries this setup; nothing to write.",
         plan_failed = "The radio refused part of the setup",
@@ -2685,7 +2689,6 @@ return {
         save_error_title = "Error",
         save_error_message = "Save failed",
         pointer_fc = "The set layout, the step size and the undo profile are in Setup > Controls.",
-        pulse_ms_note = "One press is one step. The board counts nothing before 100 ms of stillness and repeats only after 200 ms more.",
         gvar_in_use = "is in use by",
         gvar_name_clash = "is not the variable this setup drives"
       },
@@ -2745,6 +2748,29 @@ return {
         saved_message = "In-flight tuning settings saved",
         save_error_title = "Error",
         save_error_message = "Save failed"
+      },
+      settings_dashboard_keys = {
+        page_down = "PAGE >",
+        page_up = "PAGE <",
+        mdl = "MDL",
+        sys = "SYS",
+        tele = "TELE",
+        theme = "Theme",
+        none = "Nothing",
+        menu = "Quick menu",
+        suite_tool = "Main menu",
+        flight_log = "Flight log",
+        exit = "Exit fullscreen",
+        saved_title = "Saved",
+        saved_message = "Keys saved",
+        save_error_title = "Error",
+        save_error_message = "Save failed",
+        help_intro = "Keys: radio-wide shortcuts. On the theme itself, Theme uses its binding; unbound keys do nothing. Nothing disables a key.",
+        help_page_down = "PAGE >: Quick menu by default; it opens and closes the menu. On Theme: the theme's binding, else nothing on the theme itself.",
+        help_page_up = "PAGE <: Quick menu by default; it opens and closes the menu. On Theme: the theme's binding, else nothing on the theme itself.",
+        help_mdl = "MDL: Theme by default.",
+        help_sys = "SYS: Main menu by default; it requires a disarmed model.",
+        help_tele = "TELE: Quick menu by default. Flight log requires its preview switch.",
       },
       settings_dashboard_quick_menu = {
         place = "Position %d",
@@ -3012,8 +3038,6 @@ return {
         stat_vbec_max = "BEC voltage max",
         stat_sags = "Voltage sags",
         stat_sag_min = "Deepest sag",
-        battery_for_next = "Battery for the next flight",
-        battery_none = "None",
         battery_id = "Id",
         battery_name = "Name",
         battery_capacity = "Capacity",
@@ -3041,16 +3065,15 @@ return {
         error_id_required = "A pack needs an id",
         setting_enabled = "Write a flight log",
         setting_min_seconds = "Minimum flight length",
-        setting_ask_on_connect = "Ask which pack after connecting",
         setting_set_fc_profile = "Set the pack's battery profile",
         help_title = "Flight Log Help",
         help_p1 = "A line per flight is written to the card once the log is switched on under Settings.",
         help_p2 = "A flight is the time between arming and disarming. An arm shorter than the minimum is not one.",
-        help_p3 = "A pack picked under Batteries goes into the flight's line and its first flight counts one cycle.",
+        help_p3 = "Batteries: the pack is picked on the dashboard; the flight's line records it, its first flight counts one cycle.",
         help_p4 = "A pack with no model list is offered for every craft, otherwise only for the names listed.",
         help_p5 = "Both files are plain text. An edit rewrites one line and leaves the rest of the file alone.",
         help_p6 = "The tab you are on is marked. Editing a pack takes the whole screen until Save or Cancel.",
-        help_p7 = "With the prompt on, the dashboard offers this model's packs in fullscreen once after connecting.",
+        help_p7 = "Write a flight log: the dashboard then asks for this model's pack after connecting. Packs are picked only there.",
         help_p8 = "A pick in the prompt can also set the flight controller's battery profile, never while armed.",
         help_p9 = "Cells: where the flight controller keeps a cell count per profile, it has to match it too; 0 leaves it out. A tie sets no profile."
       },
@@ -3087,10 +3110,10 @@ return {
         page_prev = "Previous",
         page_next = "Next",
         list_range = "%d-%d of %d",
-        help_p1 = "Telemetry Logs: Displays flight statistics recorded on your radio SD card.",
-        help_p2 = "Log Location: Logs are loaded from /LOGS/, /LOGS/rfsuite/ and /LOGS/rfsuite/telemetry/.",
-        help_p3 = "Summary Cards: Shows Min, Max, and Average values for Battery Voltage, Current, Headspeed, and ESC Temperature. A value the log has no column for is shown as dashes.",
-        help_p4 = "Graph: Plots up to four telemetry columns of the selected log against flight time, with zoom, paging and a cursor readout.",
+        help_p1 = "Lists EdgeTX telemetry logs on the SD card in /LOGS/, /LOGS/rfsuite/ and /LOGS/rfsuite/telemetry/, newest first, 25 at a time (Previous/Next).",
+        help_p2 = "View: Opens the log summary with Flight Time, Voltage, Current, Headspeed and ESC Temp; missing columns give --.",
+        help_p3 = "Graph: Plots the log over time.",
+        help_p4 = "Curve: Choose up to four columns, or one of the offered sets (Power, Battery, Link, Governor), then press Show; zoom, paging and a cursor readout work on the plotted flight.",
         graph_open = "Graph",
         graph_title = "Graph",
         graph_select = "Select Sensors",
@@ -3110,7 +3133,10 @@ return {
         tpl_power = "Power",
         tpl_battery = "Battery",
         tpl_link = "Link",
-        tpl_governor = "Governor"
+        tpl_governor = "Governor",
+        date_unknown = "Unknown",
+        model_default = "Default",
+        parse_failed = "Failed to parse log file"
       }
     }
   },

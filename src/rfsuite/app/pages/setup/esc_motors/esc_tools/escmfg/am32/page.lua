@@ -302,6 +302,7 @@ local function queuePostSaveReset(target, nextState)
     isWrite = true,
     simulatorResponse = {},
     processReply = function()
+      if not ui.runtime then return end
       ui.connState = nextState
       ui.connTimer = nowSeconds()
       if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
@@ -309,6 +310,7 @@ local function queuePostSaveReset(target, nextState)
       end
     end,
     errorHandler = function()
+      if not ui.runtime then return end
       ui.connState = 5
       ui.saving = false
       ui.notice = {
@@ -375,6 +377,7 @@ local function queueAm32Write(requestRebuild)
     payload = EscParametersAm32Api.buildWritePayload(writeData),
     isWrite = true,
     processReply = function(self, buf)
+      if not ui.runtime then return end
       ui.dirty = false
       ui.connState = 6
       ui.connTimer = nowSeconds()
@@ -383,6 +386,7 @@ local function queueAm32Write(requestRebuild)
       end
     end,
     errorHandler = function()
+      if not ui.runtime then return end
       ui.saving = false
       ui.notice = {
         title = pageText(ui.i18n, "save_failed_title", "Save Failed"),
