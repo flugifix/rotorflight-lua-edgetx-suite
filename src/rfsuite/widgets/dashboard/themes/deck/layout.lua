@@ -178,7 +178,7 @@ local CARD_PAD = 4
 -- at the left end of the header, before the model name: this one opens the quick menu, the one beside
 -- it the suite's tool (L.toolControl). There is no close control -- a long press on RTN leaves
 -- full screen in the firmware, and init.lua declares that (`fullscreenExit`), which is what the
--- host's theme check reads. The page keys open the menu by the binding L.KEYS gives them.
+-- host's theme check reads. With PAGE on Theme radio-wide, the page keys open the menu only when bound.
 --
 -- The press is a `button`, and everything drawn over it is a LINE: on the full screen surface a
 -- rectangle takes a press and hands it to its PARENT, so a rectangle over the button would
@@ -315,20 +315,23 @@ L.KEY_ACTIONS = {
   { id = "exit",       action = "exitFullscreen" },
 }
 
--- The keys the pilot can bind: the host's name in `ctx.keys`, the stored key, the theme's default
--- and `host`, what the host does with the key when the theme binds nothing -- nothing, for every
--- key, so the page keys' quick menu is bound here rather than left to the host. SYS opens the
--- suite's tool and TELE the quick menu by default, the two places a pilot on the full screen goes
--- most.
+-- The keys the pilot can bind: the host's name in `ctx.keys`, the stored key, and the
+-- unbound default. `host` is the choice that leaves `ctx.keys` empty; all rows start on Nothing.
+-- Quick menu is an explicit binding, including on PAGE keys. The radio-wide defaults of
+-- Settings > Dashboard > Keys (widgets/dashboard/keys.lua) are where PAGE, SYS and TELE get theirs.
+-- A binding here acts only while that page leaves the key on Theme.
+--
+-- The stored keys are `theme_key_*`. The `key_*` ones an earlier build of this page wrote stay in
+-- the pilot's files and bind nothing any more, so a key starts unbound here.
 --
 -- Not rows of L.SETTINGS: those are what the drawing reads, and the page probe holds each of them
 -- to a change in the picture. A key binding draws nothing.
 L.KEYS = {
-  { key = "pageDown", pref = "key_page_down", default = "menu",       host = "none" },
-  { key = "pageUp",   pref = "key_page_up",   default = "menu",       host = "none" },
-  { key = "mdl",      pref = "key_mdl",       default = "none",       host = "none" },
-  { key = "sys",      pref = "key_sys",       default = "suite_tool", host = "none" },
-  { key = "tele",     pref = "key_tele",      default = "menu",       host = "none" },
+  { key = "pageDown", pref = "theme_key_page_down", default = "none", host = "none" },
+  { key = "pageUp",   pref = "theme_key_page_up",   default = "none", host = "none" },
+  { key = "mdl",      pref = "theme_key_mdl",       default = "none", host = "none" },
+  { key = "sys",      pref = "theme_key_sys",       default = "none", host = "none" },
+  { key = "tele",     pref = "theme_key_tele",      default = "none", host = "none" },
 }
 
 local KEY_ACTION_IDS = {}

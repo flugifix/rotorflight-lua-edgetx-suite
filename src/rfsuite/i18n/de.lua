@@ -2896,6 +2896,7 @@ return {
         deck_kind_arm = "Scharf/entschärft",
         urban_key = "Taste",
         urban_key_none = "Nichts",
+        urban_key_global = "(global)",
         urban_key_menu = "Suite: Schnellmenü",
         urban_key_tools = "Theme: Abstimmung",
         urban_key_link = "Theme: ELRS-Link",
