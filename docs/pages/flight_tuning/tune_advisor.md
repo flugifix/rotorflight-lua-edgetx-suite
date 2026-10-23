@@ -75,7 +75,8 @@ The suggestions follow these rules:
   and on Reload. Until the first read answers, or if it fails, suggestions name the per-axis rows as before;
   a later read that fails keeps the previous answer. The profile switch is seen through the radio's rate
   profile telemetry sensor, otherwise the profile known at connect is used. Without that sensor, a switch
-  made on the transmitter is not seen; Reload reads again. Feed-forward and P/cut-off suggestions stay per axis.
+  made on the transmitter is not seen: Reload reads the rates again, but the #n in the heading keeps the profile
+  known at connect. Feed-forward and P/cut-off suggestions stay per axis.
   Roll and Pitch are still judged separately, so their cards can ask for different changes to the one *Cyclic*
   row: change it once, fly, and check both again.
 
