@@ -90,6 +90,12 @@ local STUBS = {
   ["tasks/msp/api/dataflash_summary.lua"] = function()
     return { command = 70, simulatorResponse = {}, parse = function() return nil end }
   end,
+  ["tasks/msp/api/battery_profile.lua"] = function()
+    return { writeCommand = 1, buildWritePayload = function() return {} end }
+  end,
+  ["tasks/msp/api/eeprom_write.lua"] = function()
+    return { writeCommand = 250, buildWritePayload = function() return {} end }
+  end,
 }
 
 local function requireStub(path)
@@ -137,7 +143,12 @@ local Confirm = loadTreeModule("widgets/dashboard/confirm_menu.lua")
 -- ---------------------------------------------------------------------------
 
 local function newWidget()
-  return { zone = { w = 800, h = 480 }, state = {}, built = true, renderKey = "test" }
+  -- Every confirmation-flow case models a connected widget: its FC-side modules are stubbed
+  -- above, and the product offers FC writes only after the connection chain is ready.
+  return {
+    zone = { w = 800, h = 480 }, state = {}, connectionReady = true,
+    built = true, renderKey = "test",
+  }
 end
 
 local function resetWorld()
@@ -243,6 +254,40 @@ local function caseNoQuestionRefuses(menu)
   return nil
 end
 
+-- An offline widget neither offers the row nor accepts a stale press on it. The record is built
+-- first to model a menu that was already on screen when the connection stopped being ready.
+local function caseOfflineHidesAndRefuses(menu)
+  resetWorld()
+  local w = newWidget()
+  local entry = menu.entry(w, "erase_blackbox")
+  w.connectionReady = nil
+  if menu.visible(w, entry) then return "the erase row is visible while offline" end
+  menu.run(w, entry)
+  if #adds ~= 0 then return "an offline press queued " .. #adds .. " message(s)" end
+  if exits ~= 0 then return "an offline press left full screen" end
+  if Views.pendingConfirm(w) ~= nil then return "an offline press raised a confirmation" end
+  return nil
+end
+
+-- The battery profile page takes its presses itself, past the row's own condition, and a key or a
+-- lost link can leave it on screen before the connection is ready: a press there queues nothing.
+local function caseProfilePressNeedsReadyConnection(menu)
+  resetWorld()
+  local w = newWidget()
+  w.state.battery_config = { batteryCapacity_0 = 1000 }
+  local entry = menu.entry(w, "battery_profile")
+  if entry == nil then return "no battery profile entry" end
+  local options = entry.options(w)
+  if #options ~= 1 then return "expected one profile option, got " .. #options end
+  options[1].press(function() end)
+  if #adds == 0 then return "a connected press queued nothing, so the case cannot see a refusal" end
+  resetWorld()
+  w.connectionReady = nil
+  options[1].press(function() end)
+  if #adds ~= 0 then return "a press before the connection is ready queued " .. #adds .. " message(s)" end
+  return nil
+end
+
 -- Agreeing closes the question before the work's own action runs, so a theme's `after` -- handed
 -- in through ctx.run -- acts on the surface the press was written for, the menu, and not on the
 -- question that was on top of it.
@@ -298,6 +343,8 @@ local CASES = {
   { id = "CANCEL runs nothing",                      fn = caseCancelRunsNothing },
   { id = "ERASE performs the press",                 fn = caseAgreePerforms },
   { id = "an unraisable question refuses the press", fn = caseNoQuestionRefuses },
+  { id = "offline hides and refuses the erase row",  fn = caseOfflineHidesAndRefuses },
+  { id = "a profile press needs a ready connection",  fn = caseProfilePressNeedsReadyConnection },
   { id = "agreeing closes the question first",       fn = caseAgreeClosesQuestionFirst },
   { id = "a choice confirm guards its options",      fn = caseChoiceConfirmGuardsOptions },
 }

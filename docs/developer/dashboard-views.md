@@ -188,8 +188,9 @@ battery profile's press queues nothing while the model is armed.
 | --- | --- |
 | `previewInflightTuning` | the in-flight tuning preview switch is on and the widget carries the overlay's state for this model |
 | `batteryPickHasPacks` | the model is disarmed and the battery registry has a pack for it |
-| `modelDisarmed` | the model is not armed (`state.armed`); MAIN MENU and ERASE BLACKBOX ask it |
-| `batteryProfileOffered` | the model is not armed and the flight controller's battery configuration (`state.battery_config`) has a capacity above zero for at least one of the six profiles; the BATTERY PROFILE row asks it |
+| `modelDisarmed` | the model is not armed (`state.armed`); MAIN MENU asks it |
+| `connectionReadyDisarmed` | the connection is ready (`connectionReady`) and the model is not armed; ERASE BLACKBOX asks it, so a menu a key opens before the connection is ready offers no write |
+| `batteryProfileOffered` | `connectionReadyDisarmed`, and the flight controller's battery configuration (`state.battery_config`) has a capacity above zero for at least one of the six profiles; the BATTERY PROFILE row asks it |
 | `flightLogOffered` | the *Flight Log* preview switch is on (`preferences.general.preview_flight_log`, the switch the tool's own menu asks) and the model is not armed |
 | `batteryPickPending` | the battery prompt is waiting for an answer (`state.batteryPick.pending`) and no pick has been recorded yet |
 
@@ -343,18 +344,21 @@ has no widget of its own to pass. It is the `ctx` a fullscreen theme's build rec
 
 ## Keys
 
-Only a widget with a base layer answers keys; without one the widget answers none, as before.
+Radio-wide choices on [Keys](../pages/settings/dashboard/keys.md) apply with or without a base
+layer, including the SYS/Main menu and the TELE and PAGE/Quick menu defaults. Keys on **Theme** return false
+without a base layer, so LVGL can handle them. With the base showing and no view on top,
+`ctx.keys[key]` wins over `init.keys[key]`; an unbound key is consumed without navigation.
 `views.key(widget, event)` is called for every event of a fullscreen pass that is not idle,
 ahead of the job the pass may run, so a key is not lost to a build. It acts on the release edge
 of six keys, read from the firmware's `EVT_VIRTUAL_NEXT_PAGE`, `EVT_VIRTUAL_PREV_PAGE`,
 `EVT_VIRTUAL_EXIT`, `EVT_MODEL_BREAK`, `EVT_SYS_BREAK` and `EVT_TELEM_BREAK` where the radio
-defines them, and on nothing else:
+defines them, and on nothing else. For keys on **Theme**:
 
 | Key | A view on top | The base layer showing |
 | --- | --- | --- |
-| PAGE down / up | the menu on top: `closeView`; any other view: `openView:menu` | the theme's `ctx.keys.pageDown` / `pageUp`, else `openView:menu` |
+| PAGE down / up | the menu on top: `closeView`; any other view: `openView:menu` | the theme's `ctx.keys.pageDown` / `pageUp`, then `init.keys` for that key, else nothing |
 | RTN | the view module's `back(widget)` if it has one, else `closeView` | the theme's `ctx.keys.exit`, else nothing |
-| MDL, SYS, TELE | nothing | the theme's `ctx.keys.mdl` / `sys` / `tele`, else nothing |
+| MDL, SYS, TELE | nothing, unless bound to the view on top | the theme's `ctx.keys.mdl` / `sys` / `tele`, then `init.keys` for that key, else nothing |
 
 A key the theme binds to `openView:<id>`, RTN aside, is `closeView` while that view is on top,
 whatever the first column says for it: a bound key toggles its view.
@@ -366,8 +370,10 @@ do nothing, as before.
 The picker's `back` is its close box — the prompt is dismissed and `done` follows — because a
 plain `closeView` would leave `pending` standing and the picker would open again on the next
 pass. A long press on RTN leaves full screen in the firmware; Lua sees only its press edge,
-which is not answered. Keys are not answered while the in-flight tuning surface, the connect
-splash or no theme is on screen.
+which is not answered. Keys are not answered while the in-flight tuning surface or suite tool
+is up. Radio-wide choices and manifest bindings to the widget's own actions and views already
+act on the connection splash, before the theme's build supplies `ctx.keys`; a manifest binding
+to one of the theme's views acts once the connection is ready and those views are registered.
 
 ## `rfsuite.batteryPick`
 
