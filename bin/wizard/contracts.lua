@@ -618,7 +618,42 @@ return function(h)
     eq(rows[1].get(),string.format(L.linkPair,333,8),"S02 CRSF shows FC rate and ratio")
     eq(rows[2].get(),string.format(L.linkModulePair,"500 Hz","1:4"),"S02 CRSF shows module rate and ratio")
     eq(rows[3].get(),"task status","S02 task status text is displayed")
-    local probes=#starts;rows[4].press();drain(w)
+    local difference=rows[4]
+    check(difference.kind=="notice" and type(difference.get)=="function","S02 ELRS has one full-width difference line")
+    if difference.get then
+      local function differs(rate,ratio,expected)
+        session.crsfTelemetryConfig={mode=1,linkRate=rate,linkRatio=ratio}
+        eq(difference.get(),expected,"S02 ELRS names only differing known values")
+      end
+      differs(333,8,string.format(L.linkDiffPair,333,8,500,4))
+      differs(500,8,string.format(L.linkDiffRatio,8,4))
+      differs(333,4,string.format(L.linkDiffRate,333,500))
+      differs(500,4,"")
+      differs(1000,4,string.format(L.linkDiffRate,1000,500))
+      for _,label in ipairs({"D500","D250"}) do
+        session.elrsLinkConfig.packetRateLabel=label
+        session.elrsLinkConfig.packetRate=tonumber(string.sub(label,2))
+        session.crsfTelemetryConfig={mode=1,linkRate=1000,linkRatio=4}
+        eq(difference.get(),"","S02 "..label.." vs FC 1000 has no rate difference")
+        session.crsfTelemetryConfig.linkRatio=8
+        eq(difference.get(),string.format(L.linkDiffRatio,8,4),"S02 "..label.." compares only the ratio")
+      end
+      session.elrsLinkConfig.packetRateLabel="D500"
+      session.elrsLinkConfig.packetRate=500
+      session.crsfTelemetryConfig={mode=1,linkRate=500,linkRatio=4}
+      eq(difference.get(),"","S02 D500 vs FC 500 does not compare the rate")
+      session.elrsLinkConfig.packetRateLabel="500 Hz"
+      for _,key in ipairs({"linkRate","linkRatio"}) do
+        session.crsfTelemetryConfig[key]=nil;eq(difference.get(),"","S02 unknown FC values have no difference line")
+        session.crsfTelemetryConfig[key]=key=="linkRate" and 333 or 8
+      end
+      for _,key in ipairs({"packetRate","telemetryRatio"}) do
+        local old=session.elrsLinkConfig[key];session.elrsLinkConfig[key]=nil
+        eq(difference.get(),"","S02 unknown module values have no difference line")
+        session.elrsLinkConfig[key]=old
+      end
+    end
+    local probes=#starts;rows[#rows].press();drain(w)
     eq(#starts,probes+1,"S02 Probe starts a fresh task after the automatic probe")
     eq(starts[#starts],0,"S02 Probe starts MODE_PROBE")
     local before=wakes;h.measure("ELRS wakeup",function() w:tick() end);check(wakes>before,"S02 current ELRS card wakes its task")
@@ -668,7 +703,22 @@ return function(h)
           if item.y and item.h then check(item.y+item.h<=size[2],"S02 ELRS widgets fit "..size[1].."x"..size[2]) end
           if item.type=="choice" then check(item.y+item.h<firstButtonY,"S02 ELRS pickers stay above navigation") end
         end
-        eq(#card.rows,4,"S02 ELRS cards have four rows at every screen size")
+        eq(#card.rows,i==index and 5 or 4,"S02 ELRS overview includes one difference row")
+        if i==index and difference.get then
+          local notice
+          for _,item in ipairs(scene.children) do if item.text==difference.get then notice=item end end
+          check(notice and notice.w>=size[1]*.54,"S02 difference uses the full form width")
+          if notice then
+            check(notice.y+notice.h<=firstButtonY-27,"S02 difference stays above footer and navigation")
+            local buttonY
+            for _,item in ipairs(scene.children) do if item.text==L.linkProbe then buttonY=item.y end end
+            check(buttonY and notice.y+notice.h<=buttonY,"S02 difference stays above Probe")
+            session.crsfTelemetryConfig={mode=1,linkRate=500,linkRatio=4}
+            check(notice.visible()==false,"S02 equal settings hide the difference line reactively")
+            session.crsfTelemetryConfig={mode=1,linkRate=333,linkRatio=8}
+            check(notice.visible()==true,"S02 differing settings show the line reactively")
+          end
+        end
       end
     end
     w.card=index+1
@@ -1393,6 +1443,54 @@ return function(h)
         if node.y then check(node.y>=0 and node.y+(node.h or 0)<=ctx.h,"CORE loading nodes fit screen") end
       end
       page.onClose()
+    end
+  end)
+  case("REVIEW.cleanup-single-attempt",function()
+    -- Use the real queue and the messages produced by each cleanup path.
+    local Queue=load("tasks/msp/queue.lua")
+    for _,kind in ipairs({"servo","mixer","motor","trial"}) do
+      for _,replyAt in ipairs({1,0}) do
+        local w=world();settle(w)
+        if kind=="trial" then
+          w.bus.apis.esc_sensor_trial=h.api("esc_sensor_trial")
+          w.trial={api="esc_sensor_trial"};w:stopTrial()
+        else
+          if kind=="motor" then w.motorHold={index=0}
+          else w.holds={{kind=kind,index=kind=="servo" and 0 or 1}} end
+          w:release()
+        end
+        local message=table.remove(q.messages,1)
+        check(message and message.client=="helicopter-cleanup","REVIEW OFF uses cleanup owner")
+        eq(message.maxRetries,0,"REVIEW "..kind.." OFF must disable retries")
+        local sends,replies,errors=0,0,0
+        local originalReply,originalError=message.processReply,message.errorHandler
+        message.processReply=function(m,b) replies=replies+1;if originalReply then originalReply(m,b) end end
+        message.errorHandler=function(m,reason) errors=errors+1;if originalError then originalError(m,reason) end end
+        local queue=Queue.new({sendRequest=function() sends=sends+1;return true end,
+          pollReply=function() if replyAt>0 and sends==replyAt then return message.command,{} end end})
+        queue._simDetectDone=true;queue._simDetected=false
+        local started=getTime();queue:add(message);queue:processQueue()
+        eq(sends,1,"REVIEW OFF first attempt is sent")
+        h.advance(199);queue:processQueue();eq(sends,1,"REVIEW OFF waits for the two-second timeout")
+        for _=1,210 do
+          h.advance(1);queue:processQueue()
+          if queue:isProcessed() then break end
+        end
+        eq(sends,1,"REVIEW "..kind.." OFF is sent exactly once")
+        eq(replies,replyAt>0 and 1 or 0,"REVIEW OFF acknowledges once only after a reply")
+        eq(errors,replyAt>0 and 0 or 1,"REVIEW OFF fails once when its only reply is lost")
+        check(queue:isProcessed(),"REVIEW OFF queue settles")
+        if replyAt==0 then check(getTime()-started>=200,"REVIEW single OFF attempt gets its full timeout") end
+        if kind~="trial" then
+          eq(w.cleanupPending,0,"REVIEW cleanup accounting settles after one attempt")
+          check((w.cleanupFailed==true)==(replyAt==0),"REVIEW a lost OFF reply fails cleanup closed")
+          if replyAt==0 then
+            -- The controller consumes the queue failure on its next frame.
+            w:tick()
+            check(not w:usable() and w.locked,"REVIEW unanswered OFF keeps edits and arming locked")
+          end
+        end
+      end
     end
   end)
   case("REVIEW.cleanup-before-unlock",function()

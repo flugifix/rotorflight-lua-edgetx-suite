@@ -288,6 +288,8 @@ function M.new(runtime, transport, mathModule, labels)
     end
     dispatch=function()
       local job=jobs[index]
+      -- MSP replies match only the command (tasks/msp/queue.lua): a late retry ACK could
+      -- confirm the next OFF even if it never arrived. One attempt keeps a lost reply a cleanup failure.
       q:add({command=job.command,payload=job.payload,isWrite=true,client="helicopter-cleanup",
         maxRetries=0,processReply=function(m) complete(m,nil) end,errorHandler=complete})
     end

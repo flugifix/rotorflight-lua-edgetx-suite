@@ -22,6 +22,9 @@ function M.new(w, ctx, diagrams)
   local controlH = large and 44 or width >= 480 and 32 or 26
   local rowY = large and 108 or height <= 272 and 76 or 88
   local rowH = large and 52 or math.min(controlH+6, math.floor((height-2*controlH-31-rowY)/3))
+  if card and card.link=="overview" and not large then
+    rowH=math.min(rowH,math.floor((height-2*controlH-31-rowY)/4))
+  end
   local all = {}
   local title = w.historyMode and w.L.historyTitle or (w.overview or w.modelPreparationCard or w.recoveryCard) and w.L.name or string.format("%d/19  %s", w.step, w.L.steps[w.step] or w.L.name)
   if attitudeCard and not (w.historyMode or w.overview or w.confirmExit or w.modelPreparationCard or w.recoveryCard) then
@@ -131,7 +134,11 @@ function M.new(w, ctx, diagrams)
       local y = rowY + (i-1)*rowH
       local function editable() return current() and (not r.enabled or r.enabled()) end
       local function enabled() return w.canEdit == true and editable() end
-      if r.kind == "button" or r.kind == "hold" then
+      if r.kind == "notice" then
+        all[#all+1]=label(formX,y+3,formW,r.get)
+        all[#all].h=math.min(controlH,rowH-3)
+        all[#all].visible=function() return r.get()~="" end
+      elseif r.kind == "button" or r.kind == "hold" then
         button(formX, y, formW, r.label, function() if enabled() and w:usable() then r.press() end end, enabled,
           r.kind == "hold" and "momentaryButton" or "button", r.release)
       else
@@ -144,7 +151,7 @@ function M.new(w, ctx, diagrams)
         end
         if r.kind == "value" then
           all[#all + 1] = label(formX+formW-editW, y+3, editW, function() return tostring(r.get() or "--") end)
-          all[#all].h=controlH
+          all[#all].h=card.link=="overview" and math.min(controlH,rowH-3) or controlH
         elseif r.kind == "toggle" then
           local function set(v) w:applyEdit(function() if editable() then r.set(v) end end) end
           all[#all + 1] = { type = "button", x = formX+formW-editW, y = y, w = editW, h = controlH,

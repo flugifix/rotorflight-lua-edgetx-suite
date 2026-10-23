@@ -29,6 +29,9 @@ The ELRS cards apply only to a serial CRSF receiver (provider 9, serial receiver
 with CRSF telemetry. Otherwise their rows explain that the link is unavailable and cannot start
 reads or writes. STATUS freshness and the wizard's arming lock guard the task; leaving either card
 cancels its pending FC requests. A request already sent to the FC cannot be undone by leaving.
+When both sides are known, one extra status line names only differing rates and/or telemetry
+ratios, for example **Differs: FC 1:8, module 1:4**. Matching or unknown values add no line.
+For DVDA module modes such as D500 and D250, only the telemetry ratio is compared.
 
 ## Loading and fresh status
 

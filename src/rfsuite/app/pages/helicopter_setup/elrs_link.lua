@@ -61,6 +61,20 @@ function M.new(w)
     w.linkNotice=text
     if text then w.message=text end
   end
+  function c:difference()
+    if not self:applies() then return "" end
+    local fc,link=w:session().crsfTelemetryConfig,w:session().elrsLinkConfig
+    if not fc or not link or not fc.linkRate or not fc.linkRatio
+      or not link.packetRate or not link.telemetryRatio then return "" end
+    -- The task parses the digits in DVDA labels as rate, not the on-air packet rate.
+    local dvda=string.match(link.packetRateLabel or "","^D%d+")~=nil
+    local rate,ratio=not dvda and fc.linkRate~=link.packetRate,fc.linkRatio~=link.telemetryRatio
+    if rate and ratio then
+      return string.format(L.linkDiffPair,fc.linkRate,fc.linkRatio,link.packetRate,link.telemetryRatio)
+    elseif rate then return string.format(L.linkDiffRate,fc.linkRate,link.packetRate)
+    elseif ratio then return string.format(L.linkDiffRatio,fc.linkRatio,link.telemetryRatio) end
+    return ""
+  end
   function c:status()
     if not self:applies() then return L.linkNeedsCrsf end
     return w.linkNotice or task.getStatusText(w.i18n)
@@ -136,6 +150,7 @@ function M.new(w)
       self.card.rows={w:value(L.linkFc,function() return self:boardText() end),
         w:value(L.linkModule,function() return self:moduleText() end),
         w:value(L.linkStatus,function() return self:status() end),
+        {kind="notice",get=function() return self:difference() end},
         w:button(L.linkProbe,function() self:probe() end,function() return self:applies() and not self:busy() end)}
     else
       self.card.rows={
