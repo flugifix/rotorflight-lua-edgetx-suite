@@ -228,6 +228,7 @@ jobs:
         run: |
           lua5.3 bin/dashboard/verify_voltage_bounds.lua
           lua5.3 bin/themes/verify_voltage_save.lua
+          lua5.3 bin/dashboard/verify_offline_theme_settings.lua
 
   board-auto-align:
     # Setup > Alignment drives the flight controller's board auto-alignment. This runs the

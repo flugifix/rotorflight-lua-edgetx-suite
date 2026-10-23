@@ -64,9 +64,10 @@ The model's own theme settings are edited under
 - **The post-flight screen keeps the model's theme after the battery is unplugged.** A model with
   a theme of its own shows that theme on its post-flight screen also once the flight controller
   has stopped answering, until the next flight controller connects, also when a Setup > Power
-  page is opened from the dashboard in that stretch. Usually the model's own theme
-  settings stay too; where the widget had to let go of the model's file as the link went, only the
-  theme is kept, and in that stretch it uses the standard values.
+  page is opened from the dashboard in that stretch. Its model-specific theme settings stay
+  too, even when the disconnected session has released the model's file. Settings the model
+  does not override still follow the radio's values. The next connection clears this retained
+  context before loading another model.
 - **The theme list is kept between visits.** The page lists the theme folders when it is first
   opened and keeps that list while the tool runs, until the tool drops the page from its cache of
   recently opened pages. The page has no *Reload*: a theme copied onto the card while the tool is
