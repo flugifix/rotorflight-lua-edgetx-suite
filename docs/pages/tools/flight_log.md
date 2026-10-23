@@ -201,6 +201,16 @@ The battery registry beside it is the same kind of file, one pack per line, and 
 kept by hand as readily as from the editor: an edit made here rewrites the one line it changes and
 leaves comments, unknown fields and the rest of the file exactly as they were.
 
+A pack can leave the registry without this page knowing which models had it chosen: deleted or
+given a new id in the file itself, or on this page while another model is connected. So the pack a
+flight is about to be logged against is looked up in the registry at the disarm first. Where no
+pack carries that id any more, the flight's line is written with its battery column empty, no
+cycle is counted, the log names the id at warning level, and the model's choice of that pack is
+cleared, so its later flights are not logged against an id that names nothing. Where the link was
+lost during the flight, the choice is cleared on the card at the next logged flight that ends with
+the link up. A registry the card does not read whole is not judged: the flight is logged against
+the chosen id as before.
+
 A flight counts as logged only once the file on the card has grown by exactly the bytes its line
 takes. Where the card will not say how large a file on it is, the flight is not written at all and
 the log says which step refused, rather than a line being appended to a file whose contents cannot
