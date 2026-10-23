@@ -219,7 +219,7 @@ local function resolve(t)
         assert(type(x)=="number" and type(y)=="number" and x>=0 and y>=0,"LVGL pos returns two coordinates")
         out[k]={x,y}
       elseif k=="pts" then out[k]=resolve(v())
-      elseif k=="text" or k=="get" or k=="active" or k=="visible" or k=="color" then out[k] = v()
+      elseif k=="text" or k=="get" or k=="active" or k=="visible" or k=="color" or k=="file" then out[k] = v()
       elseif k=="display" and t.get then out[k] = v(t.get()) end
     elseif type(v)=="table" then out[k] = resolve(v)
     else out[k] = v end
@@ -345,9 +345,11 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
           if item.type=="image" then
             images=images+1
             -- The picture ships in the package, and its frame keeps the 220x160 aspect.
-            local rel=string.match(item.file or "","^/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
+            local file=item.file
+            if type(file)=="function" then file=file() end
+            local rel=string.match(file or "","^/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
             local f=rel and io.open("src/rfsuite/"..rel,"rb")
-            check(f~=nil,name.." picture "..tostring(item.file).." exists in the package")
+            check(f~=nil,name.." picture "..tostring(file).." exists in the package")
             if f then f:close() end
             check(item.w>0 and item.h>0 and math.abs(item.w*160-item.h*220)<=220,name.." picture frame keeps its aspect on "..size[1].."x"..size[2])
           end
@@ -355,29 +357,45 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
         check(lines>=4 or images==1,name.." illustrates the task on "..size[1].."x"..size[2])
       end
       if c==1 then exported[#exported+1] = {step=n,name=name,width=size[1],height=size[2],children=resolve(job.children)} end
-      if n==1 and c==3 then
+      if n==1 and c==4 then
         w.data.attitude={roll=0,pitch=0,yaw=0};w.attitudeAt=getTime()
         w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
       end
-      if (n==1 and c>1) or (n==2 and c>1) or (n==6 and c==2) or (n==7 and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
+      if (n==1 and c>1) or (n==2 and c>1) or (n==6 and c>1) or (n==7 and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
         exported[#exported+1] = {step=n,name=name,task=c,width=size[1],height=size[2],children=resolve(job.children)}
       end
       if n==6 then
-        local old=w.data.mixer_config.swash_type
-        w.data.mixer_config.swash_type=2
-        if c==1 then exported[#exported+1] = {step=n,name=name,task="120",width=size[1],height=size[2],children=resolve(job.children)} end
-        local p120=resolve(job.children)
-        w.data.mixer_config.swash_type=5
-        local p90=resolve(job.children)
-        local changed=false
-        for i,item in ipairs(p120) do
-          if item.type=="line" and type(job.children[i].pts)=="function" then
-            if item.pts[2][1]~=p90[i].pts[2][1] or item.pts[2][2]~=p90[i].pts[2][2] then changed=true end
-            eq(#item.pts,#p90[i].pts,"changing swash geometry preserves point count")
+        -- Each of the three cards swaps its picture in the existing scene when its value moves.
+        local m=w.data.mixer_config
+        local field=({"swash_type","main_rotor_dir","tail_rotor_mode"})[c]
+        local values=({{2,5},{0,1},{0,1}})[c]
+        local old=m[field]
+        local function picture()
+          for _,item in ipairs(job.children) do
+            if item.type=="image" then return type(item.file)=="function" and item.file() or item.file end
           end
         end
-        check(changed,"changing swash type updates existing geometry")
-        w.data.mixer_config.swash_type=old
+        local count=#job.children
+        m[field]=values[1]
+        if c==1 then exported[#exported+1] = {step=n,name=name,task="120",width=size[1],height=size[2],children=resolve(job.children)} end
+        local first=picture()
+        m[field]=values[2]
+        local second=picture()
+        check(first~=nil and second~=nil and first~=second,"swash card "..c.." picture follows "..field)
+        eq(#job.children,count,"changing "..field.." keeps the scene")
+        m[field]=old
+        if c==1 then
+          -- swash_type 1..6 is Direct, 120, 135, 140, 90L, 90V; a motor tail drops servo 4.
+          local tail,rear=m.tail_rotor_mode,w.swashRear
+          m.tail_rotor_mode=1;w.swashRear=false
+          for s,want in ipairs({"swash%-direct","swash%-120%-front","swash%-135%-front","swash%-140%-front","swash%-90l","swash%-90v"}) do
+            m.swash_type=s
+            check(string.find(picture() or "","/"..want.."%.png$")~=nil,"swash type "..s.." shows its own layout")
+          end
+          m.swash_type=3;w.swashRear=true;m.tail_rotor_mode=0
+          check(string.find(picture() or "","/swash%-135%-rear%-tail%.png$")~=nil,"servo 1 behind and a servo tail show in the layout")
+          m.tail_rotor_mode,w.swashRear=tail,rear;m[field]=old
+        end
       end
     end
   end
@@ -392,11 +410,11 @@ for _,size in ipairs({{320,240},{480,272},{800,480}}) do
       w.data.mode_ranges.mode_ranges[1]={id=0,auxChannelIndex=0,range={start=1800,["end"]=2100}}
       w.data.rc={channels={1500,1500,1500,1500,1500,value}}
     end},
-    {name="sensors",card=3,group="attitude-roll",values={0,30,0,-30,0},apply=function(value)
+    {name="sensors",card=4,group="attitude-roll",values={0,30,0,-30,0},apply=function(value)
       w.data.attitude={roll=value,pitch=0,yaw=0};w.attitudeAt=getTime()
       w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
     end},
-    {name="sensors",card=3,group="attitude-pitch",values={0,30,0,-30,0},apply=function(value)
+    {name="sensors",card=4,group="attitude-pitch",values={0,30,0,-30,0},apply=function(value)
       w.data.attitude={roll=0,pitch=value,yaw=0};w.attitudeAt=getTime()
       w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
     end},

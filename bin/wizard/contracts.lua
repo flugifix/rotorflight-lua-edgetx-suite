@@ -271,34 +271,35 @@ return function(h)
     print("TRANSPORT retained jobs: "..#w.bus.jobs.." after "..(#q.sent-sent).." completed polling messages")
   end)
   case("S01.manual-alignment-fallback",function()
-    local w=world();settle(w);w.step=1;step(w,"sensors");w.card=2
+    local w=world();settle(w);w.step=1;step(w,"sensors");w.card=3
     local before=w.data.board_alignment_config.yaw_degrees
     h.setFailCommand(0x5F13);w:startTrial("board_auto_align");drain(w);h.setFailCommand(nil)
     check(not w.error and not w.trial,"S01 unsupported auto alignment preserves manual setup")
     eq(w.message,L.manualAlign,"S01 unsupported detection explains the manual alternative")
     eq(w.data.board_alignment_config.yaw_degrees,before,"S01 refused detection preserves current angles")
-    w.cards[2].rows[4].set(45)
+    w.cards[3].rows[4].set(45)
     eq(w.data.board_alignment_config.yaw_degrees,45,"S01 manual angle remains editable after refusal")
     check(w.dirty.board_alignment_config and w.rebootPending,"S01 manual fallback retains save/reboot semantics")
   end)
   case("VISUAL.rotor-direction-arrow",function()
-    local w=world();settle(w);local c=step(w,"swash");w.card=1;w.data.mixer_config.swash_type=2
+    -- The rotor card shows the Configurator's rotor picture whose arrow turns the chosen way.
+    local w=world();settle(w);local c=step(w,"swash");w.card=2
     local scene=h.view.new(w,{w=800,h=480},h.diagrams);while not scene:step() do end
-    local arrow
+    local picture
     for _,item in ipairs(scene.children) do
-      if item.type=="line" and type(item.pts)=="function" and #item.pts()>=9 and item.thickness==2 then arrow=item end
+      if item.type=="image" and type(item.file)=="function" then picture=item end
     end
-    check(arrow~=nil,"VISUAL swash shows a rotor direction arrow")
-    if arrow then
-      w.data.mixer_config.main_rotor_dir=0;local p=arrow.pts()
-      check(p[#p-1][2]>p[1][2],"VISUAL clockwise arrow points from the front round to the right")
-      w.data.mixer_config.main_rotor_dir=1;p=arrow.pts()
-      check(p[#p-1][2]<p[1][2],"VISUAL counter-clockwise arrow points round towards the front")
+    check(picture~=nil,"VISUAL swash shows a rotor direction picture")
+    if picture then
+      w.data.mixer_config.main_rotor_dir=0
+      check(string.find(picture.file(),"/rotor%-cw%.png$")~=nil,"VISUAL clockwise shows the clockwise rotor")
+      w.data.mixer_config.main_rotor_dir=1
+      check(string.find(picture.file(),"/rotor%-ccw%.png$")~=nil,"VISUAL counter-clockwise shows the counter-clockwise rotor")
     end
   end)
   case("VISUAL.live-orientation-model",function()
     for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
-      local w=world();settle(w);step(w,"sensors");w.card=3
+      local w=world();settle(w);step(w,"sensors");w.card=4
       local scene=h.view.new(w,{w=size[1],h=size[2]},h.diagrams)
       while not scene:step() do end
       check(w.attitudeView~=nil,"VISUAL orientation check has a live model")
@@ -438,10 +439,10 @@ return function(h)
   case("S01.calibration-alignment",function()
     local w=world();local c=step(w,"sensors")
     w.data.status.sensor_status=0;c=step(w,"sensors")
-    check(not c[1].rows[3].enabled(),"S01 missing accelerometer blocks calibration")
+    check(not c[2].rows[1].enabled(),"S01 missing accelerometer blocks calibration")
     w.data.status.sensor_status=1;c=step(w,"sensors")
-    c[1].rows[3].press();check(w.calibrationAt==nil,"S01 preparation required")
-    w.checks.unplugged,w.checks.blades=true,true;c[1].rows[3].press();settle(w)
+    c[2].rows[1].press();check(w.calibrationAt==nil,"S01 preparation required")
+    w.checks.unplugged,w.checks.blades=true,true;c[2].rows[1].press();settle(w)
     check(w.calibrationAt~=nil,"S01 calibration starts after ACK")
     h.advance(200)
     local status=h.api("status").parse(h.fixtures[101]);status.arming_disable_flags=(1<<16)|(1<<12)
@@ -1011,7 +1012,7 @@ return function(h)
   case("S06.tail-transition-and-pin",function()
     local w=world();w.data.mixer_config.tail_rotor_mode=1;w.startTail=1
     w.data.tail_motor_output={output=1,result=0}
-    local c=step(w,"swash");c[1].rows[3].set(3);w.commit()
+    local c=step(w,"swash");c[3].rows[1].set(3);w.commit()
     check(w.restoreProfile==nil,"S06 motor to bidirectional preserves custom TTA")
     eq(math.abs(w.data.mixer_input.inputs[3].rate),1000,"S06 motor yaw scale")
     w.startTail=0;w.commit()
@@ -1746,6 +1747,7 @@ return function(h)
         if type(item.pts)=="function" then
           for _,p in ipairs(item.pts()) do parts[#parts+1]=p[1]..","..p[2] end
         end
+        if type(item.file)=="function" then parts[#parts+1]=item.file() end
       end
       return table.concat(parts,";")
     end
@@ -1761,8 +1763,8 @@ return function(h)
     w.data.mode_ranges.mode_ranges[1]={id=0,auxChannelIndex=0,range={start=1800,["end"]=2100}}
     w.data.rc={channels={1500,1500,1500,1500,1500,1000}};a=signature(s);w.data.rc.channels[6]=1900
     check(a~=signature(s),"VISUAL switch cue moves without a scene rebuild")
-    s=scene("swash");w.data.mixer_config.main_rotor_dir=0;a=signature(s);w.data.mixer_config.main_rotor_dir=1
-    check(a~=signature(s),"VISUAL rotor direction changes existing arrow")
+    s=scene("swash",2);w.data.mixer_config.main_rotor_dir=0;a=signature(s);w.data.mixer_config.main_rotor_dir=1
+    check(a~=signature(s),"VISUAL rotor direction changes the existing picture")
   end)
   case("CORE.prepared-api-roundtrip",function()
     local w=world();settle(w)

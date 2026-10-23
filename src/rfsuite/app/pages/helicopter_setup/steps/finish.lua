@@ -11,7 +11,7 @@ return function(w)
       w:value(L.rotorDirection,function() return w.data.mixer_config.main_rotor_dir==0 and L.clockwise or L.counterclockwise end),
       w:value(L.tailType,function() return ({L.servoTail,L.motorTail,L.bidirectional})[w.data.mixer_config.tail_rotor_mode+1] end),
       w:value(L.collectiveLimit,function() return string.format("%.1f°",w.data.mixer_input.inputs[4].max*0.012) end)
-    },nil,"heli"),
+    }),
     w:cardDef(L.finish,L.finishHint,{
       w:value(L.cyclicLimit,function() return string.format("%.1f°",w.data.mixer_input.inputs[2].max*0.012) end),
       w:value(L.protocol,function() return protocol(motorProtocols,w.data.motor_config.motor_pwm_protocol) end),

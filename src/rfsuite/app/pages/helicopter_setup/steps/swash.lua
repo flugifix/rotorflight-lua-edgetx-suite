@@ -30,20 +30,23 @@ return function(w)
       w:touch("mixer_input", false, true)
     end
   end
-  return { w:cardDef(L.swash, L.swashHint, {
+  -- Three cards, as the Configurator's step has three parts: the swashplate type, the main
+  -- rotor direction and the tail. Each picture follows the value chosen on its card.
+  return { w:cardDef(L.swashType, L.swashTypeHint, {
     w:c("mixer_config", "swash_type", L.swashType, { L.direct, "120", "135", "140", "90L", "90V" }, true, true, 1),
-    w:c("mixer_config", "main_rotor_dir", L.rotorDirection, { L.clockwise, L.counterclockwise }, false, true),
+    {kind="choice",label=L.servoOnePosition,values={L.frontPosition,L.rearPosition},
+      get=function() return w.swashRear and 2 or 1 end,
+      set=function(v) w.swashRear=v==2 end,
+      enabled=function() local s=w.data.mixer_config.swash_type;return s>=2 and s<=4 end}
+  }, nil, "swashType"), w:cardDef(L.rotorDirection, L.rotorDirectionHint, {
+    w:c("mixer_config", "main_rotor_dir", L.rotorDirection, { L.clockwise, L.counterclockwise }, false, true)
+  }, nil, "rotorDir"), w:cardDef(L.tailType, L.tailTypeHint, {
     tail,
     w:value(L.tailPin, function()
       local d = w.data.tail_motor_output
       if not d then return L.unsupported end
       return ({ L.servo4, L.motor2, L.both, L.noPin })[d.output + 1]
-    end)
-  }, nil, "swash"), w:cardDef(L.swashLayout,L.swashLayoutHint,{
-    {kind="choice",label=L.servoOnePosition,values={L.frontPosition,L.rearPosition},
-      get=function() return w.swashRear and 2 or 1 end,
-      set=function(v) w.swashRear=v==2 end,
-      enabled=function() local s=w.data.mixer_config.swash_type;return s>=2 and s<=4 end},
+    end),
     w:value(L.tailServo,function() return w:motorised() and L.none or L.servo4 end)
-  },nil,"swash") }
+  }, nil, "tailKind") }
 end

@@ -13,7 +13,7 @@ return function(w)
       w:n("motor_config", "motor_pole_count_0", L.motorPoles, 2, 255, true),
       dshot,
       w:check("blades", L.bladesRemoved)
-    }, nil, "heli"),
+    }, nil, "heliBladesOff"),
     w:cardDef(L.gearing, L.gearingHint, {
       w:n("motor_config", "main_rotor_gear_ratio_0", L.motorPinion, 1, 50000, true),
       w:n("motor_config", "main_rotor_gear_ratio_1", L.mainGear, 1, 50000, true),

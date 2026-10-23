@@ -108,9 +108,15 @@ unplug servos, restart, then confirm the test prerequisites.
 
 On 320- and 480-pixel displays, illustrated tasks put a compact mechanical sketch
 beside at most four control rows. The 800×480 layout has a separate instruction
-column and a larger sketch. Numbered swash links follow the selected 120/135/140/90L/90V
-geometry without rebuilding the scene; Direct shows each servo function instead.
-Board orientation, servo lift/neutral, roll/pitch/collective response, swash levelling,
+column and a larger sketch. The side-view cards show a picture of the helicopter in the
+Configurator wizard's three poses: blades crossed out where they must come off (Board
+orientation, Motor & ESC, ESC & spin test), level for the accelerometer calibration, and the
+tail lifted 20 degrees for finding the board orientation. The three Swashplate cards show the
+Configurator's drawings of the chosen value: the servo layout seen from above (numbered
+servos, servo 1 in front or behind, servo 4 with a servo tail; Direct names each servo's
+function), the main rotor turning, and the kind of tail. A picture changes with its value
+without rebuilding the scene.
+Servo lift/neutral, roll/pitch/collective response, swash levelling,
 blade-pitch reference and opposing gyro correction have distinct diagrams.
 The final Board orientation card has its own layout: a live helicopter above the
 confirmation on small screens, and a larger model beside it on 800×480. Tilt the
@@ -139,7 +145,7 @@ the switch while the wizard inhibits arming. The profile-switch reference stays
 still. Servo pulse references cache custom Hz/width geometry on settings edits;
 the native getters do not generate waves. Timing beyond the pulse limit displays
 a restart/readback hint instead of a physically impossible waveform. Receiver bars and control-command meters already follow live inputs;
-swash diagrams follow the selected geometry. All other mechanical drawings remain
+swash, rotor and tail pictures follow the selected values. All other mechanical drawings remain
 test references: commanded output or board attitude cannot measure actual servo,
 swash, blade or gyro-correction movement. Verify these on the real helicopter.
 The short instruction area may show only its first lines; **?** opens the full text.
@@ -148,12 +154,12 @@ The short instruction area may show only its first lines; **?** opens the full t
 
 | # | Step | Controls and checks |
 | --- | --- | --- |
-| 1 | Board orientation | Confirm servos unplugged and all blades removed. Calibrate the accelerometer with the model level and still. Detect orientation by lifting the tail, or enter roll, pitch and yaw in degrees. After restart, compare the live helicopter model with real roll/pitch movements and confirm the directions. Automatic alignment requires firmware support. |
+| 1 | Board orientation | Four cards. Confirm servos unplugged and all blades removed. Calibrate the accelerometer with the model standing level and still. Detect orientation by lifting the tail, or enter roll, pitch and yaw in degrees. After restart, compare the live helicopter model with real roll/pitch movements and confirm the directions. Automatic alignment requires firmware support. |
 | 2 | Receiver | Keep the established receiver UART; protocol configuration remains available, and use USB Configurator for receiver wiring detection (the trial interrupts the radio MSP link). Save & reboot is available here. Detect collective, roll, pitch, yaw, the throttle switch (hold / governor) and the arm switch one control at a time, or select ELRS, FrSky, Futaba/Hitec or DSM/Graupner/JR presets. Check FC channel numbers and rising values for roll/yaw right, pitch forward and collective up. Detection uses a fresh pre-click snapshot, so an immediate stick/switch movement is retained. Record all throttle-switch positions (or both proportional endpoints), starting and finishing OFF, with at least 300 µs travel; Use measured range adds a 20 µs margin at each end. Zero limits select firmware defaults. Throttle is low compares the mapped input with the low threshold; it is not permission to arm. The ELRS link cards compare the FC's declared rate and telemetry ratio with the transmitter module, probe the link, and align either side after confirmation. Module pickers offer supported 333 Hz, 500 Hz, D500 and 1:4, 1:8, 1:16, 1:32 options; save wizard changes first, keep the model disarmed, and keep telemetry running. |
 | 3 | Mode switches | Assign ARM, RESCUE and TRAINER when the FC exposes them. Move the switch to its intended ON position; a clear AUX movement and settled position determine the active window. ARM is read from AUX1 only, the arm channel set in step 2, because ExpressLRS 4.x also outputs its arm flag on CH14 (AUX9), which moves with the arm switch. Reassign or Remove an assignment. ARM assignment is required. No unrelated mode slots are overwritten. |
 | 4 | Profiles & gain | Detect a two- or three-position switch; select PID + rate profiles, PID only or None. Visit the positions and Use switch. Optional gain uses a knob, or four trim-button values on one spare channel. Mapped gain is 50–150%; button gain is ±5%, bounded to 25–200%. The trim guide gives MAX mix weights 30/40/50/60%, with 100% at rest. Configure those mixes in EdgeTX; this page does not rewrite the transmitter model. |
 | 5 | Rates | Select each rate profile and Keep current, Trainer (180/270°/s), Sport (250/400°/s), or 3D (400/600°/s). Only switch-selected profiles, or the active profile, are offered. Suggest fills a three-position switch in its position order. Collective pitch is preserved. Profiles are selected, read and written sequentially, then the original rate profile is restored. |
-| 6 | Swashplate | Select Direct, 120, 135, 140, 90L or 90V; clockwise/counterclockwise main rotor; variable-pitch, motorised or bidirectional tail. Tail changes reset the yaw input rate to ±250 or ±1000. Switching between servo and motor tail sets TTA to 0 or 100 on every PID profile; motor-to-bidirectional changes preserve custom TTA. If supported and required, the tail pin is moved between SERVO 4 and MOTOR 2; a refusal blocks advance. A missing command is reported as unsupported. |
+| 6 | Swashplate | Three cards, as in the Configurator: select Direct, 120, 135, 140, 90L or 90V and, for 120/135/140, whether servo 1 sits in front of the shaft or behind it; the main rotor direction, clockwise or counterclockwise seen from above; the variable-pitch, motorised or bidirectional tail with the tail output it uses. Tail changes reset the yaw input rate to ±250 or ±1000. Switching between servo and motor tail sets TTA to 0 or 100 on every PID profile; motor-to-bidirectional changes preserve custom TTA. If supported and required, the tail pin is moved between SERVO 4 and MOTOR 2; a refusal blocks advance. A missing command is reported as unsupported. |
 | 7 | Servo type | Servos must be unplugged. Choose cyclic and tail groups separately: 50 Hz/1520 µs, 333 Hz/1520 µs or 560 Hz/760 µs. Changing pulse band resets centre, travel and scale to the matching defaults. Frame-rate changes require restart. Only the PWM servos belonging to the selected swash/tail are used; bus channels are excluded.  Custom 25–5000 Hz fields are separate for cyclic/tail and preserve centre, travel and scale. Mixed groups are explicit. Manufacturer limits apply; firmware may reduce the rate for pulse limits/shared timers, so verify after restart. Separate cards switch geometry correction for all cyclic servos and, with a servo tail, for the tail servo alone (bit 1; the reverse bit is kept). It turns the servo arm's arc into straight link movement. Use it with the arm at 90 degrees to the link at centre and large servo travel. Leave it off if the arm is not at 90 degrees at centre, a bellcrank or the mechanics already make the movement linear, or the helicopter manual says so. It changes travel near the end stops: recheck blade pitch and tail limits after switching it. No restart is needed. Motorised tails have no tail-servo choice. |
 | 8 | Governor | Off, Limit, Direct, Electric or Nitro, plus Normal, Switch or Function throttle. Switch requires Electric or Nitro. The fast-RPM warning requires motor poles plus an RPM sensor or bidirectional DShot; serial ESC telemetry does not meet that requirement. |
 | 9 | Motor & ESC | Choose throttle protocol, motor pole counts and bidirectional DShot. Enter motor pinion/main gear tooth counts and tail input/output gears for a servo tail, or tail motor poles for a motor tail. Castle telemetry and the ESC_SENSOR feature are kept consistent. Set up a new ESC first (BEC voltage, motor timing, ESC governor off with the FC governor, and direction) under Configuration > Setup > ESC & Motors > ESC Tools for AM32, BLHeli_S, Bluejay, Flyrotor, Hobbywing V5, OMP, Scorpion, XDFly, YGE and ZTW; entries are available when the FC's ESC telemetry protocol matches. Where the Suite can open pages from a page, an **Open ESC Tools** button goes there; an unsaved change in the wizard has to be saved or discarded first. |
@@ -393,11 +399,14 @@ record the function inventory, behavior contracts and independent golden vectors
 The preview images are approximate renders of the actual scene definitions, using
 desktop fonts. They are not native EdgeTX screenshots or radio acceptance evidence.
 
-[Compact live orientation](../images/helicopter_setup/01-small-task-3.png) ·
+[Compact live orientation](../images/helicopter_setup/01-small-task-4.png) ·
 [Compact roll movement](../images/helicopter_setup/motion-attitude-roll-small.gif) ·
 [Compact pitch movement](../images/helicopter_setup/motion-attitude-pitch-small.gif) ·
 [320×240 roll movement](../images/helicopter_setup/motion-attitude-roll-narrow.gif) ·
-[800×480 orientation](../images/helicopter_setup/01-large-task-3.png)
+[800×480 orientation](../images/helicopter_setup/01-large-task-4.png) ·
+[Swash layout](../images/helicopter_setup/06-small.png) ·
+[Rotor direction](../images/helicopter_setup/06-small-task-2.png) ·
+[Tail](../images/helicopter_setup/06-small-task-3.png)
 
 [FC input directions](../images/helicopter_setup/02-small-task-3.png) ·
 [Throttle-switch endpoints](../images/helicopter_setup/02-small-task-4.png) ·

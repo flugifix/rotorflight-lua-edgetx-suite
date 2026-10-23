@@ -160,77 +160,31 @@ function M.append(children, w, card, x, y, width, height)
       rect(178,104,26,19);arrow(16,113,16,88)
     end
     text(5,141,210,kind=="tail22" and "22°" or L.tail)
-  elseif kind == "swash" then
-    -- Configurator swash.js: nose up, servo 1 at the front; 90L/90V use two servos.
-    local layouts = { {0,120,240}, {0,-120,120}, {0,-135,135}, {0,-140,140}, {0,-90}, {-45,45} }
-    local prepared = {}
-    for mode, angles in ipairs(layouts) do
-      local geometry = {}
-      for i=1,3 do
-        local rad = (angles[i] or 0)*math.pi/180
-        local a,b = 108+math.sin(rad)*48, 83-math.cos(rad)*48
-        geometry[i] = { pts=points({{108,83},{108+(a-108)*0.78,83+(b-83)*0.78}}), pos={px(a-6),py(b-8)} }
-        if mode==1 then
-          geometry[i] = { pts=points({{35,49+(i-1)*30},{75,49+(i-1)*30}}), pos={px(9),py(41+(i-1)*30)} }
-        end
-      end
-      prepared[mode] = geometry
+  elseif kind == "swashType" or kind == "rotorDir" or kind == "tailKind" then
+    -- The Configurator's own drawings of the swash step, one picture per value: the servo
+    -- layout seen from above (nose up, servo 1 in front or behind, servo 4 when the tail
+    -- has a servo), the main rotor turning, and the kind of tail.
+    local SWASH = { "direct", "120", "135", "140", "90l", "90v" }
+    local TAIL = { [0]="tail-servo", "tail-motor", "tail-bidirectional" }
+    local function picture()
+      local m = w.data.mixer_config
+      if kind == "rotorDir" then return m.main_rotor_dir == 1 and "rotor-ccw" or "rotor-cw" end
+      if kind == "tailKind" then return TAIL[m.tail_rotor_mode] or TAIL[0] end
+      -- swash_type 1..6 is Direct..90V (0, none, draws as Direct).
+      local s = math.max(1, math.min(6, m.swash_type or 1))
+      local name = "swash-" .. SWASH[s]
+      if s >= 2 and s <= 4 then name = name .. (w.swashRear and "-rear" or "-front") end
+      if m.tail_rotor_mode == 0 then name = name .. "-tail" end
+      return name
     end
-    for mode=2,4 do
-      local geometry={}
-      for i=1,3 do
-        local rad=layouts[mode][i]*math.pi/180
-        local a,b=108+math.sin(rad)*48,83+math.cos(rad)*48
-        geometry[i]={pts=points({{108,83},{108+(a-108)*0.78,83+(b-83)*0.78}}),pos={px(a-6),py(b-8)}}
-      end
-      prepared[mode+6]=geometry
-    end
-    local function mode() return math.max(1, math.min(6, w.data.mixer_config.swash_type or 1)) end
-    local function variant()
-      local s=mode();return w.swashRear and s>=2 and s<=4 and s+6 or s
-    end
-    local captions={L.direct,"120","135","140","90L","90V"}
-    local function geometric() return mode() > 1 end
-    text(5,0,210,function() return mode()==1 and L.artServoRoles or width<180 and L.artFront or L.artTop end)
-    arrow(184,58,184,29).visible=geometric
-    text(125,8,92,L.artFront).visible=function() return geometric() and width>=180 end
-    local ring={}
-    for i=0,16 do
-      local angle=i*math.pi/8
-      ring[#ring+1]={108+math.sin(angle)*32,83-math.cos(angle)*32}
-    end
-    line(ring,ink,2).visible=geometric
-    line({{99,83},{117,83}},ink,1).visible=geometric
-    line({{108,74},{108,92}},ink,1).visible=geometric
-    for i=1,3 do
-      local index = i
-      local item = line({{108,88},{108,40}},accent,3)
-      item.pts = function() return prepared[variant()][index].pts end
-      item.visible = function() return mode() <= 4 or index <= 2 end
-      local number = { type="label", text=tostring(i), font=SMLSIZE, color=ink,
-        pos=function()
-          local p=prepared[variant()][index].pos
-          return p[1],p[2]
-        end, visible=item.visible }
-      children[#children+1] = number
-      text(88,41+(i-1)*30,130,({L.pitch,L.roll,L.collective})[i]).visible=function() return mode()==1 end
-    end
-    text(5,138,210,function() return captions[mode()] end)
-    -- Rotor direction as an arc around the swashplate with its arrowhead at the end the
-    -- blades travel to, seen from above: clockwise runs right-down, counter-clockwise up.
-    local function arc(from,to)
-      local p,step={},from<to and 10 or -10
-      for d=from,to,step do local r=d*math.pi/180;p[#p+1]={108+math.sin(r)*58,83-math.cos(r)*58} end
-      local e,q=p[#p],p[#p-1]
-      local dx,dy=e[1]-q[1],e[2]-q[2];local n=math.sqrt(dx*dx+dy*dy)
-      dx,dy=dx/n*9,dy/n*9
-      p[#p+1]={e[1]-dx-dy*0.6,e[2]-dy+dx*0.6};p[#p+1]=e;p[#p+1]={e[1]-dx+dy*0.6,e[2]-dy-dx*0.6}
-      return points(p)
-    end
-    local cw,ccw=arc(40,100),arc(100,40)
-    local rotation=line({{170,111},{194,111}},accent,2)
-    rotation.pts=function() return w.data.mixer_config.main_rotor_dir==0 and cw or ccw end
-    rotation.visible=geometric
+    local current, file
+    children[#children+1] = { type = "image", x = px(0), y = py(0), w = px(220)-px(0),
+      h = py(160)-py(0), file = function()
+        local name = picture()
+        if name ~= current then current, file = name, GFX .. "light/" .. name .. ".png" end
+        return file
+      end }
+    text(5,0,210,kind=="tailKind" and L.artSide or L.artTop)
   elseif kind == "swashRoll" or kind == "swashPitch" or kind == "swashLift" or kind == "level" then
     local tilt = (kind=="swashRoll" or kind=="swashPitch") and 13 or 0
     local lift = kind=="swashLift" and 17 or 0
@@ -317,10 +271,11 @@ function M.append(children, w, card, x, y, width, height)
     end
     text(5,141,210,L.artAgainst)
   else
-    -- The side view, nose left: blades crossed out where they must come off, tail lifted
-    -- 20 degrees for the alignment check, otherwise level. The picture fills the frame.
+    -- The side view, nose left, in the Configurator's three poses: blades crossed out where
+    -- they must come off, level for the accelerometer, tail lifted 20 degrees for the board
+    -- orientation. The picture fills the frame.
     local picture = kind=="heliLift" and "heli-tail-lift"
-      or (w.step==1 or w.step==9 or w.step==11) and "heli-remove-blades" or "heli-level"
+      or kind=="heliLevel" and "heli-level" or "heli-remove-blades"
     children[#children+1] = { type = "image", x = px(0), y = py(0), w = px(220)-px(0),
       h = py(160)-py(0), file = GFX .. picture .. ".png" }
     text(5,0,210,L.artSide)

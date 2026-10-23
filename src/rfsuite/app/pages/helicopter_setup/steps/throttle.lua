@@ -27,7 +27,7 @@ return function(w)
       w:value(L.output, function() return output() end)
     })
   end
-  cards[#cards + 1] = w:cardDef(L.throttle, L.spinHint, rows, nil, "heli")
+  cards[#cards + 1] = w:cardDef(L.throttle, L.spinHint, rows, nil, "heliBladesOff")
   cards[#cards].meter=function() return math.max(-1,math.min(1,(output()-1000)/500-1)) end
   w.validate = function() return w:ack("motorDirection") end
   cards[#cards + 1] = w:cardDef(L.motorDirection, L.motorDirectionHint, { w:check("motorDirection", L.directionCorrect) })
