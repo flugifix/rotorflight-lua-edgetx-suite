@@ -109,7 +109,7 @@ Client.__index = Client
 -- request.command            MSP command number. Required.
 -- request.payload            byte array: the data of a write, or the argument of a read. Optional.
 -- request.onReply(buf, info) called with the reply body. info carries command and retries.
--- request.onError(reason)    one of four reasons:
+-- request.onError(reason)    one of five reasons:
 --                              "refused"     the retries ran out and the flight controller had
 --                                            answered at least one of them with an error reply;
 --                              "max_retries" the retries ran out and no attempt was answered;
@@ -124,10 +124,14 @@ Client.__index = Client
 --                                            example when the link went, the API version is not
 --                                            supported, the model was armed, or release() was
 --                                            called;
---                              "cancelled"   cancel() dropped it.
+--                              "cancelled"   cancel() dropped it;
+--                              "no_simulator_response"
+--                                            in the simulator, a read that carries no
+--                                            simulatorResponse; nothing was sent.
 -- request.timeout            seconds to wait for a reply before a retry. Optional.
 -- request.simulatorResponse  byte array the simulator answers with. See status().simulator:
---                            with no simulator there the radio never sends the request at all.
+--                            in the simulator a write without one gets an empty reply, and
+--                            a read without one ends with "no_simulator_response".
 -- request.isWrite            true for a write, false for a read. Optional: without it a payload
 --                            means a write, except on a command the firmware reads with an
 --                            argument (MSP_GET_MIXER_INPUT, MSP_GET_SERVO_CONFIG and the like).
@@ -189,6 +193,7 @@ function Client:request(request)
     end
     -- The queue's own reason, passed on as it is: the queue gives up with "refused" or
     -- "max_retries", Queue:clear() says "cleared" and Queue:cancel() "cancelled".
+    -- A simulator read without a fixture ends with "no_simulator_response".
     local ok, err = pcall(onError, reason, { command = command })
     if not ok then
       log("client " .. tostring(self.id) .. " error handler failed: " .. tostring(err), "warn")

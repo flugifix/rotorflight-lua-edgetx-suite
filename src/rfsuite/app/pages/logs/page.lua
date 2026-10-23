@@ -349,9 +349,9 @@ local function readListing(listing, budget)
   return spent
 end
 
-local function formatDateText(date, time, isNarrow)
-  if not date or date == "" or date == "Unknown" then
-    return "Unknown"
+local function formatDateText(date, time, isNarrow, unknownText)
+  if not date or date == "" then
+    return unknownText
   end
   local d = date
   if isNarrow then
@@ -389,7 +389,7 @@ local function extractFileInfo(filename, fullPath, parentFolder)
 
   local model = string.match(filename, "^(.-)%-%d%d%d%d")
   if not model or model == "" then
-    model = (parentFolder and parentFolder ~= "" and parentFolder ~= "telemetry" and parentFolder ~= "rfsuite" and parentFolder ~= "LOGS") and parentFolder or "Default"
+    model = (parentFolder and parentFolder ~= "" and parentFolder ~= "telemetry" and parentFolder ~= "rfsuite" and parentFolder ~= "LOGS") and parentFolder or nil
   end
 
   -- Fallback: peek first lines if date/time not in filename.
@@ -439,7 +439,7 @@ local function extractFileInfo(filename, fullPath, parentFolder)
     file = filename,
     path = fullPath,
     model = model,
-    date = date or "Unknown",
+    date = date,
     time = time or "",
     sortKey = sortKey
   }
@@ -638,7 +638,7 @@ function M.onHelp(ctx)
   if type(help) == "function" then
     return help(ctx)
   end
-  return { title = "Logs", message = "" }
+  return { title = pageText(ctx and ctx.i18n, "title"), message = "" }
 end
 
 function M.wakeup(ctx)
@@ -1310,7 +1310,7 @@ function M.build(ctx)
   if state.selectedFile and state.selectedFilePath then
     local summary = state.summary
 
-    local titleText = summaryTitle(state.selectedModel or "Log", state.selectedFile, w)
+    local titleText = summaryTitle(state.selectedModel or pageText(i18n, "model_default"), state.selectedFile, w)
     if Controls and type(Controls.appendStaticSectionHeader) == "function" then
       Controls.appendStaticSectionHeader(children, x, cursorY, w, titleText)
       cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
@@ -1322,7 +1322,7 @@ function M.build(ctx)
         x = x + 10,
         y = cursorY + 20,
         w = w - 20,
-        text = "Failed to parse log file",
+        text = pageText(i18n, "parse_failed"),
         color = COLOR_THEME_WARNING,
         align = CENTER
       }
@@ -1645,11 +1645,14 @@ function M.build(ctx)
                                         onPrev, false, rangeText)
   end
 
+  local dateUnknown = pageText(i18n, "date_unknown")
+  local modelDefault = pageText(i18n, "model_default")
+
   for i = first, last do
     local item = state.logsList[i]
     local itemY = cursorY
 
-    local labelLines = wrapToWidth(string.format("[%s] %s", item.model, item.file),
+    local labelLines = wrapToWidth(string.format("[%s] %s", item.model or modelDefault, item.file),
                                    SMLSIZE, labelW, ROW_MAX_LINES)
     local labelText = table.concat(labelLines, "\n")
     local rowH = math.max(ROW_MIN_H, 22 + #labelLines * labelLineH)
@@ -1660,7 +1663,7 @@ function M.build(ctx)
       x = x + 10,
       y = itemY + 11,
       w = dateColW,
-      text = formatDateText(item.date, item.time, isNarrow),
+      text = formatDateText(item.date, item.time, isNarrow, dateUnknown),
       color = COLOR_THEME_PRIMARY1,
       font = SMLSIZE
     }
@@ -1723,14 +1726,15 @@ function M.build(ctx)
 end
 
 -- The list of logs and the window of it on screen are kept when the page closes, so coming back
--- neither walks the card again nor builds more than one window of it. Each log is one table of
--- six short strings from extractFileInfo, about half a kilobyte of Lua memory on the 64-bit
--- EdgeTX simulator (a radio's 32-bit build has smaller table and string headers; not measured
--- there): 2.3 MB on the simulator for 5000 logs, which counts against the limit EdgeTX sets for
--- all Lua scripts and widgets together (6 MB on colour radios). The LVGL tree is not kept; the
--- host drops it with the page. The list is read again when the pilot asks for it with Reload,
--- or when the host drops this module from its page cache (app/pages/init.lua) and loads it
--- afresh. A log written since the list was read is not on it until then.
+-- neither walks the card again nor builds more than one window of it. Each log is one table of up
+-- to six short strings from extractFileInfo (date and model may be absent), about half a kilobyte
+-- of Lua memory on the 64-bit EdgeTX simulator (a radio's 32-bit build has smaller table and
+-- string headers; not measured there): 2.3 MB on the simulator for 5000 logs, which counts
+-- against the limit EdgeTX sets for all Lua scripts and widgets together (6 MB on colour radios).
+-- The LVGL tree is not kept; the host drops it with the page. The list is read again when the
+-- pilot asks for it with Reload, or when the host drops this module from its page cache
+-- (app/pages/init.lua) and loads it afresh. A log written since the list was read is not on it
+-- until then.
 --
 -- A walk still in progress is dropped rather than kept, and with it any directory it held open;
 -- the next visit starts it again.

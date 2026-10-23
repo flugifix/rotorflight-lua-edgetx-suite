@@ -12,13 +12,13 @@ return function(ctx)
   local t = Common and Common.pageT("setup_modes") or function(_, _, fb) return fb end
   local i18n = ctx.i18n
 
-  local help_p1 = t(i18n, "help_p1", "Flight modes allow you to map radio channels (AUX) to specific features on the flight controller (such as Stabilize, Governor, etc.).")
-  local help_p2 = t(i18n, "help_p2", "Add a range, select the channel, logic, and adjust the slider limits. Press 'Set' to automatically configure limits using your current radio switch position.")
+  local help_p1 = t(i18n, "help_p1", "Ranges activate modes while AUX channels are in their windows. Save writes all changed ranges.")
+  local help_p2 = t(i18n, "help_p2", "Mode: Shows ranges for a mode from the flight controller's list.\nActive ranges: Shows this mode's range count out of the controller's slots.\nRange: Each row sets AUX (AUTO: move a switch to detect its channel), OR/AND with other ranges and Start/End in us; + Add adds a range, X deletes it.\nSet: Uses the current channel position +/-50 us as the window after confirmation.")
 
   local parts = { help_p1, help_p2 }
 
   return {
     title = t(i18n, "help_title", "Modes Help"),
-    message = table.concat(parts, "\n\n")
+    message = table.concat(parts, "\n")
   }
 end

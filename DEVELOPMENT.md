@@ -269,6 +269,12 @@ The reader checks exercise the dashboard, home screen and already-built diagnost
 including recovery without a page rebuild. Both checks run offline with desktop Lua 5.3;
 they do not measure radio timing or hardware behavior.
 
+The flight-record absent-source check runs in both `pr.yml` and `checks.yml`:
+`lua5.3 bin/telemetry/verify_flight_record_absent.lua`. It checks missing and late sensors,
+session reset, the powered gate and the dashboard's armed statistic reader against the real
+modules. Pass `--record <file>` or `--common <file>` to check a pre-fix source with the same
+expectations. It runs offline with desktop Lua 5.3 and does not measure radio timing.
+
 Release notes wait under `release-notes/`, one file per pull request, until the release is cut:
 `python bin/release/collect_release_notes.py` files them under the version in
 `src/rfsuite/lib/version.lua`, and the result is committed before the tag. The format is in
@@ -278,6 +284,12 @@ A release tag of the form `release/<x>.<y>.<z>-<suffix>` is published as a Relea
 without the suffix it is published as a Release. The version baked into the package itself
 comes from `src/rfsuite/lib/version.lua`.
 
+
+The in-flight trim-routing check compares 12,288 switch masks against the original lookup
+algorithm, including remapped/missing trims and navigation mode. It also exercises sliced discovery,
+legacy migration, settings invalidation and disabled inputs. Run
+`lua5.3 bin/dashboard/verify_inflight_trims.lua`. Pass `--drive <file>` with the previous drive
+implementation to prove the repeated-lookup check goes red.
 
 ## Documentation
 

@@ -675,6 +675,13 @@ that draws its container and no value.
 
 ## `configure.lua`
 
+Voltage forms may pass a fifth argument to `setThemeConfig`,
+`{ voltageEdited = false }`, to leave both stored voltage limits unchanged. Pass `true` after
+either bound is edited: an explicit model range is then retained even when it equals numeric
+theme defaults and the radio has no explicit bounds. Omit the option for the original write
+contract. Clear the edit flag on reload and after a successful save, retaining it on failure.
+The shipped voltage forms use this to keep an automatic range automatic on unrelated saves.
+
 A theme with settings returns a **factory**: a function taking the page context and returning
 the page module. The context carries the theme the page was opened for, and the factory takes
 the theme's path out of it. That is what makes a copied theme store its own values instead of
@@ -1047,7 +1054,7 @@ switch", for a view that opens on a switch only once the pilot has picked one. S
 
 ## The battery prompt
 
-With *Ask which pack after connecting* on (the [Flight Log](../pages/tools/flight_log.md) page,
+With *Write a flight log* on (the [Flight Log](../pages/tools/flight_log.md) page,
 *Settings*), the widget offers the pilot's battery registry once per connection — in fullscreen,
 because a widget zone receives no touch and Lua can leave fullscreen but not enter it. The
 picker is the widget's for every theme that does not register a look for it, so its way out is
@@ -1063,7 +1070,7 @@ closure may index it without guarding. A theme reads it and never writes it.
 | Field | |
 | --- | --- |
 | `loaded` | the registry has been read for this connection |
-| `pending` | the prompt is on, this model has packs, and this connection the pilot has neither picked nor closed it and the model has not been armed |
+| `pending` | the flight log is on, this model has packs, and this connection the pilot has neither picked nor closed it and the model has not been armed |
 | `candidates` | the registry entries for this model: `id`, `name`, `cap`, `cells`, `profile`, `cycles`, `last`, plus `targetProfile` |
 | `selectedId`, `selectedName` | the pack picked this connection, else the one stored for the model, else `nil` |
 | `boardProfile` | the battery profile the flight controller reported on connecting, 0-based; `nil` until it has answered, and again after any profile write, which is not confirmed |

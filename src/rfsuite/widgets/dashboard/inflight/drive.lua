@@ -186,6 +186,7 @@ function M.newDrive(radio, settings)
   self.trimPulseUntil = nil
   self.trimCoolUntil = 0
   self.trims = nil
+  self.rowTrims = nil
   self.trimsResolved = false
   self.trimScan = nil
   self.navDir = 0
@@ -1075,11 +1076,23 @@ function Drive:pollTrims()
     return nil, nil
   end
 
+  -- M.get clears this route when settings change and the trim block must be walked again.
+  -- Resolve the six row assignments after the sliced trim walk and legacy migration finish.
+  -- Keep the sampling order and cadence; only the repeated stored-position lookup goes away.
+  local rowTrims = self.rowTrims
+  if rowTrims == nil then
+    rowTrims = {}
+    for row = 1, Functions.ROW_COUNT do
+      rowTrims[row] = Setup.trimEntry(trims, settings.rowTrim and settings.rowTrim[row])
+    end
+    self.rowTrims = rowTrims
+  end
+
   -- The row with the largest magnitude wins when two trims are held at once. It is a choice
   -- rather than a reading: the shipped template SUMS its trims onto the value channel, and a sum
   -- of two lands outside every window, so two trims there produce no step at all.
   for row = 1, Functions.ROW_COUNT do
-    local trim = Setup.trimEntry(trims, settings.rowTrim and settings.rowTrim[row])
+    local trim = rowTrims[row]
     if trim then
       if self.radio.switchValue(trim.plus) == true then return row, true end
       if self.radio.switchValue(trim.minus) == true then return row, false end
@@ -1657,6 +1670,7 @@ function M.get(widget)
   elseif drive._signature ~= signature then
     drive:cleanup(false)
     drive.settings = settings
+    drive.rowTrims = nil
     drive._signature = signature
     -- and the setup verdict with it: a changed channel, variable or trim is a different question
     -- for the walk, and the answer gates the drive as well as filling the line on the screen.
