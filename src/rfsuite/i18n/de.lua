@@ -522,7 +522,7 @@ return {
         why_brake_fmt = "Stopps prallen %d%% zurück. Mehr P bremst sie (oder B erhöhen).",
         why_ok = "Der Heli folgt dem Knüppel wie verlangt.",
         help_title = "Tuning-Berater",
-        help_message = "Im Rate-Modus fliegen, dann die Empfehlung Achse für Achse lesen; eine Änderung, dann erneut fliegen.\nAchse: Roll, Nick oder Gier; alles darunter gilt für diese Achse.\nFlugdaten: bisher gemessener Rate-Flug und ob gerade erfasst wird.\nAnsprechen: wie schnell der Heli dreht, verglichen mit dem Knüppel.\nStopps: wie weit er nach dem Zentrieren des Knüppels zurückprallt.\nVorgeschlagene Änderungen: was zu ändern ist, nach Seite und Einstellung.\nWarum: der Grund für jede Änderung.\n*: löscht nach Rückfrage die gesammelten Daten."
+        help_message = "Im Rate-Modus fliegen, dann die Empfehlung Achse für Achse lesen; eine Änderung, dann erneut fliegen.\n#n oben: Raten-Profil, für das der Rat gilt.\nAchse: Roll, Nick oder Gier; alles darunter gilt für diese Achse.\nFlugdaten: bisher gemessener Rate-Flug und ob gerade erfasst wird.\nAnsprechen: wie schnell der Heli dreht, verglichen mit dem Knüppel.\nStopps: wie weit er nach dem Zentrieren des Knüppels zurückprallt.\nVorgeschlagene Änderungen: was zu ändern ist, nach Seite und Einstellung.\nWarum: der Grund für jede Änderung.\n*: löscht nach Rückfrage die gesammelten Daten."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
         title = "Zyklisches Verhalten",

@@ -24,8 +24,10 @@
 --   relax cut-off; with F still off, F comes first; otherwise the controller is barely braking,
 --   so more P (or B).
 --
+-- RC tuning is read after the first advisor reply, when the active rate profile changes and
+-- on Reload, never on a pass that builds or polls.
 -- Clear (the header's star button) resets the statistics on the flight controller; they also
--- reset on their own when the tune changes.
+-- reset at the next arming when the tune changed since the last arming.
 
 local M = {}
 
@@ -43,13 +45,13 @@ local Controls = nil
 local MspRuntime = nil
 local TuneAdvisorApi = nil
 local RcTuningApi = nil
+local Profile = nil
 local ConfirmDialog = nil
 local t = nil
 
 local AXIS_ROLL, AXIS_PITCH, AXIS_YAW = 1, 2, 3
 
 local REFRESH_INTERVAL_SECONDS = 2
-local RC_TUNING_REFRESH_SECONDS = 10
 
 -- Feed-forward match
 local FF_MIN_COUNT = 1000       -- 10 s of usable 40-200 deg/s stick
@@ -123,7 +125,9 @@ local ui = {
   pending = false,
   rcTuning = nil,
   rcTuningPending = false,
-  lastRcTuning = 0,
+  rcTuningSignature = nil,
+  rcTuningProfile = nil,
+  drawnProfile = nil,
   unsupported = false,      -- the flight controller refused the command: no polling until Reload
   lastPoll = 0,
   lastData = nil,
@@ -153,8 +157,17 @@ local function ensureDeps()
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not TuneAdvisorApi then TuneAdvisorApi = loadModule("tasks/msp/api/tune_advisor.lua") end
   if not RcTuningApi then RcTuningApi = loadModule("tasks/msp/api/rc_tuning.lua") end
+  if not Profile then Profile = loadModule("lib/profile.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not t then t = Common and Common.pageT("flight_tuning_tune_advisor") or nil end
+end
+
+local function getLiveProfile()
+  return Profile and Profile.getActiveRateProfile(1) or 1
+end
+
+local function buildSessionSignature()
+  return tostring(getLiveProfile())
 end
 
 local function pageText(i18n, key, fallback)
@@ -320,9 +333,8 @@ end
 local function matchesPolarRates(a, axis)
   local record = ui.rcTuning
   if not record or record.cyclic_polarity ~= 1 or record.rates_type ~= a.ratesType then return false end
-  -- Polar and rates belong to the active rate profile: reject a record from before a profile
-  -- switch when the own-axis rates differ. Keep per-axis advice until the next read of the
-  -- rate settings.
+  -- Polar and rates belong to the active rate profile. Reject mismatched rates from another
+  -- profile when its switch has not been seen yet.
   if axis == AXIS_ROLL then return record.rcRates_1 == a.rcRate and record.rates_1 == a.sRate end
   if axis == AXIS_PITCH then return record.rcRates_2 == a.rcRate and record.rates_2 == a.sRate end
   return false
@@ -467,14 +479,14 @@ local function getQueue()
 end
 
 local function readRcTuning()
-  if ui.rcTuningPending then return end
+  if ui.rcTuningPending then return false end
   local api = RcTuningApi
   local queue = getQueue()
-  if not api or not queue then return end
+  if not api or not queue then return false end
 
   local generation = ui.generation
+  local profile = getLiveProfile()
   ui.rcTuningPending = true
-  ui.lastRcTuning = nowSeconds()
   queue:add({
     command = api.command,
     simulatorResponse = api.simulatorResponse,
@@ -489,17 +501,20 @@ local function readRcTuning()
       local matchedBefore = shown and matchesPolarRates(data.a, data.axis)
       local previous = ui.rcTuning
       ui.rcTuning = record
+      ui.rcTuningProfile = profile
       local matchedAfter = shown and matchesPolarRates(data.a, data.axis)
       local pitchRatesChanged = matchedBefore and matchedAfter
         and (previous.rates_type ~= record.rates_type or previous.rcRates_2 ~= record.rcRates_2
           or previous.rates_2 ~= record.rates_2)
       if matchedBefore ~= matchedAfter or pitchRatesChanged then render() end
+      if ui.rcTuningProfile ~= ui.drawnProfile then requestRebuild() end
     end,
     errorHandler = function()
       if generation ~= ui.generation then return end
       ui.rcTuningPending = false
     end
   })
+  return true
 end
 
 local poll
@@ -590,7 +605,9 @@ local function ensureLoaded(i18n)
   ui.lastPoll = 0
   ui.rcTuning = nil
   ui.rcTuningPending = false
-  ui.lastRcTuning = 0
+  ui.rcTuningSignature = nil
+  ui.rcTuningProfile = nil
+  ui.drawnProfile = nil
   ui.lastData = nil
   ui.lastSignature = nil
   ui.text = loadTexts(i18n)
@@ -611,7 +628,8 @@ end
 
 -- Polling lives here and never on the pass that built the page: a build this pass defers the
 -- poll to the next one, at most once in a row.
--- RC tuning is read on a later wakeup that does not issue a poll.
+-- RC tuning is read after the first advisor reply, on a profile change and on Reload,
+-- never on a pass that builds or polls.
 function M.wakeup(ctx)
   if not ui.loaded then return end
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or ui.runtime.requestRebuild
@@ -629,9 +647,9 @@ function M.wakeup(ctx)
       and (ui.lastPoll == 0 or now - ui.lastPoll >= REFRESH_INTERVAL_SECONDS) then
     ui.lastPoll = now
     poll()
-  elseif ui.lastData ~= nil and not ui.unsupported
-      and (ui.lastRcTuning == 0 or now - ui.lastRcTuning >= RC_TUNING_REFRESH_SECONDS) then
-    readRcTuning()
+  elseif ui.lastData ~= nil and not ui.unsupported and not ui.rcTuningPending then
+    local signature = buildSessionSignature()
+    if signature ~= ui.rcTuningSignature and readRcTuning() then ui.rcTuningSignature = signature end
   end
 end
 
@@ -694,6 +712,12 @@ function M.build(ctx)
   local x, y, w = ctx.x, ctx.y, ctx.w
   local cursorY = y
 
+  local profile = ui.rcTuningProfile or getLiveProfile()
+  local headingTitle = string.format("%s #%d", T.pageTitle, profile)
+  Controls.appendStaticSectionHeader(children, x, cursorY, w, headingTitle)
+  cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
+  ui.drawnProfile = profile
+
   local axisOptions = {
     { label = T.axisNames[AXIS_ROLL], value = AXIS_ROLL },
     { label = T.axisNames[AXIS_PITCH], value = AXIS_PITCH },
@@ -713,7 +737,7 @@ end
 
 function M.onReload()
   -- Ask again, e.g. after a firmware update
-  ui.lastRcTuning = 0
+  ui.rcTuningSignature = nil
   ui.unsupported = false
   ui.lastSignature = nil
   ui.lastPoll = nowSeconds()
@@ -740,7 +764,9 @@ function M.onClose()
   ui.pending = false
   ui.rcTuning = nil
   ui.rcTuningPending = false
-  ui.lastRcTuning = 0
+  ui.rcTuningSignature = nil
+  ui.rcTuningProfile = nil
+  ui.drawnProfile = nil
   ui.unsupported = false
   ui.lastData = nil
   ui.lastSignature = nil
@@ -754,6 +780,7 @@ function M.onClose()
   MspRuntime = nil
   TuneAdvisorApi = nil
   RcTuningApi = nil
+  Profile = nil
   ConfirmDialog = nil
   t = nil
 end
