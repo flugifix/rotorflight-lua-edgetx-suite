@@ -37,9 +37,13 @@ A radio without one of these keys never sends it; its saved choice still remains
   another view. Put a key on **Theme** to give it back to the theme.
 - A theme binds keys in its full-screen build, or declares them in its manifest (`init.lua`).
   Build bindings take precedence over manifest bindings. Urban, Grid and Deck let the pilot bind them on
-  their own *Keys* settings page, which only acts on keys left on **Theme** here. Default binds
-  none, so on Default a key put on **Theme**, PAGE > and PAGE < included, does nothing while
-  the dashboard itself is showing.
+  their own *Keys* settings page, which only acts on keys left on **Theme** here: a key held here
+  is marked *(global)* there and cannot be changed. As the radio comes that holds PAGE >,
+  PAGE <, SYS and TELE, so a theme's own PAGE binding takes effect only once the page keys are
+  set to **Theme** here. That page starts unbound, so a key on **Theme** does nothing until it
+  is bound there, PAGE > and PAGE < on the theme base included.
+  Default binds none, so on Default a key put on **Theme**, PAGE > and PAGE < included, does
+  nothing while the dashboard itself is showing.
 - On the connection screen, global actions already work, and so do manifest bindings to the
   host's actions and to its own views, such as the quick menu. A manifest binding to one of the
   theme's own views takes effect once the connection is ready, when those views are registered;

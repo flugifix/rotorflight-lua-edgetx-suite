@@ -7,7 +7,8 @@ local M = {}
 -- and the page keys open the quick menu too -- on a theme that draws its own full screen they are
 -- the key path to it, and where full screen is the quick menu they answer with it. MDL is left to
 -- the theme. The defaults live here and nowhere else, so the
--- Keys page and the widget cannot disagree about them.
+-- Keys page, the widget and the themes' own key pages (which mark the keys held here) cannot
+-- disagree about them.
 M.KEYS = {
   { id = "pageDown", pref = "key_page_down", default = "menu" },
   { id = "pageUp", pref = "key_page_up", default = "menu" },

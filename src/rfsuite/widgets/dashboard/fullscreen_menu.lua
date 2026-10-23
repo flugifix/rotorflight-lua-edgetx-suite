@@ -417,6 +417,8 @@ function BUILD.battery_profile(widget, t)
     after = "openView:battery_profile",
     -- What a page of profiles says while the model is armed and nothing on it can be pressed.
     armedNote = t("widgets.dashboard.battery_profile_armed", "CHANGEABLE ONLY WHEN DISARMED"),
+    -- And what it says before the connection is ready, when a press queues nothing either.
+    notReadyNote = t("widgets.dashboard.battery_profile_not_ready", "CHANGEABLE ONLY WHEN CONNECTED"),
     -- One option per capacity the flight controller carries, resolved when the row is drawn
     -- rather than when the list is made, so an entry stays a description of what it offers. The
     -- widget is the one this list was made for where the caller passes none.

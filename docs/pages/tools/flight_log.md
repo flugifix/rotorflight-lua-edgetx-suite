@@ -90,15 +90,17 @@ Back cancels it. A pack already in the list is opened with the `>` button, which
 holds together with how many logged flights name it and when it was last used, and offers *Edit*
 and *Delete*. Deleting asks first.
 
+![The pack editor, scrolled to its models](../../images/tools/flight_log/pack-editor.png)
+
 | Field | What it holds |
 | --- | --- |
 | Id | The name the flight's line and the model's own choice refer to the pack by. Letters, digits, `_` and `-`; anything else is dropped. It has to be unique, and a new pack is offered the lowest number the registry has free. |
 | Name | What the pack is called on the page and in the flight list. Up to 24 characters. |
 | Capacity | The pack's capacity in whole mAh, as on the Battery page. `0` means it is not recorded and the field is left out of the file. |
 | Cells | The pack's cell count, 1 to 24. Only used to find the pack's battery profile on a flight controller that keeps a cell count per profile (see *The battery profile* below). `0` means it is not recorded and the field is left out of the file. |
-| Models | The craft this pack is offered for, as a comma-separated list of model names. Empty means every model. |
 | Battery profile | The flight controller's battery profile this pack belongs to, 1 to 6. `0` means none is recorded and the field is left out of the file. |
 | Cycles | How many charges the pack has seen. It is counted up by flying, and is editable here for a pack that was already in use before it was entered. |
+| Models | The craft this pack is offered for. The models are listed at the end of the form, below *Cycles*. *All models* (the default) offers it for every model; otherwise only for the models switched on. The list holds every model the radio knows of: those with logged flights, the connected craft, and every flight controller [whose name is recorded on the card](../../reference/configuration-files.md). A model never connected or flown here is not listed yet. A name containing a comma or a semicolon is not listed because the file uses both as separators. An older entry naming a model the radio does not know is kept and shown switched on. |
 
 Renaming a pack's id, or deleting it, takes the pack chosen for the connected model with it: the
 choice follows the new id, or is cleared.

@@ -10,6 +10,10 @@ The transmitter module and the flight controller each hold their own idea of how
 runs and how much of it is telemetry, and nothing makes the two agree by itself. This page reads
 both and, on request, writes one side to match the other.
 
+Module parameter reads share one bounded, read-only provider with the dashboard standby screen
+and audio alerts. This prevents readers from consuming each other's CRSF replies; diagnostics
+still owns its existing confirmation, arming, and write gates.
+
 ## Where to find it
 
 *Tools* → *Diagnostics* → *ELRS Link*

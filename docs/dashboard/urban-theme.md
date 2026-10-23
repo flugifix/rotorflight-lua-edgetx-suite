@@ -72,10 +72,10 @@ With *Urban* selected, full screen shows the theme itself rather than the quick 
 draws no close button: a **long press on RTN** leaves full screen, which the radio always
 allows. Six places on the screen open a page over it, and a seventh opens the suite's tool:
 
-- **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so do the
-  page keys and TELE, left at their defaults.
+- **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so do
+  TELE and the page keys by default.
 - **The tool button** beside it opens the suite's tool inside the widget, as the quick menu's
-  *MAIN MENU* does; so does SYS, left at its default. The tool opens only while the model is
+  *MAIN MENU* does; so does SYS, as it comes. The tool opens only while the model is
   disarmed: while it is armed the button is drawn grey and a press does nothing.
 - **The profile row** of the left panel (PID, rate and battery profile) opens *Profile & Tuning*:
   the in-flight tuning surface, or a note that it is not available now, and, only while the
@@ -152,18 +152,25 @@ there are more packs than three rows hold, the packs scroll -- swipe them, or tu
 encoder, which moves from pack to pack -- while *NO BATTERY* stays at the foot, so every pack can
 be picked. RTN closes a page as well.
 
-The radio-wide choice at *System* → *Settings* → *Dashboard* →
-[*Keys*](../pages/settings/dashboard/keys.md) comes first: as the radio comes it holds SYS (Main
-menu), TELE, PAGE > and PAGE < (quick menu) for every theme, so what this page chooses for those
-four keys acts only once they are put on *Theme* there. Grid and Deck follow the same order.
+What the page keys, MDL, SYS and TELE do in full screen is chosen at two levels. The radio-wide
+choice at *System* → *Settings* → *Dashboard* → [*Keys*](../pages/settings/dashboard/keys.md)
+comes first and holds for every theme: as it comes, SYS opens the suite's tool, and TELE and the
+page keys the quick menu there, and MDL is left on *Theme*. A key
+left on *Theme* does what Urban's own *Keys* page binds it to, which is where a key can open one of
+Urban's pages; a key held radio-wide is marked *(global)* on Urban's page and cannot be changed
+there. So a PAGE binding on Urban's page takes effect only once the pilot has set PAGE > or
+PAGE < to *Theme* on the radio-wide page. Urban binds nothing until the pilot does: with the
+theme itself showing, every unbound key on *Theme*, PAGE > and PAGE < included, does nothing. Outside full screen MDL, SYS and TELE
+open the radio's own menus as always. A key set to open a page closes that page again when
+pressed while it is showing, so a second TELE closes the quick menu. A key set to the tool does nothing while the model is armed.
+MDL, SYS or TELE bound on Urban's page does nothing while a different page is on top. PAGE keys
+on *Theme* close the quick menu or open it over another page, unless bound to the page on top,
+which they close instead. A radio without one of these keys simply never uses its setting.
 
-What the page keys, MDL, SYS and TELE do in full screen is chosen on the *Keys* page. Left at
-their defaults, the page keys and TELE open the quick menu, SYS opens the suite's tool and MDL does
-nothing; outside full screen MDL, SYS and TELE open the radio's own menus as always. A key set to
-open a page closes that page again when pressed while it is showing, so a second TELE closes the
-quick menu. A key set to the tool does nothing while the model is armed. MDL, SYS and TELE on
-*Theme* radio-wide do nothing while another page is on top; a radio-wide choice acts there too. A
-radio without one of these keys simply never uses its setting.
+Choices made on Urban's *Keys* page by an earlier version are not carried over: the page starts
+unbound, and the old choices stay in the settings files unused. Where a model carried its own,
+[*Per-Model Settings*](../pages/settings/dashboard/overrides.md) still lists them (as `key_sys`
+and so on); *Reset* there removes them.
 
 ## The link steps
 
@@ -202,8 +209,8 @@ stays in the settings file and is no longer read.
 | Top Bar | Status bar: TPWR | The transmitter power in the bottom bar. On by default. |
 | Top Bar | Colour the bars | *Always* (default) colours a good link green; *Only on warning* leaves it neutral until a bar drops to its warning step. |
 | Top Bar | Link view switch | A switch position that shows the *ELRS* link page while it is held. None by default: the page then opens only by a tap on the link bars. |
-| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Theme: Telemetry* (the *Telemetry* page), *Theme: Battery* (the *Battery* page), *Theme: Status* (the *Status* page), *Suite: Main menu*, *Suite: Flight log* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. *Suite: Flight log* opens the suite's tool on its *Flight Log* page, as the quick menu's *FLIGHT LOG* does, and does nothing while the model is armed. |
-| Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys. Defaults: MDL *Nothing*, SYS *Suite: Main menu*, TELE *Suite: Quick menu*. |
+| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen while it is on *Theme* radio-wide, which the page keys are not as they come (they open the quick menu there and are marked *(global)* here): *Nothing* (default; unbound), *Suite: Quick menu* (opens the quick menu on the theme base), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Theme: Telemetry* (the *Telemetry* page), *Theme: Battery* (the *Battery* page), *Theme: Status* (the *Status* page), *Suite: Main menu*, *Suite: Flight log* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. *Suite: Flight log* opens the suite's tool on its *Flight Log* page, as the quick menu's *FLIGHT LOG* does, and does nothing while the model is armed. |
+| Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys, *Nothing* by default. SYS and TELE are held radio-wide as they come, and marked *(global)* until they are put on *Theme* there. |
 | Telemetry | Tile 1 … Tile 12 | The reading each tile of the *Telemetry* page shows, from the same list as the value rows, or nothing; a tile set to nothing is left out and the others close up. Defaults: voltage, cell voltage, current, capacity used, fuel, headspeed, ESC temperature, MCU temperature, BEC voltage, and tiles 10 to 12 off. The *Units beside the values* and *Temperature colours* settings apply to the tiles as to the rows. |
 
 The cell voltage row turns red below the minimum pack voltage the widget works out for the

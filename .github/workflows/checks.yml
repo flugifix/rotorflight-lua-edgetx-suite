@@ -191,8 +191,25 @@ jobs:
       - name: Check global and theme key resolution
         run: lua5.3 bin/dashboard/verify_fullscreen_keys.lua
 
+  dashboard-theme-global-keys:
+    name: Dashboard theme global keys
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Lua 5.3
+        run: sudo apt-get update && sudo apt-get install -y lua5.3
+
+      - name: Prove the checks can go red
+        run: lua5.3 bin/dashboard/verify_theme_global_keys.lua --self-test
+
+      - name: Check the theme Keys pages against the global keys
+        run: lua5.3 bin/dashboard/verify_theme_global_keys.lua
+
   dashboard-voltage:
-    name: Dashboard voltage bounds
+    name: Dashboard regressions
     runs-on: ubuntu-latest
 
     steps:
@@ -206,6 +223,19 @@ jobs:
         run: |
           lua5.3 bin/dashboard/verify_voltage_bounds.lua
           lua5.3 bin/themes/verify_voltage_save.lua
+          lua5.3 bin/dashboard/verify_offline_theme_settings.lua
+
+      - name: Check dashboard standby geometry and formatting
+        run: lua5.3 bin/dashboard/verify_standby.lua
+
+      - name: Check dashboard standby integration
+        run: lua5.3 bin/tests/dashboard_standby_integration_test.lua
+
+      - name: Check shared ELRS configuration reads
+        run: lua5.3 bin/tests/elrs_config_test.lua
+
+      - name: Check ELRS diagnostics ownership gate
+        run: lua5.3 bin/tests/elrs_diagnostics_gate_test.lua
 
   board-auto-align:
     # Setup > Alignment drives the flight controller's board auto-alignment. This runs the

@@ -240,6 +240,12 @@ local function enterCurrent()
   end
 end
 
+local function leaveCurrent()
+  if ui.view ~= "run" then return end
+  local proc = wiz.procedure()
+  if proc and type(proc.leave) == "function" then proc.leave(wiz) end
+end
+
 -- `pageIndex` may be -1, meaning "the last page of that screen", which the build resolves once it
 -- knows how many there are. Stepping BACK into a screen has to land at its end, where the pilot
 -- left off reading, and that is not knowable from here.
@@ -250,6 +256,7 @@ function wiz.goToProcedure(index, screenIndex, pageIndex)
   if index == nil then wiz.showOverview() return end
   if index < 1 then index = 1 end
   if index > #ui.procedures then index = #ui.procedures end
+  leaveCurrent()
   ui.view = "run"
   ui.procIndex = index
   ui.screenIndex = screenIndex or 1
@@ -347,6 +354,7 @@ function wiz.advance()
 end
 
 function wiz.showOverview()
+  leaveCurrent()
   ui.view = "overview"
   ui.pageIndex = 1
   ui.busy = nil
@@ -1283,6 +1291,7 @@ function M.allowMemAutoRefresh()
 end
 
 function M.onClose()
+  leaveCurrent()
   if Store then Store.flush() end
   if Common and type(Common.resetPageState) == "function" then
     Common.resetPageState(ui, { resetLoaded = true, resetDirty = true })

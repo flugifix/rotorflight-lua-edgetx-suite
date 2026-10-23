@@ -256,6 +256,24 @@ before their job step can run. The self-test changes the radio-wide branch, drop
 PAGE > default, makes each theme layout ignore the stored choice, makes the page store Theme as
 absent and disables the early exit guard; each mutation must turn its own case red.
 
+The Urban, Grid and Deck Keys page check runs beside it in both workflows:
+
+```sh
+lua5.3 bin/dashboard/verify_theme_global_keys.lua --self-test
+lua5.3 bin/dashboard/verify_theme_global_keys.lua
+```
+
+It loads the real Urban, Grid and Deck configure, layout and init modules and the real key
+resolver. Per theme it builds the Keys page over key choices an earlier version stored, and checks
+that the page starts unbound, marks the keys the radio-wide page holds (PAGE, SYS and TELE as
+the radio comes), saves a choice in radio and
+model scope without touching the old fields, and that the layout binds only the new fields, which
+act only while the radio-wide choice is Theme. The self-test makes the layout read the old fields,
+gives the theme a SYS or PAGE default again, leaves an explicit PAGE Quick menu choice unbound,
+and removes the held mark; each must turn a case red in all three themes. Both PAGE directions,
+put on Theme radio-wide, start on Nothing and can save, reload and clear an explicit Quick menu binding in either scope.
+Controls and preference-card writes are stubbed; native touch delivery is outside this offline check.
+
 The SmartFuel validity check runs in both `pr.yml` and `checks.yml`:
 
 ```sh
