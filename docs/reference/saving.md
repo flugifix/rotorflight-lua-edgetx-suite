@@ -326,6 +326,15 @@ ESC telemetry protocol, which all three share. Which of the three pages fits is 
 pilot's choice; on the BLHeli_S and Bluejay pages these checks make a wrong choice visible
 instead of writing it to the ESC.
 
+A save the page is left during still reaches the ESC: its write is already queued and is sent.
+The answer then changes nothing on the page that was left. On AM32, BLHeli_S and Bluejay it no
+longer starts the reset that follows a save on a page that stays open, so the next visit runs the
+full connection sequence; on Hobbywing V5 and Scorpion it does not send the read that follows a
+save. Before, the answer ran against the closed page and stopped with an error in the log, and on
+AM32, BLHeli_S and Bluejay the next visit ran that post-save reset in place of its connection
+sequence. The same holds when the page is left while that post-save reset is still out: its answer,
+or its refusal, no longer sets the connection state of the page that was left.
+
 ## Scope
 
 The shared check protects the Save action from absent page data. It does not change wire
