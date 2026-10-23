@@ -744,7 +744,8 @@ return {
         flag_set_name = "Set Model Name on the Radio",
         loading_title = "Model Configuration",
         loading_message = "Reading from the flight controller",
-        help_message = "Settings the flight controller stores for this model: three parameters it applies to the radio's timers or global variables on connect, and the radio-side features it asks for. Whether those are applied is decided here too. From RF 2.3 the craft itself carries the model-name decision; on older firmware the radio does, and the switch then applies to every model on this radio."
+        save_error_title = "Error",
+        help_message = "Model settings stored on the flight controller and applied to the radio on connect.\nParameter 1 Type: None, a timer or a global variable; slots 2 and 3 work the same.\nParameter 1 Value: Value for the timer or global variable; slots 2 and 3 work the same.\nSynchronize Model Parameters: Apply parameters on connect, for every model on this radio.\nSet Model Name on the Radio: Rename the radio's model after the craft; from RF 2.3 the craft stores this choice, on older firmware this radio does, for every model."
       },
       settings_general = {
         section_safety = "Safety & Prompts",

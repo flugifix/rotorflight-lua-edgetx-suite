@@ -375,7 +375,18 @@ function M.onSave(ctx)
   -- The board is written only when something of the board's changed. A save that moved nothing
   -- but a radio preference has nothing to send; sending anyway costs an EEPROM commit, and on a
   -- craft that has gone away it fails over a setting that was stored fine.
-  if ui.dirty then queueWrite() end
+  if ui.dirty then
+    local ok, err = queueWrite()
+    if not ok then
+      if ctx and type(ctx.reportSave) == "function" then
+        ctx.reportSave({
+          title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
+          message = tostring(err or "MSP write failed")
+        })
+      end
+      return false
+    end
+  end
 end
 
 function M.build(ctx)
