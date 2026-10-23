@@ -415,7 +415,7 @@ return {
         arm = "Arm switch",
         rescue = "Rescue switch",
         trainer = "Trainer switch",
-        modeHint = "Press Assign, then move the desired switch to its ON position. The drawing follows the assigned ARM input or the FC's Rescue/Trainer mode flag. Switch active does not mean armed: the wizard keeps arming inhibited. Unassigned or unavailable input is shown neutrally.",
+        modeHint = "Press Assign, then move the desired switch to its ON position. ARM listens only to AUX1, the arm channel set in step 2. The drawing follows the assigned ARM input or the FC's Rescue/Trainer mode flag. Switch active does not mean armed: the wizard keeps arming inhibited. Unassigned or unavailable input is shown neutrally.",
         assign = "Assign switch",
         remove = "Remove assignment",
         flick = "Move the intended switch or control.",

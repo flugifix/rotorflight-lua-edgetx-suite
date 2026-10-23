@@ -412,6 +412,31 @@ for _,size in ipairs({{320,240},{480,272},{800,480}}) do
   end
 end
 eq(#steps,19,"exact step count")
+-- ARM is learned from AUX1 only. ExpressLRS 4.x also outputs the arm flag on CH14 (AUX9),
+-- which moves with the arm switch; Rescue/Trainer keep the free search.
+do
+  local m=world()
+  local function listen(id,moves)
+    m.data.boxids.box_ids={0,53,47}
+    local slots={};for i=1,20 do slots[i]={id=0,auxChannelIndex=0,range={start=900,["end"]=900}} end
+    m.data.mode_ranges.mode_ranges=slots;m.data.mode_ranges_extra.mode_ranges_extra={}
+    for n,name in ipairs(steps) do if name=="modes" then m.step=n end end
+    load(PATH.."steps/modes.lua")(m)
+    local base={};for i=1,14 do base[i]=i<=5 and 1500 or 1000 end
+    m.modeListen.id,m.modeListen.base,m.modeListen.untilAt=id,base,ticks+1500
+    m.modeListen.aux,m.modeListen.value,m.modeListen.at=nil,nil,nil
+    local now={};for i=1,14 do now[i]=moves[i] or base[i] end
+    m.onLive("rc",{channels=now});ticks=ticks+50;m.onLive("rc",{channels=now})
+    for _,r in ipairs(m.data.mode_ranges.mode_ranges) do
+      if r.id==id and r.range.start<r.range["end"] then return r end
+    end
+  end
+  local r=listen(0,{[6]=1900,[14]=1900})
+  eq(r and r.auxChannelIndex,0,"ARM with a mirrored CH14 lands on AUX1")
+  eq(listen(0,{[7]=1900}),nil,"ARM ignores a switch on another AUX")
+  r=listen(53,{[7]=1900})
+  eq(r and r.auxChannelIndex,1,"Rescue still found on any AUX")
+end
 -- Live replies update cached values, never the scene.
 w.step,w.error,w.transition,w.rebuilds = 14,nil,nil,0
 w.data.rc_command = {commands={0,0,0,0,0}}

@@ -24,7 +24,10 @@ return function(w)
     if not s.base then s.base = d.channels; return end
     local peaks = {}
     for i = 6, #d.channels do peaks[i - 5] = math.abs(d.channels[i] - (s.base[i] or d.channels[i])) end
-    local aux = H.moved(peaks)
+    -- ARM is read from AUX1 alone: the receiver step maps the arm switch there, and
+    -- ExpressLRS 4.x also outputs its arm flag on CH14, so a free search finds two winners.
+    local aux
+    if s.id == 0 then aux = H.moved({ peaks[1] or 0 }) else aux = H.moved(peaks) end
     if not aux then return end
     local value = d.channels[aux + 5]
     if s.aux ~= aux or math.abs((s.value or 0) - value) > 25 then s.aux, s.value, s.at = aux, value, getTime(); return end

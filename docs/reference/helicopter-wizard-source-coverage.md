@@ -82,6 +82,10 @@ draft discard is also checked with the old curve and choices still present.
   this wizard's MSP link. A radio-side guard sends no START, even on compatible
   firmware. The wizard therefore requires an already working receiver/MSP link.
   ESC wiring detection and board alignment use independent facilities.
+- ARM is detected on AUX1 only, where the receiver step maps the arm switch; the
+  Configurator searches every AUX. ExpressLRS 4.x outputs its arm flag on CH14
+  (AUX9 on Rotorflight) as well, so a free search sees two equal movements.
+  RESCUE and TRAINER keep the free search.
 - AUX wire indexes remain identical. Displayed receiver channel numbers follow
   RX_MAP (firmware `rx.c/readRxChannels`, `MSP_RC` versus `MSP_RX_CHANNELS`). For
   example, an ELRS preset can make AUX1 correspond to transmitter CH5; it must

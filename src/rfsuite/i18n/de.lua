@@ -415,7 +415,7 @@ return {
         arm = "Scharfschalter",
         rescue = "Rettungsschalter",
         trainer = "Trainerschalter",
-        modeHint = "Zuordnen drücken und gewünschten Schalter auf EIN bewegen. Die Grafik folgt dem zugeordneten ARM-Eingang oder dem Rescue/Trainer-Modus des FC. Schalter aktiv bedeutet nicht scharf: Der Assistent hält das Scharfschalten gesperrt. Ohne Zuordnung oder Eingang bleibt die Grafik neutral.",
+        modeHint = "Zuordnen drücken und gewünschten Schalter auf EIN bewegen. ARM hört nur auf AUX1, den Arm-Kanal aus Schritt 2. Die Grafik folgt dem zugeordneten ARM-Eingang oder dem Rescue/Trainer-Modus des FC. Schalter aktiv bedeutet nicht scharf: Der Assistent hält das Scharfschalten gesperrt. Ohne Zuordnung oder Eingang bleibt die Grafik neutral.",
         assign = "Schalter zuordnen",
         remove = "Zuordnung entfernen",
         flick = "Gewünschten Schalter oder Geber bewegen.",
