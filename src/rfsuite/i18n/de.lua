@@ -2815,7 +2815,7 @@ return {
         help_page_up = "PAGE <: standardmäßig Schnellmenü; öffnet und schließt das Menü. Auf Theme: Belegung des Themes, sonst auf der Theme-Ansicht ohne Aktion.",
         help_mdl = "MDL: standardmäßig Theme.",
         help_sys = "SYS: standardmäßig Hauptmenü; es erfordert ein nicht scharfgeschaltetes Modell.",
-        help_tele = "TELE: standardmäßig Schnellmenü. Das Flugbuch erfordert seinen Vorschau-Schalter.",
+        help_tele = "TELE: standardmäßig Schnellmenü. Das Flugbuch erfordert ein nicht scharfgeschaltetes Modell.",
       },
       settings_dashboard_quick_menu = {
         place = "Position %d",

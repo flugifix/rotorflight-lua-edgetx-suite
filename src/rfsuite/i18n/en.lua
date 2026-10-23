@@ -2787,7 +2787,7 @@ return {
         help_page_up = "PAGE <: Quick menu by default; it opens and closes the menu. On Theme: the theme's binding, else nothing on the theme itself.",
         help_mdl = "MDL: Theme by default.",
         help_sys = "SYS: Main menu by default; it requires a disarmed model.",
-        help_tele = "TELE: Quick menu by default. Flight log requires its preview switch.",
+        help_tele = "TELE: Quick menu by default. Flight log requires a disarmed model.",
       },
       settings_dashboard_quick_menu = {
         place = "Position %d",
