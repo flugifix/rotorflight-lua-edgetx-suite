@@ -57,7 +57,8 @@ it where it is offered.
 **ERASE BLACKBOX and BATTERY PROFILE are not offered before the connection is ready or while
 the model is armed.** Before the connection is ready — at start, or with the link lost and the
 battery profile page still open — a write would wait for the next connection, which can be a
-different board; a profile pressed on the battery profile page then queues nothing either. While the model is
+different board; the battery profile page then draws its profiles without a press, as while armed
+(see [the battery profile page](#the-battery-profile-page)). While the model is
 armed nothing they send would arrive: the suite sends no configuration messages to
 the flight controller and drops the ones waiting, so an erase or a profile change pressed in the
 air would never reach the board. A menu that was already open when the model armed still shows
@@ -162,6 +163,12 @@ While the model is armed the page stays open, but its buttons cannot be pressed:
 force stays highlighted, and the foot line says *CHANGEABLE ONLY WHEN DISARMED*. A change pressed
 in the air would never reach the board, for the same reason given for ERASE BLACKBOX above.
 
+Before the connection is ready — with the link lost while the page is open, or the page opened by
+a key on the connection screen — it looks the same, and the foot line says *CHANGEABLE ONLY WHEN
+CONNECTED*. That note wins over the armed one: the arm state is the last one the board sent, and
+a lost link does not clear it. A theme's own look of the page is drawn only while the connection is
+ready, so before it this is always the widget's page.
+
 ## Closing it
 
 The **X** in the header closes the menu and leaves full screen. So does every entry except
@@ -203,6 +210,7 @@ menus:
 | `options` | For a `choice`: a list, or a function returning one, of `{ id, label, detail, current, press, after }`. `id` is what a run is matched by: a battery profile's number, 1 to 6, and a pack's registry id. `detail` is an optional second, smaller line under the label. The battery profiles are one, and the battery picker's packs are the other. |
 | `values` | Optional, a function `values(w)` returning texts for a row that shows a value beside its title, longest first, each a shortening of the one before. BATTERY PROFILE has one: the profile in force as `6S / 2000mAh / Warn 3.50V`, then `6S / 2000mAh`, then `2000mAh`, from the parts the flight controller reports; an empty list where no profile is known to be in force. |
 | `armedNote` | Optional, already translated: what a page of the entry's options says while the model is armed and none of them can be pressed. BATTERY PROFILE has one. |
+| `notReadyNote` | Optional, already translated: what that page says before the connection is ready, when none of them can be pressed either; it is shown in place of `armedNote` when both apply. BATTERY PROFILE has one. |
 | `close` | Optional, `{ press, after }`: what closing the surface that draws the options does. |
 | `info` | Optional, a function returning what the entry knows about the state it acts on, read when it is called. ERASE BLACKBOX has one: `{ used, total }` of the blackbox, from the summary the flight controller last sent. |
 
