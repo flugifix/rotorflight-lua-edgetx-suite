@@ -236,12 +236,12 @@ count has arrived, Save is held and the lists offer six. Reload asks the flight 
 
 ## A read that fails
 
-On **Setup > GPS**, **Setup > Model**, **Flight Tuning > Advanced > Autolevel** and **Setup >
-ESC/Motors > Motor Override**, a read that fails -- no answer after the retries, a reply that
-cannot be read, or a request taken off the queue -- leaves the page showing *Could not read the
-settings from the flight controller. Use Reload to try again.* in place of its fields, so nothing
-on screen stands for a value the flight controller did not send. The page does not ask again by
-itself; **Reload** does.
+On **Setup > GPS**, **Setup > Model**, **Setup > Controls > Modes**, **Flight Tuning > Advanced >
+Autolevel** and **Setup > ESC/Motors > Motor Override**, a read that fails -- no answer after the
+retries, a reply that cannot be read, or a request taken off the queue -- leaves the page showing
+*Could not read the settings from the flight controller. Use Reload to try again.* in place of
+its fields, so nothing on screen stands for a value the flight controller did not send. The page
+does not ask again by itself; **Reload** does.
 
 - A read the suite abandons because the model was armed or the link dropped while it was out
   counts as failed too; Reload reads again once the model is disarmed and connected.
