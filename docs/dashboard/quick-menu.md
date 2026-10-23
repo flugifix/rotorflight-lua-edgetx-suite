@@ -13,8 +13,10 @@ directly when a theme leaves fullscreen to the menu.
 
 Put the *RFSuite* widget full screen the way EdgeTX puts any widget full screen — the widget's
 own context menu on the screen it sits on, then *Full screen*. With Default, fullscreen
-shows the dashboard; press its menu control at the top right or either page key to open
-the quick menu. Closing the menu returns to the dashboard.
+shows the dashboard; press its menu control at the top right, TELE or a page key (the default
+global shortcuts) to open the quick menu. Default binds no keys: a key put on **Theme** does
+nothing while the dashboard itself is showing.
+Closing the menu returns to the dashboard.
 
 Other themes can also take full screen for themselves (a theme author's choice, see
 [dashboard themes](../developer/dashboard-themes.md#a-theme-that-takes-fullscreen)); their
@@ -32,16 +34,19 @@ closed it or armed the model.
 The menu's colours are the radio's, not the dashboard theme's. It uses the same theme colours
 EdgeTX gives every script, so it looks the same whichever dashboard theme is selected.
 
+Hardware shortcuts are set on [Keys](../pages/settings/dashboard/keys.md), for every theme and
+model. They can also open the core menu on the connection screen, before the FC is ready.
+
 ## What it offers
 
 | Entry | What it does |
 | --- | --- |
-| **ERASE BLACKBOX** | Asks first, because the erase cannot be undone — see [the erase confirmation](#the-erase-confirmation). Its **ERASE** answer erases the flight controller's blackbox storage, then reads the storage summary back so the dashboard shows the free space it has now, closes the menu and leaves full screen (over a theme that takes full screen: closes the menu and shows the theme again). Only listed while the model is disarmed. |
+| **ERASE BLACKBOX** | Asks first, because the erase cannot be undone — see [the erase confirmation](#the-erase-confirmation). Its **ERASE** answer erases the flight controller's blackbox storage, then reads the storage summary back so the dashboard shows the free space it has now, closes the menu and leaves full screen (over a theme that takes full screen: closes the menu and shows the theme again). Only listed while the connection is ready and the model is disarmed. |
 | **IN-FLIGHT TUNING** | Opens the in-flight tuning surface at full size. It stays full screen rather than closing. Only listed while the feature is switched on — see below. |
 | **BATTERY** | Brings the battery prompt back, with this model's packs. It stays full screen, the picker taking the menu's place. Only listed while the battery registry has a pack for this model and the model is disarmed. |
 | **MAIN MENU** | Opens the suite's tool, with its whole menu, inside the widget — see [the tool from full screen](#the-tool-from-full-screen). Only listed while the model is disarmed. |
 | **FLIGHT LOG** | Opens the suite's tool inside the widget on its [Flight Log](../pages/tools/flight_log.md) page; the back key there closes it again. Not in the menu as it comes — the pilot adds it on the *Quick Settings* page — and then only listed while the *Flight Log* preview is on and the model is disarmed. |
-| **BATTERY PROFILE** | Opens [the battery profile page](#the-battery-profile-page), where pressing a profile makes it the one in force. Not one of the entries above: a row of its own under them — see [the layout](#the-layout). Only shown while the model is disarmed and the flight controller has reported at least one battery profile with a capacity. |
+| **BATTERY PROFILE** | Opens [the battery profile page](#the-battery-profile-page), where pressing a profile makes it the one in force. Not one of the entries above: a row of its own under them — see [the layout](#the-layout). Only shown while the connection is ready, the model is disarmed and the flight controller has reported at least one battery profile with a capacity. |
 
 That is the menu as it comes, *FLIGHT LOG* aside. Which of the first five entries it shows, and in which order, is the
 pilot's to choose on *System* → *Settings* → *Dashboard* →
@@ -49,8 +54,11 @@ pilot's to choose on *System* → *Settings* → *Dashboard* →
 where the table says it is not listed. BATTERY PROFILE is not chosen there; the menu always draws
 it where it is offered.
 
-**ERASE BLACKBOX and BATTERY PROFILE are not offered while the model is armed** because nothing
-they send would arrive: while the model is armed the suite sends no configuration messages to
+**ERASE BLACKBOX and BATTERY PROFILE are not offered before the connection is ready or while
+the model is armed.** Before the connection is ready — at start, or with the link lost and the
+battery profile page still open — a write would wait for the next connection, which can be a
+different board; a profile pressed on the battery profile page then queues nothing either. While the model is
+armed nothing they send would arrive: the suite sends no configuration messages to
 the flight controller and drops the ones waiting, so an erase or a profile change pressed in the
 air would never reach the board. A menu that was already open when the model armed still shows
 what it showed; a press on an entry that is no longer offered does nothing, keeps full screen,
@@ -164,9 +172,13 @@ full screen — a long press on the return key — works as it does anywhere els
 
 Over a theme that takes full screen, the same X, entries and picker answers close what is open
 and show the theme again instead; the theme's own close control, or a long press on the return
-key, leaves full screen. On a radio with page keys, PAGE opens and closes the menu there, and a
-short press on the return key closes the menu or the picker, and on the battery profile page
-does what its **<** does.
+key, leaves full screen. With a view open, a page key on **Quick menu**, its default on the
+radio-wide [Keys](../pages/settings/dashboard/keys.md) page, or on **Theme** closes the quick
+menu or opens it over another view (over the battery profile page it goes back to the menu); one the theme binds to the view on top closes that view
+instead. A page key set there to another action does that action, and on **Nothing** nothing:
+the view stays. A key bound to the quick menu also opens and closes it, and a short
+press on the return key closes the menu or the picker, and on the battery
+profile page does what its **<** does.
 
 ## For contributors
 

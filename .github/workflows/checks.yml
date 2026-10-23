@@ -171,6 +171,23 @@ jobs:
       - name: Check the wiring detection page lifecycle
         run: lua5.3 bin/msp/verify_esc_wiring_trial.lua
 
+  dashboard-fullscreen-keys:
+    name: Dashboard fullscreen keys
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Lua 5.3
+        run: sudo apt-get update && sudo apt-get install -y lua5.3
+
+      - name: Prove the checks can go red
+        run: lua5.3 bin/dashboard/verify_fullscreen_keys.lua --self-test
+
+      - name: Check global and theme key resolution
+        run: lua5.3 bin/dashboard/verify_fullscreen_keys.lua
+
   dashboard-voltage:
     name: Dashboard voltage bounds
     runs-on: ubuntu-latest

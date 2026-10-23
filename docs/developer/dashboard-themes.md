@@ -58,6 +58,7 @@ the widget to find the module for the phase it is in.
 | `pages` | table | Optional. Splits the theme's settings into pages, one tile each. See [Splitting the settings into pages](#splitting-the-settings-into-pages). |
 | `standalone` | boolean | `true` keeps the theme off the *Dashboard* → *Settings* page even if it declares `configure`. |
 | `fullscreen` | string | Optional. `"theme"` makes fullscreen show this theme at the fullscreen size instead of the quick menu. See [A theme that takes fullscreen](#a-theme-that-takes-fullscreen). Omit it and fullscreen is what it has always been. |
+| `keys` | table | Optional fullscreen bindings for `pageDown`, `pageUp`, `mdl`, `sys`, `tele`, and `exit` (short RTN with the theme itself showing). Host shortcut actions (`widgets/dashboard/keys.lua`): `"none"`, `"openView:menu"`, `"openTool"`, `"openTool:tools_flight_log_page"`, `"exitFullscreen"`; theme views can use `"openView:<id>"` (see [actions](dashboard-views.md#what-follows-a-press)). A non-Theme choice on the global Keys page wins, including the PAGE/SYS/TELE defaults; on Theme, base-layer resolution is `ctx.keys[key]`, then `init.keys[key]`, then nothing. No shipped theme declares this table. |
 | `fullscreenExit` | string | Optional, read only by `bin/themes/validate.lua`. `"longRtn"` declares that the theme binds no control that leaves fullscreen and relies on a long press on RTN. |
 | `views` | table | Optional, for a free-form theme. Views of the theme's own, and looks for the widget's: see [Views of a theme's own](#views-of-a-themes-own). |
 
@@ -928,23 +929,40 @@ out; a theme that relies on a long press on RTN instead declares it with
 
 ### Keys
 
-In this mode the widget answers six keys (a theme without the key answers none, as before):
+In this mode the widget answers six keys (a theme without the key answers none, as before).
+The pilot's radio-wide choices on *Settings → Dashboard →*
+[*Keys*](../pages/settings/dashboard/keys.md) come first: a key not left on **Theme** there does
+the chosen action whatever the theme binds, with a view on top as well. As it comes, SYS opens
+the suite tool, and TELE and both page keys the quick menu that way, so a theme's
+`ctx.keys.pageDown`, `ctx.keys.pageUp`, `ctx.keys.sys` and `ctx.keys.tele` act only once the
+pilot has put those keys on **Theme**. On **Theme**, the host reads `ctx.keys[key]`
+first, then `init.keys[key]` if the build supplies no binding. With the theme base showing and
+no view on top, an unbound key on **Theme** is consumed and does nothing, PAGE down/up included.
+Without a theme base, keys on **Theme** return false and reach LVGL as before.
+`"none"` is an explicit binding and stops
+resolution. The table is what a key on **Theme** does:
 
 | Key | With a view on top | With the theme showing |
 | --- | --- | --- |
-| PAGE down, PAGE up | the quick menu on top: close it; any other view: open the menu over it | `ctx.keys.pageDown` / `ctx.keys.pageUp` if set, else open the menu |
-| RTN, short | the view's `back` — the picker: its close box; the battery profile page: its back box, back to the menu; the menu: close it | `ctx.keys.exit` if set, else nothing |
+| PAGE down, PAGE up | the quick menu on top: close it; any other view: open the menu over it | `ctx.keys.pageDown` / `ctx.keys.pageUp`, then `init.keys` for that key, else nothing |
+| RTN, short | the view's `back` — the picker: its close box; the battery profile page: its back box, back to the menu; the menu: close it | `ctx.keys.exit`, then `init.keys.exit`, else nothing |
 | RTN, long | leaves fullscreen, in the firmware | leaves fullscreen, in the firmware |
-| MDL, SYS, TELE, short | nothing | `ctx.keys.mdl` / `ctx.keys.sys` / `ctx.keys.tele` if set, else nothing |
+| MDL, SYS, TELE, short | nothing, unless bound to the view on top (see below) | `ctx.keys.mdl` / `ctx.keys.sys` / `ctx.keys.tele`, then `init.keys` for that key, else nothing |
 
 A key bound to `openView:<id>`, RTN aside, closes that view again while it is on top, rather
 than doing what the first column says: pressed twice, it opens the view and closes it.
 
-Both page keys do the same because some radios have only one. The keys are not answered while
-the in-flight tuning surface or the connect splash is up.
+The keys are not answered while the in-flight tuning surface or the suite tool is up. On the
+connect splash `ctx.keys` is still empty until the theme has built; radio-wide choices and
+manifest bindings to the host's actions and views already act. A manifest binding to one of the
+theme's own views acts once the connection is ready: the theme's views are registered then, and
+before it the host refuses to open a view it does not have. With the theme base showing and no
+view on top, an unbound
+Theme key does not open the quick menu as a fallback.
 
 MDL, SYS and TELE open the radio's own menus everywhere but in a widget's fullscreen, where the
-widget gets them and the radio opens nothing; unbound they do nothing there, as before. Not
+widget gets them and the radio opens nothing. On **Theme** and unbound they do nothing there; as
+the radio comes, SYS, TELE and the page keys are not on Theme (see above). Not
 every radio has them, so a binding is a shortcut, never the only way to something: the menu
 access and the way out a theme owes are a press, the page keys or RTN.
 

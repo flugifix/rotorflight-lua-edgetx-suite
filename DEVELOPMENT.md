@@ -238,6 +238,24 @@ configuration, absent or small pack voltage, the legacy session alias and saved 
 To prove the check detects the original defect, pass a pre-fix runtime source with
 `--runtime <file>`; the same expectations must fail. The check does not measure hardware or timing.
 
+The dashboard fullscreen-key regression check also runs in both workflows:
+
+```sh
+lua5.3 bin/dashboard/verify_fullscreen_keys.lua --self-test
+lua5.3 bin/dashboard/verify_fullscreen_keys.lua
+```
+
+It loads the real key resolver and view router, then checks the PAGE, SYS and TELE defaults (the
+page keys on Urban, on a base layer that binds nothing as Default's, and without a base layer), that a key on Theme does only what the
+theme binds, the PAGE navigation over open views, radio-wide choices on top of a view, Nothing
+consumption and operation before a theme base exists. It loads the real Urban, Grid and Deck
+layouts and checks that a stored PAGE choice is what they bind. It loads the real Keys page and
+checks that it shows the defaults and stores only the choices that differ from them. It also loads
+the real runtime and checks that leaving fullscreen cancels pending fullscreen builds and splashes
+before their job step can run. The self-test changes the radio-wide branch, drops the SYS and the
+PAGE > default, makes each theme layout ignore the stored choice, makes the page store Theme as
+absent and disables the early exit guard; each mutation must turn its own case red.
+
 The SmartFuel validity check runs in both `pr.yml` and `checks.yml`:
 
 ```sh
