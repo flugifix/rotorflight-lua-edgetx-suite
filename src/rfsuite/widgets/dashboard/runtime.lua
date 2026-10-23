@@ -2677,10 +2677,10 @@ end
 -- them from the session together with the board's id, and a preferences reload in the
 -- disconnected stretch has no id to load them by. So the theme the model's own preferences
 -- resolve for the post-flight screen is kept on the widget while they are there, and answers for
--- the post-flight screens while they are not. Only that one path is kept, nothing else of the
--- preferences, and only where the model's own theme chose it: a model drawing the radio's theme
--- keeps following the radio's settings. The connect edge drops it, and the next model's
--- preferences set it again.
+-- the post-flight screens while they are not. The memo already holds the last model preferences:
+-- reloadActiveTheme uses them for configuration as well, including a model that customizes the
+-- radio's theme without choosing another one. Radio values still supply every setting the model
+-- does not override. The connect edge drops both the path and the memo before the next model.
 --
 -- Preferences without a `dashboard` table cannot name a theme, and the disconnected stretch
 -- produces exactly those: the Setup > Power pages create an empty table in the session when
@@ -3631,6 +3631,11 @@ function Runtime.new(zone, options)
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
     local dashboardPrefs = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
     local selectedTheme = themePathFor(self, dashboardPrefs, modelPrefs, self.flightMode)
+    -- The same model that supplies the offline theme supplies its settings. The memo is already
+    -- retained by noteModelTheme and is cleared on reconnect; it never enters the new session.
+    if themePrefs(modelPrefs) == nil and (self.flightMode == "postflight" or self.flightMode == "offline") then
+      modelPrefs = self._modelThemePrefs
+    end
     local nextConfig = {}
     if self.dashboardLib and self.dashboardLib.getThemeConfig then
       nextConfig = self.dashboardLib.getThemeConfig(self.preferences, selectedTheme, {}, modelPrefs)
