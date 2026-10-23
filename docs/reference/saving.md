@@ -298,6 +298,20 @@ one EEPROM write. They ignore Save and Reload while that runs as well, so every 
 Controls that saves to the flight controller does: a second Save there used to send the same write
 again with a second EEPROM write.
 
+On Stats and both Beepers pages, that write and its EEPROM write are sent by the tool's shared save
+rather than by the page. While it runs, the page is covered by the save's progress. A save that
+worked reads *Settings saved.* and the notice clears itself after two seconds; one that failed reads
+*Not saved* and stays up until it is closed (a failed write said nothing before). Back pressed
+while the save runs is not asked about unsaved changes; the page is left once the notice has gone.
+When the tool opened from the dashboard closes during the save, the save still finishes, and its
+replies no longer reach what the page's close released. After a save that worked, the page reads
+the flight controller again if it is still open; if it was closed, its next visit reads. Before, the page
+queued the EEPROM write from the write's reply and its read from the EEPROM write's reply, so a page
+left in between ran that reply against the state its close had released; the MSP queue catches such
+a raise and logs it as a warning. On Stats the flight count kept for the flight record is now set
+from the saved value also when the page was closed. In the EdgeTX simulator without a flight
+controller these three saves behave as on the other pages that use the shared save.
+
 ## ESC Configurator pages
 
 *Setup* > *ESC & Motors* > *ESC Tools* opens one page per ESC firmware. These pages do not use
