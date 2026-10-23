@@ -302,7 +302,29 @@ Reload discards every change -- on Adjustments that includes a slot other than t
 is read again when it is next selected. While Modes writes its ranges, the page is covered by the
 save's progress, as Adjustments is, so a range cannot be changed half-way through a save.
 
-Modes, Adjustments and Failsafe send their save as a chain of writes,
+Adjustments and Failsafe send their save through the tool's shared save rather than from the
+page: one write for each slot or channel that was changed, then one EEPROM write. Failsafe builds
+every write when Save is pressed. Adjustments copies every changed slot when Save is pressed and
+builds each slot's write from that copy when its turn comes, one slot at a time, so that a save of
+many slots in the tool opened from the dashboard does not run into EdgeTX's instruction limit for a
+single call; the shared save offers this to any page whose steps would otherwise be built all at
+once. While it runs, the page is covered by the save's progress. A save that worked
+reads *Settings saved.* and the notice clears itself after two seconds; one that failed reads *Not
+saved* and stays up until it is closed (before, Adjustments put up its own message, and a failed
+write on Failsafe said nothing). Back pressed while the save runs is not asked about unsaved
+changes; the page is left once the notice has gone. When the tool opened from the dashboard closes
+during the save, the save still finishes with the values Save was pressed with. Before, every
+write after the first was built from the page only when the one before it was answered: with the
+page closed by then, the first slot or channel was changed on the flight controller, the others
+were not, and nothing was stored; with the page opened again at once, the remaining writes went out
+with that visit's values -- on Adjustments a slot's starting values, which switched the slot off --
+and were stored. A change made on a visit opened while an earlier save was still running is kept
+when that save finishes; before, it was marked as saved and the next Save did not write it. After a
+save that worked, Failsafe reads the flight controller again if it is still open; Adjustments does
+not, as before. In the EdgeTX simulator without a flight controller these two saves behave as on
+the other pages that use the shared save.
+
+Modes sends its save as a chain of writes,
 every write after the first built only when the one before it is answered, then one EEPROM write. While that chain runs, Save and
 Reload pressed in the header have no effect (a confirmation the preferences ask for first is still
 shown): a second Save would send every write again with a second EEPROM write, and a Reload would
