@@ -57,7 +57,7 @@ A radio without one of these keys never sends it; its saved choice still remains
 - On themes without a theme base layer (legacy quick-menu fullscreen), keys on **Theme** are
   left to LVGL as before.
 - While the suite tool or in-flight tuning owns the fullscreen, these shortcuts do not take its keys.
-- Main menu is refused while armed. Flight log also requires its preview switch.
+- Main menu and Flight log are refused while armed.
   The quick menu's FC writes stay hidden until the connection is ready and the model is disarmed.
 - A failed SD-card save reports the error and leaves the page marked as unsaved.
 - Unknown stored action values use the key's default. Existing theme configuration is not changed

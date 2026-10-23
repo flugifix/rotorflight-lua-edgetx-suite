@@ -288,8 +288,7 @@ end
 -- drift apart. The battery picker is not among them: the host opens it while a pick is pending
 -- and at no other time. `suite_tool` is the suite's tool, which the host opens only while the
 -- model is disarmed: armed, the key does nothing. `flight_log` is the same tool opened on its
--- Flight Log page, which the host opens only while that page's preview switch is on as well:
--- otherwise the key does nothing.
+-- Flight Log page, which the host opens under the same condition.
 L.KEY_ACTIONS = {
   { id = "none",       action = "none" },
   { id = "menu",       action = "openView:menu" },

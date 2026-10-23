@@ -14,15 +14,15 @@ lines, newest first, and opens one to show the flight in full.
 
 *Tools* → *Flight Log*
 
-Hidden until *System* → *Settings* → *General* → *Preview* → *Flight Log* is on
-(`visibleWhen = "previewFlightLog"`). The tile is locked while the model is armed
-(`lockedWhileArmed = true`), so the page cannot be opened in flight.
+The tile is locked while the model is armed (`lockedWhileArmed = true`), so the page cannot be
+opened in flight. The page is always there, but nothing is written to the log until *Write a
+flight log* is switched on in its own [*Settings*](#settings) tab.
 
 From the dashboard widget at full screen the page can be opened directly: put *FLIGHT LOG* into
 the [quick menu](../../dashboard/quick-menu.md) on *System* → *Settings* → *Dashboard* →
 [*Quick Settings*](../settings/dashboard/quick_menu.md), or, on the Urban theme, set a key to
-*Suite: Flight log*. Either opens the suite's tool inside the widget on this page, under the same two
-conditions, and the back key on the page closes the tool again rather than stepping up to
+*Suite: Flight log*. Either opens the suite's tool inside the widget on this page, under the same
+condition, and the back key on the page closes the tool again rather than stepping up to
 *Tools*.
 
 ## Getting around the page
@@ -35,9 +35,31 @@ naming what they show, the flight's date and time and the pack's name.
 Back steps out of whatever was opened before it leaves the page: an open pack editor, then a
 flight or a pack detail, then a filtered flight list, then the page itself.
 
+## Flights
+
+![The Flights tab](../../images/tools/flight_log/flights.png)
+
+The flights in the log, newest first, under a line with their number and their total armed time.
+Each row shows the date and time the craft armed, the model and the pack, and how long it was
+armed. A log longer than the screen is paged with *Prev* and *Next*.
+
+The `>` button opens the flight. Its heading is the flight's date and time; below it are the
+model, the pack, the duration and, where the line carries them, the flight's statistics (see
+[What a line holds](#what-a-line-holds)). A flight recorded without statistics says so instead.
+
+![One flight opened](../../images/tools/flight_log/flight-detail.png)
+
+## Models
+
+![The Models tab](../../images/tools/flight_log/models.png)
+
+One row per model name the log holds, with its number of flights and their total armed time. The
+`>` button opens the *Flights* list with only that model's flights, headed by the model's name,
+its number of flights and its total time.
+
 ## Settings
 
-The log itself is switched on under *Settings*, not here. This page only reads what has been
+*Write a flight log* is what switches the log on. The other tabs only read what has been
 written.
 
 | Setting | What it does |

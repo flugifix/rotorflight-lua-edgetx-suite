@@ -11,6 +11,6 @@ return function(ctx)
   local line5 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_sys")
     or "SYS: Main menu by default; it requires a disarmed model."
   local line6 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_tele")
-    or "TELE: Quick menu by default. Flight log requires its preview switch."
+    or "TELE: Quick menu by default. Flight log requires a disarmed model."
   return { message = table.concat({ line1, line2, line3, line4, line5, line6 }, "\n") }
 end

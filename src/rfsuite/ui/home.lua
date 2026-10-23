@@ -3354,7 +3354,6 @@ function M.init(opts)
     conditions = {
       developerTools = prefs.general and prefs.general.developer_tools == true,
       previewSetupWizard = prefs.general and prefs.general.preview_setup_wizard == true,
-      previewFlightLog = prefs.general and prefs.general.preview_flight_log == true,
       previewInflightTuning = prefs.general and prefs.general.preview_inflight_tuning == true,
       fblConnected = false,
       -- Declared here rather than left to the first run() tick, so that the build M.init()

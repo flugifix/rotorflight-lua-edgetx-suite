@@ -776,8 +776,6 @@ return {
         reload_confirm = "Confirm on Reload",
         preview_setup_wizard = "Setup Assistant",
         preview_confirm_setup_wizard = "The setup assistant is not finished. Its screens and their order can still change, and it can write to the flight controller. Check what it has written before you fly. Show it anyway?",
-        preview_flight_log = "Flight Log",
-        preview_confirm_flight_log = "The flight log is not finished. What it records, and how the page presents it, can still change, and it keeps a file of its own on the card. Show it anyway?",
         preview_inflight_tuning = "In-flight tuning",
         preview_confirm_inflight_tuning = "Not finished, and it changes the flight controller's parameters in flight. Show it anyway?",
         developer_tools = "Developer Tools",
@@ -2789,7 +2787,7 @@ return {
         help_page_up = "PAGE <: Quick menu by default; it opens and closes the menu. On Theme: the theme's binding, else nothing on the theme itself.",
         help_mdl = "MDL: Theme by default.",
         help_sys = "SYS: Main menu by default; it requires a disarmed model.",
-        help_tele = "TELE: Quick menu by default. Flight log requires its preview switch.",
+        help_tele = "TELE: Quick menu by default. Flight log requires a disarmed model.",
       },
       settings_dashboard_quick_menu = {
         place = "Position %d",

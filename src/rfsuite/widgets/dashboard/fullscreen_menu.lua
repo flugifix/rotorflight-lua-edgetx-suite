@@ -351,8 +351,8 @@ function BUILD.tool(widget, t)
 end
 
 -- The suite's tool, opened on its Flight Log page rather than on its menu, and closed again by
--- the back key there. Offered only while that page is in the tool -- its preview switch is on --
--- and the model is disarmed; not in the default list, so it is in the menu only where the pilot puts it.
+-- the back key there. Offered only while the model is disarmed; not in the default list, so it is
+-- in the menu only where the pilot puts it.
 function BUILD.flight_log(widget, t)
   return {
     id = "flight_log",
