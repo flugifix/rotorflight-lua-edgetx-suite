@@ -80,10 +80,11 @@ those rates nor the FF change paired with them. P and I-term relax cut-off sugge
 FF and its paired rate changes are written together or not at all; if a rate stays unchanged at a limit,
 none of them is written.
 
-After an acknowledged write the axis shows "Applied. Fly again to check the new settings." and offers no
-further change on the same flight data. This survives leaving the page. It goes when the flight data changes
-at the next flight, or when you clear the data with *\**. A different flight controller
-starts with its own measurements.
+Once Save starts writing, the axis shows "Applied. Fly again to check the new settings." and offers no further
+change on the same flight data, including after a failed write or EEPROM commit. Values may be active in RAM
+until a restart, so a further step would build on them; the mark survives leaving the page and clears when
+flight data changes at the next flight or is cleared with *\**. A different flight controller starts with its
+own measurements.
 
 ## Getting a clean measurement
 

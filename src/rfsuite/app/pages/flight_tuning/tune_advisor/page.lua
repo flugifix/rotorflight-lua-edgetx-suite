@@ -919,6 +919,23 @@ function M.onSave(ctx)
   if not ensureSaveDeps() then finishApply(false, ui.text.readFailed); return false end
   local applyGeneration = ui.applyGeneration
   local journalFailed = false
+  local function markApplied()
+    local active = applyGeneration == ui.applyGeneration and ui.applying
+    local marks = appliedAxes()
+    if marks and marks.mcu == snapshot.tune.mcu then
+      local data = active and ui.lastData
+      marks[snapshot.tune.axis] = data and data.axis == snapshot.tune.axis and data.seconds or snapshot.tune.seconds
+      if snapshot.tune.polar then
+        for _, change in ipairs(snapshot.changes) do
+          if change.msg == "rates" then
+            local seconds = marks[snapshot.tune.axis]
+            marks[AXIS_ROLL], marks[AXIS_PITCH] = seconds, seconds
+            break
+          end
+        end
+      end
+    end
+  end
   local function readBack(records)
     if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
     local mismatch
@@ -961,20 +978,7 @@ function M.onSave(ctx)
       onSaved = function()
         -- A save without reboot can commit after the page closes, so record it regardless.
         local active = applyGeneration == ui.applyGeneration and ui.applying
-        local marks = appliedAxes()
-        if marks and marks.mcu == snapshot.tune.mcu then
-          local data = active and ui.lastData
-          marks[snapshot.tune.axis] = data and data.axis == snapshot.tune.axis and data.seconds or snapshot.tune.seconds
-          if snapshot.tune.polar then
-            for _, change in ipairs(snapshot.changes) do
-              if change.msg == "rates" then
-                local seconds = marks[snapshot.tune.axis]
-                marks[AXIS_ROLL], marks[AXIS_PITCH] = seconds, seconds
-                break
-              end
-            end
-          end
-        end
+        markApplied()
         local entries = {}
         for i, change in ipairs(snapshot.changes) do
           local profile = change.profileKind == "pid" and snapshot.tune.pidProfile or snapshot.tune.rateProfile
@@ -987,10 +991,12 @@ function M.onSave(ctx)
         end
       end,
       onDone = function(result)
+        if result.status ~= "done" then markApplied() end
         if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
         if result.status ~= "done" then
           if type(SavePipeline.hasOutcome) == "function" and SavePipeline.hasOutcome() then SavePipeline.dismiss() end
           local commit = result.step == "commit" or result.phase == "commit"
+          render()
           finishApply(false, commit and ui.text.notStored or ui.text.writeFailed)
           return
         end
