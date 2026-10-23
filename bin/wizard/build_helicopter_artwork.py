@@ -63,6 +63,12 @@ for name,base,reference in layers:
     patch = np.asarray(Image.open(ART/"annotations"/(name+".png")).convert("RGBA"))
     patch_mask = np.asarray(Image.open(ART/"annotations"/(name+"-mask.png"))) > 0
     pixels[patch_mask] = patch[patch_mask]
+    # The master faces right; the wizard draws every helicopter nose left. Mirror the finished
+    # image, then turn text regions back so they stay readable.
+    if layout.get("mirror"):
+        pixels = np.ascontiguousarray(pixels[:, ::-1])
+        for x0,y0,x1,y1 in layout.get("readableRegions", {}).get(name, []):
+            pixels[y0:y1+1,x0:x1+1] = pixels[y0:y1+1,x0:x1+1][:, ::-1]
     result = Image.fromarray(pixels)
     accepted = ART/"accepted"/(name+".png")
     if args.write:

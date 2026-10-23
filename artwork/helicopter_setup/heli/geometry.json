@@ -83,5 +83,16 @@
     900
   ],
   "rotationAlignmentY": -6,
-  "ground": 900
+  "ground": 900,
+  "mirror": true,
+  "readableRegions": {
+    "heli-tail-lift": [
+      [
+        844,
+        795,
+        949,
+        852
+      ]
+    ]
+  }
 }

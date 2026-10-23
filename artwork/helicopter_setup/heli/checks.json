@@ -46,8 +46,8 @@
         2000,
         1000
       ],
-      "bytes": 453449,
-      "sha256": "475dc2262f5a6badf3ff679f58729b07a4f910cd840c72d5bcbe78f1c6ea2789",
+      "bytes": 452799,
+      "sha256": "aafd384870bf2cdc9b686a664fc34f03e08b85e3284577e6d2f0cf2747ab8b20",
       "alpha_extrema": [
         0,
         255
@@ -59,8 +59,8 @@
         2000,
         1000
       ],
-      "bytes": 388533,
-      "sha256": "6a741542c7cef7fc37dba025a5b3bd2d3f301c01e5ff8af8d90fcee09b9f9514",
+      "bytes": 387941,
+      "sha256": "e3c08f81e13c29b98f2c6cc98b625515f8c91a5a1ea5a70a8ddbaa0735d2a590",
       "alpha_extrema": [
         0,
         255
@@ -72,12 +72,13 @@
         2000,
         1000
       ],
-      "bytes": 551543,
-      "sha256": "e8997d74285b42c0c0fa17c7ec914bb9cfa5dd252144d4bc36c3f9c477b63671",
+      "bytes": 552074,
+      "sha256": "ccc4aa98d24890b7d868ead4dd706e108ed623492d1c194f05ce328d003024ed",
       "alpha_extrema": [
         0,
         255
       ]
     }
-  ]
+  ],
+  "mirrored_nose_left": true
 }

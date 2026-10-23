@@ -2015,26 +2015,26 @@
     },
     {
       "name": "heli-remove-blades",
-      "sourceSha256": "475dc2262f5a6badf3ff679f58729b07a4f910cd840c72d5bcbe78f1c6ea2789",
+      "sourceSha256": "aafd384870bf2cdc9b686a664fc34f03e08b85e3284577e6d2f0cf2747ab8b20",
       "png": {
-        "sha256": "629922e03e42ce7ff1f049ae1a49866cabd97e09f4aa8b162ef71bddb7983031",
-        "bytes": 11896
+        "sha256": "5c0ed6d588700987e4ab35bdfffdd20303117c4a1e89cc0e4988db97d84de41a",
+        "bytes": 11915
       }
     },
     {
       "name": "heli-level",
-      "sourceSha256": "6a741542c7cef7fc37dba025a5b3bd2d3f301c01e5ff8af8d90fcee09b9f9514",
+      "sourceSha256": "e3c08f81e13c29b98f2c6cc98b625515f8c91a5a1ea5a70a8ddbaa0735d2a590",
       "png": {
-        "sha256": "e957ce7c12918c0abd64a91de336b9f561fe8bf061299a3f989e226293542609",
-        "bytes": 10299
+        "sha256": "d6a11111a1c8f093fe40cc23cb4d5febe618b9e091d52b0b30f7b3db9e5e9667",
+        "bytes": 10304
       }
     },
     {
       "name": "heli-tail-lift",
-      "sourceSha256": "e8997d74285b42c0c0fa17c7ec914bb9cfa5dd252144d4bc36c3f9c477b63671",
+      "sourceSha256": "ccc4aa98d24890b7d868ead4dd706e108ed623492d1c194f05ce328d003024ed",
       "png": {
-        "sha256": "79a529c41688bd4f30eee6f1be60514d06d35d6ee2b8d69ed56ad8123ae11a6a",
-        "bytes": 11776
+        "sha256": "cbe58fb4374484ea2241018744a5605166d44b8bb150ed428d6c5c366193ef67",
+        "bytes": 11747
       }
     }
   ]
