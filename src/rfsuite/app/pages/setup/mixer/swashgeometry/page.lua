@@ -19,6 +19,7 @@ local MixerInputCollectiveApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local ApiVersion = nil
+local SavePipeline = nil
 local t = nil
 
 local MIXER_OVERRIDE_OFF = 2501
@@ -548,72 +549,51 @@ local function queueGeometryRead(isAutoReload)
 end
 
 local function queueGeometryWrite()
-  if not MspRuntime or not MixerConfigApi or not MixerInputPitchApi or not MixerInputRollApi or not MixerInputCollectiveApi or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not MixerConfigApi or not MixerInputPitchApi or not MixerInputRollApi or not MixerInputCollectiveApi then
     return false, "msp_runtime_unavailable"
-  end
-
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
   end
 
   if not M.canSave() or not copyConfigToApi() then
     return false, "loaded_data_missing"
   end
 
-  local mixerCfgPayload = MixerConfigApi.buildWritePayload(ui.apiData.MIXER_CONFIG)
-  local pitchPayload = MixerInputPitchApi.buildWritePayload(ui.apiData.GET_MIXER_INPUT_PITCH)
-  local rollPayload = MixerInputRollApi.buildWritePayload(ui.apiData.GET_MIXER_INPUT_ROLL)
-  local collectivePayload = MixerInputCollectiveApi.buildWritePayload(ui.apiData.GET_MIXER_INPUT_COLLECTIVE)
   local stored = takeSnapshot()
+  -- The visit this save belongs to. The page's close sets ui.runtime to nil and its next visit
+  -- creates a new table, so the hook below changes this visit's state only.
+  local visit = ui.runtime
+
+  -- The writes and the EEPROM commit belong to the pipeline, not to this page: the page can be
+  -- left while they are on the wire, and its close releases ui.runtime and the module handles
+  -- above. So every payload is built here, and nothing below may assume the page is still open.
+  local ok, err = SavePipeline.start({
+    pageId = "setup_mixer_swashgeometry",
+    steps = {
+      { label = "MSP_SET_MIXER_CONFIG", command = MixerConfigApi.writeCommand,
+        payload = MixerConfigApi.buildWritePayload(ui.apiData.MIXER_CONFIG) },
+      { label = "MSP_SET_MIXER_INPUT", command = MixerInputPitchApi.writeCommand,
+        payload = MixerInputPitchApi.buildWritePayload(ui.apiData.GET_MIXER_INPUT_PITCH) },
+      { label = "MSP_SET_MIXER_INPUT", command = MixerInputRollApi.writeCommand,
+        payload = MixerInputRollApi.buildWritePayload(ui.apiData.GET_MIXER_INPUT_ROLL) },
+      { label = "MSP_SET_MIXER_INPUT", command = MixerInputCollectiveApi.writeCommand,
+        payload = MixerInputCollectiveApi.buildWritePayload(ui.apiData.GET_MIXER_INPUT_COLLECTIVE) }
+    },
+    reboot = false,
+    onSaved = function()
+      -- Stored: from now on this is what leaving without Save puts back.
+      if ui.runtime == visit then ui.original = stored end
+    end,
+    onDone = function()
+      if ui.runtime ~= visit then return end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
+  })
+  if not ok then return false, err end
+
   -- The save sends what is on screen, so the live loop has nothing to send until it changes.
   ui.liveConfig = copyFlat(ui.config)
-
-  queue:add({
-    command = MixerConfigApi.writeCommand,
-    payload = mixerCfgPayload,
-    isWrite = true,
-    processReply = function()
-      queue:add({
-        command = MixerInputPitchApi.writeCommand,
-        payload = pitchPayload,
-        isWrite = true,
-        processReply = function()
-          queue:add({
-            command = MixerInputRollApi.writeCommand,
-            payload = rollPayload,
-            isWrite = true,
-            processReply = function()
-              queue:add({
-                command = MixerInputCollectiveApi.writeCommand,
-                payload = collectivePayload,
-                isWrite = true,
-                processReply = function()
-                  local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-                  if eepromApi then
-                    queue:add({
-                      command = eepromApi.writeCommand,
-                      payload = {},
-                      isWrite = true,
-                      -- Stored: from now on this is what leaving without Save puts back.
-                      processReply = function() ui.original = stored end,
-                      errorHandler = function() end
-                    })
-                  end
-                end,
-                errorHandler = function() end
-              })
-            end,
-            errorHandler = function() end
-          })
-        end,
-        errorHandler = function() end
-      })
-    end,
-    errorHandler = function() end
-  })
-
   return true, nil
 end
 
@@ -902,14 +882,8 @@ function M.onSave(ctx)
     return false
   end
 
+  -- The shared save's notice reports how the save ended; the page has nothing to add to it.
   ui.dirty = false
-  if ctx and type(ctx.reportSave) == "function" then
-    ctx.reportSave({
-      ok = true,
-      title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
-      message = pageText(ctx and ctx.i18n, "saved_message_geometry", "Swashplate geometry settings saved")
-    })
-  end
   return true
 end
 
@@ -990,6 +964,7 @@ function M.onClose()
   LoadingOverlay = nil
   ConfirmDialog = nil
   ApiVersion = nil
+  SavePipeline = nil
   t = nil
 end
 

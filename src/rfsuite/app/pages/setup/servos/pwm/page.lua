@@ -15,6 +15,7 @@ local MspRuntime = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local ApiVersion = nil
+local SavePipeline = nil
 local t = nil
 
 local lastChangeTime = 0
@@ -653,19 +654,13 @@ local function queueServosRead(isAutoReload)
 end
 
 --- `onDone(ok)` is told once the write is over: true when the flight controller has taken the
---- record (and the EEPROM write after it), false when either was refused or never answered.
+--- record (and the EEPROM write after it), false when either was refused or never answered. It is
+--- told only while the page is on the visit the save was started from.
 local function queueServoWrite(servoIdx, onDone)
-  local function done(ok)
-    if type(onDone) == "function" then onDone(ok) end
-  end
   if not M.canSave() then return false, "read_required" end
-  if not MspRuntime or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline then
     return false, "msp_runtime_unavailable"
-  end
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
   end
 
   local config = ui.config.servos and ui.config.servos[servoIdx]
@@ -703,61 +698,34 @@ local function queueServoWrite(servoIdx, onDone)
   writeU16(payload, speed)
   writeU16(payload, flags)
 
-  ui.loading = true
-  if type(ui.runtime.requestRebuild) == "function" then
-    ui.runtime.requestRebuild()
-  end
+  -- The visit this save belongs to. The page's close sets ui.runtime to nil and its next visit
+  -- creates a new table, so the hooks below change this visit's state only: on another visit the
+  -- snapshot and the session copy are that visit's own, from its own read.
+  local visit = ui.runtime
 
-  queue:add({
-    command = 212,
-    payload = payload,
-    isWrite = true,
-    processReply = function(self, buf)
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.command,
-          payload = {},
-          isWrite = true,
-          processReply = function()
-            ui.loading = false
-            ui.dirty = false
-            renewOriginalServo(servoIdx)
-            saveToSession()
-            if type(ui.runtime.requestRebuild) == "function" then
-              ui.runtime.requestRebuild()
-            end
-            done(true)
-          end,
-          errorHandler = function()
-            ui.loading = false
-            if type(ui.runtime.requestRebuild) == "function" then
-              ui.runtime.requestRebuild()
-            end
-            done(false)
-          end
-        })
-      else
-        ui.loading = false
-        ui.dirty = false
-        renewOriginalServo(servoIdx)
-        saveToSession()
-        if type(ui.runtime.requestRebuild) == "function" then
-          ui.runtime.requestRebuild()
-        end
-        done(true)
-      end
+  -- The write and the EEPROM commit belong to the pipeline, not to this page: the page can be
+  -- left while they are on the wire, and its close releases ui.runtime. Its notice covers the
+  -- page while the save runs, so the page puts up no overlay of its own.
+  return SavePipeline.start({
+    pageId = "setup_servos_pwm",
+    steps = {
+      { label = "MSP_SET_SERVO_CONFIGURATION", command = 212, payload = payload }
+    },
+    reboot = false,
+    onSaved = function()
+      if ui.runtime ~= visit then return end
+      ui.dirty = false
+      renewOriginalServo(servoIdx)
+      saveToSession()
     end,
-    errorHandler = function()
-      ui.loading = false
+    onDone = function(result)
+      if ui.runtime ~= visit then return end
+      if type(onDone) == "function" then onDone(result.saved == true) end
       if type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
-      done(false)
     end
   })
-
-  return true, nil
 end
 
 --- Makes servo `val` the one on screen, reading its record first where it has not been read on
@@ -1176,13 +1144,8 @@ function M.onSave(ctx)
     return false
   end
 
+  -- The shared save's notice reports how the save ended, once the flight controller has answered.
   ui.dirty = false
-  if ctx and type(ctx.reportSave) == "function" then
-    ctx.reportSave({
-      title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
-      message = pageText(ctx and ctx.i18n, "saved_message", "Servo settings saved")
-    })
-  end
   return true
 end
 
@@ -1264,6 +1227,7 @@ function M.onClose()
   LoadingOverlay = nil
   ConfirmDialog = nil
   ApiVersion = nil
+  SavePipeline = nil
   t = nil
 end
 
