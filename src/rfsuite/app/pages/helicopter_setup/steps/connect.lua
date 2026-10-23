@@ -13,9 +13,12 @@ return function(w)
       w:value(L.reboot, function() return L.required end)
     }, nil, "servo") }
   end
-  return { w:cardDef(L.connect, L.connectHint, {
+  local cards = { w:cardDef(L.plugServos, L.connectHint, {
     w:value(L.motorOutputs, function() return w:motorOutputsOk() and L.ready or L.motorFailed end),
     w:value(L.servos, function() return table.concat(w:servoLabels(), ", ") end),
     w:check("connected", L.servosConnected), w:check("blades", L.bladesRemoved)
-  }, nil, "servo") }
+  }, nil, "servo"), w:cardDef(L.battery, L.batteryUnpluggedHint, {}) }
+  cards[1].summary=L.plugServosShort
+  cards[2].summary=L.batteryUnpluggedShort
+  return cards
 end

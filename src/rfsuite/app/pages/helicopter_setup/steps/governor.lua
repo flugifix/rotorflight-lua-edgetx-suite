@@ -11,17 +11,23 @@ return function(w)
     if v < 4 and w.data.governor_config.gov_throttle_type == 1 then
       w:field("governor_config", "gov_throttle_type", 0, true)
     end
+    w.buildRequested=true;w:rebuild()
   end
-  return { w:cardDef(L.governor, L.governorHint, {
+  local cards = { w:cardDef(L.governorMode, L.governorHint, {
     { kind = "choice", label = L.mode, values = { L.off, L.limit, L.direct, L.electric, L.nitro },
       get = function() return mode() + 1 end, set = setMode },
-    { kind = "choice", label = L.throttleType, values = { L.normal, L.switch, L.functionMode },
-      get = function() return w.data.governor_config.gov_throttle_type + 1 end,
-      set = function(v)
-        if mode()==0 then return end
-        if v == 2 and mode() < 3 then w.message = L.governorSwitch; return end
-        w:field("governor_config", "gov_throttle_type", v - 1, true)
-      end,enabled=function() return mode()>0 end },
     w:value(L.fastRpm, function() return w:fastRpm() and L.available or L.rpmMissing end)
   }) }
+  if mode()>0 then
+    cards[#cards+1]=w:cardDef(L.throttleType, L.throttleTypeHint, {
+      { kind = "choice", label = L.throttleType, values = { L.normal, L.switch, L.functionMode },
+        get = function() return w.data.governor_config.gov_throttle_type + 1 end,
+        set = function(v)
+          if mode()==0 then return end
+          if v == 2 and mode() < 3 then w.message = L.governorSwitch; return end
+          w:field("governor_config", "gov_throttle_type", v - 1, true)
+        end,enabled=function() return mode()>0 end }
+    })
+  end
+  return cards
 end

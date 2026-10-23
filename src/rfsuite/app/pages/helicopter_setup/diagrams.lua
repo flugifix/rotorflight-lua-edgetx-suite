@@ -95,6 +95,8 @@ function M.append(children, w, card, x, y, width, height)
     end
     line({{5,149},{210,149}},ink,1)
   elseif kind == "rates" then
+    local function style() return card.rateStyle and card.rateStyle() end
+    local sketchStart=#children+1
     text(5,0,210,L.rateCurve)
     line({{22,26},{22,128},{207,128}})
     line({{22,77},{207,77}},ink,1)
@@ -109,11 +111,16 @@ function M.append(children, w, card, x, y, width, height)
     end
     local curve=line({{22,128},{207,28}},accent,3)
     curve.pts=function()
-      local style=w.rateStyles and w.rateStyles[w.rateProfile] or w.rateMatched and w.rateMatched[w.rateProfile]
-      return prepared[style or 2]
+      return prepared[style() or 2]
     end
     text(5,140,210,L.artExample)
     line({{22,128},{22,132}});line({{207,128},{207,132}})
+    for i=sketchStart,#children do children[i].visible=function() return style()==nil end end
+    local pictures={"rate-trainer-cyclic","rate-sport-cyclic","rate-3d-cyclic"}
+    local picture=image(function() return pictures[style() or 1] end)
+    picture.visible=function() return style()~=nil end
+  elseif kind == "motorGears" then
+    image(function() return "motor-gears" end)
   elseif kind == "pulses" then
     text(5,0,210,L.pulseTrain)
     local servoIndex=card.servoIndex or 0

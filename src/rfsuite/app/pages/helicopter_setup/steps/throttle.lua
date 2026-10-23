@@ -12,20 +12,32 @@ return function(w)
   }
   local cards = {}
   if w.data.motor_config.motor_pwm_protocol == 0 then
-    cards[1] = w:cardDef(L.escCalibration, L.escCalibrationHint, {
+    cards[1] = w:cardDef(L.fullThrottleTitle, L.fullThrottleHint, {
       w:check("escBlades", L.bladesRemoved),
       w:button(function() return w.escStage=="full" and L.cancelTest or L.fullThrottle end, function()
         if w.escStage=="full" then w:stopMotor();w.escStage="idle";w.message=L.ready;return end
         if not w:usable() or w.rebootPending or (w.data.status.motor_count or 0)<1 or not w.checks.escBlades then w.message = L.confirmCheck; return end
         w.motorHold = { index = 0, value = 1000, due = 0, untilAt = getTime() + 6000 }; w.escStage = "full"
       end),
-      w:button(L.batteryThenLow, function() w:stopMotor(); w.escStage = "low" end,
+      w:value(L.output, function() return output() end)
+    })
+    cards[2] = w:cardDef(L.connectBattery, L.connectBatteryPwmHint, {
+      w:button(L.cancelTest, function() w:stopMotor();w.escStage="idle";w.message=L.ready end,
+        function() return w.escStage=="full" end),
+      w:button(L.lowThrottle, function() w:stopMotor(); w.escStage = "low" end,
         function() return w.escStage == "full" and output() >= 1995 end),
+    })
+    cards[3] = w:cardDef(L.lowThrottle, L.lowThrottleHint, {
       w:button(L.calibrationDone, function()
         if w.escStage == "low" and output() > 0 and output() <= 1005 then w.calibratedEsc = true; w.message = L.ready end
       end),
       w:value(L.output, function() return output() end)
     })
+    cards[1].summary=L.fullThrottleShort
+    cards[2].summary=L.connectBatteryShort
+    cards[3].summary=L.lowThrottleShort
+  else
+    cards[1] = w:cardDef(L.connectBattery, L.connectBatteryHint, {})
   end
   cards[#cards + 1] = w:cardDef(L.throttle, L.spinHint, rows, nil, "heliBladesOff")
   cards[#cards].meter=function() return math.max(-1,math.min(1,(output()-1000)/500-1)) end

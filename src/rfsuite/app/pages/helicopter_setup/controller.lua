@@ -390,7 +390,12 @@ function M.new(runtime, transport, mathModule, labels)
       -- Stick travel is measured anew on every visit to the receiver step.
       if step == 2 and self.rx then self.rx.travel, self.rx.travelSig = nil, nil end
     end
-    self:release()
+    -- Full throttle must remain active while the battery instruction is displayed.
+    -- Back and every other transition still release all overrides.
+    local calibrationForward=self.step==11 and step==11 and self.card==1 and card==2
+      and self.data.motor_config.motor_pwm_protocol==0 and self.escStage=="full" and self.motorHold
+      and self.motorHold.index==0 and self.motorHold.value==1000 and self.motorHold.mode==nil
+    if not calibrationForward then self:release() end
     -- A result reported on one card (a learned switch, a calibration) is not about the next one;
     -- only the unsaved-change reminder and a pending status check carry over.
     local L = self.L

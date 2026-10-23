@@ -29,17 +29,29 @@ return function(w)
     w:read("rc_tuning",function(d) w.data.rc_tuning=d end)
     w:run(function() w.transition=nil end)
   end
-  local values={};for i,id in ipairs(profiles) do values[i]=tostring(id+1) end
-  return { w:cardDef(L.rates, L.ratesHint, {
-    { kind="choice",label=L.rateProfile,values=values,
-      get=function() for i,id in ipairs(profiles) do if id==w.rateProfile then return i end end; return 1 end,
-      set=function(v) w.rateProfile=profiles[v] or profiles[1] end },
-    { kind="choice",label=L.flyingStyle,values={L.keep,L.trainerRates,L.sportRates,L.threeDRates},
-      get=function() return (w.rateStyles and w.rateStyles[w.rateProfile] or w.rateMatched and w.rateMatched[w.rateProfile] or 0)+1 end,
-      set=function(v) w.rateStyles[w.rateProfile]=v>1 and v-1 or nil;w:touch("rc_tuning") end },
-    w:button(L.suggest,function()
-      for i,id in ipairs(profiles) do w.rateStyles[id]=i end;w:touch("rc_tuning")
-    end,function() return #profiles==3 end),
-    w:value(L.collective,function() return H.collective((w.rateTunings or {})[w.rateProfile] or w.data.rc_tuning) or "--" end)
-  },enter,"rates") }
+  local switched=H.profileMode(w.data.adjustment_ranges.adjustment_ranges)==1
+    and H.rangeOf(w.data.adjustment_ranges.adjustment_ranges,1)~=nil
+  local cards={}
+  for position,id in ipairs(profiles) do
+    local index=id
+    local function style()
+      return w.rateStyles and w.rateStyles[index] or w.rateMatched and w.rateMatched[index]
+    end
+    local rows={}
+    if switched and position==1 then
+      rows[#rows+1]=w:button(L.suggest,function()
+        for i,profile in ipairs(profiles) do w.rateStyles[profile]=i end;w:touch("rc_tuning")
+      end,function() return #profiles==3 end)
+    end
+    rows[#rows+1]={ kind="choice",label=L.flyingStyle,values={L.keep,L.trainerRates,L.sportRates,L.threeDRates},
+      get=function() return (style() or 0)+1 end,
+      set=function(v) w.rateStyles[index]=v>1 and v-1 or nil;w:touch("rc_tuning") end }
+    rows[#rows+1]=w:value(L.collective,function() return H.collective((w.rateTunings or {})[index] or w.data.rc_tuning) or "--" end)
+    local title=switched and string.format(L.switchRateProfile,position,index+1) or string.format(L.rateProfileTitle,index+1)
+    local card=w:cardDef(title,L.ratesHint.."\n"..L.rateNoMatch,rows,enter,"rates")
+    card.rateStyle=style
+    card.summary=function() return style() and L.ratesHint or L.rateNoMatchShort end
+    cards[#cards+1]=card
+  end
+  return cards
 end

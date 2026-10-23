@@ -64,7 +64,7 @@ return function(h)
       w.data.serial_config["port_"..i.."_function_mask"]=0
     end
     local function choices()
-      return {step(w,"escTelemetry")[1].rows[2],w:port(L.port,64)}
+      return {step(w,"escTelemetry")[2].rows[1],w:port(L.port,64)}
     end
     for _,row in ipairs(choices()) do
       eq(row.values[1],"S.BUS [UART1]","PORTS known board names UART1")
@@ -1002,6 +1002,188 @@ return function(h)
     w.data.rc.channels[6]=2012
     eq(c[2].rows[4].get(),L.none,"S04 neutral outside button windows")
   end)
+  local function cardOrder(cards,titles,id)
+    eq(#cards,#titles,id.." card count")
+    for i,title in ipairs(titles) do eq(cards[i] and cards[i].title,title,id.." card title "..i) end
+  end
+  local function savedPayload(w,name,id)
+    local api=load("tasks/msp/api/"..name..".lua")
+    local expected=api.buildWritePayload(w.data[name])
+    local count=0
+    for _,m in ipairs(q.sent) do
+      if m.command==api.writeCommand then
+        count=count+1
+        eq(table.concat(m.payload,","),table.concat(expected,","),id.." saved "..name.." payload")
+      end
+    end
+    eq(count,1,id.." writes "..name.." once")
+  end
+  case("S05.profile-cards-and-save",function()
+    local w=world();settle(w);w.step=5
+    local ranges=w.data.adjustment_ranges.adjustment_ranges
+    ranges[1]=H.mapped(2,1,1000,2000,1,3);ranges[2]=H.mapped(1,1,1000,2000,1,3)
+    local c=step(w,"rates")
+    cardOrder(c,{string.format(L.switchRateProfile,1,1),string.format(L.switchRateProfile,2,2),
+      string.format(L.switchRateProfile,3,3)},"S05")
+    c[1].enter();settle(w)
+    check(c[1].rows[1].enabled(),"S05 three switch positions enable Suggest")
+    c[1].rows[1].press()
+    for i=1,3 do eq(w.rateStyles[i-1],i,"S05 Suggest follows switch position "..i) end
+    w.rateTunings[0].rcRates_4=80;w.rateTunings[1].rcRates_4=120
+    check(c[1].rows[3].get()~=c[2].rows[2].get(),"S05 collective readout belongs to its profile")
+    c[1].rows[2].set(1);c[2].rows[1].set(4);c[3].rows[1].set(2)
+    eq(w.rateStyles[0],nil,"S05 Keep current leaves the first profile unwritten")
+    eq(w.rateStyles[1],3,"S05 second card edits only profile two")
+    eq(w.rateStyles[2],1,"S05 third card edits only profile three")
+    local expected={}
+    local fixture=load("tasks/msp/api/rc_tuning.lua")
+    for _,style in ipairs({3,1}) do
+      local d=fixture.parse(fixture.simulatorResponse);H.style(d,style,6)
+      expected[#expected+1]=table.concat(fixture.buildWritePayload(d),",")
+    end
+    q.sent={};w:save();settle(w)
+    local count=0
+    for _,m in ipairs(q.sent) do
+      if m.command==204 then count=count+1;eq(table.concat(m.payload,","),expected[count],"S05 per-profile save fields "..count) end
+    end
+    eq(count,2,"S05 only the two selected profiles are saved")
+    ranges[1],ranges[2]=nil,nil;c=step(w,"rates")
+    cardOrder(c,{string.format(L.rateProfileTitle,w.data.status.current_control_rate_profile_index+1)},"S05 active")
+    eq(c[1].rows[1].label,L.flyingStyle,"S05 active profile has no selector or Suggest")
+    w.rateStyles={};w.rateMatched={}
+    eq(c[1].summary(),L.rateNoMatchShort,"S05 unmatched profile explains rate replacement")
+    check(string.find(c[1].detail,L.rateNoMatch,1,true)~=nil,"S05 help includes the full unmatched warning")
+  end)
+  case("S08.card-order-and-save",function()
+    local w=world();settle(w);w.step=8;w.data.feature_config.enabledFeatures=0
+    local c=step(w,"governor");cardOrder(c,{L.governorMode},"S08 Off")
+    c[1].rows[1].set(4);c=step(w,"governor")
+    cardOrder(c,{L.governorMode,L.throttleType},"S08 On")
+    c[2].rows[1].set(2)
+    eq(w.data.governor_config.gov_mode,3,"S08 Electric mode field")
+    eq(w.data.governor_config.gov_throttle_type,1,"S08 Switch throttle field")
+    check(w.rebootPending,"S08 mode still requires restart")
+    q.sent={};w:save();settle(w)
+    savedPayload(w,"governor_config","S08");savedPayload(w,"feature_config","S08")
+    c=step(w,"governor");c[1].rows[1].set(1);c=step(w,"governor")
+    cardOrder(c,{L.governorMode},"S08 disabled again")
+  end)
+  case("S09.card-order-and-save",function()
+    for _,tail in ipairs({0,1}) do
+      local w=world();settle(w);w.step=9;w.data.mixer_config.tail_rotor_mode=tail
+      local c=step(w,"motor")
+      cardOrder(c,{L.throttleProtocol,L.motorGearing,L.motorGearingTail},"S09 tail "..tail)
+      c[1].rows[1].set(5);c[1].rows[2].set(2)
+      c[2].rows[1].set(14);c[2].rows[2].set(12);c[2].rows[3].set(120)
+      eq(c[2].rows[4].get(),"10.000","S09 ratio still follows tooth counts")
+      if tail==0 then c[3].rows[1].set(20);c[3].rows[2].set(90)
+      else c[3].rows[1].set(8) end
+      eq(w.data.motor_config.motor_pwm_protocol,5,"S09 protocol wire ID")
+      eq(w.data.motor_config.use_dshot_telemetry,1,"S09 DShot field")
+      eq(w.data.motor_config.motor_pole_count_0,14,"S09 main pole field")
+      eq(w.data.motor_config.main_rotor_gear_ratio_0,12,"S09 pinion field")
+      eq(w.data.motor_config.main_rotor_gear_ratio_1,120,"S09 main gear field")
+      if tail==0 then
+        eq(w.data.motor_config.tail_rotor_gear_ratio_0,20,"S09 tail input field")
+        eq(w.data.motor_config.tail_rotor_gear_ratio_1,90,"S09 tail output field")
+      else eq(w.data.motor_config.motor_pole_count_1,8,"S09 tail pole field") end
+      eq(c[2].art,"motorGears","S09 gearing has its own picture")
+      q.sent={};w:save();settle(w)
+      savedPayload(w,"motor_config","S09");savedPayload(w,"feature_config","S09")
+    end
+  end)
+  local function noConfigWrites(w,id)
+    q.sent={};w:save();settle(w)
+    local config={}
+    for _,name in ipairs({"motor_config","governor_config","feature_config","esc_sensor_config","serial_config","rc_tuning"}) do
+      local api=load("tasks/msp/api/"..name..".lua");config[api.writeCommand]=true
+    end
+    local eeprom=0
+    for _,m in ipairs(q.sent) do
+      check(not config[m.command],id.." adds no configuration write")
+      if m.command==250 then eeprom=eeprom+1 end
+    end
+    eq(eeprom,1,id.." save still reaches EEPROM")
+  end
+  case("S10.card-order-and-save",function()
+    local w=world();settle(w);w.step=10;w.rebootPending=nil;w.data.motor={motor_1=1000,motor_2=1000}
+    local c=step(w,"connect");cardOrder(c,{L.plugServos,L.battery},"S10")
+    c[1].rows[3].set(2);c[1].rows[4].set(2)
+    check(w.validate(),"S10 both confirmations still complete the step")
+    noConfigWrites(w,"S10")
+    w.rebootPending=true;c=step(w,"connect");cardOrder(c,{L.connect},"S10 restart")
+    eq(c[1].rows[1].label,L.servosUnplugged,"S10 restart retains unplugged confirmation")
+    eq(c[1].art,"servo","S10 restart retains its picture")
+  end)
+  case("S11.card-order-save-and-calibration-navigation",function()
+    local w=world();settle(w);w.step=11;w.card=1;w.data.motor_config.motor_pwm_protocol=0
+    w.data.motor={motor_1=1000,motor_2=1000}
+    local c=step(w,"throttle")
+    cardOrder(c,{L.fullThrottleTitle,L.connectBattery,L.lowThrottle,L.throttle,L.motorDirection},"S11 PWM")
+    w.checks.escBlades=true;c[1].rows[2].press()
+    local hold=w.motorHold;check(hold~=nil,"S11 calibration navigation has a running hold")
+    w:navigate(11,2)
+    eq(w.motorHold,hold,"S11 full throttle survives only the battery-card handoff")
+    eq(w.motorHold and w.motorHold.untilAt,hold.untilAt,"S11 battery handoff never extends hold timeout")
+    settle(w);c=step(w,"throttle")
+    w.data.motor.motor_1=1994;check(not c[2].rows[2].enabled(),"S11 battery card retains full-output safety gate")
+    w.data.motor.motor_1=2000;c[2].rows[2].press()
+    check(not w.motorHold and w.escStage=="low","S11 Low throttle still releases the hold")
+    w:navigate(11,3);settle(w);c=step(w,"throttle")
+    for _,output in ipairs({0,1006}) do
+      w.data.motor.motor_1=output;c[3].rows[1].press();check(not w.calibratedEsc,"S11 invalid low output cannot confirm calibration")
+    end
+    w.data.motor.motor_1=1000;c[3].rows[1].press();check(w.calibratedEsc,"S11 valid low output confirms calibration")
+    check(not w.validate(),"S11 Continue still requires motor direction")
+    c[5].rows[1].set(2);check(w.validate(),"S11 motor direction still completes the step")
+    noConfigWrites(w,"S11")
+    w.card=1;c[1].rows[2].press()
+    check(w.motorHold~=nil,"S11 Back control starts with full throttle active")
+    w:navigate(11,2);settle(w)
+    w:navigate(11,1);check(not w.motorHold,"S11 Back from the battery card releases full throttle")
+    settle(w);w.escStage="idle";c=step(w,"throttle");c[1].rows[2].press()
+    check(w.motorHold~=nil,"S11 skip control starts with full throttle active")
+    w:navigate(11,4);check(not w.motorHold,"S11 skipping calibration cards releases full throttle")
+    settle(w);w.card=1;w.escStage="full"
+    w.motorHold={index=0,value=100,mode="spin",due=0,untilAt=getTime()+1500}
+    w:navigate(11,2);check(not w.motorHold,"S11 battery handoff never retains a spin-test hold")
+    settle(w);w.data.motor_config.motor_pwm_protocol=5;c=step(w,"throttle")
+    cardOrder(c,{L.connectBattery,L.throttle,L.motorDirection},"S11 non-PWM")
+  end)
+  case("S12.card-order-and-save",function()
+    local w=world();settle(w);w.step=12;w.data.motor_config.motor_pwm_protocol=5
+    w.data.esc_sensor_config.protocol=1
+    local c=step(w,"escTelemetry")
+    cardOrder(c,{L.escTelemetry,L.port,L.telemetryCheck,L.telemetryStatus},"S12 serial")
+    c[1].rows[1].set(3);c[2].rows[1].set(1)
+    eq(w.data.esc_sensor_config.protocol,2,"S12 protocol field")
+    check(w:hasPort(1024),"S12 port assignment still selects telemetry")
+    q.sent={};w:save();settle(w)
+    savedPayload(w,"esc_sensor_config","S12");savedPayload(w,"feature_config","S12")
+    local serialWrites,expected=0,{}
+    local api=load("tasks/msp/api/serial_config.lua")
+    for i=1,12 do
+      local port={}
+      for _,key in ipairs({"identifier","function_mask","msp_baud_index","gps_baud_index","telem_baud_index","blackbox_baud_index"}) do
+        port[key]=w.data.serial_config["port_"..i.."_"..key]
+      end
+      if port.identifier~=nil then expected[#expected+1]=table.concat(api.buildWritePayload(port),",") end
+    end
+    for _,m in ipairs(q.sent) do
+      if m.command==55 then
+        serialWrites=serialWrites+1
+        eq(table.concat(m.payload,","),expected[serialWrites],"S12 preserves all saved serial fields "..serialWrites)
+      end
+    end
+    eq(serialWrites,#expected,"S12 saves every configured serial port")
+    check(serialWrites>0,"S12 port assignment is saved")
+    c=step(w,"escTelemetry");c[1].rows[1].set(1);c=step(w,"escTelemetry")
+    cardOrder(c,{L.escTelemetry,L.telemetryCheck,L.telemetryStatus},"S12 Off")
+    w.data.motor_config.motor_pwm_protocol=9;c=step(w,"escTelemetry")
+    cardOrder(c,{L.escTelemetry,L.telemetryCheck,L.telemetryStatus},"S12 Castle")
+    eq(c[1].detail,L.castleTelemetryHint,"S12 Castle explains its throttle wire")
+    check(not c[1].rows[1].enabled(),"S12 Castle protocol stays read-only")
+  end)
   case("S05.scoped-rates-and-readback",function()
     local w=world();w.step=5
     local ranges=w.data.adjustment_ranges.adjustment_ranges
@@ -1009,8 +1191,8 @@ return function(h)
     local c=step(w,"rates");c[1].enter();settle(w)
     eq(table.concat(w.rateProfiles,","),"1,2","S05 only mapped rate profiles offered")
     check(w.rateTunings[1] and w.rateTunings[2] and not w.rateTunings[0],"S05 profiles read individually")
-    check(not c[1].rows[3].enabled(),"S05 suggest only offered for three positions")
-    c[1].rows[1].set(1);c[1].rows[2].set(2)
+    check(not c[1].rows[1].enabled(),"S05 suggest only offered for three positions")
+    c[1].rows[2].set(2)
     q.sent={};w:save();settle(w)
     local writes=0;local selections={}
     for _,m in ipairs(q.sent) do
@@ -1170,11 +1352,13 @@ return function(h)
     local w=world();w.data.feature_config.enabledFeatures=0;w.data.governor_config.gov_mode=3
     local c=step(w,"governor")
     eq(c[1].rows[1].get(),1,"S08 disabled feature overrides latent mode")
-    c[1].rows[2].set(3)
+    eq(#c,1,"S08 Off omits the throttle type card")
+    w.data.feature_config.enabledFeatures=1<<26;c=step(w,"governor")
+    w.data.feature_config.enabledFeatures=0;c[2].rows[1].set(3)
     eq(w.data.feature_config.enabledFeatures & (1<<26),0,"S08 throttle edit never enables latent governor")
     w.data.governor_config.gov_throttle_type=1;c[1].rows[1].set(3)
     eq(w.data.governor_config.gov_throttle_type,0,"S08 leaving headspeed resets Switch throttle")
-    c[1].rows[2].set(2)
+    c[2].rows[1].set(2)
     eq(w.data.governor_config.gov_throttle_type,0,"S08 unsupported Switch choice refused")
     w.data.motor_config.motor_pole_count_0=14;w.data.motor_config.motor_pwm_protocol=5;w.data.motor_config.use_dshot_telemetry=1
     check(w:fastRpm(),"S08 bidirectional DShot is fast RPM")
@@ -1217,7 +1401,7 @@ return function(h)
     local w=world();settle(w);local card=step(w,"motor")[1]
     check(type(card.summary)=="string" and card.summary==L.motorQuick,
       "S09 motor card shows a short new ESC instruction beside full help")
-    eq(#card.rows,4,"S09 ESC guidance keeps the compact motor form at four rows")
+    eq(#card.rows,3,"S09 protocol card keeps protocol, DShot and blades confirmation")
     local manifest=load("app/manifest.lua")
     for _,locale in ipairs({"en","de"}) do
       local b=load("i18n/"..locale..".lua");local s=b.app.modules.helicopter_setup
@@ -1253,7 +1437,7 @@ return function(h)
     check(help and string.find(help,card.detail,1,true)~=nil,"S09 question mark opens the full ESC guidance")
   end)
   case("S09.bidirectional-dshot-switch",function()
-    local w=world();settle(w);local c=step(w,"motor");local row=c[1].rows[3]
+    local w=world();settle(w);local c=step(w,"motor");local row=c[1].rows[2]
     eq(row.kind,"choice","S09 bidirectional DShot is an on/off choice")
     w.data.motor_config.motor_pwm_protocol=0
     check(not row.enabled(),"S09 bidirectional DShot is inactive for PWM")
@@ -1278,9 +1462,9 @@ return function(h)
     check((w.data.feature_config.enabledFeatures & (1<<27))~=0,"S09 Castle feature remains enabled")
     check(not w:canDetect(1024),"S12 Castle has no wiring trial")
     w.data.motor_telemetry={motors={{voltage=0,temperature=0,current=0,rpm=0}}}
-    eq(c[3].rows[1].get(),L.noTelemetry,"S12 zero data is missing telemetry")
+    eq(c[4].rows[3].get(),L.noTelemetry,"S12 zero data is missing telemetry")
     w.data.motor_telemetry.motors[1].voltage=24000
-    eq(c[3].rows[1].get(),L.receiving,"S12 voltage proves reception")
+    eq(c[4].rows[3].get(),L.receiving,"S12 voltage proves reception")
   end)
   case("S10.connection-gate",function()
     local w=world();w.rebootPending=true
@@ -1303,9 +1487,9 @@ return function(h)
     w.bladesOff=false;w:spin(0,1);check(w.motorHold==nil,"S11 blades acknowledgement required")
     local c=step(w,"throttle");c[1].rows[1].set(2);c[1].rows[2].press()
     eq(w.motorHold.value,1000,"S11 calibration high command")
-    w.data.motor={motor_1=1994};check(not c[1].rows[3].enabled(),"S11 actual high output required")
-    w.data.motor.motor_1=2000;check(c[1].rows[3].enabled(),"S11 actual full output enables low transition")
-    c[1].rows[3].press();w.data.motor.motor_1=1000;c[1].rows[4].press()
+    w.data.motor={motor_1=1994};check(not c[2].rows[2].enabled(),"S11 actual high output required")
+    w.data.motor.motor_1=2000;check(c[2].rows[2].enabled(),"S11 actual full output enables low transition")
+    c[2].rows[2].press();w.data.motor.motor_1=1000;c[3].rows[1].press()
     check(w.calibratedEsc,"S11 low calibration completion")
     w.step=10;w:navigate(11,1)
     check(not w.calibratedEsc,"S11 revisiting requires fresh ESC procedure")
@@ -1773,7 +1957,7 @@ return function(h)
     local s=scene("direction");w.data.rc_command={commands={-500,0,0,0,0}};local a=signature(s)
     w.data.rc_command.commands[1]=500
     check(a~=signature(s),"VISUAL command changes existing stick marker")
-    s=scene("rates");w.rateStyles[w.rateProfile]=1;a=signature(s);w.rateStyles[w.rateProfile]=3
+    s=scene("rates");w.rateStyles[w.rateProfiles[1]]=1;a=signature(s);w.rateStyles[w.rateProfiles[1]]=3
     check(a~=signature(s),"VISUAL selected style changes existing rate curve")
     s=scene("swash",2);w.data.mixer_config.main_rotor_dir=0;a=signature(s);w.data.mixer_config.main_rotor_dir=1
     check(a~=signature(s),"VISUAL rotor direction changes the existing picture")
@@ -1824,7 +2008,20 @@ return function(h)
         end
       end
     end
-    w.rebootPending=true;local job,picture=scene("connect");expect(picture,"servo");w.rebootPending=nil
+    local job,picture=scene("rates");local count=#job.children
+    local profile=w.rateProfiles[1]
+    w.rateStyles,w.rateMatched={},{}
+    check(not picture.visible(),"VISUAL unmatched rates show the existing sketch")
+    for style,name in ipairs({"rate-trainer-cyclic","rate-sport-cyclic","rate-3d-cyclic"}) do
+      w.rateMatched[profile]=style;expect(picture,name)
+      check(picture.visible(),"VISUAL matched rates show their style picture")
+      eq(#job.children,count,"VISUAL rate picture changes retain the scene")
+    end
+    w.rateStyles[profile]=1;expect(picture,"rate-trainer-cyclic")
+    w.rateStyles={};w.rateMatched={}
+    check(not picture.visible(),"VISUAL removing the match restores the rates sketch")
+    job,picture=scene("motor",2);expect(picture,"motor-gears")
+    w.rebootPending=true;job,picture=scene("connect");expect(picture,"servo");w.rebootPending=nil
     w.data.mixer_config.tail_rotor_mode=1
     job,picture=scene("tail");local count=#job.children
     for _,value in ipairs({1,2,1}) do

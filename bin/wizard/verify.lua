@@ -364,7 +364,7 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
         w.data.attitude={roll=0,pitch=0,yaw=0};w.attitudeAt=getTime()
         w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
       end
-      if (n==1 and c>1) or (n==2 and c>1) or (n==6 and c>1) or (n==7 and c==2) or ((n==15 or n==16 or n==17) and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
+      if ((n==5 or n==8 or n==9 or n==10 or n==11 or n==12) and c>1) or (n==1 and c>1) or (n==2 and c>1) or (n==6 and c>1) or (n==7 and c==2) or ((n==15 or n==16 or n==17) and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
         exported[#exported+1] = {step=n,name=name,task=c,width=size[1],height=size[2],children=resolve(job.children)}
       end
       if n==6 then
@@ -405,11 +405,11 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
 end
 -- Additional picture variants use the same card definitions as the normal walk.
 for _,size in ipairs({{320,240},{480,272},{800,480}}) do
-  local function export(name,task,prepare)
+  local function export(name,task,prepare,card)
     w.rebootPending=nil
     if prepare then prepare() end
     for n,key in ipairs(steps) do if key==name then w.step=n;break end end
-    w.cards=load(PATH.."steps/"..name..".lua")(w);w.card=1
+    w.cards=load(PATH.."steps/"..name..".lua")(w);w.card=card or 1
     local job=view.new(w,{w=size[1],h=size[2]},diagrams)
     while not job.done do job:step() end
     exported[#exported+1]={step=w.step,name=name,task=task,width=size[1],height=size[2],children=resolve(job.children)}
@@ -421,6 +421,32 @@ for _,size in ipairs({{320,240},{480,272},{800,480}}) do
     end)
   end
   export("connect","restart",function() w.rebootPending=true end)
+  local features=w.data.feature_config.enabledFeatures
+  export("governor","throttle-type",function()
+    w.data.feature_config.enabledFeatures=features | (1<<26)
+  end,2)
+  w.data.feature_config.enabledFeatures=features
+  local protocol=w.data.motor_config.motor_pwm_protocol
+  for card=1,3 do
+    export("throttle","pwm-"..card,function() w.data.motor_config.motor_pwm_protocol=0 end,card)
+  end
+  w.data.motor_config.motor_pwm_protocol=protocol
+  export("throttle","non-pwm",function() w.data.motor_config.motor_pwm_protocol=5 end)
+  w.data.motor_config.motor_pwm_protocol=protocol
+  local ranges=w.data.adjustment_ranges.adjustment_ranges
+  local pid,rate=ranges[1],ranges[2]
+  for card=1,3 do
+    export("rates","profile-"..card,function()
+      ranges[1]=H.mapped(2,1,1000,2000,1,3);ranges[2]=H.mapped(1,1,1000,2000,1,3)
+      w.rateStyles={[0]=1,[1]=2,[2]=3}
+    end,card)
+  end
+  ranges[1],ranges[2]=pid,rate;w.rateStyles={}
+  local telemetry=w.data.esc_sensor_config.protocol
+  export("escTelemetry","castle",function() w.data.motor_config.motor_pwm_protocol=9 end)
+  w.data.motor_config.motor_pwm_protocol=protocol
+  export("escTelemetry","off",function() w.data.esc_sensor_config.protocol=0 end)
+  w.data.esc_sensor_config.protocol=telemetry
   for _,mode in ipairs({1,2}) do
     export("tail",mode==2 and "bidirectional" or "motor",function() w.data.mixer_config.tail_rotor_mode=mode end)
   end
@@ -451,7 +477,7 @@ for _,size in ipairs({{320,240},{480,272},{800,480}}) do
       w.data.attitude={roll=0,pitch=value,yaw=0};w.attitudeAt=getTime()
       w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
     end},
-    {name="rates",card=1,group="rates",values={1,2,3},apply=function(value) w.rateStyles[w.rateProfile]=value end},
+    {name="rates",card=1,group="rates",values={1,2,3},apply=function(value) w.rateStyles[w.rateProfiles[1]]=value end},
     {name="servoType",card=1,group="pulses",values={50,333,560},apply=function(value)
       for _,index in ipairs(w.cards[1].servoIndices) do
         local servo=w.data.servo_configurations.servos[index]

@@ -13,27 +13,33 @@ return function(w)
         if mask and (mask & 1024) ~= 0 then w.data.serial_config[key]=mask & (~1024); w:touch("serial_config",true) end
       end
     end
+    w.buildRequested=true;w:rebuild()
   end
   local castle=w.data.motor_config.motor_pwm_protocol==9
   protocol.enabled=function() return not castle and not w.trial end
   local port=w:port(L.port,1024)
   port.enabled=function() return not castle and not w.trial and w.data.esc_sensor_config.protocol>0 end
   local cards={
-    w:cardDef(L.escTelemetry, L.telemetryHint, {
-      protocol, port,
-      w:button(function() return w.trial and L.cancelDetect or L.detectWiring end,
-        function() if w.trial then w:stopTrial(true) else w:startTrial("esc_sensor_trial") end end,
-        function() return w.trial ~= nil or w:canDetect(1024) end),
+    w:cardDef(L.escTelemetry, castle and L.castleTelemetryHint or L.telemetryHint, {
+      protocol,
       w:button(L.saveReboot, function() w:reboot() end)
-    }),
-    w:cardDef(L.telemetryCheck, L.telemetryCheckHint, {
-      w:value(L.voltage, function() local m = motor(); return m and string.format("%.2f V", m.voltage / 1000) or "--" end),
-      w:value(L.current, function() local m = motor(); return m and string.format("%.2f A", m.current / 1000) or "--" end),
-      w:value(L.temperature, function() local m = motor(); return m and string.format("%.1f°C", m.temperature / 10) or "--" end),
-      w:value(L.rpm, function() local m = motor(); return m and m.rpm or "--" end)
     })
   }
+  if castle then cards[1].summary=L.castleTelemetryShort end
+  if not castle and w.data.esc_sensor_config.protocol>0 then
+    cards[#cards+1]=w:cardDef(L.port,L.telemetryPortHint,{port})
+  end
   cards[#cards+1]=w:cardDef(L.telemetryCheck,L.telemetryCheckHint,{
+    w:button(function() return w.trial and L.cancelDetect or L.detectWiring end,
+      function() if w.trial then w:stopTrial(true) else w:startTrial("esc_sensor_trial") end end,
+      function() return w.trial ~= nil or w:canDetect(1024) end),
+    w:value(L.voltage, function() local m = motor(); return m and string.format("%.2f V", m.voltage / 1000) or "--" end),
+    w:value(L.temperature, function() local m = motor(); return m and string.format("%.1f°C", m.temperature / 10) or "--" end),
+  })
+  cards[#cards].summary=L.telemetryCheckShort
+  cards[#cards+1]=w:cardDef(L.telemetryStatus,L.telemetryStatusHint,{
+    w:value(L.current, function() local m = motor(); return m and string.format("%.2f A", m.current / 1000) or "--" end),
+    w:value(L.rpm, function() local m = motor(); return m and m.rpm or "--" end),
     w:value(L.active,function()
       local m=motor();return m and (m.voltage>0 or m.temperature>0) and L.receiving or L.noTelemetry
     end),
