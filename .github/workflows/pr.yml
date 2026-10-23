@@ -245,7 +245,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lua5.3
 
       - name: Check automatic and saved voltage bounds
-        run: lua5.3 bin/dashboard/verify_voltage_bounds.lua
+        run: |
+          lua5.3 bin/dashboard/verify_voltage_bounds.lua
+          lua5.3 bin/themes/verify_voltage_save.lua
 
   board-auto-align:
     # Setup > Alignment drives the flight controller's board auto-alignment. This runs the

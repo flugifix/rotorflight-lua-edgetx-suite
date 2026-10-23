@@ -110,6 +110,15 @@ local Controls = setmetatable({ SECTION_H = 30, ROW_H = 40 }, {
   end
 })
 
+-- Exercise an actual edit: an untouched automatic voltage form correctly writes no bounds.
+function Controls.appendNumberField(children, _, _, _, _, field)
+  if type(children) == "table" then children[#children + 1] = "appendNumberField" end
+  if field and type(field.get) == "function" and type(field.set) == "function" then
+    field.set(field.get() + 1)
+  end
+  return 41
+end
+
 -- "ok", "absent" (the module will not load), or what a refused save answers.
 local mpMode = "ok"
 local mpCalls = 0
