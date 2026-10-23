@@ -138,3 +138,12 @@ store answered, or if a module's source no longer has the line the breakage rewr
 
 Exit status: `0` green, `1` red, `2` when the tree cannot be read. It is not part of the CI
 workflow.
+
+## Voltage field edits
+
+`lua5.3 bin/themes/verify_voltage_save.lua` drives the four shipped voltage forms through
+unchanged saves, explicit defaults, inherited bounds, failed saves/retries and reload.
+An optional repository-root argument runs the same expectations against an older tree;
+the original implementation fails on the untouched automatic minimum.
+The save-reporting matrix edits numeric fields before saving, so a voltage-only form has
+actual values to write without requiring untouched automatic limits to become explicit.

@@ -723,8 +723,11 @@ end
 -- standard still reaches every value the model never changed. Without the model's store the
 -- model scope saves nothing: writing its values into the radio's file instead would change the
 -- standard for every model.
-function M.setThemeConfig(prefs, path, values, modelPrefs)
+function M.setThemeConfig(prefs, path, values, modelPrefs, options)
   if type(values) ~= "table" then return end
+  -- A voltage form distinguishes an untouched automatic range from an explicitly edited one.
+  -- Other callers retain the existing write contract when they pass no options.
+  local preserveVoltage = options and options.voltageEdited == false
 
   if M.getEditScope() == "model" then
     if type(modelPrefs) ~= "table" then return end
@@ -736,9 +739,10 @@ function M.setThemeConfig(prefs, path, values, modelPrefs)
     if modelPrefs.dashboard.overrides == nil then modelPrefs.dashboard.overrides = true end
     for k, v in pairs(values) do
       local key = themeConfigKey(path, k)
-      if key then
+      if key and not (preserveVoltage and (k == "v_min" or k == "v_max")) then
         local standard = global[key]
-        if standard == nil then standard = defaults[k] end
+        local explicitVoltage = options and options.voltageEdited == true and (k == "v_min" or k == "v_max")
+        if standard == nil and not explicitVoltage then standard = defaults[k] end
         if standard ~= nil and sameValue(v, standard) then
           modelPrefs.dashboard[key] = nil
         else
@@ -753,7 +757,7 @@ function M.setThemeConfig(prefs, path, values, modelPrefs)
   prefs.dashboard = prefs.dashboard or {}
   for k, v in pairs(values) do
     local key = themeConfigKey(path, k)
-    if key then
+    if key and not (preserveVoltage and (k == "v_min" or k == "v_max")) then
       prefs.dashboard[key] = v
     end
   end

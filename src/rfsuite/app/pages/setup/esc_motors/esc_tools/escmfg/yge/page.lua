@@ -280,6 +280,7 @@ local function queueYgeWrite(requestRebuild)
     payload = EscParametersYgeApi.buildWritePayload(writeData),
     isWrite = true,
     processReply = function(self, buf)
+      if not ui.runtime then return end
       ui.dirty = false
       ui.saving = false
       ui.progress = 100
@@ -288,6 +289,7 @@ local function queueYgeWrite(requestRebuild)
       end
     end,
     errorHandler = function()
+      if not ui.runtime then return end
       ui.saving = false
       ui.notice = {
         title = pageText(ui.i18n, "save_failed_title", "Save Failed"),
