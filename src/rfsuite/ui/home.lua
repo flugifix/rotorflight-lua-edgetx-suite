@@ -1472,6 +1472,7 @@ local function returnToRootOnDisconnect()
 
   closeHelpDialogIfOpen()
   state.pendingMenuOpen = nil
+  state.pendingPageOpen = nil
   -- Nothing can be saved over a link that has gone, so the question is not asked: the page goes
   -- with the rest of the menu.
   state.leavePromptVisible = false
@@ -3093,6 +3094,9 @@ local function buildScene()
         -- finished -- needs the same route the back key takes. Passing it here rather than having
         -- the page reach into the menu keeps the navigation in one place.
         requestClose = function() leaveCurrentPage(false) end,
+        -- Another page by its menu id, for a page that points the pilot on (a wizard that sends
+        -- him to the page where a setting lives). Parked like a tile press and taken by run().
+        openPage = function(menuId) if type(menuId) == "string" then state.pendingPageOpen = menuId end end,
         -- The unsaved-changes question, for a page about to drop an edit of its own accord.
         askUnsavedChanges = function(answers) return askUnsavedChanges(pageModule, answers) end,
         openHelp = function(message, title, subtitle)
@@ -3265,34 +3269,45 @@ end
 
 -- ── Init / Run ────────────────────────────────────────────────────────────────
 
+-- The entry ids that lead from a root entry down to the page `menuId`, depth first through the
+-- menus the entries open. A menu is entered once per search, so a manifest that links menus in a
+-- circle cannot loop.
+local function findMenuPath(menuId, entries, path, seen)
+  local menus = manifest and manifest.menus or {}
+  for i = 1, #entries do
+    local entry = entries[i]
+    path[#path + 1] = entry.id
+    if entry.menuId == menuId then return true end
+    local sub = entry.menuId and menus[entry.menuId] or nil
+    if type(sub) == "table" and type(sub.pages) == "table" and not seen[entry.menuId] then
+      seen[entry.menuId] = true
+      if findMenuPath(menuId, sub.pages, path, seen) then return true end
+    end
+    path[#path] = nil
+  end
+  return false
+end
+
 -- Open the page `menuId` the way the pilot would reach it: through the root entry that leads to
--- it, and for a page one level down, through that entry's own menu. The page's conditions are
--- the menu's -- a page the menu would not offer now is not opened -- and a step that fails puts
--- the menu back at its root. Answers whether the page is open.
+-- it, then through each menu below it. The page's conditions are the menu's -- a page the menu
+-- would not offer now is not opened -- and a step that fails puts the menu back at its root.
+-- Answers whether the page is open.
 local function openLanding(menuId)
   local sections = manifest and manifest.sections or {}
-  local menus = manifest and manifest.menus or {}
   for i = 1, #sections do
     local section = sections[i]
-    local entries = section.pages or {}
-    for j = 1, #entries do
-      local entry = entries[j]
-      if entry.menuId == menuId then
-        return state.menu.openRootEntry(section.id, entry.id) == true
+    local path = {}
+    if findMenuPath(menuId, section.pages or {}, path, {}) then
+      local open = state.menu.openRootEntry(section.id, path[1]) == true
+      for k = 2, #path do
+        if not open then break end
+        open = state.menu.openEntry(path[k]) == true
       end
-      local sub = entry.menuId and menus[entry.menuId] or nil
-      local subEntries = type(sub) == "table" and sub.pages or {}
-      for k = 1, #subEntries do
-        if subEntries[k].menuId == menuId then
-          if state.menu.openRootEntry(section.id, entry.id) and state.menu.openEntry(subEntries[k].id) then
-            return true
-          end
-          while not state.menu.isRoot() do
-            if not state.menu.goBack() then break end
-          end
-          return false
-        end
+      if open then return true end
+      while not state.menu.isRoot() do
+        if not state.menu.goBack() then break end
       end
+      return false
     end
   end
   return false
@@ -3388,6 +3403,7 @@ function M.init(opts)
   state.armedFeedbackText = nil
   state.connStatusNoticeVisible = false
   state.pendingMenuOpen = nil
+  state.pendingPageOpen = nil
   state.isClosing = false
   state.closeTicks = nil
   state.closeMemStart = nil
@@ -3667,6 +3683,7 @@ function M.run(event, touchState)
         state.leavePromptVisible = false
         state.leavePromptAnswers = nil
         state.pendingMenuOpen = nil
+        state.pendingPageOpen = nil
         closeHelpDialogIfOpen()
         
         -- Release all pages in the registry (queues override/rollback resets). Its writes stay --
@@ -3861,6 +3878,32 @@ function M.run(event, touchState)
       end
       state.focusIndex = 0
       state.pendingMenuOpen = nil
+      transitionedMenuThisTick = true
+      scheduleBuildUI(true)
+    end
+
+    -- A page asked for another page (ctx.openPage). Leaving goes up to the root, so the page on
+    -- screen is released by the next build like any page that is left; the target is then opened
+    -- through its root entry, so its conditions are the menu's. A page the menu would not offer
+    -- now is not opened, and the menu stays at its root.
+    if state.pendingPageOpen and not state.isClosing and not transitionedMenuThisTick and
+      (state.leavePromptVisible or state.saveOverlayVisible or state.pendingSaveAction ~= nil) then
+      -- A save prompt or a save in progress belongs to the page on screen; leaving under it would
+      -- answer it for the wrong page. The request is dropped, and the pilot asks again.
+      logf("info", "page %s not opened, a save prompt or save is in progress", tostring(state.pendingPageOpen))
+      state.pendingPageOpen = nil
+    end
+    if state.pendingPageOpen and not state.isClosing and not transitionedMenuThisTick then
+      local target = state.pendingPageOpen
+      state.pendingPageOpen = nil
+      while not state.menu.isRoot() do
+        if not state.menu.goBack() then break end
+      end
+      if not openLanding(target) then
+        logf("info", "page %s not offered, the menu stays at its root", target)
+      end
+      state.landingMenuId = nil
+      state.focusIndex = 0
       transitionedMenuThisTick = true
       scheduleBuildUI(true)
     end
