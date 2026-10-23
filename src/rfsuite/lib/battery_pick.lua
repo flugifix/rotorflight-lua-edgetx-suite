@@ -154,11 +154,12 @@ function M.select(session, id)
   return true
 end
 
---- Which preference switches are on, out of the flight log's section.
+--- The two flight-log switches a pick reads: whether the prompt is offered (the log's own enabled
+-- switch), and whether a pick also writes the board's battery profile.
 function M.settings(prefs)
   local section = (type(prefs) == "table") and prefs.flightlog or nil
   if type(section) ~= "table" then return false, false end
-  return section.ask_on_connect == true, section.set_fc_profile == true
+  return section.enabled == true, section.set_fc_profile == true
 end
 
 -- ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ local FlightStatsApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local ApiVersion = nil
+local SavePipeline = nil
 local t = nil
 
 local ui = {
@@ -151,71 +152,53 @@ local function queueStatsRead(isAutoReload)
 end
 
 local function queueStatsWrite(requestRebuild)
-  if not MspRuntime or not FlightStatsApi or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not FlightStatsApi then
     return false, "msp_runtime_unavailable"
   end
 
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
-  end
-
-  local payload = FlightStatsApi.buildWritePayload({
-    flightcount = ui.config.flightcount,
-    totalflighttime = ui.config.totalflighttime,
-    totaldistance = ui.config.totaldistance,
-    minarmedtime = ui.config.minarmedtime
+  local flightcount = ui.config.flightcount
+  -- The write and the EEPROM commit belong to the pipeline, not to this page: the page can be
+  -- left while they are on the wire, and its close releases ui.runtime and the module handles
+  -- above. So nothing below may assume the page is still open.
+  local ok, err = SavePipeline.start({
+    pageId = "setup_controls_stats",
+    steps = {
+      {
+        label = "MSP_SET_FLIGHT_STATS",
+        command = FlightStatsApi.writeCommand,
+        payload = FlightStatsApi.buildWritePayload({
+          flightcount = ui.config.flightcount,
+          totalflighttime = ui.config.totalflighttime,
+          totaldistance = ui.config.totaldistance,
+          minarmedtime = ui.config.minarmedtime
+        })
+      }
+    },
+    reboot = false,
+    onSaved = function()
+      ui.dirty = false
+      -- The board stores the four values as sent. The flight record counts from this one, and
+      -- the read below that would refresh it only runs while the page is open.
+      local session = getSession()
+      if session then session.flightcount = flightcount end
+    end,
+    onDone = function(result)
+      ui.saving = false
+      if not ui.runtime then return end
+      if result.saved then queueStatsRead(true) end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
   })
+  if not ok then return false, err end
 
   ui.saving = true
   ui.progress = 0
   if type(requestRebuild) == "function" then
     requestRebuild()
   end
-
-  queue:add({
-    command = FlightStatsApi.writeCommand,
-    payload = payload,
-    isWrite = true,
-    simulatorResponse = {},
-    processReply = function()
-      -- Step 2: Write EEPROM
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.writeCommand,
-          payload = {},
-          isWrite = true,
-          simulatorResponse = {},
-          processReply = function()
-            ui.dirty = false
-            ui.saving = false
-            queueStatsRead(true)
-          end,
-          errorHandler = function()
-            ui.saving = false
-            if type(requestRebuild) == "function" then
-              requestRebuild()
-            end
-          end
-        })
-      else
-        ui.dirty = false
-        ui.saving = false
-        if type(requestRebuild) == "function" then
-          requestRebuild()
-        end
-      end
-    end,
-    errorHandler = function()
-      ui.saving = false
-      if type(requestRebuild) == "function" then
-        requestRebuild()
-      end
-    end
-  })
-
   return true, nil
 end
 
@@ -230,6 +213,9 @@ local function ensureLoaded()
       syncHeaderTitle = nil
     }
   end
+  -- A save left running on an earlier visit clears this in its onDone; a new visit starts clear,
+  -- as both Beepers pages do.
+  ui.saving = false
 
   ui.config = {
     flightcount = 0,
@@ -424,6 +410,7 @@ function M.onClose()
   LoadingOverlay = nil
   ConfirmDialog = nil
   ApiVersion = nil
+  SavePipeline = nil
   t = nil
 end
 

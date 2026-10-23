@@ -47,6 +47,7 @@ local function loadConfig(prefs)
 
     ui.config.v_min_tenths = math.floor((vMin * 10) + 0.5)
     ui.config.v_max_tenths = math.floor((vMax * 10) + 0.5)
+    ui.voltageEdited = false
     ui.loaded = true
 end
 
@@ -60,7 +61,7 @@ local function saveConfig(prefs)
     DashboardLib.setThemeConfig(prefs, THEME_PATH, {
         v_min = (tonumber(ui.config.v_min_tenths) or 70) / 10,
         v_max = (tonumber(ui.config.v_max_tenths) or 84) / 10,
-    }, modelPrefs)
+    }, modelPrefs, { voltageEdited = ui.voltageEdited == true })
 
     -- The model's file is written whenever a flight controller is connected, but it carries
     -- this save's values only in the model scope: there its answer is what the save reports.
@@ -94,6 +95,7 @@ local function setMin(value)
     local nextValue = clamp(tonumber(value) or 70, 50, maxAllowed)
     if ui.config.v_min_tenths ~= nextValue then
         ui.config.v_min_tenths = nextValue
+        ui.voltageEdited = true
     end
 end
 
@@ -108,6 +110,7 @@ local function setMax(value)
     local nextValue = clamp(tonumber(value) or 84, minAllowed, 650)
     if ui.config.v_max_tenths ~= nextValue then
         ui.config.v_max_tenths = nextValue
+        ui.voltageEdited = true
     end
 end
 
@@ -136,6 +139,7 @@ function M.onSave(ctx)
         ok, err = false, DashboardLib.saveFailureReason(ctx.i18n, modelErr, true)
     end
     if ok then
+        ui.voltageEdited = false
         ui.dirty = false
         if ctx and type(ctx.reportSave) == "function" then
             local i18n = ctx.i18n

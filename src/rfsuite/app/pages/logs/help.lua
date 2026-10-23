@@ -21,6 +21,6 @@ return function(ctx)
 
   return {
     title = t(i18n, "help_title"),
-    message = table.concat(parts, "\n\n")
+    message = table.concat(parts, "\n")
   }
 end

@@ -159,6 +159,7 @@ return {
       dashboard_settings = { name = "Einstellungen" },
       dashboard_overrides = { name = "Modell-Einstellungen" },
       dashboard_inflight = { name = "In-Flight-Tuning" },
+      dashboard_keys = { name = "Tasten" },
       dashboard_quick_menu = { name = "Schnelleinstellungen" },
       profile = { name = "Profil" },
       safety = { name = "Sicherheit" },
@@ -522,7 +523,7 @@ return {
         why_brake_fmt = "Stopps prallen %d%% zurück. Mehr P bremst sie (oder B erhöhen).",
         why_ok = "Der Heli folgt dem Knüppel wie verlangt.",
         help_title = "Tuning-Berater",
-        help_message = "Im Rate-Modus fliegen, dann die Empfehlung Achse für Achse lesen; eine Änderung, dann erneut fliegen.\nAchse: Roll, Nick oder Gier; alles darunter gilt für diese Achse.\nFlugdaten: bisher gemessener Rate-Flug und ob gerade erfasst wird.\nAnsprechen: wie schnell der Heli dreht, verglichen mit dem Knüppel.\nStopps: wie weit er nach dem Zentrieren des Knüppels zurückprallt.\nVorgeschlagene Änderungen: was zu ändern ist, nach Seite und Einstellung.\nWarum: der Grund für jede Änderung.\n*: löscht nach Rückfrage die gesammelten Daten."
+        help_message = "Im Rate-Modus fliegen, dann die Empfehlung Achse für Achse lesen; eine Änderung, dann erneut fliegen.\n#n oben: Raten-Profil, für das der Rat gilt.\nAchse: Roll, Nick oder Gier; alles darunter gilt für diese Achse.\nFlugdaten: bisher gemessener Rate-Flug und ob gerade erfasst wird.\nAnsprechen: wie schnell der Heli dreht, verglichen mit dem Knüppel.\nStopps: wie weit er nach dem Zentrieren des Knüppels zurückprallt.\nVorgeschlagene Änderungen: was zu ändern ist, nach Seite und Einstellung.\nWarum: der Grund für jede Änderung.\n*: löscht nach Rückfrage die gesammelten Daten."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
         title = "Zyklisches Verhalten",
@@ -743,7 +744,8 @@ return {
         flag_set_name = "Modellnamen am Sender setzen",
         loading_title = "Modellkonfiguration",
         loading_message = "Wird vom Flight Controller gelesen",
-        help_message = "Einstellungen, die der Flight Controller für dieses Modell speichert: drei Parameter, die er beim Verbinden auf Timer oder globale Variablen des Senders anwendet, und die Sender-Funktionen, die er anfordert. Ob sie angewendet werden, wird ebenfalls hier entschieden. Ab RF 2.3 trägt der Heli die Entscheidung über den Modellnamen selbst; auf älterer Firmware der Sender, und der Schalter gilt dann für alle Modelle dieses Senders."
+        save_error_title = "Fehler",
+        help_message = "Modelleinstellungen im Flight Controller, die beim Verbinden am Sender angewendet werden.\nParameter 1 Typ: Keiner, ein Timer oder eine globale Variable; für 2 und 3 gilt dasselbe.\nParameter 1 Wert: Wert für Timer oder globale Variable; für 2 und 3 gilt dasselbe.\nModellparameter synchronisieren: Parameter beim Verbinden anwenden, für alle Modelle dieses Senders.\nModellnamen am Sender setzen: Das Sendermodell nach dem Heli benennen; ab RF 2.3 speichert der Heli diese Wahl, bei älterer Firmware der Sender, für alle seine Modelle."
       },
       settings_general = {
         section_safety = "Sicherheit & Prompts",
@@ -1876,8 +1878,8 @@ return {
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen",
         help_title = "Modi Hilfe",
-        help_p1 = "Flugmodi ermoeglichen es, Funkkanaele (AUX) bestimmten Funktionen auf dem Flugcontroller (wie Stabilisierung, Governor usw.) zuzuordnen.",
-        help_p2 = "Fuegen Sie einen Bereich hinzu, waehlen Sie den Kanal und die Logik aus und passen Sie die Grenzwerte an. Druecken Sie 'Set', um die Grenzwerte automatisch anhand Ihrer aktuellen Schalterposition zu konfigurieren."
+        help_p1 = "Bereiche aktivieren Flugmodi, solange AUX-Kanaele im Fenster liegen. Speichern schreibt alle geaenderten Bereiche.",
+        help_p2 = "Modus: Zeigt Bereiche des Modus aus der Liste des Flugcontrollers.\nAkt. Bereiche: Zeigt, wie viele Flugcontroller-Slots dieser Modus belegt.\nBereich: Pro Zeile AUX (AUTO: Schalter bewegen, Kanal erkennen), OR/AND mit anderen Bereichen und Start/End in us waehlen; + Add fuegt einen Bereich hinzu, X loescht ihn.\nSet: Setzt nach Bestaetigung das Fenster auf die aktuelle Kanalposition mit je 50 us beiderseits."
       },
       setup_adjustments = {
         title = "Anpassungen",
@@ -2772,6 +2774,29 @@ return {
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen"
       },
+      settings_dashboard_keys = {
+        page_down = "PAGE >",
+        page_up = "PAGE <",
+        mdl = "MDL",
+        sys = "SYS",
+        tele = "TELE",
+        theme = "Theme",
+        none = "Nichts",
+        menu = "Schnellmenü",
+        suite_tool = "Hauptmenü",
+        flight_log = "Flugbuch",
+        exit = "Vollbild verlassen",
+        saved_title = "Gespeichert",
+        saved_message = "Tasten gespeichert",
+        save_error_title = "Fehler",
+        save_error_message = "Speichern fehlgeschlagen",
+        help_intro = "Tasten: senderweite Belegung. Auf der Theme-Ansicht nutzt Theme die Belegung; unbelegt passiert dort nichts. Nichts deaktiviert eine Taste.",
+        help_page_down = "PAGE >: standardmäßig Schnellmenü; öffnet und schließt das Menü. Auf Theme: Belegung des Themes, sonst auf der Theme-Ansicht ohne Aktion.",
+        help_page_up = "PAGE <: standardmäßig Schnellmenü; öffnet und schließt das Menü. Auf Theme: Belegung des Themes, sonst auf der Theme-Ansicht ohne Aktion.",
+        help_mdl = "MDL: standardmäßig Theme.",
+        help_sys = "SYS: standardmäßig Hauptmenü; es erfordert ein nicht scharfgeschaltetes Modell.",
+        help_tele = "TELE: standardmäßig Schnellmenü. Das Flugbuch erfordert seinen Vorschau-Schalter.",
+      },
       settings_dashboard_quick_menu = {
         place = "Position %d",
         none = "-",
@@ -2959,8 +2984,6 @@ return {
         stat_vbec_max = "BEC-Spannung max",
         stat_sags = "Spannungseinbrueche",
         stat_sag_min = "Tiefster Einbruch",
-        battery_for_next = "Akku fuer den naechsten Flug",
-        battery_none = "Keiner",
         battery_id = "Kennung",
         battery_name = "Name",
         battery_capacity = "Kapazitaet",
@@ -2988,16 +3011,15 @@ return {
         error_id_required = "Ein Akku braucht eine Kennung",
         setting_enabled = "Flugbuch schreiben",
         setting_min_seconds = "Mindestflugdauer",
-        setting_ask_on_connect = "Nach dem Verbinden nach dem Akku fragen",
         setting_set_fc_profile = "Akkuprofil des Akkus setzen",
         help_title = "Hilfe zum Flugbuch",
         help_p1 = "Ist das Flugbuch unter Einstellungen eingeschaltet, wird pro Flug eine Zeile auf die Karte geschrieben.",
         help_p2 = "Ein Flug ist die Zeit zwischen Scharfschalten und Entschaerfen. Ein kuerzeres Scharfschalten ist keiner.",
-        help_p3 = "Ein gewaehlter Akku steht in der Zeile des Fluges, sein erster Flug zaehlt einen Zyklus.",
+        help_p3 = "Akkus: der Akku wird im Dashboard gewaehlt; die Flugzeile nennt ihn, sein erster Flug zaehlt einen Zyklus.",
         help_p4 = "Ein Akku ohne Modellliste gilt fuer jedes Modell, sonst nur fuer die genannten Namen.",
         help_p5 = "Beide Dateien sind reiner Text. Eine Aenderung schreibt nur die eine Zeile neu.",
         help_p6 = "Der aktuelle Reiter ist markiert. Ein Akku wird im ganzen Bildschirm bearbeitet, bis Speichern oder Abbrechen.",
-        help_p7 = "Ist die Abfrage an, bietet das Dashboard die Akkus dieses Modells nach dem Verbinden einmal im Vollbild an.",
+        help_p7 = "Flugbuch schreiben: dann fragt das Dashboard nach dem Verbinden nach dem Akku. Nur dort wird er gewaehlt.",
         help_p8 = "Eine Wahl in dieser Abfrage kann auch das Akkuprofil des Flugcontrollers setzen, nie im scharfen Zustand.",
         help_p9 = "Zellen: hat der Flugcontroller eine Zellenzahl je Akkuprofil, muss sie auch dazu passen; 0 laesst sie weg. Bei Gleichstand wird kein Profil gesetzt."
       },
@@ -3034,10 +3056,10 @@ return {
         page_prev = "Zurück",
         page_next = "Weiter",
         list_range = "%d-%d von %d",
-        help_p1 = "Telemetrie-Logs: Zeigt Flugstatistiken von Flügen auf der SD-Karte der Fernsteuerung an.",
-        help_p2 = "Speicherort: Logdateien werden aus /LOGS/, /LOGS/rfsuite/ und /LOGS/rfsuite/telemetry/ geladen.",
-        help_p3 = "Übersichtskarten: Zeigt Minimal-, Maximal- und Durchschnittswerte für Akkuspannung, Strom, Drehzahl und Reglertemperatur. Ein Wert, für den das Log keine Spalte hat, wird als Striche angezeigt.",
-        help_p4 = "Diagramm: Zeichnet bis zu vier Telemetriespalten des gewählten Logs über die Flugzeit, mit Zoom, Blättern und einer Cursor-Anzeige.",
+        help_p1 = "Listet Telemetrie-Logs aus /LOGS/, /LOGS/rfsuite/ und /LOGS/rfsuite/telemetry/, neueste zuerst, je 25 (Zurück/Weiter).",
+        help_p2 = "Anzeigen: Öffnet die Log-Zusammenfassung mit Flugzeit, Spannung, Strom, Kopfdrehzahl und Regler-Temp; fehlt eine Spalte, steht dort --.",
+        help_p3 = "Diagramm: Zeigt das Log im Zeitverlauf.",
+        help_p4 = "Kurve: Bis zu vier Spalten oder eines der angebotenen Sets (Leistung, Akku, Funk, Governor) wählen, dann Anzeigen; Zoom, Blättern und Cursor-Anzeige wirken auf den gezeigten Flug.",
         graph_open = "Diagramm",
         graph_title = "Diagramm",
         graph_select = "Sensoren wählen",
@@ -3057,7 +3079,10 @@ return {
         tpl_power = "Leistung",
         tpl_battery = "Akku",
         tpl_link = "Funk",
-        tpl_governor = "Governor"
+        tpl_governor = "Governor",
+        date_unknown = "Unbekannt",
+        model_default = "Standard",
+        parse_failed = "Die Logdatei kann nicht ausgewertet werden."
       }
     }
   },

@@ -45,6 +45,7 @@ local requireModule = (_G.rfsuite and _G.rfsuite.require) or function(path)
 end
 
 local Log = requireModule("lib/log.lua")
+local KeyBindings = nil
 
 local function viewLog(msg)
   if Log and type(Log.emit) == "function" then
@@ -142,11 +143,17 @@ function CONDITIONS.modelDisarmed(widget)
   return not (widget.state and widget.state.armed == true)
 end
 
--- The BATTERY PROFILE row: while the model is disarmed, like the write it leads to, and only where
--- the flight controller has reported at least one profile with a capacity -- a row that opens a
--- page with nothing to choose on it is not offered.
+-- Fullscreen shortcuts can open the menu before the connection is ready. The rows that write to
+-- the flight controller stay hidden until it is, as they do while the model is armed.
+function CONDITIONS.connectionReadyDisarmed(widget)
+  return widget.connectionReady == true and CONDITIONS.modelDisarmed(widget)
+end
+
+-- The BATTERY PROFILE row: while the connection is ready and the model is disarmed, like the write
+-- it leads to, and only where the flight controller has reported at least one profile with a
+-- capacity -- a row that opens a page with nothing to choose on it is not offered.
 function CONDITIONS.batteryProfileOffered(widget)
-  if not CONDITIONS.modelDisarmed(widget) then return false end
+  if not CONDITIONS.connectionReadyDisarmed(widget) then return false end
   local config = widget.state and widget.state.battery_config or nil
   if type(config) ~= "table" then return false end
   for i = 0, 5 do
@@ -588,22 +595,19 @@ end
 
 -- Whatever is built is dropped, so the next interactive pass builds the view now on top.
 --
--- Over a base layer a build can still be under way for the surface that was on top until now:
--- the theme is built over several passes, and a key can arrive while a view's build is queued.
--- Left running it would put that surface up once more before the next pass notices the change,
--- so a queued fullscreen build is dropped with the rest. Without a base layer every action but
--- `openView` leaves fullscreen, and the job slot is left exactly as it was.
-local function reset(widget)
+-- Navigation can arrive while a fullscreen view or connection splash is queued,
+-- including on legacy themes. A stale job must not paint over the new surface.
+function M.invalidate(widget)
   widget.built = false
   widget.renderKey = nil
-  if widget._viewBase ~= nil then
-    local job = widget._job
-    if job ~= nil and (job.fullscreen or M.find(widget, job.kind) ~= nil) then widget._job = nil end
+  local job = widget._job
+  if job ~= nil and (job.fullscreen or job.fullscreenSplash or M.find(widget, job.kind) ~= nil) then
+    widget._job = nil
   end
 end
 
 local function exitFullscreen(widget)
-  reset(widget)
+  M.invalidate(widget)
   if lcd and type(lcd.exitFullScreen) == "function" then
     lcd.exitFullScreen()
   end
@@ -663,20 +667,22 @@ function M.navigate(widget, after)
       return
     end
     if not push(widget, id, false) then return end
-    reset(widget)
+    M.invalidate(widget)
   elseif verb == "closeView" then
     pop(widget)
-    reset(widget)
+    M.invalidate(widget)
   elseif verb == "done" then
     newSession(widget)
     if widget._viewBase == nil then
       exitFullscreen(widget)
+      return true
     else
-      reset(widget)
+      M.invalidate(widget)
     end
   elseif verb == "exitFullscreen" then
     widget._viewStack = nil
     exitFullscreen(widget)
+    return true
   elseif verb == "openTool" then
     if id ~= nil and not M.condition(TOOL_LANDINGS[id], widget) then
       viewLog("tool not opened on '" .. id .. "': that page is not offered now")
@@ -685,7 +691,7 @@ function M.navigate(widget, after)
     local ToolHost = requireModule("widgets/dashboard/tool_host.lua")
     if type(ToolHost) == "table" and type(ToolHost.request) == "function" and ToolHost.request(widget, id) then
       newSession(widget)
-      reset(widget)
+      M.invalidate(widget)
     end
   end
 end
@@ -717,7 +723,7 @@ function M.confirm(widget, spec, work)
     session.confirm = nil
     return false
   end
-  reset(widget)
+  M.invalidate(widget)
   return true
 end
 
@@ -738,7 +744,7 @@ function M.closeConfirm(widget)
   if session ~= nil then session.confirm = nil end
   if M.top(widget) == CONFIRM_VIEW then
     pop(widget)
-    reset(widget)
+    M.invalidate(widget)
   end
 end
 
@@ -830,39 +836,54 @@ local function keyName(event)
   return nil
 end
 
---- Answer a key, for a widget whose fullscreen has a base layer. Returns true when the key was
---- one of the six and answered; MDL, SYS and TELE with a view on top return false, unless they
---- are bound to that view.
+--- Answer a fullscreen key. Returns true when the key was one of the six and answered. Theme
+--- bindings for MDL, SYS and TELE with a view on top return false unless they toggle that view;
+--- a radio-wide choice (Settings > Dashboard > Keys, widgets/dashboard/keys.lua) still applies
+--- on top. That includes a key's default there: the page keys, SYS and TELE are not on Theme
+--- unless the pilot put them there. The rules below are those of a key on Theme.
 --
 --   PAGE down / up  with the quick menu on top: close it. With any other view on top: open the
---                   menu over it. With the base layer showing: the base layer's own binding
---                   for that key (`keys.pageDown` / `keys.pageUp` on its ctx), else the menu.
+--                   menu over it. With the base layer showing: `ctx.keys`, then `init.keys`,
+--                   else nothing.
 --   RTN             with a view on top: that view's `back(widget)` where its module has one --
 --                   for a view of the theme's own, `back(ctx)` -- else `closeView`. With the
 --                   base layer showing: its `keys.exit`, else nothing -- a long press on RTN
 --                   still leaves fullscreen, in the firmware.
---   MDL, SYS, TELE  with the base layer showing: its `keys.mdl` / `keys.sys` / `keys.tele`,
---                   else nothing. With a view on top: nothing.
+--   MDL, SYS, TELE  with the base layer showing: `ctx.keys`, then `init.keys`,
+--                   else nothing. With a view on top: a key on Theme does nothing, while a
+--                   radio-wide choice still applies.
 --
 -- A key the base layer binds to `openView:<id>`, RTN aside, closes that view again while it is
 -- on top, whatever the rules above say for that key: a bound key toggles its view.
 --
--- Both page keys do the same, because some radios have only one of them. The runtime calls this
--- only for a widget with a base layer, and not while the in-flight tuning surface, the connect
--- splash or no theme at all is on screen; without a base layer the widget answers no key.
+-- With the theme base showing and no view on top, unbound Theme keys are consumed without
+-- navigation. The runtime calls this ahead of builds and connection splashes, except while the
+-- tool or tuning owns input. Radio-wide choices also work without a theme base; Theme keys
+-- return false there so LVGL can handle them.
 function M.key(widget, event)
   local name = keyName(event)
   if name == nil then return false end
   local top = M.top(widget)
   local ctx = widget._viewCtx
   local keys = ctx and ctx.keys
-  local bound = type(keys) == "table" and keys[name] or nil
+  if KeyBindings == nil then KeyBindings = requireModule("widgets/dashboard/keys.lua") end
+  local bound, global
+  if KeyBindings then
+    local prefs = widget.preferences
+    bound, global = KeyBindings.resolve(prefs and prefs.dashboard, name, keys, widget._declaredKeys)
+  else
+    bound = type(keys) == "table" and keys[name] or nil
+  end
+  -- A theme without a base layer binds no keys of its own, so a key on Theme stays unanswered
+  -- there; a radio-wide choice works on those themes as well.
+  if widget._viewBase == nil and not global then return false end
   local after
-  if top == nil then
+  if global then
     after = bound
-    if after == nil and (name == "pageDown" or name == "pageUp") then
-      after = "openView:" .. M.DEFAULT_VIEW
-    end
+    if top ~= nil and bound == "openView:" .. top then after = "closeView" end
+  elseif top == nil then
+    -- An absent base-layer binding is consumed below without navigation, including PAGE keys.
+    after = bound
   elseif name ~= "exit" and bound == "openView:" .. top then
     -- The key bound to the view on top: close it, rather than open the menu over it.
     after = "closeView"
@@ -896,8 +917,8 @@ function M.key(widget, event)
   else
     after = "openView:" .. M.DEFAULT_VIEW
   end
-  M.navigate(widget, after)
-  return true
+  local exited = M.navigate(widget, after)
+  return true, exited
 end
 
 -- ---------------------------------------------------------------------------
