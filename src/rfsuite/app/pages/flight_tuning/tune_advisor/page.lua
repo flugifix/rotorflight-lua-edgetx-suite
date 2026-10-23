@@ -927,15 +927,17 @@ function M.onSave(ctx)
     local steps = buildSteps(snapshot, records, buffers)
     if not steps then finishApply(false, ui.text.changed); return end
     ui.status = nil
+    local journal = ChangeJournal
     local started, reason = SavePipeline.start({
       pageId = PAGE_ID,
       steps = steps,
       reboot = false,
       onSaved = function()
-        if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
+        -- A save without reboot can commit after the page closes, so record it regardless.
+        local active = applyGeneration == ui.applyGeneration and ui.applying
         local marks = appliedAxes()
         if marks and marks.mcu == snapshot.tune.mcu then
-          local data = ui.lastData
+          local data = active and ui.lastData
           marks[snapshot.tune.axis] = data and data.axis == snapshot.tune.axis and data.seconds or snapshot.tune.seconds
         end
         local entries = {}
@@ -943,8 +945,11 @@ function M.onSave(ctx)
           local profile = change.profileKind == "pid" and snapshot.tune.pidProfile or snapshot.tune.rateProfile
           entries[i] = { source = "tune_advisor", profile = profile, field = change.field, old = change.from, new = change.to }
         end
-        journalFailed = not ChangeJournal or not ChangeJournal.append(snapshot.tune.mcu, entries)
-        render()
+        local appended = journal and journal.append(snapshot.tune.mcu, entries)
+        if active then
+          journalFailed = not appended
+          render()
+        end
       end,
       onDone = function(result)
         if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
