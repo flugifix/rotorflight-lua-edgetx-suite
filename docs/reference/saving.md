@@ -287,8 +287,12 @@ is read again when it is next selected. While Modes writes its ranges, the page 
 save's progress, as Adjustments is, so a range cannot be changed half-way through a save.
 
 Adjustments and Failsafe send their save through the tool's shared save rather than from the
-page: one write for each slot or channel that was changed, each built when Save is pressed, then
-one EEPROM write. While it runs, the page is covered by the save's progress. A save that worked
+page: one write for each slot or channel that was changed, then one EEPROM write. Failsafe builds
+every write when Save is pressed. Adjustments copies every changed slot when Save is pressed and
+builds each slot's write from that copy when its turn comes, one slot at a time, so that a save of
+many slots in the tool opened from the dashboard does not run into EdgeTX's instruction limit for a
+single call; the shared save offers this to any page whose steps would otherwise be built all at
+once. While it runs, the page is covered by the save's progress. A save that worked
 reads *Settings saved.* and the notice clears itself after two seconds; one that failed reads *Not
 saved* and stays up until it is closed (before, Adjustments put up its own message, and a failed
 write on Failsafe said nothing). Back pressed while the save runs is not asked about unsaved

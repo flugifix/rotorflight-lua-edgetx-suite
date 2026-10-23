@@ -829,10 +829,37 @@ local function startLoad(requestRebuild)
   return true
 end
 
--- One slot's MSP_SET_ADJUSTMENT_RANGE payload, from the slot's record as the page holds it.
-local function buildSlotPayload(slotIndex)
-  local adjRange = sanitizeAdjustmentRange(ui.adjustmentRanges[slotIndex] or {})
-  ui.adjustmentRanges[slotIndex] = adjRange
+local function copyRange(src, dst)
+  if type(src) ~= "table" then return nil end
+  if type(dst) ~= "table" then dst = {} end
+  dst.start = src.start
+  dst["end"] = src["end"]
+  return dst
+end
+
+-- Copies the fields of a slot's record the payload is built from, the nested ranges included, into
+-- dst (a new table when dst is nil): at Save into the copy the slot is written from, and back into
+-- the page's own record once the save has stored it.
+local function copySlotRecord(src, dst)
+  if type(dst) ~= "table" then dst = {} end
+  if type(src) ~= "table" then return dst end
+  dst.adjFunction = src.adjFunction
+  dst.enaChannel = src.enaChannel
+  dst.enaRange = copyRange(src.enaRange, dst.enaRange)
+  dst.adjChannel = src.adjChannel
+  dst.adjRange1 = copyRange(src.adjRange1, dst.adjRange1)
+  dst.adjRange2 = copyRange(src.adjRange2, dst.adjRange2)
+  dst.adjMin = src.adjMin
+  dst.adjMax = src.adjMax
+  dst.adjStep = src.adjStep
+  return dst
+end
+
+-- One slot's MSP_SET_ADJUSTMENT_RANGE payload, from a copy of its record, which it sanitises in
+-- place. It runs when the slot's write is queued, after the page may have been left, so it reads
+-- nothing of the page's state but that copy.
+local function buildSlotPayload(slotIndex, record)
+  local adjRange = sanitizeAdjustmentRange(record)
 
   local enaStartStep = clamp((adjRange.enaRange.start - 1500) / 5, -125, 125)
   local enaEndStep = clamp((adjRange.enaRange["end"] - 1500) / 5, -125, 125)
@@ -875,15 +902,20 @@ local function queueAdjustmentsWrite(requestRebuild)
     return false, "msp_runtime_unavailable"
   end
 
-  -- Every changed slot's payload is built now, from what Save was pressed with: the page can be
-  -- left while the writes are on the wire, and a page opened again holds other records.
+  -- Every changed slot is copied now, as Save was pressed: the page can be left while the writes
+  -- are on the wire, and a page opened again holds other records. Each payload is built from its
+  -- copy when the slot's write is queued -- one slot per call rather than every slot in this one,
+  -- which on a full table would run into EdgeTX's instruction limit for a widget call.
   local steps = {}
+  local copies = {}
   for i = 1, #ui.adjustmentRanges do
     if ui.dirtySlots[i] then
+      local record = copySlotRecord(ui.adjustmentRanges[i])
+      copies[i] = record
       steps[#steps + 1] = {
         label = "MSP_SET_ADJUSTMENT_RANGE",
         command = SetAdjustmentRangeApi.writeCommand or 53,
-        payload = buildSlotPayload(i)
+        buildPayload = function() return buildSlotPayload(i, record) end
       }
     end
   end
@@ -906,6 +938,11 @@ local function queueAdjustmentsWrite(requestRebuild)
     reboot = false,
     onSaved = function()
       if ui.runtime ~= visit then return end
+      -- The page's records take the sanitised values that were written, as they did when each
+      -- slot was sanitised in place before its write.
+      for slotIndex, record in pairs(copies) do
+        ui.adjustmentRanges[slotIndex] = copySlotRecord(record, ui.adjustmentRanges[slotIndex])
+      end
       ui.dirty = false
       ui.dirtySlots = {}
       ui.progress = 100

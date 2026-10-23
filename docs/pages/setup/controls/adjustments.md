@@ -46,7 +46,9 @@ stand now (`-` while its enable channel is outside its range; a `*` marks an out
   unless a PID profile has already been read on this connection, the page reads the PID
   profile once to find out. They are announced as "cyclic gain" and "yaw gain".
 - Save writes each changed slot, then one EEPROM write, through the tool's shared save; every
-  slot's write is built when Save is pressed. While it runs, the page is covered by the save's
+  changed slot is copied when Save is pressed, and each slot's write is built from its copy when
+  its turn comes, so a Save of every slot works in the tool opened from the dashboard too. While it
+  runs, the page is covered by the save's
   progress, and Save or Reload pressed in the header has no effect until the save has finished.
   A save that worked reads *Settings saved.*; one that failed reads *Not saved*. A save the page
   is left during, or the tool opened from the dashboard closes during, still finishes with the

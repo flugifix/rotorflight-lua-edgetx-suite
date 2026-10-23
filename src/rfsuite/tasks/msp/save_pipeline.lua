@@ -52,6 +52,18 @@
 --     onDone = function(result) ... end,
 --   })
 --
+-- A step may carry `buildPayload = function() return { ... } end` instead of `payload`. It is
+-- called when that step is queued -- the first step's inside start(), every later one in the
+-- reply handler of the step before -- so a save of many writes builds one payload per call
+-- instead of all of them in the call that handles Save, where EdgeTX's instruction limit for a
+-- widget call can stop it. The step is queued by then, not when Save was pressed: the page may
+-- have been left or opened again since, so the builder works from a copy the page took at Save,
+-- never from the page's live state. `payload` wins when a step carries both. A builder that
+-- raises or returns no table ends the save as a refused write does: at the first step start()
+-- refuses with "payload" and nothing is queued; at a later step the save fails at that step's
+-- label. EdgeTX's instruction-limit stop is raised on instead, before anything is changed, so
+-- the queue keeps the previous write's reply handler current and runs it again on a later pass.
+--
 -- Progress is exposed through getProgress() and drawn by whoever is on screen, which is the
 -- same split the start screen uses for the connect chain. Nothing here opens a native modal,
 -- so the tool's run() and the MSP tick keep going for the whole pipeline.
@@ -139,6 +151,31 @@ local function logf(level, fmt, ...)
   if type(Log) == "table" and type(Log.emitf) == "function" then
     pcall(Log.emitf, "rfsuite.save", level, fmt, ...)
   end
+end
+
+-- EdgeTX's instruction-limit stop. lib/log_sink.lua publishes the check; it is not loaded in every
+-- Lua state this module runs in, so the same test stands in for it when it is absent.
+local function isCpuLimitError(err)
+  local fn = _G.rfsuite and _G.rfsuite.isCpuLimitError
+  if type(fn) == "function" then return fn(err) == true end
+  return type(err) == "string" and string.find(err, "CPU limit", 1, true) ~= nil
+end
+
+--- A step's payload: its `payload`, or what its `buildPayload` returns. Returns nil and the reason
+-- when the builder raised or returned no table; an instruction-limit stop is raised on.
+local function stepPayload(step)
+  if step.payload ~= nil or type(step.buildPayload) ~= "function" then
+    return step.payload or {}
+  end
+  local ok, built = pcall(step.buildPayload)
+  if not ok then
+    if isCpuLimitError(built) then error(built, 0) end
+    return nil, tostring(built)
+  end
+  if type(built) ~= "table" then
+    return nil, "no table"
+  end
+  return built
 end
 
 local function getQueue()
@@ -427,7 +464,8 @@ local function queueCommit()
   })
 end
 
-queueStep = function(index)
+-- `payload` is given for the first step only: start() resolves it before the run exists.
+queueStep = function(index, payload)
   local steps = S.run.desc.steps
   if index > #steps then
     queueCommit()
@@ -441,11 +479,22 @@ queueStep = function(index)
     return
   end
 
+  if payload == nil then
+    local reason
+    payload, reason = stepPayload(step)
+    if not payload then
+      logf("warn", "step payload failed page=%s step=%d err=%s", tostring(S.run.desc.pageId),
+        index, tostring(reason))
+      fail(step.label or tostring(step.command))
+      return
+    end
+  end
+
   S.run.stepIndex = index
   enter(PHASE.WRITE)
   queue:add({
     command = step.command,
-    payload = step.payload or {},
+    payload = payload,
     isWrite = true,
     client = S.run.client,
     processReply = function()
@@ -493,6 +542,18 @@ function M.start(desc)
     return false, "armed"
   end
 
+  -- The first step's payload is resolved before the run exists, so a builder that fails here is a
+  -- refusal with nothing queued, and an instruction-limit stop leaves no run behind.
+  local firstPayload = nil
+  if #desc.steps > 0 then
+    local reason
+    firstPayload, reason = stepPayload(desc.steps[1])
+    if not firstPayload then
+      logf("warn", "refused reason=payload page=%s err=%s", tostring(desc.pageId), tostring(reason))
+      return false, "payload"
+    end
+  end
+
   local reboot = desc.reboot
   if type(reboot) == "function" then
     local ok, value = pcall(reboot)
@@ -515,7 +576,7 @@ function M.start(desc)
 
   logf("info", "start page=%s steps=%d reboot=%s client=%s",
     tostring(desc.pageId), #desc.steps, tostring(reboot), tostring(S.run.client))
-  queueStep(1)
+  queueStep(1, firstPayload)
   return true
 end
 
