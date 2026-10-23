@@ -522,7 +522,7 @@ return {
         why_brake_fmt = "Stops bounce back %d%%. More P brakes them (or add B).",
         why_ok = "The heli answers the stick as asked.",
         help_title = "Tune Advisor",
-        help_message = "Fly in rate mode, then read the advice one axis at a time; make one change and fly again.\n#n (header): the rate profile the advice is for.\nAxis: Roll, Pitch or Yaw; everything below is for this axis.\nFlight data: rate flight measured so far, and whether it is collecting now.\nResponse: how fast the heli turns compared with what the stick asks.\nStops: how far it bounces back after you centre the stick.\nSuggested changes: what to change, named by page and setting.\nWhy: the reason for each change.\n*: clears the collected data after asking."
+        help_message = "Fly in rate mode, then read the advice one axis at a time; make one change and fly again.\n#n (heading): the rate profile the advice is for.\nAxis: Roll, Pitch or Yaw; everything below is for this axis.\nFlight data: rate flight measured so far, and whether it is collecting now.\nResponse: how fast the heli turns compared with what the stick asks.\nStops: how far it bounces back after you centre the stick.\nSuggested changes: what to change, named by page and setting.\nWhy: the reason for each change.\n*: clears the collected data after asking."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
         title = "Cyclic Behaviour",
