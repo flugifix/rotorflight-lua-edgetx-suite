@@ -33,8 +33,6 @@ local function buildLoading(ctx)
   return children
 end
 function M.build(ctx)
-  if not palette then palette = assert(loadScript(BASE .. deps[#deps], "t"))() end
-  modules[#deps] = palette
   context = ctx
   -- The host's independent ARMED strip stays outside this page's own frame.
   if (ctx.y or 0)>0 then
@@ -53,9 +51,9 @@ function M.build(ctx)
   elseif loadingScene then
     table.move(loadingScene,1,#loadingScene,#ctx.children+1,ctx.children)
   else
-    ctx.children[#ctx.children+1] = { type="rectangle",x=0,y=0,w=ctx.w,h=ctx.h,filled=true,color=palette.background }
+    -- The first build stays minimal; the palette is loaded by the first wakeup.
     ctx.children[#ctx.children+1] = { type="label",x=12,y=30,w=ctx.w-24,
-      text="@i18n(app.modules.helicopter_setup.loading)@",color=palette.text,font=SMLSIZE }
+      text="@i18n(app.modules.helicopter_setup.loading)@",color=COLOR_THEME_PRIMARY1,font=SMLSIZE }
   end
 end
 function M.wakeup(ctx)
@@ -63,6 +61,8 @@ function M.wakeup(ctx)
   if ctx and ctx.requestRebuild then context.requestRebuild = ctx.requestRebuild end
   loadingFraction = w and (w.ready and 1 or 0.2+0.8*(w.progress or 0)/math.max(1,w.loadTotal or 1)) or 0.2*(stage-1)/#deps
   loadingPoints[2][1]=24+math.floor((context.w-48)*math.min(1,loadingFraction))
+  if not palette then palette = assert(loadScript(BASE .. deps[#deps], "t"))() end
+  modules[#deps] = modules[#deps] or palette
   if not loadingScene then
     loadingScene=buildLoading(context);context.requestRebuild();return
   end
