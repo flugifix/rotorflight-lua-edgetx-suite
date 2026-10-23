@@ -19,7 +19,8 @@ return function(ctx)
   local help_p2 = t(i18n, "help_p2", "A flight is the time between arming and disarming. An arm shorter than the minimum is not one.")
   local help_p3 = t(i18n, "help_p3",
     "Batteries: the pack is picked on the dashboard; the flight's line records it, its first flight counts one cycle.")
-  local help_p4 = t(i18n, "help_p4", "A pack with no model list is offered for every craft, otherwise only for the names listed.")
+  local help_p4 = t(i18n, "help_p4",
+    "Models: with All models on, the pack is offered for every craft, otherwise only for the models switched on.")
   local help_p5 = t(i18n, "help_p5", "Both files are plain text. An edit rewrites one line and leaves the rest of the file alone.")
   local help_p6 = t(i18n, "help_p6", "The tab you are on is marked. Editing a pack takes the whole screen until Save or Cancel.")
   local help_p7 = t(i18n, "help_p7",
