@@ -545,8 +545,25 @@ function Queue:processQueue(now)
   local commandInterval = tonumber(msg.commandInterval) or self.commandInterval
   local maxRetries = tonumber(msg.maxRetries) or self.maxRetries
 
+  -- Nothing is sent in the simulator, so every message is answered here or not at all. A write
+  -- that carries no simulatorResponse gets an empty reply, which is what the board answers a
+  -- write with. A read without one cannot be answered: it ends through its errorHandler with
+  -- "no_simulator_response", so a caller waiting for it is told, and the warn line keeps the
+  -- missing fixture visible. Dropping either with no callback left the caller waiting for ever.
   if simulatorMode then
-    if not msg.simulatorResponse then
+    local simBuf = msg.simulatorResponse
+    if not simBuf and isWriteMessage(msg) then simBuf = {} end
+    if not simBuf then
+      msg.__retryCount = self.retryCount
+      -- Called as the give-up path below calls it: under pcall, an instruction-limit stop raised on.
+      if type(msg.errorHandler) == "function" then
+        local ok, herr = pcall(msg.errorHandler, msg, "no_simulator_response")
+        if not ok then
+          if isCpuLimitError(herr) then error(herr, 0) end
+          self.logf("warn", "error handler raised cmd=%s rw=R client=%s reason=no_simulator_response err=%s",
+            tostring(msg.command), tostring(msg.client), tostring(herr))
+        end
+      end
       self.logf("warn", "no simulator response cmd=%s client=%s",
         tostring(msg.command), tostring(msg.client))
       self.currentMessage = nil
@@ -559,11 +576,11 @@ function Queue:processQueue(now)
       self.lastTimeCommandSent = now
       self.retryCount = self.retryCount + 1
       msg.__retryCount = self.retryCount
-      msg.buf = msg.simulatorResponse
+      msg.buf = simBuf
       -- The third source, and it is tagged for the same reason `cache` is. This buffer is the
-      -- api module's own simulatorResponse constant: nothing was sent and no board answered. A
-      -- line calling it a reply would say the transport works on a card where the transport was
-      -- never used.
+      -- api module's own simulatorResponse constant, or the empty reply of a write that has none:
+      -- nothing was sent and no board answered. A line calling it a reply would say the transport
+      -- works on a card where the transport was never used.
       if self.wanted("trace") then
         self.logf("trace", "rx cmd=%s src=sim len=%s client=%s %s",
           tostring(msg.command), tostring(bufLen(msg.buf)), tostring(msg.client),
