@@ -3061,10 +3061,10 @@ return {
         page_prev = "Zurück",
         page_next = "Weiter",
         list_range = "%d-%d von %d",
-        help_p1 = "Telemetrie-Logs: Zeigt Flugstatistiken von Flügen auf der SD-Karte der Fernsteuerung an.",
-        help_p2 = "Speicherort: Logdateien werden aus /LOGS/, /LOGS/rfsuite/ und /LOGS/rfsuite/telemetry/ geladen.",
-        help_p3 = "Übersichtskarten: Zeigt Minimal-, Maximal- und Durchschnittswerte für Akkuspannung, Strom, Drehzahl und Reglertemperatur. Ein Wert, für den das Log keine Spalte hat, wird als Striche angezeigt.",
-        help_p4 = "Diagramm: Zeichnet bis zu vier Telemetriespalten des gewählten Logs über die Flugzeit, mit Zoom, Blättern und einer Cursor-Anzeige.",
+        help_p1 = "Listet Telemetrie-Logs aus /LOGS/, /LOGS/rfsuite/ und /LOGS/rfsuite/telemetry/, neueste zuerst, je 25 (Zurück/Weiter).",
+        help_p2 = "Anzeigen: Öffnet die Log-Zusammenfassung mit Flugzeit, Spannung, Strom, Kopfdrehzahl und Regler-Temp; fehlt eine Spalte, steht dort --.",
+        help_p3 = "Diagramm: Zeigt das Log im Zeitverlauf.",
+        help_p4 = "Kurve: Bis zu vier Spalten oder eines der angebotenen Sets (Leistung, Akku, Funk, Governor) wählen, dann Anzeigen; Zoom, Blättern und Cursor-Anzeige wirken auf den gezeigten Flug.",
         graph_open = "Diagramm",
         graph_title = "Diagramm",
         graph_select = "Sensoren wählen",
@@ -3084,7 +3084,10 @@ return {
         tpl_power = "Leistung",
         tpl_battery = "Akku",
         tpl_link = "Funk",
-        tpl_governor = "Governor"
+        tpl_governor = "Governor",
+        date_unknown = "Unbekannt",
+        model_default = "Standard",
+        parse_failed = "Die Logdatei kann nicht ausgewertet werden."
       }
     }
   },
