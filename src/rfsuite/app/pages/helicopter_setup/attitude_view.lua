@@ -78,10 +78,10 @@ function M.new(children,w,x,y,width,height)
     for j,index in ipairs(path) do pts[j]=s.projected[index] end
     children[#children+1]={type="line",pts=function() return pts end,
       visible=function() return s.valid end,thickness=thick[i],
-      color=accent[i] and COLOR_THEME_SECONDARY1 or COLOR_THEME_PRIMARY1}
+      color=accent[i] and w.palette.accent or w.palette.text}
   end
   children[#children+1]={type="label",x=x,y=y+height-22,w=width,h=22,font=SMLSIZE,
-    color=COLOR_THEME_PRIMARY1,text=function() return s.readout end}
+    color=w.palette.text,text=function() return s.readout end}
   return s
 end
 return M

@@ -368,7 +368,16 @@ return function(h)
   case("VISUAL.native-background",function()
     local w=world();settle(w)
     local scene=h.view.new(w,{w=480,h=272},h.diagrams)
-    eq(scene.all[1].color,COLOR_THEME_PRIMARY2,"VISUAL page uses native light background color")
+    eq(scene.all[1].color,lcd.RGB(20,25,30),"VISUAL page uses the dark palette background")
+    check(scene.all[1].filled==true,"VISUAL page background is filled")
+    for _,item in ipairs(scene.all) do
+      if item.type=="button" or item.type=="momentaryButton" then
+        local primary=item.y==234 and item.x>240
+        eq(item.color,primary and w.palette.accent or w.palette.card,"VISUAL button background follows its role")
+        eq(item.textColor,primary and w.palette.accentText or item.y==2 and item.text~="?" and w.palette.accent or w.palette.text,
+          "VISUAL button text contrasts with its background")
+      end
+    end
   end)
   case("CORE.packed-feedback",function()
     local w=world();settle(w)

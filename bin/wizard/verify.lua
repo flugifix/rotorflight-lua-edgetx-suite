@@ -11,6 +11,8 @@ local function eq(a,b,name) check(a == b, name .. " (" .. tostring(a) .. "/" .. 
 local function load(path) return assert(loadfile(ROOT .. path))() end
 function getTime() return ticks end
 COLOR_THEME_PRIMARY1, COLOR_THEME_PRIMARY2, COLOR_THEME_PRIMARY3, COLOR_THEME_SECONDARY1 = 1, 2, 3, 4
+-- Keep RGB channels intact in exported scenes for the desktop renderer.
+lcd = { RGB = function(r,g,b) return (r << 16) | (g << 8) | b end }
 SMLSIZE, MIDSIZE = 0, 1
 LCD_W, LCD_H = 480, 272
 local armed = false
@@ -181,6 +183,7 @@ end
 local function beginWorld()
   q.messages,q.sent = {},{}
   local w = load(PATH .. "controller.lua").new(runtime,load(PATH .. "transport.lua"),H,L)
+  w.palette=load(PATH .. "palette.lua")
   w.newAttitudeView=load(PATH .. "attitude_view.lua").new
   w.newServoGrid=load(PATH .. "servo_grid.lua").append
   load(PATH .. "forms.lua").attach(w,load("lib/port_labels.lua"));load(PATH .. "workflow.lua").attach(w);load(PATH .. "navigation.lua").attach(w)
@@ -283,8 +286,8 @@ end
 -- Properties each widget type already used on the radio; lvgl.build raises "Invalid property" on others.
 RADIO_PROPS={}
 for t,keys in pairs({label="color,font,h,pos,text,type,visible,w,x,y,align",
-  momentaryButton="active,h,press,release,text,type,w,x,y",numberEdit="active,display,get,h,max,min,set,type,w,x,y",
-  button="active,font,h,press,text,type,visible,w,x,y",choice="active,get,h,set,title,type,values,w,x,y",
+  momentaryButton="active,color,h,press,release,text,textColor,type,w,x,y",numberEdit="active,display,get,h,max,min,set,type,w,x,y",
+  button="active,color,font,h,press,text,textColor,type,visible,w,x,y",choice="active,get,h,set,title,type,values,w,x,y",
   rectangle="color,filled,h,thickness,type,w,x,y",line="color,pts,thickness,type,visible",
   image="file,h,type,w,x,y"}) do
   RADIO_PROPS[t]={};for k in string.gmatch(keys,"[^,]+") do RADIO_PROPS[t][k]=true end

@@ -34,6 +34,12 @@ def wrap(draw, text, face, width):
     return lines
 
 
+def color(value, default):
+    if not isinstance(value, int):
+        return default
+    return {1: "#000000", 2: "#ffffff", 3: "#0c3f66", 4: "#125e99"}.get(value, f"#{value:06x}")
+
+
 def render(scene):
     width, height = scene['width'], scene['height']
     image = Image.new('RGB', (width, height), '#edf1f5')
@@ -46,14 +52,14 @@ def render(scene):
         kind = item['type']
         x, y, w, h = (item.get(k, 0) for k in ('x', 'y', 'w', 'h'))
         x, y = item.get('pos', (x, y))
-        color = {1:'#000000', 2:'#ffffff', 3:'#0c3f66', 4:'#125e99'}.get(item.get('color'), '#26394c')
+        ink = color(item.get('color'), '#26394c')
         if kind == 'rectangle':
             if item.get('filled'):
-                draw.rectangle((x,y,x+w,y+h), fill=color)
+                draw.rectangle((x,y,x+w,y+h), fill=ink)
             else:
-                draw.rectangle((x,y,x+w,y+h), outline=color, width=item.get('thickness', 2))
+                draw.rectangle((x,y,x+w,y+h), outline=ink, width=item.get('thickness', 2))
         elif kind == 'line':
-            draw.line([tuple(p) for p in item['pts']], fill=color, width=item.get('thickness', 2), joint='curve')
+            draw.line([tuple(p) for p in item['pts']], fill=ink, width=item.get('thickness', 2), joint='curve')
         elif kind == 'image':
             # Zoomed to fit its frame, keeping the aspect, as EdgeTX does for a Lua image.
             rel = str(item.get('file', '')).removeprefix('/SCRIPTS/TOOLS/rfsuite-core/')
@@ -70,9 +76,10 @@ def render(scene):
             if h:
                 lines = lines[:max(1, int(h / line_h))]
             for n,line in enumerate(lines):
-                draw.text((x,y+n*line_h),line,font=face,fill=color)
+                draw.text((x,y+n*line_h),line,font=face,fill=ink)
         elif kind in ('button','momentaryButton','choice','numberEdit'):
-            draw.rounded_rectangle((x,y,x+w,y+h),radius=4,fill='#fff',outline='#9caab8',width=1)
+            draw.rounded_rectangle((x,y,x+w,y+h),radius=4,
+                                   fill=color(item.get('color'), '#fff'),outline='#34404b',width=1)
             face = font(size)
             text = item.get('text')
             if text is None:
@@ -85,7 +92,7 @@ def render(scene):
             while draw.textlength(str(text),font=face) > w-12 and size > 8:
                 size -= 1
                 face = font(size)
-            draw.text((x+w/2,y+h/2),str(text),anchor='mm',font=face,fill='#26394c')
+            draw.text((x+w/2,y+h/2),str(text),anchor='mm',font=face,fill=color(item.get('textColor'), '#26394c'))
             if kind == 'choice':
                 draw.polygon(((x+w-12,y+h/2-2),(x+w-6,y+h/2-2),(x+w-9,y+h/2+2)),fill='#74889b')
             size = 20 if large else 13 if width >= 480 else 12

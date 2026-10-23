@@ -3,7 +3,7 @@
 local M = {}
 local GFX = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/helicopter_setup/gfx/"
 function M.append(children, w, card, x, y, width, height)
-  local ink, accent = COLOR_THEME_PRIMARY1, COLOR_THEME_SECONDARY1
+  local ink, accent = w.palette.text, w.palette.accent
   local kind,L=card.art,w.L
   if kind=="attitude" then
     if w.attitudeView then w.attitudeView.valid=false end
@@ -181,7 +181,7 @@ function M.append(children, w, card, x, y, width, height)
     children[#children+1] = { type = "image", x = px(0), y = py(0), w = px(220)-px(0),
       h = py(160)-py(0), file = function()
         local name = picture()
-        if name ~= current then current, file = name, GFX .. "light/" .. name .. ".png" end
+        if name ~= current then current, file = name, GFX .. "dark/" .. name .. ".png" end
         return file
       end }
     text(5,0,210,kind=="tailKind" and L.artSide or L.artTop)

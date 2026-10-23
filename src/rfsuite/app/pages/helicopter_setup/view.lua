@@ -1,10 +1,11 @@
 -- Compact illustrated tasks use a drawing beside the controls. Large displays
 -- have a separate instruction column. The scene is published four objects per pass.
 local M = {}
-local function label(x, y, width, text, font)
-  return { type = "label", x = x, y = y, w = width, text = text, font = font or SMLSIZE, color = COLOR_THEME_PRIMARY1 }
-end
 function M.new(w, ctx, diagrams)
+  local palette = w.palette
+  local function label(x, y, width, text, font)
+    return { type = "label", x = x, y = y, w = width, text = text, font = font or SMLSIZE, color = palette.text }
+  end
   local width, height = ctx.w, ctx.h
   local large = width >= 700
   w.refreshPulse=nil
@@ -30,13 +31,18 @@ function M.new(w, ctx, diagrams)
   if attitudeCard and not (w.historyMode or w.overview or w.confirmExit or w.modelPreparationCard or w.recoveryCard) then
     title=string.format("%d/19  %s",w.step,card.title)
   end
-  all[#all + 1] = { type = "rectangle", x = 0, y = 0, w = width, h = height, filled = true, color = COLOR_THEME_PRIMARY2 }
+  all[#all + 1] = { type = "rectangle", x = 0, y = 0, w = width, h = height, filled = true, color = palette.background }
+  if card then
+    local cardY = large and 50 or 27
+    all[#all + 1] = { type = "rectangle", x = 6, y = cardY, w = width-12,
+      h = height-controlH-(large and 40 or 27)-cardY, filled = true, color = palette.card }
+  end
   if w.historyMode or w.overview or w.confirmExit or not w.requestSteps then
     all[#all + 1] = label(10, 4, width - 54, title, large and MIDSIZE or SMLSIZE)
   end
   local function button(x, y, bw, text, press, active, kind, release)
     all[#all + 1] = { type = kind or "button", x = x, y = y, w = bw, h = controlH, text = text,
-      press = press, release = release, active = active }
+      press = press, release = release, active = active, color = palette.card, textColor = palette.text }
   end
   -- Back is deliberately first in focus order.
   button(8, height-controlH-6, math.floor(width * 0.25), w.L.back, function() w:back() end,
@@ -45,6 +51,7 @@ function M.new(w, ctx, diagrams)
     button(8, 2, width-controlH-20, title, function() w:requestSteps() end,
       function() return w.canEdit == true end)
     all[#all].h, all[#all].font = large and 44 or 24, large and MIDSIZE or SMLSIZE
+    all[#all].textColor = palette.accent
   end
   button(width-controlH-6, 2, controlH, "?", function()
     local current = w.cards and w.cards[w.card]
@@ -57,7 +64,7 @@ function M.new(w, ctx, diagrams)
     if w.openHelp then w.openHelp(message, w.L.name) end
   end)
   if w.disconnectExit then
-    all[#all+1]=label(12,48,width-24,w.L.disconnectedExitHint);all[#all].h=100
+    all[#all+1]=label(12,48,width-24,w.L.disconnectedExitHint);all[#all].h=100;all[#all].color=palette.warning
     button(12,160,width-24,w.L.powerOffLeave,function() w:leaveDisconnected() end)
   elseif w.confirmExit then
     local leavingStep=w.exitToSteps or w.backTarget
@@ -68,19 +75,22 @@ function M.new(w, ctx, diagrams)
       function() if w.resolveExit then w:resolveExit(false) else w:discard() end end)
   elseif w.error then
     all[#all + 1] = label(12, 48, width-24, w.statusFailure and w.L.statusUnavailable or next(w.dirty) and w.L.failed or w.L.failedClean)
-    all[#all].h=36
+    all[#all].h=36;all[#all].color=palette.error
     all[#all + 1] = label(12, 88, width-24, w.error)
+    all[#all].color=palette.error
     if w.statusFailure then
       all[#all+1]=label(12,116,width-24,w.L.statusWaitHint);all[#all].h=50
     end
     button(12, w.statusFailure and 172 or 132, width-24, w.L.retry, function() w:retry() end)
   elseif w.historyFailure then
     all[#all+1]=label(12,48,width-24,w.L.historySaveFailed)
+    all[#all].color=palette.warning
     button(12,100,width-24,w.L.retry,function() w.historyRetry() end)
     button(12,100+rowH,width-24,w.historyAllowSkip and w.L.historyContinue or w.L.back,function() w.historySkip() end)
   elseif w.overview then
     all[#all + 1] = label(10, large and 55 or 30, width-20, w.L.chooseStep, large and MIDSIZE or SMLSIZE)
     all[#all + 1] = label(10, large and 94 or 48, large and math.floor(width*0.4)-24 or width-20, w.L.stepMenuHint)
+    all[#all].color=palette.muted
     if not large then all[#all].h = rowY-52 end
     local x = large and math.floor(width*0.43) or 10
     local bw = width-x-10
@@ -112,7 +122,7 @@ function M.new(w, ctx, diagrams)
     local formW = width-formX-(large and 16 or 10)
     if attitudeCard then
       all[#all+1]=label(10,large and 58 or 30,width-20,w.L.orientationModelHint)
-      all[#all].h=large and 32 or 23
+      all[#all].h=large and 32 or 23;all[#all].color=palette.muted
       diagrams.append(all,w,card,10,large and 108 or 56,
         large and formX-26 or width-20,large and height-controlH-168 or rowY-68)
     else
@@ -122,6 +132,7 @@ function M.new(w, ctx, diagrams)
     if not (card.grid and not large) then
     all[#all + 1] = label(10, large and 94 or 48, large and not card.grid and formX-30 or width-20, card.summary or card.detail)
     all[#all].h = large and (card.grid and 30 or illustrated and 98 or height-controlH-154) or rowY-52
+    all[#all].color = palette.muted
     end
     if illustrated then
       local artY = large and 204 or rowY+4
@@ -155,7 +166,7 @@ function M.new(w, ctx, diagrams)
         elseif r.kind == "toggle" then
           local function set(v) w:applyEdit(function() if editable() then r.set(v) end end) end
           all[#all + 1] = { type = "button", x = formX+formW-editW, y = y, w = editW, h = controlH,
-            text = function() return r.values[r.get()] end,
+            text = function() return r.values[r.get()] end, color = palette.card, textColor = palette.text,
             press = function() if enabled() then set(r.get() == 2 and 1 or 2) end end, active = enabled }
         elseif r.kind == "choice" then
           all[#all + 1] = { type = "choice", x = formX+formW-editW, y = y, w = editW, h = controlH,
@@ -177,12 +188,15 @@ function M.new(w, ctx, diagrams)
     if not w.historyMode then
     button(width-math.floor(width*0.42)-8, height-controlH-6, math.floor(width*0.42), nextText,
       function() if current() then w:next() end end, function() return w.canNext == true and current() end)
+    all[#all].color, all[#all].textColor = palette.accent, palette.accentText
     all[#all + 1] = label(math.floor(width*0.27)+8, height-controlH, math.floor(width*0.28)-20,
       string.format("%d/%d", w.card, #w.cards))
+    all[#all].color = palette.accent
     end
   end
   all[#all + 1] = label(10, height-controlH-(large and 40 or 27), width-20,
     function() return w.feedbackText and w:feedbackText() or w.legacyHold and w.L.persistent or w.message or "" end)
+  all[#all].color = palette.muted
   local job = { all = all, children = {}, index = 1 }
   function job:step()
     for _ = 1, 4 do

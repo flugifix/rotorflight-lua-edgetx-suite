@@ -14,12 +14,12 @@ function M.append(all, w, card, width, height, large, controlH, current)
   local function act(fn) return function() if enabled() and w:usable() then fn() end end end
   local function label(x, y, lw, text, font)
     all[#all + 1] = { type = "label", x = x, y = y, w = lw, h = lineH, text = text, font = font or SMLSIZE,
-      color = COLOR_THEME_PRIMARY1 }
+      color = w.palette.text }
     return all[#all]
   end
   local function button(x, y, bw, text, press, visible)
     all[#all + 1] = { type = "button", x = x, y = y, w = bw, h = controlH, text = text, press = act(press),
-      active = enabled, visible = visible }
+      active = enabled, visible = visible, color = w.palette.card, textColor = w.palette.text }
     return all[#all]
   end
   local function test(c, x, y, tw)
