@@ -1047,7 +1047,7 @@ switch", for a view that opens on a switch only once the pilot has picked one. S
 
 ## The battery prompt
 
-With *Ask which pack after connecting* on (the [Flight Log](../pages/tools/flight_log.md) page,
+With *Write a flight log* on (the [Flight Log](../pages/tools/flight_log.md) page,
 *Settings*), the widget offers the pilot's battery registry once per connection — in fullscreen,
 because a widget zone receives no touch and Lua can leave fullscreen but not enter it. The
 picker is the widget's for every theme that does not register a look for it, so its way out is
@@ -1063,7 +1063,7 @@ closure may index it without guarding. A theme reads it and never writes it.
 | Field | |
 | --- | --- |
 | `loaded` | the registry has been read for this connection |
-| `pending` | the prompt is on, this model has packs, and this connection the pilot has neither picked nor closed it and the model has not been armed |
+| `pending` | the flight log is on, this model has packs, and this connection the pilot has neither picked nor closed it and the model has not been armed |
 | `candidates` | the registry entries for this model: `id`, `name`, `cap`, `cells`, `profile`, `cycles`, `last`, plus `targetProfile` |
 | `selectedId`, `selectedName` | the pack picked this connection, else the one stored for the model, else `nil` |
 | `boardProfile` | the battery profile the flight controller reported on connecting, 0-based; `nil` until it has answered, and again after any profile write, which is not confirmed |
