@@ -345,9 +345,9 @@
         "src/rfsuite/app/pages/helicopter_setup/view.lua"
       ],
       "contracts": [
-        "VISUAL.cached-reactivity"
+        "VISUAL.configurator-pictures"
       ],
-      "adaptation": "Mechanical reference geometry is static, as in the source. Source scene/axis/angle variants become task-specific line drawings. Physical response is confirmed by the pilot."
+      "adaptation": "Packaged Configurator roll, pitch and yaw correction pictures replace the mechanical sketches; physical response is confirmed by the pilot."
     },
     {
       "source": "tabs/setup_wizard/HeliSide.svelte",
@@ -473,9 +473,9 @@
         "src/rfsuite/app/pages/helicopter_setup/view.lua"
       ],
       "contracts": [
-        "VISUAL.cached-reactivity"
+        "VISUAL.configurator-pictures"
       ],
-      "adaptation": "Mechanical reference geometry is static, as in the source. Source scene/axis/angle variants become task-specific line drawings. Physical response is confirmed by the pilot."
+      "adaptation": "Packaged Configurator pitch-9 pictures show both calibration references; pitch-0 shows the level-check tip."
     },
     {
       "source": "tabs/setup_wizard/PulseTrain.svelte",
@@ -490,9 +490,9 @@
         "src/rfsuite/app/pages/helicopter_setup/view.lua"
       ],
       "contracts": [
-        "VISUAL.cached-reactivity"
+        "VISUAL.configurator-pictures"
       ],
-      "adaptation": "Function-bound cached geometry changes with the source parameter or MSP value; the switch cue alone is a decorative timed movement."
+      "adaptation": "Exact group Hz/width presets select packaged Configurator pulse pictures. Custom or mixed settings retain cached waveform geometry. Image and sketch visibility change within the same scene."
     },
     {
       "source": "tabs/setup_wizard/RateCurve.svelte",
@@ -584,9 +584,9 @@
         "src/rfsuite/app/pages/helicopter_setup/view.lua"
       ],
       "contracts": [
-        "VISUAL.cached-reactivity"
+        "VISUAL.configurator-pictures"
       ],
-      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises."
+      "adaptation": "Both connection cards show the packaged Configurator servo picture."
     },
     {
       "source": "tabs/setup_wizard/SetupWizard.svelte",
@@ -1150,9 +1150,9 @@
         "src/rfsuite/app/pages/helicopter_setup/view.lua"
       ],
       "contracts": [
-        "VISUAL.cached-reactivity"
+        "VISUAL.configurator-pictures"
       ],
-      "adaptation": "Mechanical reference geometry is static, as in the source. Source scene/axis/angle variants become task-specific line drawings. Physical response is confirmed by the pilot."
+      "adaptation": "Packaged Configurator roll, pitch, collective and level swash-motion pictures replace the mechanical sketches; live input meters remain."
     },
     {
       "source": "tabs/setup_wizard/SwitchFlick.svelte",
@@ -1165,9 +1165,10 @@
         "src/rfsuite/app/pages/helicopter_setup/view.lua"
       ],
       "contracts": [
-        "VISUAL.cached-reactivity"
+        "VISUAL.configurator-pictures",
+        "VISUAL.mode-switch-feedback"
       ],
-      "adaptation": "Function-bound cached geometry changes with the source parameter or MSP value; the switch cue alone is a decorative timed movement."
+      "adaptation": "Left/right Configurator pictures follow the existing live mode state. Unavailable input hides the directional picture and retains its status text; the profile card remains a labelled example."
     },
     {
       "source": "tabs/setup_wizard/TabButton.svelte",
@@ -1201,9 +1202,9 @@
         "src/rfsuite/app/pages/helicopter_setup/view.lua"
       ],
       "contracts": [
-        "VISUAL.cached-reactivity"
+        "VISUAL.configurator-pictures"
       ],
-      "adaptation": "Mechanical reference geometry is static, as in the source. Source scene/axis/angle variants become task-specific line drawings. Physical response is confirmed by the pilot."
+      "adaptation": "Packaged Configurator servo-centre, servo-direction, motor and bidirectional pictures replace the mechanical sketches. The direction meter and the 22-degree calibration sketch remain."
     },
     {
       "source": "tabs/setup_wizard/TailMotorTest.svelte",

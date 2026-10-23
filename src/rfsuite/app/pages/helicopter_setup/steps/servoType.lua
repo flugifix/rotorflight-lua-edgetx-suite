@@ -66,7 +66,7 @@ return function(w)
           return L.uniform
         end)}
       local card=w:cardDef(tail and L.tailServo or L.cyclicServos,L.servoHzHint,rows,nil,"pulses")
-      card.summary,card.servoIndex=L.servoHzQuick,indices[1]
+      card.summary,card.servoIndex,card.servoIndices=L.servoHzQuick,indices[1],indices
       cards[#cards+1]=card
     end
   end

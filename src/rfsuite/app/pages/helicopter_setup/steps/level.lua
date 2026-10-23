@@ -10,6 +10,6 @@ return function(w)
         for i = 0, 2 do w:field("mixer_config", "swash_trim_" .. i, 0, false, true) end
       end)
     }, function() w:holdAxes(nil, 0) end, "level"),
-    w:cardDef(L.levelCheck, L.levelCheckHint, { w:check("level", L.swashLevel) }, function() w:holdAxes(nil, 0) end, "level")
+    w:cardDef(L.levelCheck, L.levelCheckHint, { w:check("level", L.swashLevel) }, function() w:holdAxes(nil, 0) end, "levelCheck")
   }
 end

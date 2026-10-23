@@ -44,7 +44,7 @@ return function(w)
       w:value(L.inputYaw, function() return w:stickNow(3) end),
       w:button(L.wrongReverse, function() w:invertInput(3); w.checks.tailDirection = nil end),
       w:check("tailDirection", L.directionCorrect)
-    }, function() hold(2502) end,"tail"),
+    }, function() hold(2502) end,"tailMove"),
     w:cardDef(L.tailCalibration, L.tailCalibrationHint, {
       holdButton(L.holdPositive22, 917),
       holdButton(L.holdNegative22, -917),

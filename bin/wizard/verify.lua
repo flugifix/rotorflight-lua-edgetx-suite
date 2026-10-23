@@ -289,7 +289,7 @@ for t,keys in pairs({label="color,font,h,pos,text,type,visible,w,x,y,align",
   momentaryButton="active,color,h,press,release,text,textColor,type,w,x,y",numberEdit="active,display,get,h,max,min,set,type,w,x,y",
   button="active,color,font,h,press,text,textColor,type,visible,w,x,y",choice="active,get,h,set,title,type,values,w,x,y",
   rectangle="color,filled,h,thickness,type,w,x,y",line="color,pts,thickness,type,visible",
-  image="file,h,type,w,x,y"}) do
+  image="file,h,type,visible,w,x,y"}) do
   RADIO_PROPS[t]={};for k in string.gmatch(keys,"[^,]+") do RADIO_PROPS[t][k]=true end
 end
 for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
@@ -364,7 +364,7 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
         w.data.attitude={roll=0,pitch=0,yaw=0};w.attitudeAt=getTime()
         w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
       end
-      if (n==1 and c>1) or (n==2 and c>1) or (n==6 and c>1) or (n==7 and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
+      if (n==1 and c>1) or (n==2 and c>1) or (n==6 and c>1) or (n==7 and c==2) or ((n==15 or n==16 or n==17) and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
         exported[#exported+1] = {step=n,name=name,task=c,width=size[1],height=size[2],children=resolve(job.children)}
       end
       if n==6 then
@@ -403,6 +403,36 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
     end
   end
 end
+-- Additional picture variants use the same card definitions as the normal walk.
+for _,size in ipairs({{320,240},{480,272},{800,480}}) do
+  local function export(name,task,prepare)
+    w.rebootPending=nil
+    if prepare then prepare() end
+    for n,key in ipairs(steps) do if key==name then w.step=n;break end end
+    w.cards=load(PATH.."steps/"..name..".lua")(w);w.card=1
+    local job=view.new(w,{w=size[1],h=size[2]},diagrams)
+    while not job.done do job:step() end
+    exported[#exported+1]={step=w.step,name=name,task=task,width=size[1],height=size[2],children=resolve(job.children)}
+  end
+  for _,value in ipairs({1000,1900}) do
+    export("modes",value==1000 and "off" or "on",function()
+      w.data.mode_ranges.mode_ranges[1]={id=0,auxChannelIndex=0,range={start=1800,["end"]=2100}}
+      w.data.rc={channels={1500,1500,1500,1500,1500,value}}
+    end)
+  end
+  export("connect","restart",function() w.rebootPending=true end)
+  for _,mode in ipairs({1,2}) do
+    export("tail",mode==2 and "bidirectional" or "motor",function() w.data.mixer_config.tail_rotor_mode=mode end)
+  end
+  w.data.mixer_config.tail_rotor_mode=0
+  for _,preset in ipairs({{50,1520},{333,1520},{560,760},{200,1520}}) do
+    export("servoType","pulse-"..preset[1].."-"..preset[2],function()
+      for _,servo in pairs(w.data.servo_configurations.servos) do
+        servo.rate,servo.mid,servo.max=preset[1],preset[2],preset[2]==760 and 250 or 700
+      end
+    end)
+  end
+end
 -- Multi-frame previews prove that parameter/live bindings update one scene.
 for _,size in ipairs({{320,240},{480,272},{800,480}}) do
   local samples={
@@ -423,9 +453,10 @@ for _,size in ipairs({{320,240},{480,272},{800,480}}) do
     end},
     {name="rates",card=1,group="rates",values={1,2,3},apply=function(value) w.rateStyles[w.rateProfile]=value end},
     {name="servoType",card=1,group="pulses",values={50,333,560},apply=function(value)
-      w.data.servo_configurations.servos[0].rate=value
-      w.data.servo_configurations.servos[0].mid=value==560 and 760 or 1520
-      w.data.servo_configurations.servos[0].max=value==560 and 250 or 700
+      for _,index in ipairs(w.cards[1].servoIndices) do
+        local servo=w.data.servo_configurations.servos[index]
+        servo.rate,servo.mid,servo.max=value,value==560 and 760 or 1520,value==560 and 250 or 700
+      end
       if w.refreshPulse then w.refreshPulse() end
     end},
     {name="swash",card=1,group="geometry",values={2,5,6},apply=function(value) w.data.mixer_config.swash_type=value end}

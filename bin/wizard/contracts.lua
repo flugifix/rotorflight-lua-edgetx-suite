@@ -348,15 +348,25 @@ return function(h)
     w.data.rc={channels={1500,1500,1500,1500,1500,1000}};w.animationFrame=0
     local scene=h.view.new(w,{w=480,h=272},h.diagrams)
     while not scene:step() do end
-    local lever
-    for _,item in ipairs(scene.children) do if item.type=="line" and type(item.pts)=="function" then lever=item end end
-    check(lever~=nil,"VISUAL switch feedback has a reactive lever")
-    local off=lever.pts()[2][1]
+    local picture
+    for _,item in ipairs(scene.children) do if item.type=="image" then picture=item end end
+    check(picture~=nil,"VISUAL switch feedback has a reactive picture")
+    if not picture then return end
+    local prefix="/SCRIPTS/TOOLS/rfsuite-core/app/pages/helicopter_setup/gfx/dark/"
+    local count=#scene.children
+    eq(picture.file(),prefix.."switch-left.png","VISUAL OFF shows the left switch")
     w.data.rc.channels[6]=1900
-    check(lever.pts()[2][1]~=off,"VISUAL mode lever follows actual ARM-switch position")
+    eq(picture.file(),prefix.."switch-right.png","VISUAL ON shows the right switch")
+    eq(#scene.children,count,"VISUAL switch changes retain the scene")
     local card=w.cards[1]
     check(card.switchState()==true,"VISUAL ARM input can be active while arming stays locked")
     w.data.rc=nil;eq(card.switchState(),nil,"VISUAL absent RC input stays unknown")
+    check(not picture.visible(),"VISUAL unknown switch hides the directional picture")
+    local unavailable=false
+    for _,item in ipairs(scene.children) do
+      if item.type=="label" and type(item.text)=="function" and item.text()==L.unavailable then unavailable=true end
+    end
+    check(unavailable,"VISUAL unknown input retains the unavailable cue")
     step(w,"modes");w.card=2
     local rescue=w.cards[2]
     w.data.mode_ranges.mode_ranges[2]={id=53,auxChannelIndex=1,range={start=1800,["end"]=2100}}
@@ -1765,15 +1775,110 @@ return function(h)
     check(a~=signature(s),"VISUAL command changes existing stick marker")
     s=scene("rates");w.rateStyles[w.rateProfile]=1;a=signature(s);w.rateStyles[w.rateProfile]=3
     check(a~=signature(s),"VISUAL selected style changes existing rate curve")
-    s=scene("servoType");w.checks.unplugged=true;w.cards[1].rows[2].set(1);a=signature(s)
-    w.cards[1].rows[2].set(3)
-    check(a~=signature(s),"VISUAL selected servo rate changes existing pulses")
-    s=scene("modes")
-    w.data.mode_ranges.mode_ranges[1]={id=0,auxChannelIndex=0,range={start=1800,["end"]=2100}}
-    w.data.rc={channels={1500,1500,1500,1500,1500,1000}};a=signature(s);w.data.rc.channels[6]=1900
-    check(a~=signature(s),"VISUAL switch cue moves without a scene rebuild")
     s=scene("swash",2);w.data.mixer_config.main_rotor_dir=0;a=signature(s);w.data.mixer_config.main_rotor_dir=1
     check(a~=signature(s),"VISUAL rotor direction changes the existing picture")
+  end)
+  case("VISUAL.configurator-pictures",function()
+    local w=world();settle(w)
+    local prefix="/SCRIPTS/TOOLS/rfsuite-core/app/pages/helicopter_setup/gfx/dark/"
+    local function scene(name,index)
+      w.cards=step(w,name);w.card=index or 1
+      local job=h.view.new(w,{w=480,h=272},h.diagrams)
+      while not job:step() do end
+      local picture,images
+      images=0
+      for _,item in ipairs(job.children) do
+        if item.type=="image" then picture=item;images=images+1 end
+      end
+      eq(images,1,"VISUAL "..name.." card "..w.card.." has one picture")
+      return job,picture
+    end
+    local function expect(picture,name)
+      eq(picture and picture.file(),prefix..name..".png","VISUAL exact picture "..name)
+    end
+    for _,spec in ipairs({
+      {"direction",{"swash-motion-roll","swash-motion-pitch","swash-motion-collective"}},
+      {"gyro",{"gyro-roll","gyro-pitch","gyro-yaw"}},
+      {"tail",{"tail-servo","tail-servo-move"}},
+      {"pitch",{"pitch-9","pitch-9"}},
+      {"level",{"swash-motion-level","pitch-0"}},
+      {"connect",{"servo"}}
+    }) do
+      w.data.mixer_config.tail_rotor_mode=0
+      for index,name in ipairs(spec[2]) do
+        local job,picture=scene(spec[1],index);expect(picture,name)
+        if spec[1]=="direction" or (spec[1]=="tail" and index==2) then
+          local marker
+          for _,item in ipairs(job.children) do
+            if item.type=="line" and type(item.pts)=="function" then marker=item end
+          end
+          check(marker~=nil,"VISUAL picture retains the live input meter")
+          if marker then
+            local axis=spec[1]=="tail" and 3 or ({1,2,4})[index]
+            w.data.rc_command={commands={0,0,0,0,0}}
+            w.data.rc_command.commands[axis]=-500;local left=marker.pts()[1][1]
+            w.data.rc_command.commands[axis]=500
+            check(marker.pts()[1][1]>left,"VISUAL meter follows the card's input axis")
+            expect(picture,name)
+          end
+        end
+      end
+    end
+    w.rebootPending=true;local job,picture=scene("connect");expect(picture,"servo");w.rebootPending=nil
+    w.data.mixer_config.tail_rotor_mode=1
+    job,picture=scene("tail");local count=#job.children
+    for _,value in ipairs({1,2,1}) do
+      w.data.mixer_config.tail_rotor_mode=value
+      expect(picture,value==2 and "tail-bidirectional" or "tail-motor")
+      eq(#job.children,count,"VISUAL motor-tail change retains the scene")
+    end
+    w.data.mixer_config.tail_rotor_mode=0
+    job,picture=scene("profiles");expect(picture,"switch-left")
+    check(picture.visible(),"VISUAL profile switch keeps its example picture")
+    -- Both servo groups swap pictures and custom geometry within one scene.
+    for index=1,2 do
+      job,picture=scene("servoType",index);count=#job.children
+      local card=w.cards[index]
+      local wave
+      for _,item in ipairs(job.children) do
+        if item.type=="line" and type(item.pts)=="function" and #item.pts()==50 then wave=item end
+      end
+      check(wave~=nil,"VISUAL pulse scene retains its custom waveform")
+      if wave then
+        local points=wave.pts()
+        for _,preset in ipairs({{50,1520,"pulse-50-1520"},{333,1520,"pulse-333-1520"},{560,760,"pulse-560-760"}}) do
+          for _,servo in ipairs(card.servoIndices) do
+            local member=w.data.servo_configurations.servos[servo]
+            member.rate,member.mid,member.max=preset[1],preset[2],preset[2]==760 and 250 or 700
+          end
+          w.refreshPulse();expect(picture,preset[3])
+          check(picture.visible() and not wave.visible(),"VISUAL preset shows only its picture")
+          local shapes={}
+          for _,custom in ipairs({{200,preset[2]},{preset[1],preset[2]+10}}) do
+            local first=w.data.servo_configurations.servos[card.servoIndex]
+            first.rate,first.mid=custom[1],custom[2];w.refreshPulse()
+            check(not picture.visible() and wave.visible(),"VISUAL custom Hz or width uses the waveform")
+            eq(wave.pts(),points,"VISUAL custom values retain waveform points")
+            local shape={}
+            for i,pt in ipairs(wave.pts()) do shape[i]=pt[1]..","..pt[2] end
+            shapes[#shapes+1]=table.concat(shape,";")
+          end
+          check(shapes[1]~=shapes[2],"VISUAL a custom rate or width redraws the waveform")
+          for _,servo in ipairs(card.servoIndices) do
+            local member=w.data.servo_configurations.servos[servo]
+            member.rate,member.mid=preset[1],preset[2]
+          end
+          w.refreshPulse();expect(picture,preset[3])
+          check(picture.visible() and not wave.visible(),"VISUAL restoring a preset restores its picture")
+          if #card.servoIndices>1 then
+            local member=w.data.servo_configurations.servos[card.servoIndices[2]]
+            member.mid=member.mid+1;w.refreshPulse()
+            check(not picture.visible() and wave.visible(),"VISUAL a mixed group cannot show a preset")
+          end
+          eq(#job.children,count,"VISUAL pulse settings retain the scene")
+        end
+      end
+    end
   end)
   case("CORE.prepared-api-roundtrip",function()
     local w=world();settle(w)
