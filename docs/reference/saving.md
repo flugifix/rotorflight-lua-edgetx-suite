@@ -332,7 +332,8 @@ longer starts the reset that follows a save on a page that stays open, so the ne
 full connection sequence; on Hobbywing V5 and Scorpion it does not send the read that follows a
 save. Before, the answer ran against the closed page and stopped with an error in the log, and on
 AM32, BLHeli_S and Bluejay the next visit ran that post-save reset in place of its connection
-sequence.
+sequence. The same holds when the page is left while that post-save reset is still out: its answer,
+or its refusal, no longer sets the connection state of the page that was left.
 
 ## Scope
 
