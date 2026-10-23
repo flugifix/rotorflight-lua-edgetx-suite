@@ -96,8 +96,7 @@ the page:
   does the same.
 - **Save** saves the servo on screen as the header's Save does, and the other servo is picked once
   the flight controller has stored it. If the save is refused or fails, nothing is picked and the
-  change stays on screen, still unsaved. (The *Saved* notice of these pages comes up when the write
-  is sent, not when it is stored.)
+  change stays on screen, still unsaved.
 - **Discard** drops the change and picks the other servo. The servo goes back to the values the
   page read from the flight controller (or last saved there). PWM Output sends its centre to the
   flight controller again where it differs, as Reload does; BUS Output does so where a centre was
@@ -236,12 +235,12 @@ count has arrived, Save is held and the lists offer six. Reload asks the flight 
 
 ## A read that fails
 
-On **Setup > GPS**, **Setup > Model**, **Flight Tuning > Advanced > Autolevel** and **Setup >
-ESC/Motors > Motor Override**, a read that fails -- no answer after the retries, a reply that
-cannot be read, or a request taken off the queue -- leaves the page showing *Could not read the
-settings from the flight controller. Use Reload to try again.* in place of its fields, so nothing
-on screen stands for a value the flight controller did not send. The page does not ask again by
-itself; **Reload** does.
+On **Setup > GPS**, **Setup > Model**, **Setup > Controls > Modes**, **Flight Tuning > Advanced >
+Autolevel** and **Setup > ESC/Motors > Motor Override**, a read that fails -- no answer after the
+retries, a reply that cannot be read, or a request taken off the queue -- leaves the page showing
+*Could not read the settings from the flight controller. Use Reload to try again.* in place of
+its fields, so nothing on screen stands for a value the flight controller did not send. The page
+does not ask again by itself; **Reload** does.
 
 - A read the suite abandons because the model was armed or the link dropped while it was out
   counts as failed too; Reload reads again once the model is disarmed and connected.
@@ -278,6 +277,23 @@ is left with a change that was not saved -- it sends the value of this visit's r
 save that completed, not the value of the first visit. Reload on PWM Output then reads the flight
 controller again, as it does on BUS Output.
 
+Swash Geometry, PWM Output and BUS Output send their save through the tool's shared save rather than
+from the page: Swash Geometry writes the mixer configuration and its three mixer inputs, each Servos
+page the selected servo's record, every payload built when Save is pressed, then one EEPROM write.
+While it runs, the page is covered by the save's progress. A save that worked reads *Settings
+saved.* and the notice clears itself after two seconds; one that failed reads *Not saved* and stays
+up until it is closed. Before, these pages said *Saved* as soon as the write was queued, also when
+the flight controller then refused it or did not answer. Back pressed while the save runs steps back
+to the menu, and the page is released once the notice has gone. When the tool opened from the
+dashboard closes during the save, the save still finishes with the values Save was pressed with, and
+its replies no longer reach what the page's close released. Before, Swash Geometry queued each write
+from the reply to the one before it, through the module handles its close releases: with the page
+closed after the first write, the mixer configuration was changed on the flight controller, the
+three mixer inputs were not sent, and nothing was stored. On the Servos pages the EEPROM write's
+reply ran against the closed page; the MSP queue catches the raise that followed and logs it as a
+warning. In the EdgeTX simulator without a flight controller these three saves behave as on the
+other pages that use the shared save.
+
 Modes and Adjustments under Setup > Controls write only the ranges that were changed since the page
 last read or saved, then one EEPROM write; a Save with nothing changed writes nothing at all. A
 range the page did not touch stays on the flight controller as it was stored -- on Modes that
@@ -286,17 +302,50 @@ Reload discards every change -- on Adjustments that includes a slot other than t
 is read again when it is next selected. While Modes writes its ranges, the page is covered by the
 save's progress, as Adjustments is, so a range cannot be changed half-way through a save.
 
-Modes, Adjustments, Failsafe and Blackbox Configuration send their save as a chain of writes,
+Modes, Adjustments and Failsafe send their save as a chain of writes,
 every write after the first built only when the one before it is answered, then one EEPROM write. While that chain runs, Save and
 Reload pressed in the header have no effect (a confirmation the preferences ask for first is still
 shown): a second Save would send every write again with a second EEPROM write, and a Reload would
 bring the flight controller's stored values back onto the page -- from the page's last read, or
 from the new read's replies -- before the chain has built its remaining writes from it. Once the save has finished, both work as before.
 
+Blackbox Configuration and Blackbox Logging send their save through the tool's shared save rather
+than from the page: Configuration writes its logging settings and then its debug settings, Logging
+its logging settings, each built when Save is pressed, then one EEPROM write. While it runs, the
+page is covered by the save's progress. A save that worked reads *Settings saved.* and the notice
+clears itself after two seconds; one that failed reads *Not saved* and stays up until it is closed
+(a failed write said nothing before). Back pressed while the save runs is not asked about unsaved
+changes; the page is left once the notice has gone. When the tool opened from the dashboard closes
+during the save, the save still finishes with the values Save was pressed with, and its replies no
+longer reach what the page's close released. Before, Configuration built its debug settings from
+the page only when the first write was answered: with the page closed by then they were not sent
+at all, and with the page opened again they went out as that visit's values. A debug settings write
+the flight controller refuses now fails the save before the EEPROM write; before, the EEPROM write
+followed. After a save that worked, the page reads the flight controller again if it is still open;
+if it was closed, its next visit reads. Both pages also end their read when they are left before it
+is answered; before, the next read of the chain was still sent after the page had gone, and on
+Configuration a visit opened again at once could then refuse Save until Reload. In the EdgeTX
+simulator without a flight controller these two saves behave as on the other pages that use the
+shared save.
+
 Stats, both Beepers pages and Blackbox Logging send a single write, built when Save is pressed, then
 one EEPROM write. They ignore Save and Reload while that runs as well, so every page under Setup >
 Controls that saves to the flight controller does: a second Save there used to send the same write
 again with a second EEPROM write.
+
+On Stats and both Beepers pages, that write and its EEPROM write are sent by the tool's shared save
+rather than by the page. While it runs, the page is covered by the save's progress. A save that
+worked reads *Settings saved.* and the notice clears itself after two seconds; one that failed reads
+*Not saved* and stays up until it is closed (a failed write said nothing before). Back pressed
+while the save runs is not asked about unsaved changes; the page is left once the notice has gone.
+When the tool opened from the dashboard closes during the save, the save still finishes, and its
+replies no longer reach what the page's close released. After a save that worked, the page reads
+the flight controller again if it is still open; if it was closed, its next visit reads. Before, the page
+queued the EEPROM write from the write's reply and its read from the EEPROM write's reply, so a page
+left in between ran that reply against the state its close had released; the MSP queue catches such
+a raise and logs it as a warning. On Stats the flight count kept for the flight record is now set
+from the saved value also when the page was closed. In the EdgeTX simulator without a flight
+controller these three saves behave as on the other pages that use the shared save.
 
 ## ESC Configurator pages
 
@@ -325,6 +374,15 @@ The ESC Tools grid lights AM32, BLHeli_S and Bluejay together, because what ligh
 ESC telemetry protocol, which all three share. Which of the three pages fits is still the
 pilot's choice; on the BLHeli_S and Bluejay pages these checks make a wrong choice visible
 instead of writing it to the ESC.
+
+A save the page is left during still reaches the ESC: its write is already queued and is sent.
+The answer then changes nothing on the page that was left. On AM32, BLHeli_S and Bluejay it no
+longer starts the reset that follows a save on a page that stays open, so the next visit runs the
+full connection sequence; on Hobbywing V5 and Scorpion it does not send the read that follows a
+save. Before, the answer ran against the closed page and stopped with an error in the log, and on
+AM32, BLHeli_S and Bluejay the next visit ran that post-save reset in place of its connection
+sequence. The same holds when the page is left while that post-save reset is still out: its answer,
+or its refusal, no longer sets the connection state of the page that was left.
 
 ## Scope
 

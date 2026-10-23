@@ -610,14 +610,14 @@ function Utils.statFields(source, stattype)
   return entry and entry[stattype] or nil
 end
 
---- The value of one statistic out of a flight record: the flight in progress if it has taken a
---- value for it, the flight that ended otherwise. `flight` is rfsuite.session.flight, which the
---- dashboard also publishes on its own state.
+--- The value of one statistic out of a flight record: while armed, only the flight in progress;
+--- otherwise its value first, then the flight that ended. `flight` is rfsuite.session.flight,
+--- which the dashboard also publishes on its own state.
 function Utils.statFromRecord(flight, key)
   if key == nil or type(flight) ~= "table" then return nil end
   local record = flight.current
   local value = record and record[key]
-  if value ~= nil then return value end
+  if flight.armed == true or value ~= nil then return value end
   record = flight.last
   return record and record[key]
 end
