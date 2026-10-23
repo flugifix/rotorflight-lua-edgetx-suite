@@ -363,6 +363,9 @@ It does not jump out of an active bench test through a web-style tab shortcut.
 
 ## Implementation and verification
 
+[Artwork sources and PNG export workflow](../developer/helicopter-wizard-artwork.md)
+describe the illustration collection maintained alongside the wizard.
+
 The reference is [Configurator PR #491](https://github.com/rotorflight/rotorflight-configurator/pull/491),
 snapshot `4a57ba971d7ffef06f39bb66b3f376d150a27e25`. Timeout/tail-output semantics follow
 [firmware PR #541](https://github.com/rotorflight/rotorflight-firmware/pull/541).

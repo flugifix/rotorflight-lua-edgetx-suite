@@ -1,0 +1,1 @@
+- Add the helicopter setup wizard's illustrations for its cards: 112 light/dark images drawn from the Configurator's wizard and three board-orientation views of the helicopter, with their sources and a reproducible export under `artwork/helicopter_setup/`; the wizard does not show them yet (`helicopter_setup`).
