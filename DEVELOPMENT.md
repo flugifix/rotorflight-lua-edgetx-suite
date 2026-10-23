@@ -285,6 +285,12 @@ without the suffix it is published as a Release. The version baked into the pack
 comes from `src/rfsuite/lib/version.lua`.
 
 
+The in-flight trim-routing check compares 12,288 switch masks against the original lookup
+algorithm, including remapped/missing trims and navigation mode. It also exercises sliced discovery,
+legacy migration, settings invalidation and disabled inputs. Run
+`lua5.3 bin/dashboard/verify_inflight_trims.lua`. Pass `--drive <file>` with the previous drive
+implementation to prove the repeated-lookup check goes red.
+
 ## Documentation
 
 `docs/` holds the user-facing reference: one file per configuration page under `docs/pages/`,
