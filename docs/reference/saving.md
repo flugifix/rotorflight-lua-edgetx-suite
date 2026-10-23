@@ -96,8 +96,7 @@ the page:
   does the same.
 - **Save** saves the servo on screen as the header's Save does, and the other servo is picked once
   the flight controller has stored it. If the save is refused or fails, nothing is picked and the
-  change stays on screen, still unsaved. (The *Saved* notice of these pages comes up when the write
-  is sent, not when it is stored.)
+  change stays on screen, still unsaved.
 - **Discard** drops the change and picks the other servo. The servo goes back to the values the
   page read from the flight controller (or last saved there). PWM Output sends its centre to the
   flight controller again where it differs, as Reload does; BUS Output does so where a centre was
@@ -277,6 +276,23 @@ instead of being read as zeros. When PWM Output puts a servo back -- on Reload, 
 is left with a change that was not saved -- it sends the value of this visit's read, or of the last
 save that completed, not the value of the first visit. Reload on PWM Output then reads the flight
 controller again, as it does on BUS Output.
+
+Swash Geometry, PWM Output and BUS Output send their save through the tool's shared save rather than
+from the page: Swash Geometry writes the mixer configuration and its three mixer inputs, each Servos
+page the selected servo's record, every payload built when Save is pressed, then one EEPROM write.
+While it runs, the page is covered by the save's progress. A save that worked reads *Settings
+saved.* and the notice clears itself after two seconds; one that failed reads *Not saved* and stays
+up until it is closed. Before, these pages said *Saved* as soon as the write was queued, also when
+the flight controller then refused it or did not answer. Back pressed while the save runs steps back
+to the menu, and the page is released once the notice has gone. When the tool opened from the
+dashboard closes during the save, the save still finishes with the values Save was pressed with, and
+its replies no longer reach what the page's close released. Before, Swash Geometry queued each write
+from the reply to the one before it, through the module handles its close releases: with the page
+closed after the first write, the mixer configuration was changed on the flight controller, the
+three mixer inputs were not sent, and nothing was stored. On the Servos pages the EEPROM write's
+reply ran against the closed page; the MSP queue catches the raise that followed and logs it as a
+warning. In the EdgeTX simulator without a flight controller these three saves behave as on the
+other pages that use the shared save.
 
 Modes and Adjustments under Setup > Controls write only the ranges that were changed since the page
 last read or saved, then one EEPROM write; a Save with nothing changed writes nothing at all. A
