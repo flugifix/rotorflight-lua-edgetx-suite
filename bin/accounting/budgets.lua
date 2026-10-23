@@ -61,6 +61,9 @@ return {
     -- under-measurement (1 826). Counts-only, the loop runs to its poll caps, which
     -- is what a pass on the radio could always cost.
     ["pass.splash"] = { target = 7100, measured = 2439 },
+    ["pass.standby.build"] = { target = 14000, measured = 12004 },
+    ["pass.standby.state"] = { target = 12000, measured = 8809 },
+    ["sweep.standby"] = { target = 950, measured = 935 },
 
     -- The cold start, before the link is up and the first scene is on screen. It is
     -- the pass that loads modules, and it is the closest any pass comes to the
@@ -336,7 +339,7 @@ return {
     ["page.developer_msp_experiments_page.build"] = { target = 5600, measured = 4448 },
     ["page.developer_msp_speed_page.build"] = { target = 4150, measured = 3318 },
     ["page.developer_settings_page.build"] = { target = 3250, measured = 2593 },
-    ["page.diagnostics_elrs_link_page.build"] = { target = 4400, measured = 3502 },
+    ["page.diagnostics_elrs_link_page.build"] = { target = 4400, measured = 4391 },
     ["page.diagnostics_fblstatus_page.build"] = { target = 6300, measured = 5023 },
     ["page.diagnostics_info_page.build"] = { target = 7250, measured = 5783 },
     ["page.diagnostics_rfstatus_page.build"] = { target = 7750, measured = 6162 },
@@ -388,6 +391,7 @@ return {
     ["page.settings_dashboard_inflight_page.build"] = { target = 10200, measured = 8152 },
     ["page.settings_dashboard_keys_page.build"] = { target = 1400, measured = 1171 },
     ["page.settings_dashboard_quick_menu_page.build"] = { target = 2500, measured = 2364 },
+    ["page.settings_dashboard_standby_page.build"] = { target = 14900, measured = 11763 },
     ["page.settings_dashboard_theme_page.build"] = { target = 13250, measured = 10585 },
     ["page.settings_general_page.build"] = { target = 2200, measured = 1747 },
     ["page.settings_localization_page.build"] = { target = 2350, measured = 1878 },

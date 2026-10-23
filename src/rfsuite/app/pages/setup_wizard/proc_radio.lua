@@ -2354,6 +2354,14 @@ procs[#procs + 1] = {
       task.start(task.MODE_PROBE)
     end
   end,
+  leave = function(w)
+    local task = w.data and w.data.linkTask or nil
+    if task and type(task.reset) == "function" then task.reset() end
+    if w.data then
+      w.data.linkProbed = nil
+      w.data.linkSignature = nil
+    end
+  end,
   screens = {
     {
       id = "pair",

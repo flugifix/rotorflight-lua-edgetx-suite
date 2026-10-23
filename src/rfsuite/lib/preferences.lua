@@ -217,7 +217,7 @@ local SCHEMA = {
     -- a menu the pilot has emptied (widgets/dashboard/quick_menu_order.lua).
     -- `key_*`: the fullscreen keys, as the pilot set them on Settings > Dashboard > Keys. Absent
     -- means the key's default (widgets/dashboard/keys.lua).
-    optional = { "model_overrides", "quick_menu", "key_page_down", "key_page_up", "key_mdl", "key_sys", "key_tele" },
+    optional = { "model_overrides", "quick_menu", "key_page_down", "key_page_up", "key_mdl", "key_sys", "key_tele", "standby_enabled", "standby_layout" },
     -- A theme's own configuration is stored here under keys built from the theme's path
     -- (app/pages/settings/dashboard/lib.lua), so the set of key names is not knowable from
     -- a schema and the section keeps whatever it is handed.
