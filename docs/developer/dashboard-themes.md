@@ -674,6 +674,13 @@ that draws its container and no value.
 
 ## `configure.lua`
 
+Voltage forms may pass a fifth argument to `setThemeConfig`,
+`{ voltageEdited = false }`, to leave both stored voltage limits unchanged. Pass `true` after
+either bound is edited: an explicit model range is then retained even when it equals numeric
+theme defaults and the radio has no explicit bounds. Omit the option for the original write
+contract. Clear the edit flag on reload and after a successful save, retaining it on failure.
+The shipped voltage forms use this to keep an automatic range automatic on unrelated saves.
+
 A theme with settings returns a **factory**: a function taking the page context and returning
 the page module. The context carries the theme the page was opened for, and the factory takes
 the theme's path out of it. That is what makes a copied theme store its own values instead of
