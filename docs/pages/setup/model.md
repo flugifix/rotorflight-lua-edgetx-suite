@@ -21,8 +21,8 @@ Greyed out until the flight controller answers. Read-only while the model is arm
 
 | Setting | What it does |
 | --- | --- |
-| Parameter 1 to 3 Type | What the slot sets on the radio when the flight controller connects: *None*, one of the radio's three timers (*Timer 1* to *Timer 3*), or a global variable (*GV1* to *GV9*). |
-| Parameter 1 to 3 Value | The value written into that timer or global variable. -32000 to 32000; greyed out while the slot's type is *None*. |
+| Parameter 1 Type to Parameter 3 Type | What the slot sets on the radio when the flight controller connects: *None*, one of the radio's three timers (*Timer 1* to *Timer 3*), or a global variable (*GV1* to *GV9*). |
+| Parameter 1 Value to Parameter 3 Value | The value written into that timer or global variable. -32000 to 32000; greyed out while the slot's type is *None*. |
 | Synchronize Model Parameters | Whether this radio applies the three parameters on connect at all. Stored on this radio, for every model. |
 | Set Model Name on the Radio | Whether the radio's model is renamed after the craft name the flight controller reports. From MSP API 12.09 the flight controller carries this decision and the switch writes it there; on older firmware the switch is a preference of this radio and applies to every model. Only one of the two is ever shown. |
 
@@ -30,6 +30,10 @@ Greyed out until the flight controller answers. Read-only while the model is arm
 
 - Saving writes the parameters and the model-name flag to the flight controller; the two
   radio-wide switches are saved on the radio.
+- When the save to the flight controller cannot start, for example because another save is
+  still running, the page shows an Error box naming the reason as a short code (such as `busy`)
+  instead of closing the save notice without a message. The two radio-wide switches are saved
+  first, independently of the flight controller.
 - Where the flight controller does not answer the read, the page says the settings could not be
   read instead of showing its fields, and Save is refused until **Reload** has read them.
 - The rename is temporary. The model's own name is put back when the craft disconnects, or at

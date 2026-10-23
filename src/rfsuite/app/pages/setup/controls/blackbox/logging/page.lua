@@ -17,6 +17,7 @@ local FeatureConfigApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local ApiVersion = nil
+local SavePipeline = nil
 local t = nil
 
 local FEATURE_BITS = {
@@ -248,8 +249,19 @@ local function queueBlackboxRead(isAutoReload)
         end
       })
     end,
-    errorHandler = function()
+    errorHandler = function(_, reason)
       readValid = false
+      -- The queue drops this read (reason "cleared") when the page is left or the link goes, and
+      -- the read ends there. Queuing the next one from here would file it under whatever owns the
+      -- queue then, and its reply would run against a page that has been closed.
+      if reason == "cleared" then
+        ui.runtime.readPending = false
+        ui.loading = false
+        if type(ui.runtime.requestRebuild) == "function" then
+          ui.runtime.requestRebuild()
+        end
+        return
+      end
       -- If feature config fails, still try to read blackbox config
       queue:add({
         command = BlackboxConfigApi.command,
@@ -292,17 +304,15 @@ local function queueBlackboxRead(isAutoReload)
 end
 
 local function queueBlackboxWrite(requestRebuild)
-  if not MspRuntime or not BlackboxConfigApi or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not BlackboxConfigApi then
     return false, "msp_runtime_unavailable"
   end
 
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
-  end
-
-  local payload = BlackboxConfigApi.buildWritePayload({
+  -- What is saved, taken now: the page can be left while the write is on the wire, and a page
+  -- opened again starts from other values. The payload and the session copy come from here.
+  local cfg = {
+    blackbox_supported = ui.cfg.blackbox_supported,
     device = ui.cfg.device,
     mode = ui.cfg.mode,
     denom = ui.cfg.denom,
@@ -310,73 +320,47 @@ local function queueBlackboxWrite(requestRebuild)
     initialEraseFreeSpaceKiB = ui.cfg.initialEraseFreeSpaceKiB,
     rollingErase = ui.cfg.rollingErase,
     gracePeriod = ui.cfg.gracePeriod
+  }
+
+  -- The write and the EEPROM commit belong to the pipeline, not to this page: the page can be
+  -- left while they are on the wire, and its close releases ui.runtime and the module handles
+  -- above. So nothing below may assume the page is still open.
+  local ok, err = SavePipeline.start({
+    pageId = "setup_controls_blackbox_logging",
+    steps = {
+      {
+        label = "MSP_SET_BLACKBOX_CONFIG",
+        command = BlackboxConfigApi.writeCommand,
+        payload = BlackboxConfigApi.buildWritePayload(cfg)
+      }
+    },
+    reboot = false,
+    onSaved = function()
+      local session = getSession()
+      if session then
+        if type(session.blackbox) ~= "table" then
+          session.blackbox = {}
+        end
+        session.blackbox.config = cfg
+      end
+      ui.dirty = false
+    end,
+    onDone = function(result)
+      ui.saving = false
+      if not ui.runtime then return end
+      if result.saved then queueBlackboxRead(true) end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
   })
+  if not ok then return false, err end
 
   ui.saving = true
   ui.progress = 0
   if type(requestRebuild) == "function" then
     requestRebuild()
   end
-
-  queue:add({
-    command = BlackboxConfigApi.writeCommand,
-    payload = payload,
-    isWrite = true,
-    simulatorResponse = {},
-    processReply = function()
-      -- Step 2: Write EEPROM
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.writeCommand,
-          payload = {},
-          isWrite = true,
-          simulatorResponse = {},
-          processReply = function()
-            -- Success! Update local session
-            local session = getSession()
-            if session then
-              if type(session.blackbox) ~= "table" then
-                session.blackbox = {}
-              end
-              session.blackbox.config = {
-                blackbox_supported = ui.cfg.blackbox_supported,
-                device = ui.cfg.device,
-                mode = ui.cfg.mode,
-                denom = ui.cfg.denom,
-                fields = ui.cfg.fields,
-                initialEraseFreeSpaceKiB = ui.cfg.initialEraseFreeSpaceKiB,
-                rollingErase = ui.cfg.rollingErase,
-                gracePeriod = ui.cfg.gracePeriod
-              }
-            end
-            ui.dirty = false
-            ui.saving = false
-            queueBlackboxRead(true)
-          end,
-          errorHandler = function()
-            ui.saving = false
-            if type(requestRebuild) == "function" then
-              requestRebuild()
-            end
-          end
-        })
-      else
-        ui.dirty = false
-        ui.saving = false
-        if type(requestRebuild) == "function" then
-          requestRebuild()
-        end
-      end
-    end,
-    errorHandler = function()
-      ui.saving = false
-      if type(requestRebuild) == "function" then
-        requestRebuild()
-      end
-    end
-  })
-
   return true, nil
 end
 
@@ -567,6 +551,7 @@ function M.onClose()
   LoadingOverlay = nil
   ConfirmDialog = nil
   ApiVersion = nil
+  SavePipeline = nil
   t = nil
 end
 
