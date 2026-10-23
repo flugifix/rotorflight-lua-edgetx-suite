@@ -301,6 +301,7 @@ local function queuePostSaveReset(target, nextState)
     isWrite = true,
     simulatorResponse = {},
     processReply = function()
+      if not ui.runtime then return end
       ui.connState = nextState
       ui.connTimer = nowSeconds()
       if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
@@ -308,6 +309,7 @@ local function queuePostSaveReset(target, nextState)
       end
     end,
     errorHandler = function()
+      if not ui.runtime then return end
       ui.connState = 5
       ui.saving = false
       ui.notice = {
