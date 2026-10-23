@@ -1878,8 +1878,8 @@ return {
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen",
         help_title = "Modi Hilfe",
-        help_p1 = "Flugmodi ermoeglichen es, Funkkanaele (AUX) bestimmten Funktionen auf dem Flugcontroller (wie Stabilisierung, Governor usw.) zuzuordnen.",
-        help_p2 = "Fuegen Sie einen Bereich hinzu, waehlen Sie den Kanal und die Logik aus und passen Sie die Grenzwerte an. Druecken Sie 'Set', um die Grenzwerte automatisch anhand Ihrer aktuellen Schalterposition zu konfigurieren."
+        help_p1 = "Bereiche aktivieren Flugmodi, solange AUX-Kanaele im Fenster liegen. Speichern schreibt alle geaenderten Bereiche.",
+        help_p2 = "Modus: Zeigt Bereiche des Modus aus der Liste des Flugcontrollers.\nAkt. Bereiche: Zeigt, wie viele Flugcontroller-Slots dieser Modus belegt.\nBereich: Pro Zeile AUX (AUTO: Schalter bewegen, Kanal erkennen), OR/AND mit anderen Bereichen und Start/End in us waehlen; + Add fuegt einen Bereich hinzu, X loescht ihn.\nSet: Setzt nach Bestaetigung das Fenster auf die aktuelle Kanalposition mit je 50 us beiderseits."
       },
       setup_adjustments = {
         title = "Anpassungen",
