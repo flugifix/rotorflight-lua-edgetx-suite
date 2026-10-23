@@ -173,9 +173,20 @@ function M.new(w, ctx, diagrams)
             title = r.label, values = r.values, get = r.get,
             set = function(v) w:applyEdit(function() if editable() then r.set(v) end end) end, active = enabled }
         else
+          local pendingEdit, pendingValue
+          local function get()
+            if pendingEdit and w.pendingEdit == pendingEdit and editable() then return pendingValue end
+            return r.get()
+          end
+          local function set(v)
+            pendingEdit = function() if editable() then r.set(v) end end
+            pendingValue = v
+            w:applyEdit(pendingEdit)
+          end
+          -- update() reads get() when the native editor closes, before a queued
+          -- STATUS reply can authorize the final value. Keep that draft visible.
           all[#all + 1] = { type = "numberEdit", x = formX+formW-editW, y = y, w = editW, h = controlH,
-            min = r.min, max = r.max, get = r.get,
-            set = function(v) w:applyEdit(function() if editable() then r.set(v) end end) end,
+            min = r.min, max = r.max, get = get, set = set,
             display = function(v)
               if r.divisor then return string.format("%.1f", v / r.divisor) end
               return tostring(v)

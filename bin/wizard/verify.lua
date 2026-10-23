@@ -212,6 +212,14 @@ local steps = { "sensors","receiver","modes","profiles","rates","swash","servoTy
 local view = load(PATH .. "view.lua")
 local diagrams = load(PATH .. "diagrams.lua")
 for i=1,#arg do if arg[i]=="--view" then view=assert(loadfile(arg[i+1]))() end end
+assert(loadfile("bin/wizard/servo_hz.lua"))()({
+  world=world,view=view,diagrams=diagrams,check=check,eq=eq,L=L,q=q,pump=pump,
+  advance=function(value) ticks=ticks+value end,fixtures=fixtures,api=api
+})
+if arg[1]=="--servo-hz-only" then
+  print(string.format("Wizard: %d assertions, %d failures",assertions,failures))
+  os.exit(failures>0 and 1 or 0)
+end
 local exported = {}
 local function resolve(t)
   local out = {}

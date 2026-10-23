@@ -170,11 +170,12 @@ function M.append(children, w, card, x, y, width, height)
     picture.visible=function() return preset~=nil end
   elseif kind == "switch" then
     text(5,0,210,L.move)
-    local picture=image(function()
+    -- The switch is always drawn; an unknown position shows it at rest (left) beside the
+    -- unavailable cue, so the card never loses its picture.
+    image(function()
       local value=card.switchState and card.switchState()
       return value==true and "switch-right" or "switch-left"
     end)
-    picture.visible=function() return not card.switchState or card.switchState()~=nil end
     text(5,141,210,function()
       if not card.switchState then return L.artExample end
       return card.switchState()==nil and L.unavailable or ""

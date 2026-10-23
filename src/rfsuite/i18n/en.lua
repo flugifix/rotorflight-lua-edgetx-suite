@@ -362,6 +362,7 @@ return {
         mixed = "Mixed",
         uniform = "Same",
         servoHzQuick = "Set type, then Hz. Maker's limit!",
+        servoUnpluggedRequired = "Unplug servos and confirm to edit.",
         geometryCorrection = "Geometry correction",
         tailGeometryCorrection = "Tail geometry correction",
         geometryQuick = "Straight link travel.\nRecheck pitch and limits.",

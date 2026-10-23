@@ -362,6 +362,7 @@ return {
         mixed = "Gemischt",
         uniform = "Gleich",
         servoHzQuick = "Typ, dann Hz. Hersteller beachten!",
+        servoUnpluggedRequired = "Zum Ändern Servos abstecken und bestätigen.",
         geometryCorrection = "Geometrie-Korrektur",
         tailGeometryCorrection = "Heck-Geometrie-Korrektur",
         geometryQuick = "Gerader Gestängeweg.\nPitch und Limits prüfen.",

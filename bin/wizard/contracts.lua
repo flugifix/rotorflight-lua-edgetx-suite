@@ -361,7 +361,8 @@ return function(h)
     local card=w.cards[1]
     check(card.switchState()==true,"VISUAL ARM input can be active while arming stays locked")
     w.data.rc=nil;eq(card.switchState(),nil,"VISUAL absent RC input stays unknown")
-    check(not picture.visible(),"VISUAL unknown switch hides the directional picture")
+    check(picture.visible==nil or picture.visible(),"VISUAL unknown switch keeps its picture")
+    eq(picture.file(),prefix.."switch-left.png","VISUAL unknown switch shows the switch at rest")
     local unavailable=false
     for _,item in ipairs(scene.children) do
       if item.type=="label" and type(item.text)=="function" and item.text()==L.unavailable then unavailable=true end
@@ -2031,7 +2032,7 @@ return function(h)
     end
     w.data.mixer_config.tail_rotor_mode=0
     job,picture=scene("profiles");expect(picture,"switch-left")
-    check(picture.visible(),"VISUAL profile switch keeps its example picture")
+    check(picture.visible==nil or picture.visible(),"VISUAL profile switch keeps its example picture")
     -- Both servo groups swap pictures and custom geometry within one scene.
     for index=1,2 do
       job,picture=scene("servoType",index);count=#job.children

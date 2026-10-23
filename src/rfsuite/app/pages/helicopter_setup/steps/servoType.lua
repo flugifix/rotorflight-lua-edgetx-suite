@@ -1,5 +1,6 @@
 return function(w)
   local L = w.L
+  local function unplugged() return w.checks.unplugged == true end
   local function apply(tail, kind)
     if not w.checks.unplugged then w.message = L.confirmCheck; return end
     local rate = ({50,333,560})[kind]
@@ -33,11 +34,11 @@ return function(w)
     return result or 0
   end
   local function row(tail, label)
-    return { kind = "choice", label = label, values = { L.analog, L.digital, L.narrow,L.customServo },
+    return { kind = "choice", label = label, enabled = unplugged, values = { L.analog, L.digital, L.narrow,L.customServo },
       get = function() local v=current(tail);return v==0 and 4 or v end, set = function(v) apply(tail, v) end }
   end
   local function rateRow(tail,indices)
-    return {kind="number",label=L.servoHz,min=25,max=5000,
+    return {kind="number",label=L.servoHz,min=25,max=5000,enabled=unplugged,
       get=function() return w.data.servo_configurations.servos[indices[1]].rate end,
       set=function(v)
         if not w.checks.unplugged then w.message=L.confirmCheck;return end
@@ -66,7 +67,8 @@ return function(w)
           return L.uniform
         end)}
       local card=w:cardDef(tail and L.tailServo or L.cyclicServos,L.servoHzHint,rows,nil,"pulses")
-      card.summary,card.servoIndex,card.servoIndices=L.servoHzQuick,indices[1],indices
+      card.summary=function() return unplugged() and L.servoHzQuick or L.servoUnpluggedRequired end
+      card.servoIndex,card.servoIndices=indices[1],indices
       cards[#cards+1]=card
     end
   end

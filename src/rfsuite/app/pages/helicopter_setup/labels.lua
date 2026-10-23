@@ -314,6 +314,7 @@ local L = {
   uniform = "@i18n(app.modules.helicopter_setup.uniform)@",
   servoHzHint = "@i18n(app.modules.helicopter_setup.servoHzHint)@",
   servoHzQuick = "@i18n(app.modules.helicopter_setup.servoHzQuick)@",
+  servoUnpluggedRequired = "@i18n(app.modules.helicopter_setup.servoUnpluggedRequired)@",
   geometryCorrection = "@i18n(app.modules.helicopter_setup.geometryCorrection)@",
   tailGeometryCorrection = "@i18n(app.modules.helicopter_setup.tailGeometryCorrection)@",
   geometryHint = "@i18n(app.modules.helicopter_setup.geometryHint)@",
