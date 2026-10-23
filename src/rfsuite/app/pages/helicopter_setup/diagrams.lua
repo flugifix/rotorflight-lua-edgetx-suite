@@ -1,6 +1,7 @@
 -- Small, labelled mechanical sketches. Geometry is prepared at build time;
 -- reactive lines select fixed-size, non-negative point tables from cached state.
 local M = {}
+local GFX = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/helicopter_setup/gfx/"
 function M.append(children, w, card, x, y, width, height)
   local ink, accent = COLOR_THEME_PRIMARY1, COLOR_THEME_SECONDARY1
   local kind,L=card.art,w.L
@@ -16,12 +17,7 @@ function M.append(children, w, card, x, y, width, height)
   local function points(p)
     local out = {}
     for i,v in ipairs(p) do
-      local a,b=v[1],v[2]
-      if kind=="heliLift" then
-        local dx,dy=a-38,b-128
-        a,b=15+(38+dx*0.939693+dy*0.342020)*0.9,10+(128-dx*0.342020+dy*0.939693)*0.9
-      end
-      out[i]={px(a),py(b)}
+      out[i]={px(v[1]),py(v[2])}
     end
     return out
   end
@@ -321,19 +317,13 @@ function M.append(children, w, card, x, y, width, height)
     end
     text(5,141,210,L.artAgainst)
   else
-    -- Recognisable side silhouette with head, canopy, boom, tail rotor and skids.
+    -- The side view, nose left: blades crossed out where they must come off, tail lifted
+    -- 20 degrees for the alignment check, otherwise level. The picture fills the frame.
+    local picture = kind=="heliLift" and "heli-tail-lift"
+      or (w.step==1 or w.step==9 or w.step==11) and "heli-remove-blades" or "heli-level"
+    children[#children+1] = { type = "image", x = px(0), y = py(0), w = px(220)-px(0),
+      h = py(160)-py(0), file = GFX .. picture .. ".png" }
     text(5,0,210,L.artSide)
-    line({{19,105},{28,77},{49,65},{90,69},{106,100},{91,111},{35,111},{19,105}},ink,3)
-    line({{31,78},{55,75},{67,96},{24,96}},accent)
-    line({{98,83},{187,71},{193,80},{104,100}},ink,3)
-    line({{190,73},{190,49},{203,76},{196,94},{190,80}})
-    line({{64,68},{64,47}},ink,3)
-    line({{15,45},{131,45}},accent,4)
-    if w.step==1 or w.step==9 or w.step==11 then
-      line({{84,33},{102,57}},accent,3);line({{102,33},{84,57}},accent,3)
-    end
-    line({{184,55},{203,90}},accent,3); line({{179,82},{207,63}},accent,3)
-    line({{38,111},{34,128},{101,128},{96,111}}); line({{20,128},{116,128}},ink,3)
     arrow(70,145,24,145); text(89,137,125,kind=="heliLift" and "20°" or L.artFront)
   end
   if card.meter then meter(10,132,196,card.meter) end

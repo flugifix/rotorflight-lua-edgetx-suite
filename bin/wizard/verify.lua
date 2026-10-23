@@ -285,7 +285,8 @@ RADIO_PROPS={}
 for t,keys in pairs({label="color,font,h,pos,text,type,visible,w,x,y,align",
   momentaryButton="active,h,press,release,text,type,w,x,y",numberEdit="active,display,get,h,max,min,set,type,w,x,y",
   button="active,font,h,press,text,type,visible,w,x,y",choice="active,get,h,set,title,type,values,w,x,y",
-  rectangle="color,filled,h,thickness,type,w,x,y",line="color,pts,thickness,type,visible"}) do
+  rectangle="color,filled,h,thickness,type,w,x,y",line="color,pts,thickness,type,visible",
+  image="file,h,type,w,x,y"}) do
   RADIO_PROPS[t]={};for k in string.gmatch(keys,"[^,]+") do RADIO_PROPS[t][k]=true end
 end
 for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
@@ -338,16 +339,27 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
         end
       end
       if card.art then
-        local lines=0
-        for _,item in ipairs(job.children) do if item.type=="line" then lines=lines+1 end end
-        check(lines>=4,name.." illustrates the task on "..size[1].."x"..size[2])
+        local lines,images=0,0
+        for _,item in ipairs(job.children) do
+          if item.type=="line" then lines=lines+1 end
+          if item.type=="image" then
+            images=images+1
+            -- The picture ships in the package, and its frame keeps the 220x160 aspect.
+            local rel=string.match(item.file or "","^/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
+            local f=rel and io.open("src/rfsuite/"..rel,"rb")
+            check(f~=nil,name.." picture "..tostring(item.file).." exists in the package")
+            if f then f:close() end
+            check(item.w>0 and item.h>0 and math.abs(item.w*160-item.h*220)<=220,name.." picture frame keeps its aspect on "..size[1].."x"..size[2])
+          end
+        end
+        check(lines>=4 or images==1,name.." illustrates the task on "..size[1].."x"..size[2])
       end
       if c==1 then exported[#exported+1] = {step=n,name=name,width=size[1],height=size[2],children=resolve(job.children)} end
       if n==1 and c==3 then
         w.data.attitude={roll=0,pitch=0,yaw=0};w.attitudeAt=getTime()
         w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
       end
-      if (n==1 and c==3) or (n==2 and c>1) or (n==6 and c==2) or (n==7 and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
+      if (n==1 and c>1) or (n==2 and c>1) or (n==6 and c==2) or (n==7 and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
         exported[#exported+1] = {step=n,name=name,task=c,width=size[1],height=size[2],children=resolve(job.children)}
       end
       if n==6 then

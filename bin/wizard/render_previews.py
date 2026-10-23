@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 FONT_PATHS = (Path('C:/Windows/Fonts/arial.ttf'), Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
 FONT = next((p for p in FONT_PATHS if p.exists()), None)
+SRC = Path(__file__).resolve().parents[2] / 'src' / 'rfsuite'
 
 
 def font(size):
@@ -53,6 +54,14 @@ def render(scene):
                 draw.rectangle((x,y,x+w,y+h), outline=color, width=item.get('thickness', 2))
         elif kind == 'line':
             draw.line([tuple(p) for p in item['pts']], fill=color, width=item.get('thickness', 2), joint='curve')
+        elif kind == 'image':
+            # Zoomed to fit its frame, keeping the aspect, as EdgeTX does for a Lua image.
+            rel = str(item.get('file', '')).removeprefix('/SCRIPTS/TOOLS/rfsuite-core/')
+            picture = Image.open(SRC / rel).convert('RGBA')
+            zoom = min(w / picture.width, h / picture.height)
+            picture = picture.resize((max(1, round(picture.width * zoom)), max(1, round(picture.height * zoom))),
+                                     Image.Resampling.BILINEAR)
+            image.paste(picture, (x + (w - picture.width) // 2, y + (h - picture.height) // 2), picture)
         elif kind == 'label':
             face = font((26 if large else 17) if item.get('font') == 1 else size)
             text = str(item.get('text', ''))
