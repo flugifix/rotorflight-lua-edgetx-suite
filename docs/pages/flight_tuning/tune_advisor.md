@@ -57,14 +57,28 @@ The suggestions follow these rules:
 The radio's own confirmation dialog lists the changes, with the No button first. After you confirm,
 the page reads the current PID gains, PID profile settings and rates afresh. It refuses
 without writing if a read fails, the model is armed, either profile or the tune differs from the advice,
-the polar cyclic setting no longer matches, or a suggested value is outside its range. Only fields that
+the polar cyclic setting no longer matches, or a suggested value is outside its range. It also reads the
+flight controller's own active PID and rate profile and checks both against the advice. Only fields that
 actually change are replaced in copies of those replies: every other byte is written back exactly as read,
 including any extra bytes at the end, and only messages carrying a change are sent. The shared save process
 then commits to EEPROM without a reboot. The page reads the settings again and reports how many changes
 were written and read back, or names the first field that differs.
+If the settings cannot be read back, it reports that the save is unverified; if a profile changed during
+the save, it asks you to check both profiles.
+
+If saving fails, the page says what may still be active in RAM until a restart:
+
+- "Saving failed. The changes are active until the flight controller restarts, then undone." means the
+  EEPROM commit failed or timed out: the new values are active but were not stored. Restart the flight
+  controller to undo them.
+- "Writing failed. Nothing was saved: restart the flight controller to undo any part already sent."
+  means a write failed or timed out before the EEPROM commit. Some values may already be active in RAM;
+  restart the flight controller to restore the stored settings.
 
 Betaflight, Raceflight and KISS rate suggestions are percentages, not exact values: Save writes neither
 those rates nor the FF change paired with them. P and I-term relax cut-off suggestions remain writable.
+FF and its paired rate changes are written together or not at all; if a rate stays unchanged at a limit,
+none of them is written.
 
 After an acknowledged write the axis shows "Applied. Fly again to check the new settings." and offers no
 further change on the same flight data. This survives leaving the page. It goes when the flight data changes
@@ -79,6 +93,9 @@ starts with its own measurements.
   at arming. Clear once with *\** after toggling it.
 - Fly, land, open the page, make one change, then fly again. The next arming starts a fresh set by itself when
   the tune changed.
+- The advice and the check use the settings the flight controller holds now, and statistics clear only at
+  the next arming, so a value changed by hand after landing is not detected; make changes by hand only
+  after flying again.
 
 ## Notes
 
@@ -90,6 +107,7 @@ starts with its own measurements.
   Roll rates are not changed by the row; they are kept as they were and apply again once polar is switched
   off. With polar on, Roll and Pitch rate suggestions name the *Cyclic* row and work from the Pitch rates;
   Save writes the Pitch rates for either axis.
+  A Cyclic rate write marks both Roll and Pitch as applied until the flight data changes or is cleared.
   The page reads the polar setting after the first advisor answer, again when the active rate profile changes,
   and on Reload. Until the first read answers, or if it fails, suggestions name the per-axis rows as before;
   a later read that fails keeps the previous answer. The profile switch is seen through the radio's rate

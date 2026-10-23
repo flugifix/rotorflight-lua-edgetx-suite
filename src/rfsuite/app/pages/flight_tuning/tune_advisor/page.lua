@@ -49,6 +49,7 @@ local Profile = nil
 local ConfirmDialog = nil
 local PidTuningApi = nil
 local PidProfileApi = nil
+local StatusApi = nil
 local SavePipeline = nil
 local Cache = nil
 local Armed = nil
@@ -283,6 +284,12 @@ local function loadTexts(i18n)
     startFailed = pageText(i18n, "save_start_failed", "Could not start the save: %s"),
     saved = pageText(i18n, "save_done", "Saved: %d change(s) written and read back."),
     differs = pageText(i18n, "save_differs", "Saved, but the read-back differs: %s"),
+    notStored = pageText(i18n, "save_not_stored",
+      "Saving failed. The changes are active until the flight controller restarts, then undone."),
+    writeFailed = pageText(i18n, "save_write_failed",
+      "Writing failed. Nothing was saved: restart the flight controller to undo any part already sent."),
+    profileMoved = pageText(i18n, "save_profile_moved", "The profile changed during the save. Check both profiles."),
+    unverified = pageText(i18n, "save_unverified", "Saved, but the settings could not be read back."),
     journalFailed = pageText(i18n, "journal_failed", "The change journal could not be written."),
     applied = pageText(i18n, "applied", "Applied. Fly again to check the new settings."),
 
@@ -412,13 +419,22 @@ local function advise(T, a, axis, actions, whys, changes)
     if a.F > 0 then
       local newF = clamp(round(a.F * clamp(1 / g, 1 - FF_STEP_MAX, 1 + FF_STEP_MAX)), 1, GAIN_MAX)
       local text = string.format(PATH_FMT, T.pidsPage, T.pidsAxis[axis], T.pidsF, a.F, newF)
-      if LINEAR_ROLES[rates.ratesType] then
+      local roles = LINEAR_ROLES[rates.ratesType]
+      local fIndex
+      if roles then
+        local before = #changes
         setting(text, pidPrefix .. "F", "tuning", a.F, newF, "pid")
+        if #changes > before then fIndex = #changes end
       else
         act(text)
       end
       -- Keep the stick feel: F x rate is what the pilot feels
+      local ratesBefore = #changes
       rateActions(T, rates, a.F / newF, act, setting)
+      if fIndex and #changes - ratesBefore < #roles then
+        for i = #changes, ratesBefore + 1, -1 do changes[i] = nil end
+        table.remove(changes, fIndex)
+      end
       why(hot and T.whyFast or T.whySlow)
       why(T.whyKeepFeel)
     else
@@ -707,12 +723,6 @@ local function ensureLoaded(i18n)
   ui.lastSignature = nil
   ui.text = loadTexts(i18n)
   ui.view = newView()
-  -- Claim only an outcome left by an earlier save. A normal opening loads no save modules.
-  local pipeline = _G.rfsuite and _G.rfsuite.tasks and _G.rfsuite.tasks.savePipeline
-  if pipeline and pipeline.pending and pipeline.pending[PAGE_ID] then
-    if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
-    if SavePipeline then SavePipeline.takeResult(PAGE_ID) end
-  end
 end
 
 local function onAxis(value)
@@ -770,19 +780,21 @@ end
 -- Nothing here is loaded by the opening/read chain. The RC codec is already needed by the
 -- existing polar read; the other modules are needed only after Save has been confirmed.
 local function ensureSaveDeps()
+  if not StatusApi then StatusApi = loadModule("tasks/msp/api/status.lua") end
   if not PidTuningApi then PidTuningApi = loadModule("tasks/msp/api/pid_tuning.lua") end
   if not PidProfileApi then PidProfileApi = loadModule("tasks/msp/api/pid_profile.lua") end
   if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
   if not Cache then Cache = loadModule("tasks/msp/cache.lua") end
   if not Armed then Armed = loadModule("lib/armed.lua") end
   if not ChangeJournal then ChangeJournal = loadModule("lib/change_journal.lua") end
-  return PidTuningApi and PidProfileApi and RcTuningApi and SavePipeline and Cache and Armed
+  return StatusApi and PidTuningApi and PidProfileApi and RcTuningApi and SavePipeline and Cache and Armed
 end
 
 -- Serialize fresh reads, preserving the reply buffers independently of the queue/cache.
 local function readSettings(applyGeneration, onRead)
   local queue = getQueue()
   local specs = {
+    { key = "status", api = StatusApi, minBytes = 27 },
     { key = "tuning", api = PidTuningApi }, { key = "profile", api = PidProfileApi }, { key = "rates", api = RcTuningApi }
   }
   local records, buffers = {}, {}
@@ -803,6 +815,7 @@ local function readSettings(applyGeneration, onRead)
       isWrite = false,
       processReply = function(_, buf)
         if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
+        if spec.minBytes and (type(buf) ~= "table" or #buf < spec.minBytes) then failed(); return end
         local record = spec.api.parse(buf)
         if not record then failed(); return end
         records[spec.key], buffers[spec.key] = record, copy(buf)
@@ -825,6 +838,9 @@ local function validateTune(snapshot, records)
   if Armed.isArmed() or (state and state.lastArmed == true) then return T.armed end
   if not state or state.lastConnected ~= true or not session or session.mcu_id ~= tune.mcu
       or Profile.getActivePidProfile(1) ~= tune.pidProfile or getLiveProfile() ~= tune.rateProfile then return T.changed end
+  local status = records.status
+  if status.current_pid_profile_index + 1 ~= tune.pidProfile
+      or status.current_control_rate_profile_index + 1 ~= tune.rateProfile then return T.changed end
   local prefix = "pid_" .. (tune.axis - 1) .. "_"
   local tuning, profile, rates = records.tuning, records.profile, records.rates
   if tuning[prefix .. "P"] ~= tune.P or tuning[prefix .. "F"] ~= tune.F or tuning[prefix .. "B"] ~= tune.B
@@ -903,21 +919,31 @@ function M.onSave(ctx)
   if not ensureSaveDeps() then finishApply(false, ui.text.readFailed); return false end
   local applyGeneration = ui.applyGeneration
   local journalFailed = false
-  local function readBack(records, _, failedMessage)
+  local function readBack(records)
     if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
     local mismatch
     local session = getSession()
-    local sameProfile = session and session.mcu_id == snapshot.tune.mcu
+    local status = records and records.status
+    local sameProfile = status and session and session.mcu_id == snapshot.tune.mcu
+      and status.current_pid_profile_index + 1 == snapshot.tune.pidProfile
+      and status.current_control_rate_profile_index + 1 == snapshot.tune.rateProfile
       and Profile.getActivePidProfile(1) == snapshot.tune.pidProfile and getLiveProfile() == snapshot.tune.rateProfile
-    for _, change in ipairs(snapshot.changes) do
-      if not sameProfile or not records or change.msg == failedMessage or records[change.msg][change.field] ~= change.to then
-        mismatch = change.field
-        break
+    local message
+    if not records then
+      message = ui.text.unverified
+    elseif not sameProfile then
+      message = ui.text.profileMoved
+    else
+      for _, change in ipairs(snapshot.changes) do
+        if records[change.msg][change.field] ~= change.to then
+          mismatch = change.field
+          break
+        end
       end
+      message = mismatch and string.format(ui.text.differs, mismatch) or string.format(ui.text.saved, #snapshot.changes)
     end
-    local message = mismatch and string.format(ui.text.differs, mismatch) or string.format(ui.text.saved, #snapshot.changes)
     if journalFailed then message = message .. " " .. ui.text.journalFailed end
-    finishApply(mismatch == nil, message)
+    finishApply(records ~= nil and sameProfile and mismatch == nil, message)
   end
   readSettings(applyGeneration, function(records, buffers)
     if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
@@ -939,6 +965,15 @@ function M.onSave(ctx)
         if marks and marks.mcu == snapshot.tune.mcu then
           local data = active and ui.lastData
           marks[snapshot.tune.axis] = data and data.axis == snapshot.tune.axis and data.seconds or snapshot.tune.seconds
+          if snapshot.tune.polar then
+            for _, change in ipairs(snapshot.changes) do
+              if change.msg == "rates" then
+                local seconds = marks[snapshot.tune.axis]
+                marks[AXIS_ROLL], marks[AXIS_PITCH] = seconds, seconds
+                break
+              end
+            end
+          end
         end
         local entries = {}
         for i, change in ipairs(snapshot.changes) do
@@ -954,8 +989,9 @@ function M.onSave(ctx)
       onDone = function(result)
         if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
         if result.status ~= "done" then
-          ui.applying, ui.status, ui.reportSave = false, nil, nil
-          requestRebuild()
+          if type(SavePipeline.hasOutcome) == "function" and SavePipeline.hasOutcome() then SavePipeline.dismiss() end
+          local commit = result.step == "commit" or result.phase == "commit"
+          finishApply(false, commit and ui.text.notStored or ui.text.writeFailed)
           return
         end
         -- The page reports the verified result. Retire the pipeline's success notice so it
@@ -979,7 +1015,7 @@ function M.wakeup(ctx)
   if not ui.loaded then return end
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or ui.runtime.requestRebuild
   if ui.applying then
-    -- Queue clearing on an arming/disconnect can discard a request without invoking its handler.
+    -- Backstop for a request dropped without a handler, e.g. a simulator message without simulatorResponse.
     if ui.readStarted and nowSeconds() - ui.readStarted > 30 then
       if ui.readTimeout then ui.readTimeout() end
     end
@@ -1143,6 +1179,7 @@ function M.onClose()
   Profile = nil
   ConfirmDialog = nil
   PidTuningApi, PidProfileApi, SavePipeline = nil, nil, nil
+  StatusApi = nil
   Cache, Armed, ChangeJournal = nil, nil, nil
   t = nil
 end

@@ -42,6 +42,13 @@ Unix seconds reach their limit on 19 January 2038. A calendar time outside the s
 The clock is the radio's own and is only as right as that clock. Correct it on the radio if needed. Lines
 always stay in the order appended, even if the clock is wrong or is set back between saves.
 
+## Reading it
+
+A reader reads the whole text (up to 64 KiB) and compiles it with Lua's
+`load(text, name, "t", { e = collector })`, where `collector(time, source, profile, field, old, new)` receives
+each line. Use `load`, not `loadScript`: on EdgeTX, `loadScript` does not pass its environment argument to
+the chunk. The append-only file otherwise grows without limit, so archive a large file by hand.
+
 ## Reading and repairing
 
 The file is never rewritten by the suite. Each append is checked against the file's growth on the card.
