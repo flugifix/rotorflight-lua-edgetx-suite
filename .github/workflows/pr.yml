@@ -67,6 +67,9 @@ jobs:
       - name: Account instructions per pass
         run: lua5.3 bin/accounting/measure.lua --check
 
+      - name: In-flight trim routing
+        run: lua5.3 bin/dashboard/verify_inflight_trims.lua
+
   startup-compile:
     # The configuration tool compiles the installed suite at start (src/rfsuite/lib/precompile.lua).
     # This runs the real module on an in-memory card across consecutive starts: a fresh install
