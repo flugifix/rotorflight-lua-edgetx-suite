@@ -32,7 +32,7 @@ Reload asks again. When the link drops for a moment, the last measurements stay 
 
 | Line | What it shows |
 | --- | --- |
-| #n (heading at the top) | The rate profile the advice is for. A profile switch with the page open is followed at once, when the radio sees the profile. |
+| #n (heading at the top) | The rate profile the advice is for. A profile switch with the page open is followed shortly after the radio sees the new profile. |
 | Axis | Roll, Pitch or Yaw. Everything below is for the chosen axis. |
 | Flight data | Minutes and seconds of rate flight measured, and whether measuring is happening now (collecting) or not (paused). |
 | Response | How fast the heli turns compared with the rate the stick asks for, for example "53% faster than asked". "Needs more flying" shows how much data is still needed; "Too uneven to judge" means the response varies too much. |

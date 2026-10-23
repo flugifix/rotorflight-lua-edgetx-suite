@@ -25,7 +25,7 @@
 --   so more P (or B).
 --
 -- RC tuning is read after the first advisor reply, when the active rate profile changes and
--- on Reload, never on a pass that builds or polls.
+-- on Reload. It is never sent on a pass that polls and is deferred after a build like the poll.
 -- Clear (the header's star button) resets the statistics on the flight controller; they also
 -- reset at the next arming when the tune changed since the last arming.
 
@@ -512,6 +512,8 @@ local function readRcTuning()
     errorHandler = function()
       if generation ~= ui.generation then return end
       ui.rcTuningPending = false
+      ui.rcTuningProfile = profile
+      if ui.rcTuningProfile ~= ui.drawnProfile then requestRebuild() end
     end
   })
   return true
@@ -628,8 +630,8 @@ end
 
 -- Polling lives here and never on the pass that built the page: a build this pass defers the
 -- poll to the next one, at most once in a row.
--- RC tuning is read after the first advisor reply, on a profile change and on Reload,
--- never on a pass that builds or polls.
+-- RC tuning is read after the first advisor reply, on a profile change and on Reload.
+-- It is never sent on a pass that polls and is deferred after a build like the poll.
 function M.wakeup(ctx)
   if not ui.loaded then return end
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or ui.runtime.requestRebuild
