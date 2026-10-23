@@ -156,6 +156,8 @@ Everything after them is the flight's own statistics, taken from the record the 
 the craft is armed. A field that was never recorded is left empty, so a line may carry all of them,
 some of them or none.
 
+A column whose sensor the model does not have, such as ESC temperature, is left empty rather than 0.
+
 | Column | What it is |
 | --- | --- |
 | `mah` | Capacity used, as the flight controller reported it, rounded down to whole mAh |
