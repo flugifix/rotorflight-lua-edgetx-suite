@@ -7,8 +7,8 @@ sidebar_position: 30
 # Tune Advisor
 
 While you fly in rate mode, the flight controller measures how the heli answers the sticks. This page reads
-those measurements and suggests one change at a time for each axis. It changes nothing by itself: make the
-change on *PIDs*, *Rates* or *PID Controller*, fly again and come back.
+those measurements and suggests one change at a time for each axis. *Save* in the header lists the writable
+changes for the shown axis and asks you to confirm. Fly again after applying them and come back.
 
 The flight controller counts only rate flight while spooled up and airborne, with the heli moving on some axis.
 Time in Angle, Horizon, Trainer, Altitude hold, Rescue, GPS rescue or failsafe is left out. The data builds up
@@ -40,6 +40,7 @@ Reload asks again. When the link drops for a moment, the last measurements stay 
 | Suggested changes | Up to three changes, each named by the page, row and column to change, in the units that page shows, for example *PIDs > Roll > FF: 100 -> 80* and *Rates > Roll > Max Rate: 720 -> 900*. |
 | Why | The reason for each change, and a fact worth knowing when there is room (for example how much faster the heli turns at high collective). |
 | * (header) | Clears the measurements on the flight controller after asking to confirm. |
+| Save (header) | After confirmation, writes the suggested changes for the shown axis, saves to EEPROM and reads back the result. Available while connected and disarmed, with a known board ID and at least one writable change, and no apply already running. |
 
 The suggestions follow these rules:
 
@@ -52,6 +53,23 @@ The suggestions follow these rules:
 - **Stops bounce back 12% or more**: if the I-term pushes back, lower *Advanced > PID Controller > Cut-off point*
   by 20%. If FF does not match yet, fix FF first. Otherwise the controller is barely braking the stop: raise P
   by 20% (or add B).
+
+The radio's own confirmation dialog lists the changes, with the No button first. After you confirm,
+the page reads the current PID gains, PID profile settings and rates afresh. It refuses
+without writing if a read fails, the model is armed, either profile or the tune differs from the advice,
+the polar cyclic setting no longer matches, or a suggested value is outside its range. Only fields that
+actually change are replaced in copies of those replies: every other byte is written back exactly as read,
+including any extra bytes at the end, and only messages carrying a change are sent. The shared save process
+then commits to EEPROM without a reboot. The page reads the settings again and reports how many changes
+were written and read back, or names the first field that differs.
+
+Betaflight, Raceflight and KISS rate suggestions are percentages, not exact values: Save writes neither
+those rates nor the FF change paired with them. P and I-term relax cut-off suggestions remain writable.
+
+After an acknowledged write the axis shows "Applied. Fly again to check the new settings." and offers no
+further change on the same flight data. This survives leaving the page. It goes when the flight data changes
+at the next flight, or when you clear the data with *\**. A different flight controller
+starts with its own measurements.
 
 ## Getting a clean measurement
 
@@ -70,7 +88,8 @@ The suggestions follow these rules:
   *Cyclic* row, which edits the Pitch rates. While polar is on, the flight controller applies that one curve
   to the whole cyclic stick, roll included, and a rate change on that row changes both axes in flight. The
   Roll rates are not changed by the row; they are kept as they were and apply again once polar is switched
-  off. With polar on, Roll and Pitch rate suggestions name the *Cyclic* row and work from the Pitch rates.
+  off. With polar on, Roll and Pitch rate suggestions name the *Cyclic* row and work from the Pitch rates;
+  Save writes the Pitch rates for either axis.
   The page reads the polar setting after the first advisor answer, again when the active rate profile changes,
   and on Reload. Until the first read answers, or if it fails, suggestions name the per-axis rows as before;
   a later read that fails keeps the previous answer. The profile switch is seen through the radio's rate
@@ -79,6 +98,11 @@ The suggestions follow these rules:
   known at connect. Feed-forward and P/cut-off suggestions stay per axis.
   Roll and Pitch are still judged separately, so their cards can ask for different changes to the one *Cyclic*
   row: change it once, fly, and check both again.
+- Each value committed by this page is appended to the flight controller's
+  [change journal](../../reference/change-journal.md), at
+  `/SCRIPTS/TOOLS/rfsuite.user/journal/<mcu id>.lua`, one line per value. Its time comes from the radio's
+  clock and is only as right as that clock; the append order holds anyway. The file is append-only.
+  A journal failure is reported with the save result; the changes already stored on the board stay stored.
 
 ## Related
 

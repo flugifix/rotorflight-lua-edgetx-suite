@@ -1,0 +1,61 @@
+---
+title: Change journal
+sidebar_label: Change journal
+---
+
+# Change journal
+
+The suite keeps a small, append-only record of values written to a flight controller, one file per board:
+
+`/SCRIPTS/TOOLS/rfsuite.user/journal/<mcu id>.lua`
+
+The board ID uses the same filename filter as the per-model preferences: characters other than letters,
+digits, underscores and hyphens become underscores. The Tune Advisor is the only writer for now. It appends
+one line per changed value after the flight controller acknowledges the EEPROM commit.
+
+## The lines
+
+Each line is one Lua statement:
+
+```lua
+e(1792756800,"tune_advisor",1,"pid_0_F",100,80)
+```
+
+| Position | Meaning |
+| --- | --- |
+| time | Unix seconds from the radio clock, or 0 if neither clock interface is available. |
+| source | The feature that wrote the value, currently `tune_advisor`. |
+| profile | The 1-based PID profile for PID gains and I-term relax cut-off fields; the 1-based rate profile for rate fields. |
+| field | The MSP codec's field name, for example `pid_0_F` for Roll FF or `rcRates_2` for Pitch RC rate. |
+| old | The raw integer value read before the write. |
+| new | The raw integer value written. |
+
+Strings are quoted Lua strings; source and field names contain only letters, digits, underscores and dots.
+Numbers are integers. The values are raw MSP values, so rate values may use different units from the page.
+
+## Time and order
+
+The time is `getRtcTime()` on radios that offer it. Otherwise the suite computes Unix seconds from the
+`getDateTime()` calendar, using integer arithmetic; without either interface it records 0. Signed 32-bit
+Unix seconds reach their limit on 19 January 2038. A calendar time outside the supported range records 0.
+
+The clock is the radio's own and is only as right as that clock. Correct it on the radio if needed. Lines
+always stay in the order appended, even if the clock is wrong or is set back between saves.
+
+## Reading and repairing
+
+The file is never rewritten by the suite. Each append is checked against the file's growth on the card.
+A failed journal append is reported by the Tune Advisor and does not undo the board's EEPROM commit.
+
+The reader accepts the whole file or reports an error; it never returns just the readable prefix. A
+half-written last line makes the file unreadable. Delete that broken last line by hand before reading it
+again. A later append starts on a new line and leaves the broken fragment in place. Files above 64 KiB
+are reported as too big rather than read partly; archive the file by hand if it reaches that size.
+
+There is no journal reader or undo button in the UI. This is a record for undoing a change by hand: select
+the recorded profile and put the old value back on the appropriate settings page, then save it.
+
+## Related
+
+- [Tune Advisor](../pages/flight_tuning/tune_advisor.md)
+- [Configuration files](configuration-files.md)
