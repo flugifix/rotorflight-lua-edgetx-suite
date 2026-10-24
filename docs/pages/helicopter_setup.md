@@ -91,8 +91,10 @@ field as on the Configuration page). An edit is written with the next saved step
 The confirmation is deliberately not stored in per-FC history, because a board can
 be used with another transmitter model. It is required again on every new complete
 or individual setup visit, before loading the selected step or entering holds. The
-history/reset page needs no model-configuration confirmation. The Configurator's
-19 numbered steps and their order remain unchanged.
+history/reset page needs no model-configuration confirmation. The 19 numbered steps
+deliberately deviate from the Configurator's order: ESC telemetry is step 11 and
+the spin test is step 12, so the ESC link and its live values exist before the
+motor first spins.
 
 The same card checks two prerequisites up front: the Rotorflight telemetry sensors
 *System Status* and *System Config*. Each row reads **Live**, **Checking** or, after
@@ -454,9 +456,11 @@ Governor headspeed and ramp cards appear only in **Electric** and **Nitro**, whe
 the FC governs. All editors start with values read from the FC. One headspeed card
 is offered for each PID profile selected by the Profiles & gain adjustment range,
 bounded by the configured positions (at most three) and the FC profile count.
-Without a known assignment, only PID profile 1 is offered. The existing sequential
-profile transaction reads and writes individual profiles, then restores the active
-profile; only edited targets are saved. The native wizard editor retains exact RPM
+Without a known assignment, only PID profile 1 is offered. Entry reads only the
+active profile without switching profiles; other targets show **--** until
+**Read all profiles** is pressed. That button runs the sequential read and restores
+the active profile. Save uses the same transaction for edited targets only.
+The native wizard editor retains exact RPM
 values, including values between the Governor page's 10-RPM increments.
 
 - **Full headspeed (rpm)**: Full-throttle target for the named PID profile, 0–30000 RPM; no recommended target is substituted.

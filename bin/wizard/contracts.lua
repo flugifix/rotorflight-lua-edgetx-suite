@@ -1663,15 +1663,29 @@ return function(h)
         if item.y and item.h then check(item.y+item.h<=320,"S08 all target/ramp cards fit 480x320") end
       end
     end
-    eq(selected,original,"S08 entry restores active PID profile")
-    check(w.restoreProfile==nil and not w.transition,"S08 entry completes restoration before editing")
-    check(w.profileOriginal==nil,"S08 read-only profile loop creates no rollback writes")
+    eq(selected,original,"S08 entry retains active PID profile")
+    check(w.restoreProfile==nil and not w.transition,"S08 entry completes active profile read before editing")
+    check(w.profileOriginal==nil,"S08 active profile read creates no rollback writes")
     local selections={}
     for _,m in ipairs(q.sent) do
       if m.command==210 then selections[#selections+1]=m.payload[1] end
+      check(m.command~=210,"S08 entering governor sends no set_pid_profile")
       check(m.command~=149 and m.command~=93 and m.command~=155,"S08 entry never writes profiles or filters")
     end
-    eq(table.concat(selections,","),"0,1,2,1","S08 profiles read sequentially then original selection restored")
+    eq(#selections,0,"S08 entry makes no profile selections")
+    for i=1,3 do
+      local row=c[3+i].rows[1]
+      eq(row.display(row.get()),i-1==original and tostring(values[i]) or "--","S08 unread profiles display placeholders")
+      eq(row.enabled(),i-1==original,"S08 only the read active profile is editable")
+    end
+    eq(c[1].rows[2].label,L.readAllProfiles,"S08 explicit Read all profiles button")
+    q.sent={};c[1].rows[2].press();settle(w);c=step(w,"governor")
+    selections={}
+    for _,m in ipairs(q.sent) do
+      if m.command==210 then selections[#selections+1]=m.payload[1] end
+      check(m.command~=149,"S08 Read all profiles never writes profile settings")
+    end
+    eq(table.concat(selections,","),"0,1,2,1","S08 explicit read walks profiles then restores selection")
     for i=1,3 do
       local row=c[3+i].rows[1]
       eq(row.get(),values[i],"S08 shows exact FC RPM, including non-tens values")
@@ -1715,6 +1729,7 @@ return function(h)
     w:discard(function() end);settle(w)
     check(w.governorSpeeds==nil and w.governorChanged==nil,"S08 discarded headspeed draft is removed")
     c=step(w,"governor");c[1].enter();settle(w);c=step(w,"governor")
+    c[1].rows[2].press();settle(w);c=step(w,"governor")
     eq(c[4].rows[1].get(),1817,"S08 discarded headspeed cannot return")
     c[4].rows[1].set(1919);h.setFailCommand(149)
     q.sent={};w:save();settle(w);h.setFailCommand(nil);drain(w)
@@ -3056,6 +3071,99 @@ return function(h)
     w.motorTelemetryAt=getTime()
     return step(w,"escTelemetry")
   end
+  case("S11.incomplete-and-smaller-blocks",function()
+    local yge=h.api("esc_parameters_yge")
+    local shared=load("lib/esc_params.lua")
+    local full=yge.simulatorResponse
+    eq(table.concat(yge.buildWritePayload(yge.parse(full)),","),table.concat(full,","),
+      "S11 full YGE codec roundtrip remains byte-identical")
+    for _,length in ipairs({5,40,65}) do
+      local short={};for i=1,length do short[i]=full[i] end
+      local parsed=yge.parse(short)
+      eq(parsed._parameterCount,32,"S11 YGE reports declared parameter count")
+      eq(parsed._receivedBytes,length,"S11 YGE reports received byte count")
+      check(not parsed._complete,"S11 YGE codec marks truncated block")
+      check(not parsed._present.unknown_6,"S11 missing tail is not present")
+      local w=escWorld(9)
+      local s=shared.new(w.bus,shared.families[9],load("lib/esc_status.lua"))
+      h.fixtures[217]=short
+      local failure
+      s:read(function(_,err) failure=err end);settle(w)
+      eq(failure,"incomplete","S11 truncated YGE read is incomplete")
+      check(not s.block,"S11 incomplete block is not cached")
+      -- Both wizard writes refresh a previously complete block before sending anything.
+      for _,operation in ipairs({"mode","range"}) do
+        escRead(w,full)
+        w.rangeChoice,w.escRangeDraft="esc_link",{minthrottle=1100,maxthrottle=1950}
+        h.fixtures[217]=short;q.sent={}
+        if operation=="mode" then w:setEscMode(1) else w:useEscRange() end
+        settle(w)
+        for _,m in ipairs(q.sent) do
+          check(m.command~=218 and m.command~=222 and m.command~=250,
+            "S11 truncated YGE refuses "..operation.." writes before FC/ESC changes")
+        end
+        eq(w.escResultKey,"escLinkFailure","S11 truncated refresh reports failure")
+      end
+    end
+    local small={};for i=1,10 do small[i]=full[i] end;small[3],small[4]=4,0
+    local parsed=yge.parse(small)
+    check(parsed._complete and parsed._present.governor,"S11 smaller ESC covers mode completely")
+    check(not parsed._present.stick_zero_us and not parsed._present.stick_range_us,
+      "S11 smaller ESC does not declare stick fields")
+    eq(table.concat(yge.buildWritePayload(parsed),","),table.concat(small,","),
+      "S11 smaller ESC writes only its declared block")
+    local w=escWorld(9)
+    local cards=escRead(w,small)
+    local route=findCard(cards,L.throttleRange).rows[1]
+    for _,label in ipairs(route.values) do check(label~=L.rangeLink,"S11 smaller ESC never offers range route") end
+    check(findCard(cards,L.escMode)~=nil,"S11 smaller ESC still shows covered mode")
+    local old=h.fixtures[218]
+    h.fixtures[218]=function(m) h.fixtures[217]=m.payload;return {} end
+    q.sent={};w:setEscMode(1);settle(w)
+    local writes=0
+    for _,m in ipairs(q.sent) do if m.command==218 then writes=writes+1;eq(#m.payload,10,"S11 smaller mode write length") end end
+    eq(writes,1,"S11 smaller ESC mode remains writable")
+    eq(w.escResultKey,"escVerified","S11 smaller ESC mode verified")
+    -- Full declared blocks can also include parameters beyond the named layout.
+    local extended={};for i,v in ipairs(full) do extended[i]=v end
+    extended[3]=33;extended[67],extended[68]=71,93
+    eq(table.concat(yge.buildWritePayload(yge.parse(extended)),","),table.concat(extended,","),
+      "S11 parameters beyond named YGE layout survive roundtrip")
+    local hw=h.api("esc_parameters_hw5")
+    local short={};for i=1,#hw.simulatorResponse-1 do short[i]=hw.simulatorResponse[i] end
+    check(hw.parse(short)==nil and hw.parse(hw.simulatorResponse)~=nil,"S11 HW5 already rejects truncated blocks")
+    h.fixtures[217],h.fixtures[218]=nil,old
+  end)
+  case("S11.pending-verification-navigation",function()
+    for _,restart in ipairs({false,true}) do
+      local w=escWorld(9)
+      local yge=h.api("esc_parameters_yge")
+      escRead(w,yge.simulatorResponse)
+      local s=w.escParams
+      s.changes,s.restart={governor=1},restart or nil
+      w:navigate(10);settle(w);w:navigate(11);settle(w)
+      local cards=step(w,"escTelemetry")
+      check(w.escParams==s and s.changes and s.restart==(restart or nil),"S11 navigation retains unresolved expectation and restart latch")
+      check(not w.validate(),"S11 re-entering cannot complete unresolved ESC verification")
+      w.motorTelemetryAt=getTime();w:readEsc();settle(w)
+      check(s.changes~=nil and not w.validate(),"S11 unmatched re-read keeps navigation blocked")
+      local data=yge.parse(yge.simulatorResponse);data.governor=1
+      h.fixtures[217]=yge.buildWritePayload(data)
+      if restart then
+        w:readEsc();settle(w)
+        check(s.restart and s.changes,"S11 matching ordinary read retains restart obligation")
+        w.checks.escBatteryCycle=true;w:verifyEscRestart();settle(w)
+      else w:readEsc();settle(w) end
+      check(not s.changes and not s.restart and w.validate(),"S11 verified re-read clears unresolved expectation")
+      s.changes,s.restart={governor=2},true
+      local protocol=findCard(step(w,"escTelemetry"),L.escTelemetry).rows[1]
+      protocol.set(protocol.get())
+      check(w.escParams==s and s.changes,"S11 unchanged protocol retains expectation")
+      w.data.esc_sensor_config.protocol=3;step(w,"escTelemetry")
+      check(w.escParams==nil,"S11 family change clears previous expectation")
+    end
+    h.fixtures[217]=nil
+  end)
   case("S11.esc-read-before-write-and-signature",function()
     local w=escWorld(9)
     local shared=load("lib/esc_params.lua")
@@ -3169,7 +3277,10 @@ return function(h)
     eq(w.data.motor_config.minthrottle,actual.stick_zero_us,"S11 verified FC minimum equals ESC zero")
     eq(w.data.motor_config.maxthrottle,actual.stick_zero_us+actual.stick_range_us,"S11 verified FC maximum equals ESC endpoint")
     for key,value in pairs(original) do
-      if key~="stick_zero_us" and key~="stick_range_us" then eq(actual[key],value,"S11 range preserves YGE "..key) end
+      if type(value)=="table" then
+        for name,v in pairs(value) do eq(actual[key][name],v,"S11 range preserves YGE metadata "..key.."."..name) end
+        for name,v in pairs(actual[key]) do eq(value[name],v,"S11 range adds no YGE metadata "..key.."."..name) end
+      elseif key~="stick_zero_us" and key~="stick_range_us" then eq(actual[key],value,"S11 range preserves YGE "..key) end
     end
     check(w.rebootPending,"S11 motor_config retains existing reboot requirement")
     local commands={};for _,m in ipairs(q.sent) do commands[#commands+1]=m.command end
@@ -3420,6 +3531,42 @@ return function(h)
   local function powerCard(cards, title)
     for _, card in ipairs(cards) do if card.power and card.title == title then return card end end
   end
+  case("POWER.shared-fields-lazy-lifecycle",function()
+    local originalLoadScript=loadScript
+    for _,entry in ipairs({
+      {"setup/power/battery", "power_fields"}, {"setup/power/sources", "power_fields"},
+      {"setup/power/smartfuel", "power_fields"}, {"flight_tuning/governor", "governor_fields"},
+      {"setup/governor/time", "governor_fields", true}
+    }) do
+      local calls,shared=0,0
+      loadScript=function(path)
+        calls=calls+1
+        if path=="/SCRIPTS/TOOLS/rfsuite-core/lib/"..entry[2]..".lua" then
+          shared=shared+1;return function() return load("lib/"..entry[2]..".lua") end
+        end
+        return function() return {
+          pageT=function() return function(_,key) return key end end,
+          createProfileAwareRuntime=function() return {} end,
+          getState=function() return {queue={add=function() end}} end
+        } end
+      end
+      local page=load("app/pages/"..entry[1].."/page.lua")
+      eq(calls,0,"POWER module import loads no dependencies: "..entry[1])
+      page.canSave();page.hasUnsavedChanges();page.onClose()
+      eq(calls,0,"POWER unloaded lifecycle loads no dependencies: "..entry[1])
+      if entry[3] then
+        page.getHeaderActions()
+        eq(calls,0,"POWER Governor Time header remains dependency-free")
+      end
+      local function ensure() if entry[3] then page.wakeup({}) else page.getHeaderActions() end end
+      ensure();eq(shared,1,"POWER existing lazy path loads shared fields once: "..entry[1])
+      ensure();eq(shared,1,"POWER repeated lazy path reuses shared fields: "..entry[1])
+      page.onClose();ensure()
+      eq(shared,2,"POWER close releases shared fields: "..entry[1])
+      page.onClose()
+    end
+    loadScript=originalLoadScript
+  end)
   case("S11.power-shared-specs-and-availability",function()
     local w=world();settle(w)
     local fields,versions=w.powerFields,w.powerApiVersion

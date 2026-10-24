@@ -396,7 +396,10 @@ function M.new(runtime, transport, mathModule, labels)
         self.calibratedEsc, self.escStage = nil, nil
         if self.rangeSource == "calibrated" then self.rangeSource = nil end
       end
-      if step == 11 then self.escParams,self.escAttempted,self.escBusy,self.escResultKey=nil,nil,nil,nil end
+      if step == 11 then
+        if self.escParams then self.escParams.block = nil end
+        self.escAttempted,self.escBusy,self.escResultKey=nil,nil,nil
+      end
       if step == 5 then self.rateStyles, self.rateLoaded = {}, nil end
       if step == 8 then self.governorLoaded, self.governorFilterLoaded = nil, nil end
       -- Stick travel is measured anew on every visit to the receiver step.
@@ -548,7 +551,8 @@ function M.new(runtime, transport, mathModule, labels)
   function w:load()
     self.ready, self.error, self.progress, self.transition = false, nil, 0, true
     self.checks,self.card,self.bladesOff,self.calibratedEsc={},1,false,nil
-    self.escParams,self.escAttempted,self.escBusy,self.rangeSource=nil,nil,nil,nil
+    if self.escParams then self.escParams.block = nil end
+    self.escAttempted,self.escBusy,self.rangeSource=nil,nil,nil
     self.rangeNeedsVerification = self.rangeChoice == "esc_link" and self.escRangeExpected ~= nil
     self.preparationDone,self.preparationCard=nil,nil
     self.governorLoaded,self.governorSpeeds,self.governorChanged,self.governorFilterLoaded=nil,nil,nil,nil

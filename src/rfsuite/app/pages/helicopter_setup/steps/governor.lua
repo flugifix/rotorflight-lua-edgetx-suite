@@ -44,8 +44,11 @@ return function(w)
       end)
     end
     if governs() and not w.governorLoaded then
-      w.governorSpeeds = w.governorSpeeds or {}
-      w:profileLoop("pid", #profiles, nil, profiles, function(d, index)
+      local previous = w.governorSpeeds or {}
+      w.governorSpeeds = {}
+      for index in pairs(w.governorChanged or {}) do w.governorSpeeds[index] = previous[index] end
+      local index = w.data.status.current_pid_profile_index
+      w:read("governor_profile", function(d)
         if not (w.governorChanged and w.governorChanged[index]) then
           w.governorSpeeds[index] = d.governor_headspeed
         end
@@ -56,6 +59,18 @@ return function(w)
         if w.governorFilterLoaded then w.transition = nil; w.buildRequested = true; w:rebuild() end
       end)
     end
+  end
+  local function readAll()
+    if not governs() or w.transition then return end
+    w.transition = true
+    w:profileLoop("pid", #profiles, nil, profiles, function(d, index)
+      if not (w.governorChanged and w.governorChanged[index]) then
+        w.governorSpeeds[index] = d.governor_headspeed
+      end
+    end)
+    w:run(function()
+      w.transition = nil; w.buildRequested = true; w:rebuild()
+    end)
   end
   w.commit = function()
     local chosen = {}
@@ -88,6 +103,10 @@ return function(w)
       get = function() return mode() + 1 end, set = setMode }
   }, enter) }
   cards[1].summary = L.governorSummary
+  if governs() then
+    cards[1].rows[#cards[1].rows+1] = w:button(L.readAllProfiles, readAll,
+      function() return w.governorLoaded == true and not w.transition end)
+  end
   if mode()>0 or w.governorRpmFilter then
     cards[#cards+1]=w:cardDef(L.rpmSource, L.rpmSourceHint, {
       { kind = "choice", label = L.rpmSource, values = { L.rpmWire, L.bidirectionalDshot },
@@ -129,16 +148,16 @@ return function(w)
       local spec = fields.headspeed
       cards[#cards+1] = w:cardDef(string.format(L.headspeedProfile, index + 1), L.headspeedHint, {
         {kind="number", label=L.headspeed, min=spec.min, max=spec.max,
-          display=function(v) return w.governorLoaded and tostring(v) or "--" end,
+          display=function(v) return w.governorSpeeds and w.governorSpeeds[index] ~= nil and tostring(v) or "--" end,
           get=function() return w.governorSpeeds and w.governorSpeeds[index] or 0 end,
           set=function(v)
-            if not governs() or not w.governorLoaded then return end
+            if not governs() or not w.governorLoaded or w.governorSpeeds[index] == nil then return end
             local value = v
             if value == w.governorSpeeds[index] then return end
             w.governorSpeeds[index] = value
             w.governorChanged = w.governorChanged or {}; w.governorChanged[index] = true
             w:touch("governor_profile")
-          end, enabled=function() return governs() and w.governorLoaded == true end}
+          end, enabled=function() return governs() and w.governorLoaded == true and w.governorSpeeds[index] ~= nil end}
       }, enter)
       cards[#cards].summary = L.headspeedSummary
     end

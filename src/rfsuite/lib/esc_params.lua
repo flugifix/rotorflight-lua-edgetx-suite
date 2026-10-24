@@ -29,8 +29,19 @@ function M.expected(family, governorMode)
   return governorMode == 3 and family.linear or governorMode == 2 and family.governing or nil
 end
 function M.hasMode(family, block)
-  return block ~= nil and (not family.supported or block[family.supported][family.modeField] == true)
+  return block ~= nil and (not family.supported or (block[family.supported] or {})[family.modeField] == true)
+    and (not block._present or block._present[family.modeField] == true)
     and block[family.modeField] ~= nil
+end
+function M.hasRange(family, block)
+  return family.range ~= nil and block ~= nil and block._present ~= nil
+    and block._present[family.range.zero] == true and block._present[family.range.span] == true
+end
+function M.complete(family, block)
+  if not block or block._complete == false then return false end
+  -- HW5 already rejects short blocks and marks layouts without a mode field.
+  if family.supported and (block[family.supported] or {})[family.modeField] == false then return true end
+  return M.hasMode(family, block)
 end
 function M.matches(block, changes)
   if not block then return false end
@@ -51,16 +62,17 @@ function M.new(bus, family, status)
     self.block = nil
     bus:add({api = family.api, optional = true, timeout = 1, maxRetries = 3, retryOnErrorReply = true,
       after = function(block, err)
+        if not err and not M.complete(family, block) then err = "incomplete" end
         self.block = not err and block or nil
         after(self.block, err)
       end})
   end
-  function s:verify(after)
+  function s:verify(after, restarted)
     self:read(function(block, err)
-      if self.restart then after(block, "restart")
+      if self.restart and not restarted then after(block, "restart")
       elseif err then after(block, err)
       elseif not M.matches(block, self.changes or {}) then after(block, "mismatch")
-      else self.changes = nil; after(block) end
+      else self.changes, self.restart = nil, nil; after(block) end
     end)
   end
   -- A successful read in this visit is required even to begin a transaction.
@@ -68,9 +80,16 @@ function M.new(bus, family, status)
   -- prepare may persist an associated FC configuration before the ESC write.
   function s:write(changes, after, prepare)
     if not self.block then after(nil, "esc_not_read"); return false end
+    if not M.complete(family, self.block) then after(nil, "incomplete"); return false end
+    for key in pairs(changes) do
+      if self.block._present and not self.block._present[key] then after(nil, "incomplete"); return false end
+    end
     local edit = {}; for key, value in pairs(changes) do edit[key] = value end
     self:read(function(block, err)
       if err or not block then after(nil, err or "esc_not_read"); return end
+      for key in pairs(edit) do
+        if block._present and not block._present[key] then after(nil, "incomplete"); return end
+      end
       local data = {}; for key, value in pairs(block) do data[key] = value end
       for key, value in pairs(edit) do data[key] = value end
       local function send()

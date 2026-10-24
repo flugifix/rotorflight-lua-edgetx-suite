@@ -114,7 +114,7 @@ flowchart LR
       S8c1 --> S8c2
       S8c3["<b>Throttle Type</b><br/>sets: Throttle Type<br/>writes: governor_config.gov_throttle_type"]:::k3
       S8c2 --> S8c3
-      S8c4["<b>PID profile {n}</b><br/>sets: Full headspeed (rpm)<br/>writes: governor_profile"]:::k3
+      S8c4["<b>PID profile {n}</b><br/>sets: Full headspeed (rpm)<br/>reads: MSP governor_profile<br/>writes: governor_profile"]:::k3
       class S8c4 deviation
       S8c3 --> S8c4
       S8c5["<b>Ramp Time</b><br/>sets: Spoolup time, Spooldown time, Recover...<br/>reads: governor_config.gov_spoolup_time, gov...<br/>writes: governor_config.gov_spoolup_time, gov..."]:::k3

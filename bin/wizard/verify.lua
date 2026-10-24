@@ -796,6 +796,21 @@ local function contractWorld()
     v.escFamily=function(self)
       return self.data.esc_sensor_config.protocol==0 and family or escFamily(self)
     end
+  elseif mutation=="esc-incomplete" then
+    local add=v.bus.add
+    v.bus.add=function(self,job)
+      if job.api=="esc_parameters_yge" and not job.write and job.after then
+        local after=job.after
+        job.after=function(block,err)
+          if block and not err then
+            block._complete=true
+            for key in pairs(block._present) do block._present[key]=true end
+          end
+          after(block,err)
+        end
+      end
+      return add(self,job)
+    end
   elseif mutation and mutation~="bulk-read" and mutation~="history-early" and mutation~="stale-status" and mutation~="retry-stale"
     and mutation~="pitch-discard" and mutation~="back-commit" and mutation~="stale-blades"
     and mutation~="shared-timeout-probe" and mutation~="cleanup-unlock" and mutation~="drop-stale-edit" then error("Unknown negative control: "..mutation) end

@@ -8,7 +8,11 @@ function M.attach(w, params, status)
   function w:escGovernorMode()
     return (self.data.feature_config.enabledFeatures & (1 << 26)) ~= 0 and self.data.governor_config.gov_mode or 0
   end
-  function w:escFamily() return params.families[self.data.esc_sensor_config.protocol] end
+  function w:escFamily()
+    local family = params.families[self.data.esc_sensor_config.protocol]
+    if self.escParams and self.escParams.family ~= family then self.escParams = nil end
+    return family
+  end
   function w:escLinkReady()
     local config = self.data.esc_sensor_config
     local motor = self.data.motor_telemetry and self.data.motor_telemetry.motors[1]
@@ -39,6 +43,10 @@ function M.attach(w, params, status)
     self.escParams = self.escParams or params.new(self.bus, self:escFamily(), status)
     self.escBusy, self.escAttempted = true, true
     self.message = self.L.loading
+    if self.escParams.changes or self.escParams.restart then
+      self.escParams:verify(function(d, failure) self:escResult(d, failure) end)
+      return
+    end
     self.escParams:read(function(block, err)
       self.escBusy = nil
       self.escResultKey = err and "escLinkFailure" or nil
@@ -66,7 +74,7 @@ function M.attach(w, params, status)
   function w:useEscRange()
     if self.rangeChoice ~= "esc_link" or not self:analogThrottle() or not self:escCanWrite() then return end
     local family, draft = self:escFamily(), self.escRangeDraft
-    if not family.range or not draft or draft.minthrottle <= 1000 or draft.maxthrottle <= draft.minthrottle then
+    if not params.hasRange(family, self.escParams.block) or not draft or draft.minthrottle <= 1000 or draft.maxthrottle <= draft.minthrottle then
       self.message = self.L.escRangeInvalid; return
     end
     local limits = self.bus.apis.motor_config.limits
@@ -109,8 +117,8 @@ function M.attach(w, params, status)
   function w:verifyEscRestart()
     if self.escBusy or not self:usable() or not self.escParams or not self.checks.escBatteryCycle then return end
     self.checks.escBatteryCycle = nil
-    self.escBusy, self.escParams.restart = true, nil
-    self.escParams:verify(function(d, err) self:escResult(d, err) end)
+    self.escBusy = true
+    self.escParams:verify(function(d, err) self:escResult(d, err) end, true)
   end
   function w:escModeName(value)
     local family = self:escFamily()
@@ -128,7 +136,9 @@ function M.attach(w, params, status)
       local routes, labels = {}, {}
       if self.data.motor_config.motor_pwm_protocol == 0 then routes[#routes+1], labels[#labels+1] = "calibrate", L.rangeCalibrate end
       routes[#routes+1], labels[#labels+1] = "asserted", L.rangeManual
-      if family and family.range then routes[#routes+1], labels[#labels+1] = "esc_link", L.rangeLink end
+      if family and family.range and (not self.escParams or not self.escParams.block or params.hasRange(family, self.escParams.block)) then
+        routes[#routes+1], labels[#labels+1] = "esc_link", L.rangeLink
+      end
       add(L.throttleRange,L.rangeChoiceHelp,{{kind="choice", label=L.rangeQuestion, values=labels, fullWidth=true,
         get=function()
           for i,route in ipairs(routes) do if route == self.rangeChoice then return i end end
@@ -184,7 +194,7 @@ function M.attach(w, params, status)
       -- HW1128/HW1132 have no mode field: report that on the link card, without a mode card.
       add(L.escLink,L.escLinkHelp,{self:value(L.escCurrentMode,function() return L.escModeUnavailable end)},L.escModeUnavailable)
     end
-    if self:analogThrottle() and self.rangeChoice == "esc_link" and family.range then
+    if self:analogThrottle() and self.rangeChoice == "esc_link" and params.hasRange(family, block) then
       add(L.escCurrentRange,L.escCurrentHelp,{
         self:value(L.escModel,function() return block.model_name or block.esc_type or block.esc_model or L.unknown end),
         self:value(L.escFirmware,function() return block.firmware_version or L.unknown end),
