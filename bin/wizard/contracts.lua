@@ -2055,6 +2055,10 @@ return function(h)
       "connect","throttle","escTelemetry","servos","direction","level","pitch","tail","gyro","finish"}
     local checked,kinds=0,{}
     for index,name in ipairs(names) do
+      if name=="servoType" then
+        -- A matching preset hides the pulse wave at build, the case the first-pass rule protects.
+        for _,s in pairs(w.data.servo_configurations.servos) do s.rate,s.mid=50,1520 end
+      end
       w.step=index;local cards=step(w,name)
       if name=="rates" then for _,p in ipairs(w.rateProfiles) do w.rateStyles[p]=2 end end
       for card=1,#cards do
