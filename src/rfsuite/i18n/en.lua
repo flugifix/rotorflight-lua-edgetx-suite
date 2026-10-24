@@ -119,6 +119,7 @@ return {
         escLinkShort = "Powered ESC, live telemetry and half-duplex required.",
         escLinkPrerequisite = "Check telemetry / half-duplex",
         escLinkFailure = "ESC read failed: check battery, telemetry wire, half-duplex and protocol (OpenYGE for YGE).",
+        escRangeFcOnly = "The flight controller has the new range, the ESC does not. Press 'Use these values' again.",
         escVerified = "ESC values verified",
         escRestartTitle = "Restart the ESC",
         escRestart = "Unplug and reconnect the flight battery, then re-read.",

@@ -8,13 +8,13 @@
     "src/rfsuite/app/pages/helicopter_setup/controller.lua": "b43aeb7ca73442bcf44dbb65fa188fee32a975fc0fb1c5eb16d0196b82a41ff7",
     "src/rfsuite/app/pages/helicopter_setup/diagrams.lua": "266c1e8c86b9d0e0e76f7ca90262dab704774e244e6966de4a2cf87e94a0321e",
     "src/rfsuite/app/pages/helicopter_setup/elrs_link.lua": "d0894117f918e5600d6a10c77df3921be5de162e2082dc400f1419e93084db71",
-    "src/rfsuite/app/pages/helicopter_setup/esc_link.lua": "d0d2008b924e04ff25ccb3d403e1fda0784d2bf9491fc1390190d9fdf696ddc4",
+    "src/rfsuite/app/pages/helicopter_setup/esc_link.lua": "41fbff1b9e4cf5ad9e1e6746ef33ae1d5e50178fcd6840e353a781b1ee54b177",
     "src/rfsuite/app/pages/helicopter_setup/feedback.lua": "4f73ebe86a8b140a8960ec3d0af6d9e29373994545bb48afaf2827ca6a8a661e",
     "src/rfsuite/app/pages/helicopter_setup/forms.lua": "6ab550b90de24e6b67315d1a84e8ec3cab75ad53c85a0b366945198eaf0091a5",
     "src/rfsuite/app/pages/helicopter_setup/help.lua": "210bc647674c7bdf88e1ac00cf623c53858bb0721623f089caa1f95465ac2c46",
     "src/rfsuite/app/pages/helicopter_setup/history.lua": "d5f7b4799e1a93821b1ebfaecf5e458a054e7cf904bdc5435ae8e985bea3350b",
     "src/rfsuite/app/pages/helicopter_setup/history_store.lua": "e98250cf48a8a360541abd967a4663d09fd33c7f936a94cf13ea67233442cda8",
-    "src/rfsuite/app/pages/helicopter_setup/labels.lua": "469330c4016fdb0ec5783b0cf2e95b6fef8a058688f9b5215565b254544ec7fc",
+    "src/rfsuite/app/pages/helicopter_setup/labels.lua": "4fa30c8e264fdae0f245daa13beebcc11604973c7772cf25061452495709d13d",
     "src/rfsuite/app/pages/helicopter_setup/math.lua": "5ef5e4d338382635a7841c6328a91877bc8183ab3b068b3e93b5d8a9ea61c8d3",
     "src/rfsuite/app/pages/helicopter_setup/navigation.lua": "4fc2956100ab51fb21bff34935df97480a8fc604a6f438765236ec4d9e18df56",
     "src/rfsuite/app/pages/helicopter_setup/page.lua": "6aab577150897947e463e77df2b83376db8d4d085d1228c63674d2b06cd45e70",
@@ -47,7 +47,7 @@
     "src/rfsuite/app/pages/setup/power/battery/page.lua": "21c1f2a6c1a19cf30478fa9312a8229ee0234f828d19f35b9ba423307fde3474",
     "src/rfsuite/app/pages/setup/power/smartfuel/page.lua": "74863d65af8394ac42d56081612dd190395ab0a4edb6a8af2a245f507edc3c95",
     "src/rfsuite/app/pages/setup/power/sources/page.lua": "6dde30b05c017650a36d5ae73524aaf4a4c72e92699aba616d43b16304b0b16c",
-    "src/rfsuite/i18n/en.lua": "016f78a0013dc1924aa9410f381e574dbbcb4d8fd4fdec08d6ff80d46a158cf0",
+    "src/rfsuite/i18n/en.lua": "0297860d89ee03c656c6f7d8a1be8f6cbce24dcbd223318bbb752214dff3bd2a",
     "src/rfsuite/lib/esc_params.lua": "2a9f2fb0fd6f762ef396ed20da5a48081a5583687bb2803b870a34ca2635eeaf",
     "src/rfsuite/lib/governor_fields.lua": "728924688c5f89fd1c561504198ba8f70e210129dc503820f9c8f39523ab3731",
     "src/rfsuite/lib/power_fields.lua": "d439bf18ec8a9fde64b4d4a05c251637cdddeea6bb94e969acb66e9d92accbac",
@@ -6575,7 +6575,7 @@
               "configurator_reference": [],
               "additions": [],
               "source": "src/rfsuite/app/pages/helicopter_setup/esc_link.lua",
-              "expression": "self : read ( \"motor_config\" , function ( actual ) self . data . motor_config = actual if not params . matches ( actual , expected ) then self : escResult ( nil , \"fc_mismatch\" ) ; return end send ( ) end )"
+              "expression": "self : read ( \"motor_config\" , function ( actual ) self . data . motor_config = actual if not params . matches ( actual , expected ) then self : escResult ( nil , \"fc_mismatch\" ) ; return end self . escFcWritten = true send ( ) end )"
             },
             {
               "kind": "read",
@@ -8531,7 +8531,7 @@
                 "esc-range-and-operating-mode"
               ],
               "source": "src/rfsuite/app/pages/helicopter_setup/esc_link.lua",
-              "expression": "self : read ( \"motor_config\" , function ( actual ) self . data . motor_config = actual if not params . matches ( actual , expected ) then self : escResult ( nil , \"fc_mismatch\" ) ; return end send ( ) end )"
+              "expression": "self : read ( \"motor_config\" , function ( actual ) self . data . motor_config = actual if not params . matches ( actual , expected ) then self : escResult ( nil , \"fc_mismatch\" ) ; return end self . escFcWritten = true send ( ) end )"
             },
             {
               "kind": "gate",

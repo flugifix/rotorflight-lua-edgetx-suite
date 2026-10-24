@@ -119,6 +119,7 @@ return {
         escLinkShort = "Versorgter Regler, aktive Telemetrie und Halbduplex erforderlich.",
         escLinkPrerequisite = "Telemetrie / Halbduplex prüfen",
         escLinkFailure = "Reglerlesen fehlgeschlagen: Akku, Telemetriekabel, Halbduplex und Protokoll (OpenYGE bei YGE) prüfen.",
+        escRangeFcOnly = "Der FC hat den neuen Bereich, der Regler nicht. „Diese Werte übernehmen“ erneut drücken.",
         escVerified = "Reglerwerte durch Lesen bestätigt",
         escRestartTitle = "Regler neu starten",
         escRestart = "Flugakku abziehen und wieder anschließen, dann erneut lesen.",

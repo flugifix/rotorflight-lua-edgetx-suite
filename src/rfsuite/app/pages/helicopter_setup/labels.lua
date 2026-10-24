@@ -47,6 +47,7 @@ local L = {
   escLinkShort = "@i18n(app.modules.helicopter_setup.escLinkShort)@",
   escLinkPrerequisite = "@i18n(app.modules.helicopter_setup.escLinkPrerequisite)@",
   escLinkFailure = "@i18n(app.modules.helicopter_setup.escLinkFailure)@",
+  escRangeFcOnly = "@i18n(app.modules.helicopter_setup.escRangeFcOnly)@",
   escVerified = "@i18n(app.modules.helicopter_setup.escVerified)@",
   escRestartTitle = "@i18n(app.modules.helicopter_setup.escRestartTitle)@",
   escRestart = "@i18n(app.modules.helicopter_setup.escRestart)@",

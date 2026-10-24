@@ -29,7 +29,11 @@ function M.attach(w, params, status)
     self.escResultKey = err and "escLinkFailure" or "escVerified"
     -- A readback mismatch after an acknowledged write may need a battery restart.
     if err == "restart" or err == "mismatch" then self.escResultKey = "escRestart" end
-    if err and self.escOperation == "range" then self.rangeSource = nil end
+    if err and self.escOperation == "range" then
+      self.rangeSource = nil
+      -- The flight controller is saved before the ESC is written; say so when only it took the values.
+      if self.escFcWritten and err ~= "restart" and err ~= "mismatch" then self.escResultKey = "escRangeFcOnly" end
+    end
     if not err and self.escOperation == "range" and self.escRangeExpected then
       local m, e = self.data.motor_config, self.escRangeExpected
       if m.mincommand == e.mincommand and m.minthrottle == e.minthrottle and m.maxthrottle == e.maxthrottle then
@@ -86,7 +90,7 @@ function M.attach(w, params, status)
     -- the implied 100% point is zero + range.
     local changes = {[family.range.zero] = expected.minthrottle,
       [family.range.span] = expected.maxthrottle - expected.minthrottle}
-    self.escBusy, self.escOperation, self.rangeSource = true, "range", nil
+    self.escBusy, self.escOperation, self.rangeSource, self.escFcWritten = true, "range", nil, nil
     self.escRangeExpected, self.escRangeChanges = expected, changes
     self.escParams:write(changes, function(d, err) self:escResult(d, err) end, function(send)
       self:applyEdit(function()
@@ -96,6 +100,7 @@ function M.attach(w, params, status)
           self:read("motor_config",function(actual)
             self.data.motor_config = actual
             if not params.matches(actual,expected) then self:escResult(nil,"fc_mismatch"); return end
+            self.escFcWritten = true
             send()
           end)
         end)
