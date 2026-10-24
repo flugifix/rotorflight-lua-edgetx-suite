@@ -654,11 +654,15 @@ end
 
 function M.reset()
     -- Only an owner (a caller that set one) retires replies on reset; for every other caller a
-    -- sync already sent runs to its end as before, the EEPROM commit included.
-    generation = generation + 1
-    -- Invalidate reply handlers before clearing: clear can synchronously call errorHandler.
-    if ownerQueue and ownerClient then ownerQueue:clear(ownerClient) end
-    ownerQueue = nil
+    -- sync already sent runs to its end as before, the EEPROM commit included. ownerQueue is set
+    -- exactly when a sync write was queued, so without it there is no reply left to retire.
+    local queue = ownerQueue
+    if queue then
+        ownerQueue = nil
+        -- Invalidate reply handlers before clearing: clear can synchronously call errorHandler.
+        generation = generation + 1
+        if ownerClient then queue:clear(ownerClient) end
+    end
     -- A page build resets an unstarted task. Do not load the provider just to release a lease this
     -- task cannot yet own; start/wakeup loads it when a parameter conversation can actually run.
     local rf = _G.rfsuite
