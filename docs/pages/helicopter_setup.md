@@ -21,6 +21,9 @@ steps themselves need MSP API 12.10 (Rotorflight 4.7): on an older flight contro
 **Firmware too old** with the reported version and reads no configuration. It works from
 the TOOLS menu and when the tool is hosted by the dashboard widget.
 
+The menu's **?** explains the tiles: a tick marks a step this flight controller completed
+before, and the last tile, **Setup history**, resets the ticks.
+
 Receiver setup requires an already working receiver/MSP link. Run automatic
 receiver wiring detection in USB Configurator: that test reinitializes the same
 UART that carries the radio link. ESC wiring detection and board auto-alignment
@@ -78,6 +81,9 @@ explains the full preparation and shows the unabridged model name. This screen
 records a current pilot confirmation, not an automatic model audit. Receiver
 mapping is still checked in step 2.
 
+The first row is **FC name**, the flight controller's own name (up to 16 characters, the same
+field as on the Configuration page). An edit is written with the next saved step.
+
 The confirmation is deliberately not stored in per-FC history, because a board can
 be used with another transmitter model. It is required again on every new complete
 or individual setup visit, before loading the selected step or entering holds. The
@@ -95,6 +101,9 @@ either sensor was taken out of it, **Add both to FC telemetry** writes them into
 the flight controller's own buffer, saves and restarts it.
 
 ## Navigation
+
+Every step shows **Exit** at the top. It leaves the step, or the complete setup, at once;
+unsaved changes first offer Save or Discard. Tapping the step title does the same.
 
 The Suite menu offers **Complete setup**, each of the 19 individual steps, and
 **Setup history**. All entry points share the same lazy-loaded page: only the
@@ -176,7 +185,7 @@ The short instruction area may show only its first lines; **?** opens the full t
 | # | Step | Controls and checks |
 | --- | --- | --- |
 | 1 | Board orientation | Four cards. Confirm servos unplugged and all blades removed. Calibrate the accelerometer with the model standing level and still. Detect orientation by lifting the tail, or enter roll, pitch and yaw in degrees. After restart, compare the live helicopter model with real roll/pitch movements and confirm the directions. Automatic alignment requires firmware support. |
-| 2 | Receiver | Keep the established receiver UART; protocol configuration remains available, and use USB Configurator for receiver wiring detection (the trial interrupts the radio MSP link). Save & reboot is available here. Detect collective, roll, pitch, yaw, the throttle switch (hold / governor) and the arm switch one control at a time, or select ELRS, FrSky, Futaba/Hitec or DSM/Graupner/JR presets. Check FC channel numbers and rising values for roll/yaw right, pitch forward and collective up. Detection uses a fresh pre-click snapshot, so an immediate stick/switch movement is retained. Record all throttle-switch positions (or both proportional endpoints), starting and finishing OFF, with at least 300 µs travel; Use measured range adds a 20 µs margin at each end. Zero limits select firmware defaults. Throttle is low compares the mapped input with the low threshold; it is not permission to arm. The single ELRS link card compares the FC's declared rate and telemetry ratio with the transmitter module, automatically probes the link, and aligns either side after confirmation. Module pickers offer supported 333 Hz, 500 Hz, D500 and 1:4, 1:8, 1:16, 1:32 options; save wizard changes first, keep the model disarmed, and keep telemetry running. |
+| 2 | Receiver | Every receiver setting (protocol, Save & reboot, channel detection and presets, throttle range and limits) stays locked until **Advanced** is switched on, under a bold warning: a setting that cuts the receiver link ends the setup, because the wizard talks over that link. Keep the established receiver UART; use USB Configurator for receiver wiring detection (the trial interrupts the radio MSP link). Detect collective, roll, pitch, yaw, the throttle switch (hold / governor) and the arm switch one control at a time, or select ELRS, FrSky, Futaba/Hitec or DSM/Graupner/JR presets. Detection uses a fresh pre-click snapshot, so an immediate stick/switch movement is retained. **Check sticks** is guided: it asks for one end stop at a time (roll right, roll left, pitch forward, pitch back, yaw right, yaw left, collective up, collective down), counts a direction at 95% of the FC's stick range, and says when the asked control moves the wrong way (reverse that channel in the transmitter) or another control moves (wrong channel order). One card holds the throttle range: **Record travel**, visit all throttle-switch positions (or both proportional endpoints), starting and finishing OFF, then **Use measured range**, which needs at least 300 µs travel and adds a 20 µs margin at each end; Minimum and Maximum can be edited, and 0 selects the firmware default. **(low)** beside the live throttle compares the mapped input with the low threshold; it is not permission to arm. The single ELRS link card compares the FC's declared rate and telemetry ratio with the transmitter module, automatically probes the link, and aligns either side after confirmation. Module pickers offer supported 333 Hz, 500 Hz, D500 and 1:4, 1:8, 1:16, 1:32 options; save wizard changes first, keep the model disarmed, and keep telemetry running. |
 | 3 | Mode switches | Assign ARM, RESCUE and TRAINER when the FC exposes them. Move the switch to its intended ON position; a clear AUX movement and settled position determine the active window. ARM is read from AUX1 only, the arm channel set in step 2, because ExpressLRS 4.x also outputs its arm flag on CH14 (AUX9), which moves with the arm switch. Reassign or Remove an assignment. ARM assignment is required. No unrelated mode slots are overwritten. Left/right switch pictures follow the same live state; unavailable input keeps its text cue. |
 | 4 | Profiles & gain | Detect a two- or three-position switch; select PID + rate profiles, PID only or None. Visit the positions and Use switch. Optional gain uses a knob, or four trim-button values on one spare channel. Mapped gain is 50–150%; button gain is ±5%, bounded to 25–200%. For Buttons only, the trim guide gives MAX mix weights 30/40/50/60%, with 100% at rest. Configure those mixes in EdgeTX; this page does not rewrite the transmitter model. The switch picture remains a labelled example. |
 | 5 | Rates | One card per offered rate profile, in switch-position order, or one for the active profile. Each has Keep current, Trainer, Sport and 3D, its own collective readout and a curve that follows the selected or matched style. Unmatched rates keep the sketch and explain replacement; Suggest sits above the first profile and fills a three-position switch in order. Trainer uses 180/270°/s, Sport 250/400°/s and 3D 400/600°/s. Collective pitch is preserved. Profiles are selected, read and written sequentially, then the original rate profile is restored. |
@@ -205,7 +214,7 @@ each step opened from its own menu entry. Smaller screens use the compact layout
 
 ![1. Board orientation](../images/helicopter_setup/radio/step-01.png)
 
-**2. Receiver** (the receiver card, then the stick travel card after roll and pitch went end to end)
+**2. Receiver** (pictures from before the receiver settings were locked behind Advanced and the stick check became guided)
 
 ![2. Receiver](../images/helicopter_setup/radio/step-02.png)
 ![2. Receiver, second picture](../images/helicopter_setup/radio/step-02b.png)
