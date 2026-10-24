@@ -394,7 +394,7 @@ function M.build(ctx)
         type = "line",
         x = 0, y = 0, w = 0, h = 0,
         pts = { { prevX, prevY }, { ptX, ptY } },
-        color = Palette.curve,
+        color = Palette.text,
         thickness = 2
       }
     end
@@ -404,7 +404,7 @@ function M.build(ctx)
       type = "rectangle",
       x = ptX - 3, y = ptY - 3,
       w = 7, h = 7,
-      color = Palette.curve,
+      color = Palette.text,
       filled = true
     }
 

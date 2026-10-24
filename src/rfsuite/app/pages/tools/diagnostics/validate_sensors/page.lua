@@ -246,12 +246,12 @@ end
 
 local function rowColor(status)
   if status == "ok" then
-    return Palette.sensorOk
+    return Palette.ok
   end
   if status == "novalue" then
-    return Palette.sensorWarning
+    return Palette.caution
   end
-  return Palette.sensorError
+  return Palette.error
 end
 
 -- rowColor already separates the three states; the text did not, and the text is what a pilot

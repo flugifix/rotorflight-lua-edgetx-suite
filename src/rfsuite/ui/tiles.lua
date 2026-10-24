@@ -18,7 +18,7 @@ local function resolveTileTextColor(isEnabled, focused)
   if not isEnabled or focused then
     return Palette.tileMuted
   end
-  return Palette.tileText
+  return Palette.text
 end
 
 local function formatTileText(text)
@@ -76,7 +76,7 @@ function Tiles.appendBadge(children, cx, cy, radius, text)
   children[#children + 1] = {
     type = "circle",
     x = cx, y = cy, radius = radius,
-    color = Palette.badgeError,
+    color = Palette.error,
     filled = true
   }
 
@@ -87,7 +87,7 @@ function Tiles.appendBadge(children, cx, cy, radius, text)
     w = radius * 2,
     text  = text,
     font  = SMLSIZE,
-    color = Palette.badgeText,
+    color = Palette.accentText,
     align = CENTER
   }
 end
@@ -101,7 +101,7 @@ local function appendDoneBadge(children, x, y, size)
   children[#children + 1] = {
     type = "circle",
     x = cx, y = cy, radius = radius,
-    color = Palette.badgeOk,
+    color = Palette.ok,
     filled = true
   }
   local s = math.max(3, math.floor(radius * 0.55))
@@ -109,7 +109,7 @@ local function appendDoneBadge(children, x, y, size)
     type = "line",
     pts = { { cx - s, cy }, { cx - math.floor(s / 3), cy + math.floor(s * 2 / 3) }, { cx + s, cy - math.floor(s * 2 / 3) } },
     thickness = math.max(2, math.floor(radius / 4)),
-    color = Palette.badgeText
+    color = Palette.accentText
   }
 end
 

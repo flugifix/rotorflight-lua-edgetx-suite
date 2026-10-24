@@ -10,6 +10,7 @@ local palette = {
   warning = COLOR_THEME_WARNING,
   error = RED,
   ok = GREEN,
+  caution = ORANGE,
   panel = COLOR_THEME_PRIMARY3,
   panelText = COLOR_THEME_PRIMARY2,
   headingText = COLOR_THEME_PRIMARY2,
@@ -23,20 +24,8 @@ local palette = {
   testProgressTrack = GREY_DARK,
   panelProgressTrack = COLOR_THEME_DISABLED,
   panelProgressFill = COLOR_THEME_SECONDARY2,
-  warningText = COLOR_THEME_WARNING or COLOR_THEME_PRIMARY1,
-  warningStrip = COLOR_THEME_WARNING or COLOR_THEME_SECONDARY1,
-  sensorOk = type(GREEN) == "number" and GREEN or COLOR_THEME_PRIMARY1,
-  sensorWarning = type(ORANGE) == "number" and ORANGE or COLOR_THEME_PRIMARY1,
-  sensorError = type(RED) == "number" and RED or COLOR_THEME_PRIMARY1,
   tile = COLOR_THEME_DISABLED,
-  tileText = COLOR_THEME_PRIMARY1 or WHITE,
   tileMuted = GREY_DARK or BLACK or COLOR_THEME_SECONDARY2,
-  badgeError = RED or COLOR_THEME_WARNING,
-  badgeOk = GREEN or COLOR_THEME_ACTIVE,
-  badgeText = WHITE or COLOR_THEME_PRIMARY2,
-  curve = COLOR_THEME_PRIMARY1 or WHITE,
-  previewBackground = COLOR_THEME_PRIMARY3 or BLACK,
-  alignmentAccent = COLOR_THEME_SECONDARY1 or YELLOW,
 }
 if _G.rfsuite then _G.rfsuite.palette = palette end
 return palette

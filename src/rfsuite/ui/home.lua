@@ -2483,7 +2483,7 @@ local function appendArmedBanner(children, x, y, w, h, text)
   children[#children + 1] = {
     type = "rectangle",
     x = x, y = y, w = w, h = h,
-    color = Palette.warningStrip,
+    color = Palette.warning,
     filled = true
   }
 
@@ -2526,7 +2526,7 @@ local function appendPageBuildError(children, x, y, w, h, i18n, menuId, err)
     type  = "label",
     x = x, y = cursorY, w = w,
     text  = title,
-    color = Palette.warningText,
+    color = Palette.warning,
     font  = MIDSIZE
   }
   cursorY = cursorY + titleH + gap

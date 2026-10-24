@@ -670,7 +670,7 @@ end
 
 local function countColorGetter()
   if ui.countOver then
-    return Palette.warningText
+    return Palette.warning
   end
   return Palette.text
 end
@@ -868,7 +868,7 @@ function M.build(ctx)
         y = cursorY + 2,
         w = w,
         text = warnText,
-        color = Palette.warningText,
+        color = Palette.warning,
         font = SMLSIZE
       }
       cursorY = cursorY + textH + 8

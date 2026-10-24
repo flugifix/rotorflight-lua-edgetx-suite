@@ -1439,7 +1439,7 @@ function M.build(ctx)
       type = "rectangle",
       x = rightX - originX, y = splitY - originY,
       w = rightW, h = splitH,
-      color = Palette.previewBackground,
+      color = Palette.panel,
       filled = true
     }
   }
@@ -1542,7 +1542,7 @@ function M.build(ctx)
         w = leftW - 20,
         text = nosePrimaryFn,
         visible = noseTwoLineFn,
-        color = Palette.alignmentAccent,
+        color = Palette.accent,
         font = SMLSIZE
       }
       children[#children + 1] = {
@@ -1561,7 +1561,7 @@ function M.build(ctx)
       w = leftW - 20,
       text = noseCombinedFn,
       visible = twoLineRoom and noseOneLineFn or nil,
-      color = Palette.alignmentAccent,
+      color = Palette.accent,
       font = SMLSIZE
     }
   end
