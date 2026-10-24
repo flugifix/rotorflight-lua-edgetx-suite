@@ -26,6 +26,10 @@ function M.new(w, ctx, diagrams)
   if card and card.link=="overview" and not large then
     rowH=math.min(rowH,math.floor((height-2*controlH-31-rowY)/4))
   end
+  -- A dense card fits all of its rows above the status line; its value rows shrink to the font.
+  if card and card.dense and card.rows and #card.rows>0 then
+    rowH=math.min(rowH,math.max(18,math.floor((height-controlH-(large and 40 or 27)-2-rowY)/#card.rows)))
+  end
   local all = {}
   local title = w.historyMode and w.L.historyTitle or (w.overview or w.modelPreparationCard or w.recoveryCard) and w.L.name or string.format("%d/19  %s", w.step, w.L.steps[w.step] or w.L.name)
   if attitudeCard and not (w.historyMode or w.overview or w.confirmExit or w.modelPreparationCard or w.recoveryCard) then
@@ -162,7 +166,7 @@ function M.new(w, ctx, diagrams)
         end
         if r.kind == "value" then
           all[#all + 1] = label(formX+formW-editW, y+3, editW, function() return tostring(r.get() or "--") end)
-          all[#all].h=card.link=="overview" and math.min(controlH,rowH-3) or controlH
+          all[#all].h=(card.link=="overview" or card.dense) and math.min(controlH,rowH-3) or controlH
         elseif r.kind == "toggle" then
           local function set(v) w:applyEdit(function() if editable() then r.set(v) end end) end
           all[#all + 1] = { type = "button", x = formX+formW-editW, y = y, w = editW, h = controlH,
