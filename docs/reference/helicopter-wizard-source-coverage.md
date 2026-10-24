@@ -34,7 +34,7 @@ The same cards are retained after navigation, cleanup, reload and teardown to
 exercise the native LVGL sweep before a staged replacement is published. Rate
 draft discard is also checked with the old curve and choices still present.
 
-| # | Source step | Read/write/check coverage | Contract prefix |
+| # | Suite step | Read/write/check coverage | Contract prefix |
 | --- | --- | --- | --- |
 | 1 | Sensors | Accelerometer present/absent; preparation gate; calibration ACK and status completion; signed alignment; start/query, uncalibrated, timeout, rejection and successful auto-align; pending restart; physical orientation answer. | `S01`, `CORE` |
 | 2 | Receiver | Receiver UART selection is intentionally omitted on the established radio/MSP link; generic port helpers retain their independent tests for other steps. RX feature group; explicit serial protocol IDs; USB guidance and a radio-side wiring-trial guard; all four channel presets; fresh pre-click FC snapshots; collective-first detection and exclusion of previously found channels; raw mapped bars; throttle-switch travel including its starting endpoint, margins, defaults, missing input and arming threshold; named input directions and raw CH numbers. | `S02`, `CORE` |
@@ -46,8 +46,8 @@ draft discard is also checked with the old curve and choices still present.
 | 8 | Governor | Feature bit overrides a latent stored mode; mode/type writes; Switch only with headspeed control and reset when leaving it; restart; fast-RPM warning distinguishes RPM input/bidirectional DShot from serial ESC telemetry. | `S08` |
 | 9 | Motor & ESC | Versioned sparse protocol IDs, including API 12.09/12.10 Disabled; motor poles; main and tail gearing; motor-tail variant; Castle protocol/feature consistency. | `S09-S12` |
 | 10 | Connection gate | Batch initial restart; unplugged confirmation before it; same visit/FC after reconnect; arming lock reasserted; actual main/tail outputs and required PWM servos; powered/connected/blades confirmations. | `S10`, lifecycle sweep |
-| 11 | ESC & spin | PWM-only high→low→done; actual high/low output gates; cancel releases high output; fresh calibration on revisit; live output marker; main spin guards, 5–50%, default 10%, 250 ms refresh, changed power and release; physical direction answer. | `S11`, `CORE` |
-| 12 | ESC telemetry | Versioned protocols; Off frees ESC function; Castle throttle-wire telemetry; free/current port; saved-config trial eligibility; successful combination kept live, cancel restores prior flags, Save & reboot persists it; V/A/temperature/RPM and explicit receiving/missing feedback. | `S09-S12`, `CORE` |
+| 11 | ESC telemetry | Battery connection with main and tail blades removed; versioned protocols; Off frees ESC function; Castle throttle-wire telemetry; free/current port; saved-config trial eligibility; successful combination kept live, cancel restores prior flags, Save & reboot persists it; V/A/temperature/RPM and explicit receiving/missing feedback. | `S11`, `S09-S12`, `CORE` |
+| 12 | ESC & spin | Unplug battery first for PWM; keep connected for other protocols; PWM-only high→low→done; actual high/low output gates; cancel releases high output; fresh calibration on revisit; live output marker; main spin guards, 5–50%, default 10%, 250 ms refresh, changed power and release; physical direction answer. | `S12`, `CORE` |
 | 13 | Servos | Centre all relevant servos; +20° test toggles; reverse preserves other flag bits and invalidates confirmation; affirmative answer returns to centre; mid pulse, band centre and >100 µs mechanics warning; actual output feedback. | `S13` |
 | 14 | Control directions | Passthrough for stabilized roll/pitch/collective; live RC command bars; visible expected movement and rear/side viewing references; signed rate reversal invalidates physical confirmation; no automatic claim about mechanical response. | `S14-S15`, `VISUAL` |
 | 15 | Level | Hold three axes at zero; trims are roll, pitch and collective, not servo numbers; ±100% in 0.1% units; individual numeric zero or Reset all; physical level confirmation. | `S14-S15` |
@@ -113,7 +113,10 @@ history covers all bits, isolated FCs, validated completion, recheck hints, advi
 prerequisites, explicit reset, bounded reads, interrupted writes and visible
 retry/continue/cancel failure paths. No history bit can supply a safety answer. Packed telemetry feedback
 covers absence, stale values, error priority and the independence of MSP locking.
-The reference's 19-step order remains the complete-setup path. An unnumbered
+The complete-setup path retains all 19 steps, with a deliberate deviation from
+PR 491: ESC telemetry is step 11, before the spin test at step 12. The source map
+records the swap as an adaptation; `CORE.esc-before-spin` checks the order,
+positional menu IDs, labels and polling. History remains keyed by index without migration. An unnumbered
 radio-model preparation precedes each new setup visit: template/manual selection
 and current-model confirmation must both be supplied. It loads no step definition
 and enters no holds; a new visit always asks again. The reset page omits this gate.

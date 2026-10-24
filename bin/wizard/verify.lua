@@ -146,7 +146,7 @@ for i=1,#arg do if arg[i]=="--locale" then locale=arg[i+1] end end
 local bundle = load("i18n/"..locale..".lua")
 for k in pairs(L) do if bundle.app.modules.helicopter_setup[k] then L[k] = bundle.app.modules.helicopter_setup[k] end end
 L.steps = { L.sensors,L.receiver,L.modeSwitches,L.profiles,L.rates,L.swash,L.servoType,L.governor,L.motor,L.connect,
-  L.spinTest,L.escTelemetry,L.servoDirectionCentre,L.controlDirections,L.level,L.bladePitch,L.tail,L.gyroCheck,L.finish }
+  L.escTelemetry,L.spinTest,L.servoDirectionCentre,L.controlDirections,L.level,L.bladePitch,L.tail,L.gyroCheck,L.finish }
 local rawLabels = load(PATH .. "labels.lua")
 check(#rawLabels.numberedSteps == 19 and rawLabels.numberedSteps[1] == "1. " .. rawLabels.sensors
   and rawLabels.numberedSteps[19] == "19. " .. rawLabels.finish, "step chooser entries are numbered like the source")
@@ -208,7 +208,7 @@ check(w.timed,"timeout capability proved per override parser")
 eq(q.sent[1].command,99,"arming disabled before configuration writes")
 eq(q.sent[1].payload[1],1,"arming disabled payload")
 local steps = { "sensors","receiver","modes","profiles","rates","swash","servoType","governor","motor","connect",
-  "throttle","escTelemetry","servos","direction","level","pitch","tail","gyro","finish" }
+  "escTelemetry","throttle","servos","direction","level","pitch","tail","gyro","finish" }
 local view = load(PATH .. "view.lua")
 local diagrams = load(PATH .. "diagrams.lua")
 for i=1,#arg do if arg[i]=="--view" then view=assert(loadfile(arg[i+1]))() end end
@@ -451,9 +451,9 @@ for _,size in ipairs({{320,240},{480,272},{800,480}}) do
   end
   ranges[1],ranges[2]=pid,rate;w.rateStyles={}
   local telemetry=w.data.esc_sensor_config.protocol
-  export("escTelemetry","castle",function() w.data.motor_config.motor_pwm_protocol=9 end)
+  export("escTelemetry","castle",function() w.data.motor_config.motor_pwm_protocol=9 end,2)
   w.data.motor_config.motor_pwm_protocol=protocol
-  export("escTelemetry","off",function() w.data.esc_sensor_config.protocol=0 end)
+  export("escTelemetry","off",function() w.data.esc_sensor_config.protocol=0 end,2)
   w.data.esc_sensor_config.protocol=telemetry
   for _,mode in ipairs({1,2}) do
     export("tail",mode==2 and "bidirectional" or "motor",function() w.data.mixer_config.tail_rotor_mode=mode end)

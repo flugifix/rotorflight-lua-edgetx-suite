@@ -20,12 +20,13 @@ return function(w)
   local port=w:port(L.port,1024)
   port.enabled=function() return not castle and not w.trial and w.data.esc_sensor_config.protocol>0 end
   local cards={
+    w:cardDef(L.connectBattery, L.telemetryBatteryHint, {}),
     w:cardDef(L.escTelemetry, castle and L.castleTelemetryHint or L.telemetryHint, {
       protocol,
       w:button(L.saveReboot, function() w:reboot() end)
     })
   }
-  if castle then cards[1].summary=L.castleTelemetryShort end
+  if castle then cards[2].summary=L.castleTelemetryShort end
   if not castle and w.data.esc_sensor_config.protocol>0 then
     cards[#cards+1]=w:cardDef(L.port,L.telemetryPortHint,{port})
   end

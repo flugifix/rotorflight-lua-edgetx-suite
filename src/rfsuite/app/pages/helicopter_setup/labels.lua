@@ -33,6 +33,7 @@ local L = {
   connectBatteryPwmHint = "@i18n(app.modules.helicopter_setup.connectBatteryPwmHint)@",
   connectBatteryShort = "@i18n(app.modules.helicopter_setup.connectBatteryShort)@",
   connectBatteryHint = "@i18n(app.modules.helicopter_setup.connectBatteryHint)@",
+  telemetryBatteryHint = "@i18n(app.modules.helicopter_setup.telemetryBatteryHint)@",
   lowThrottle = "@i18n(app.modules.helicopter_setup.lowThrottle)@",
   lowThrottleHint = "@i18n(app.modules.helicopter_setup.lowThrottleHint)@",
   lowThrottleShort = "@i18n(app.modules.helicopter_setup.lowThrottleShort)@",
@@ -607,7 +608,7 @@ local L = {
   counterclockwiseDegrees = "@i18n(app.modules.helicopter_setup.counterclockwiseDegrees)@",
 }
 L.steps = { L.sensors, L.receiver, L.modeSwitches, L.profiles, L.rates, L.swash, L.servoType, L.governor, L.motor,
-  L.connect, L.spinTest, L.escTelemetry, L.servoDirectionCentre, L.controlDirections, L.level, L.bladePitch, L.tail, L.gyroCheck, L.finish }
+  L.connect, L.escTelemetry, L.spinTest, L.servoDirectionCentre, L.controlDirections, L.level, L.bladePitch, L.tail, L.gyroCheck, L.finish }
 -- The step chooser numbers its entries the way the Configurator wizard does.
 L.numberedSteps = {}
 for i, name in ipairs(L.steps) do L.numberedSteps[i] = i .. ". " .. name end

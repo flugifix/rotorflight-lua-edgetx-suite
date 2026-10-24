@@ -416,7 +416,7 @@
         "CORE.trial-state-and-diagnostics",
         "CORE.wiring-success-polling-and-teardown",
         "S10.connection-gate",
-        "S11.motor-hold-and-calibration",
+        "S12.motor-hold-and-calibration",
         "S17.tail-servo-and-motor-variants"
       ],
       "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises."
@@ -440,7 +440,7 @@
         "CORE.trial-state-and-diagnostics",
         "CORE.wiring-success-polling-and-teardown",
         "S10.connection-gate",
-        "S11.motor-hold-and-calibration",
+        "S12.motor-hold-and-calibration",
         "S17.tail-servo-and-motor-variants"
       ],
       "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises."
@@ -663,9 +663,10 @@
         "REVIEW.independent-timeout-probes",
         "VISUAL.retained-scene-transitions",
         "CORE.completed-transport-retention",
-        "CORE.history-lua-record"
+        "CORE.history-lua-record",
+        "CORE.esc-before-spin"
       ],
-      "adaptation": "The complete path keeps all 19 source steps. Suite entries share one lazy page and load only the selected step, with preparation before holds, save/discard, and return to the Suite. Informational per-FC history has explicit reset and advisory prerequisites; no saved bit replaces fresh physical answers. Telemetry-sized indexed startup replaces USB bulk reads. Cached packed-state hints never replace MSP acknowledgements or lock readbacks. Native light palette and responsive diagrams replace browser scenes. An unnumbered current-radio-model confirmation precedes new setup visits; template use alone does not pass it and history cannot retain it."
+      "adaptation": "The complete path keeps all 19 source steps. Suite entries share one lazy page and load only the selected step, with preparation before holds, save/discard, and return to the Suite. Informational per-FC history has explicit reset and advisory prerequisites; no saved bit replaces fresh physical answers. Telemetry-sized indexed startup replaces USB bulk reads. Cached packed-state hints never replace MSP acknowledgements or lock readbacks. Native light palette and responsive diagrams replace browser scenes. An unnumbered current-radio-model confirmation precedes new setup visits; template use alone does not pass it and history cannot retain it. Deliberate deviation from PR 491: ESC telemetry is step 11 and the spin test is step 12, so the ESC link and live values are established before motor spin. Menu IDs and stored history bits remain positional; no history migration is performed."
     },
     {
       "source": "tabs/setup_wizard/StepConnect.svelte",
@@ -726,9 +727,10 @@
         "src/rfsuite/app/pages/helicopter_setup/steps/escTelemetry.lua"
       ],
       "contracts": [
-        "S09-S12.versioned-esc-and-ports"
+        "S09-S12.versioned-esc-and-ports",
+        "S11.card-order-and-save"
       ],
-      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises."
+      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises. Deliberate deviation: moved before the spin test to step 11, starting with a flight-battery connection card while main and tail blades remain removed."
     },
     {
       "source": "tabs/setup_wizard/StepFinish.svelte",
@@ -1116,9 +1118,10 @@
         "src/rfsuite/app/pages/helicopter_setup/steps/throttle.lua"
       ],
       "contracts": [
-        "S11.motor-hold-and-calibration"
+        "S12.motor-hold-and-calibration",
+        "S12.card-order-save-and-calibration-navigation"
       ],
-      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises."
+      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises. Deliberate deviation: moved after ESC telemetry to step 12. PWM calibration first instructs unplugging the battery before full throttle; other protocols keep it connected for the spin test."
     },
     {
       "source": "tabs/setup_wizard/StickIcon.svelte",
@@ -1239,7 +1242,7 @@
         "CORE.trial-state-and-diagnostics",
         "CORE.wiring-success-polling-and-teardown",
         "S10.connection-gate",
-        "S11.motor-hold-and-calibration",
+        "S12.motor-hold-and-calibration",
         "S17.tail-servo-and-motor-variants"
       ],
       "adaptation": "Idle is limited to the actual U8 wire ceiling, 25.5%, and each motor hold has a 15-second local maximum."

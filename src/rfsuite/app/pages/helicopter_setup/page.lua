@@ -11,7 +11,7 @@ local palette
 local loadingPoints = {{24,0},{24,0}}
 local loadingFraction = 0
 local keys = { "sensors", "receiver", "modes", "profiles", "rates", "swash", "servoType", "governor", "motor",
-  "connect", "throttle", "escTelemetry", "servos", "direction", "level", "pitch", "tail", "gyro", "finish" }
+  "connect", "escTelemetry", "throttle", "servos", "direction", "level", "pitch", "tail", "gyro", "finish" }
 local function key()
   if not w then return "loading" end
   return tostring(w.step) .. ":" .. tostring(w.card) .. ":" .. tostring(w.cards) .. ":" .. tostring(w.confirmExit)

@@ -5,7 +5,7 @@ local READS = { "status", "boxnames", "boxids", "mode_ranges", "mode_ranges_extr
   "motor_config", "esc_sensor_config", "governor_config", "mixer_config", "mixer_input",
   "servo_configurations", "servo", "rc_tuning", "tail_motor_output", "name" }
 local STEPS = { "sensors", "receiver", "modes", "profiles", "rates", "swash", "servoType", "governor", "motor",
-  "connect", "throttle", "escTelemetry", "servos", "direction", "level", "pitch", "tail", "gyro", "finish" }
+  "connect", "escTelemetry", "throttle", "servos", "direction", "level", "pitch", "tail", "gyro", "finish" }
 local function copy(v)
   if type(v) ~= "table" then return v end
   local out = {}; for k, x in pairs(v) do out[k] = copy(x) end; return out
@@ -379,20 +379,20 @@ function M.new(runtime, transport, mathModule, labels)
     if self.transition or not self.ready then return end
     if self.step >= 10 and step <= 9 then self.checks.unplugged = nil end
     if step ~= self.step then
-      local owned = ({ [1] = {"orientation", "unplugged", "blades"}, [10] = {"connected"}, [11] = {"motorDirection", "escBlades"},
+      local owned = ({ [1] = {"orientation", "unplugged", "blades"}, [10] = {"connected"}, [12] = {"motorDirection", "escBlades"},
         [13] = {"servoUp0", "servoUp1", "servoUp2", "servoCentre0", "servoCentre1", "servoCentre2", "servoCentre3"},
         [14] = {"control1", "control2", "control4"}, [15] = {"level"}, [16] = {"pitch"},
         [17] = {"tailCentre", "tailDirection"}, [18] = {"gyro1", "gyro2", "gyro3"}, [19] = {"finish"} })[step]
       for _, name in ipairs(owned or {}) do self.checks[name] = nil end
-      if step == 11 or step == 17 then self.bladesOff, self.percent = false, 10 end
-      if step == 11 then self.calibratedEsc, self.escStage = nil, nil end
+      if step == 12 or step == 17 then self.bladesOff, self.percent = false, 10 end
+      if step == 12 then self.calibratedEsc, self.escStage = nil, nil end
       if step == 5 then self.rateStyles, self.rateLoaded = {}, nil end
       -- Stick travel is measured anew on every visit to the receiver step.
       if step == 2 and self.rx then self.rx.travel, self.rx.travelSig, self.rx.advanced = nil, nil, nil end
     end
     -- Full throttle must remain active while the battery instruction is displayed.
     -- Back and every other transition still release all overrides.
-    local calibrationForward=self.step==11 and step==11 and self.card==1 and card==2
+    local calibrationForward=self.step==12 and step==12 and self.card==1 and card==2
       and self.data.motor_config.motor_pwm_protocol==0 and self.escStage=="full" and self.motorHold
       and self.motorHold.index==0 and self.motorHold.value==1000 and self.motorHold.mode==nil
     if not calibrationForward then self:release() end
@@ -626,8 +626,8 @@ function M.new(runtime, transport, mathModule, labels)
     local api = switches and (self.pollIndex==1 and "status" or "rc") or
       attitudeCheck and (self.pollIndex%2==1 and "attitude" or self.pollIndex==2 and "status" or "servo") or
       self.pollIndex == 1 and "status" or self.pollIndex == 2 and "servo" or
-      ({ [1] = "attitude", [2] = "rx_channels", [3] = "rc", [4] = "rc", [10] = "motor", [11] = "motor",
-        [12] = "motor_telemetry", [14] = "rc_command", [17] = self:motorised() and "motor" or "rc_command" })[self.step]
+      ({ [1] = "attitude", [2] = "rx_channels", [3] = "rc", [4] = "rc", [10] = "motor", [11] = "motor_telemetry",
+        [12] = "motor", [14] = "rc_command", [17] = self:motorised() and "motor" or "rc_command" })[self.step]
     if self.motorHold then api = "motor" end
     if not api then return end
     self:read(api, function(d)
