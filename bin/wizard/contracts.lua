@@ -87,6 +87,85 @@ return function(h)
     h.setFailCommand(4);w=h.beginWorld();drain(w);h.setFailCommand(nil)
     check(w.ready and not w.error,"PORTS unavailable board info does not block startup")
   end)
+  case("PORTS.board-name-prefixes",function()
+    local labels=load("lib/port_labels.lua")
+    eq(labels.label("F7C1",0,"FLYDRAGON_V2_2"),"S.BUS","PORTS board design takes priority over name")
+    for _,name in ipairs({"FLYDRAGON_V2_2","flydragon_v2_2","FlyDragon_V2_2_REV_A"}) do
+      eq(labels.label("RTFL",0,name),"Int.Rx","PORTS board-name prefix identifies internal UART1 receiver")
+      eq(labels.label("RTFL",1,name),"SBUS / F.Port","PORTS board-name prefix identifies UART2 socket")
+      eq(labels.label("RTFL",4,name),"GPS","PORTS board-name prefix identifies UART5 socket")
+      eq(labels.label("RTFL",2,name),nil,"PORTS undocumented UART3 stays unnamed")
+    end
+    eq(labels.label(nil,0,"FLYDRAGON_V2_2"),"Int.Rx","PORTS board name works without a design")
+    for _,name in ipairs({"FLYDRAGON_PRO","FLYDRAGON_PRO_V2_2","UNKNOWN",""}) do
+      eq(labels.label("RTFL",0,name),nil,"PORTS other products do not inherit the V2.2 labels")
+    end
+    labels.byName.FLYDRAGON={ [0]="generic",[2]="generic UART3" }
+    labels.byName.FLYDRAGON_V2_2_REV={ [0]="revision" }
+    eq(labels.label("RTFL",0,"FLYDRAGON_V2_2_REV_A"),"revision","PORTS longest name prefix wins")
+    eq(labels.label("RTFL",2,"FLYDRAGON_V2_2"),nil,"PORTS longest match does not inherit another product's undocumented socket")
+    labels.byName.FLYDRAGON,labels.byName.FLYDRAGON_V2_2_REV=nil,nil
+    local w=world();settle(w);w.data.board_info={board_design="RTFL",board_name="flydragon_v2_2_rev_a"}
+    w.data.serial_config={}
+    for i,id in ipairs({0,1,2,4}) do
+      w.data.serial_config["port_"..i.."_identifier"]=id
+      w.data.serial_config["port_"..i.."_function_mask"]=0
+    end
+    for _,row in ipairs({w:port(L.port,64),step(w,"escTelemetry")[2].rows[1]}) do
+      eq(table.concat(row.values,","),"Int.Rx [UART1],SBUS / F.Port [UART2],UART3,GPS [UART5]",
+        "PORTS wizard receiver and ESC choices pass board name")
+    end
+    -- Exercise the Ports page's actual BOARD_INFO read, session cache and failed-read fallback.
+    local originalLoadScript=loadScript
+    local pending={}
+    local queue={add=function(self,request) pending[#pending+1]=request end}
+    local base="/SCRIPTS/TOOLS/rfsuite-core/"
+    function loadScript(path)
+      local relative=string.sub(path,#base+1)
+      if relative=="tasks/msp/runtime.lua" then return function() return {getState=function() return {queue=queue} end} end end
+      if relative=="ui/controls.lua" or relative=="tasks/msp/save_pipeline.lua" then return function() return {} end end
+      if relative=="ui/loading_overlay.lua" then return function() return {append=function() end} end end
+      if relative=="app/pages/settings/common.lua" then return function() return {
+        pageT=function() return function(_,_,fallback) return fallback end end} end end
+      return originalLoadScript(path)
+    end
+    local page=load("app/pages/setup/ports/page.lua")
+    local session=w:session();local saved=session.setup_ports;session.setup_ports=nil
+    local ctx={children={},x=0,y=0,w=480,h=480}
+    page.build(ctx)
+    local request=table.remove(pending,1)
+    eq(request.command,54,"PORTS page reads serial configuration first")
+    request.processReply(request,h.api("serial_config").simulatorResponse)
+    request=table.remove(pending,1)
+    eq(request.command,4,"PORTS page reads board info after ports")
+    local board={83,55,88,50,0,0,0,1}
+    for _,text in ipairs({"STM32F7X2","flydragon_v2_2_rev_a","RTFL","TEST"}) do
+      board[#board+1]=#text;for i=1,#text do board[#board+1]=string.byte(text,i) end
+    end
+    request.processReply(request,board)
+    eq(session.setup_ports.boardName,"flydragon_v2_2_rev_a","PORTS page caches board name from MSP")
+    local function rendered()
+      ctx.children={};page.build(ctx)
+      local names={}
+      for _,item in ipairs(ctx.children) do if item.type=="choice" then names[#names+1]=item.title end end
+      check(#names>=5,"PORTS page renders positive-control UART rows")
+      return names
+    end
+    local names=rendered()
+    eq(names[1],"Int.Rx [UART1]","PORTS page passes board name for UART1")
+    eq(names[2],"SBUS / F.Port [UART2]","PORTS page passes board name for UART2")
+    eq(names[3],"UART3","PORTS page leaves undocumented UART3 plain")
+    eq(names[5],"GPS [UART5]","PORTS page passes board name for UART5")
+    page.onReload();request=table.remove(pending,1)
+    request.processReply(request,h.api("serial_config").simulatorResponse)
+    request=table.remove(pending,1);request.errorHandler()
+    names=rendered()
+    eq(names[1],"UART1","PORTS failed board info clears cached name and falls back")
+    eq(names[5],"UART5","PORTS failed board info keeps the loaded port rows")
+    check(session.setup_ports.boardName==nil and session.setup_ports.boardDesign==nil,
+      "PORTS failed board info clears both session identifiers")
+    page.onClose();session.setup_ports=saved;loadScript=originalLoadScript
+  end)
   case("CORE.paged-startup",function()
     local w=world();settle(w)
     if h.mutation=="bulk-read" then
@@ -570,13 +649,15 @@ return function(h)
     eq(cards[3].summary(),string.format(L.stickWrongChannel,L.collective),"S02 the parked collective centred and moved up is named")
     values[w.data.rx_map.collective+1]=1500;w.onLive("rx_channels",raw())
     cards[3].rows[5].press()
-    -- Receiver settings stay locked until Advanced is switched on.
+    -- Link-affecting receiver settings stay locked; throttle range stays available.
     check(not cards[1].rows[2].enabled() and not cards[1].rows[4].enabled() and not cards[2].rows[1].enabled()
-      and not cards[2].rows[2].enabled() and not cards[4].rows[2].enabled() and not cards[4].rows[3].enabled(),
-      "S02 receiver settings are locked until Advanced is on")
+      and not cards[2].rows[2].enabled(),"S02 receiver configuration is locked until Advanced is on")
+    for i=2,4 do check(cards[4].rows[i].enabled==nil,"S02 throttle range row stays usable without Advanced") end
+    eq(cards[4].summary(),L.throttleQuick,"S02 throttle summary does not ask for Advanced")
     check(cards[3].rows[5].enabled==nil and cards[1].rows[3].enabled==nil,"S02 the stick check and the USB hint stay usable")
     cards[1].rows[1].set(2)
-    check(cards[1].rows[2].enabled() and cards[2].rows[1].enabled() and cards[4].rows[4].enabled(),
+    check(cards[1].rows[2].enabled() and cards[1].rows[4].enabled() and cards[2].rows[1].enabled()
+      and cards[2].rows[2].enabled(),
       "S02 Advanced unlocks the receiver settings")
     w.step=3;w:navigate(2,1)
     check(w.rx.advanced==nil,"S02 every visit to the receiver step starts locked")
@@ -620,9 +701,11 @@ return function(h)
       getStatus=function() return "idle" end,getStatusText=function() return "task status" end,
       getRateField=function() return rate end,getRatioField=function() return ratio end,
       selectOption=function(kind,index) choices[#choices+1]={kind,index};running=true end,setOwner=function() end}
+    local question
     local realLoad=w.loadModule
     w.loadModule=function(self,path)
       if string.find(path,"elrslink_task",1,true) then return fake end
+      if path=="ui/confirm_dialog.lua" then return {show=function(ctx) question=ctx;return true end} end
       return realLoad(self,path)
     end
     local cards=step(w,"receiver")
@@ -632,17 +715,18 @@ return function(h)
     check(not w.error,"S02 a refused link read on the ELRS card does not fail the wizard")
     local gated=0
     for _,row in ipairs(cards[index].rows) do
-      if row.enabled then gated=gated+1;check(not row.enabled(),"S02 ELRS controls wait for Advanced") end
+      if row.enabled then gated=gated+1;check(row.enabled(),"S02 ELRS controls work without Advanced") end
     end
-    check(gated>0,"S02 the ELRS card has controls behind Advanced")
-    w.rx.advanced=true
+    eq(gated,4,"S02 both sync buttons and pickers work without Advanced")
+    check(not w.rx.advanced,"S02 link access does not enable receiver Advanced")
     -- A picker write is followed by a fresh walk of the module.
     h.fixtures[73]=h.api("telemetry_config").simulatorResponse
     w.cards=cards;w.card=index;cards[index].enter();w:tick();drain(w);w:tick();drain(w)
     local probes=#starts
     local picker;for _,row in ipairs(cards[index].rows) do if row.kind=="choice" then picker=row;break end end
     check(picker~=nil,"S02 the combined card offers a module picker")
-    picker.set(2);w:tick();drain(w);w:tick();drain(w);w:tick();drain(w)
+    picker.set(2);eq(#choices,0,"S02 picker waits for confirmation before its module walk")
+    question.onConfirm();w:tick();drain(w);w:tick();drain(w);w:tick();drain(w)
     check(#choices==1 and #starts>probes,"S02 a picker write is followed by a fresh module walk")
     h.fixtures[73]=nil;session.telemetryType=oldType
   end)
@@ -684,7 +768,7 @@ return function(h)
     local links=0
     for i,c in ipairs(cards) do if c.link=="combined" then index=i;links=links+1 end end
     eq(links,1,"S02 receiver has one combined ELRS card")
-    w.rx.advanced=true
+    check(not w.rx.advanced,"S02 inline ELRS confirmation does not require receiver Advanced")
     check(index~=nil,"S02 inline ELRS card replaces the pointer")
     if not index then session.telemetryType=oldType;return end
     eq(loads,0,"S02 task stays unloaded on other receiver cards")
@@ -772,9 +856,41 @@ return function(h)
     running=false
     check(rows[3].kind=="choice" and rows[4].kind=="choice","S02 walked module fields offer two pickers")
     eq(table.concat(rows[3].values,","),table.concat({L.link333,L.link500,L.linkD500},","),"S02 rate picker is the project subset")
-    rate.selectedIndex=3;rows[3].set(2);eq(choices[#choices][2],2,"S02 500 Hz never selects F500 or D500")
-    rows[3].set(3);eq(choices[#choices][2],1,"S02 D500 uses the module option index")
-    rows[4].set(4);eq(choices[#choices][2],4,"S02 ratio uses the module option index")
+    rate.selectedIndex=3
+    for _,pick in ipairs({{row=rows[3],value=2,index=2,kind="rate"},{row=rows[3],value=3,index=1,kind="rate"},
+      {row=rows[4],value=4,index=4,kind="ratio"}}) do
+      local picked=#choices
+      local function askPicker()
+        question=nil;pick.row.set(pick.value)
+        check(question~=nil,"S02 picker asks for confirmation")
+        eq(#choices,picked,"S02 picker writes nothing before confirmation")
+        eq(question.message,string.format(L.linkPickerQuestion,pick.row.values[pick.value]),
+          "S02 picker confirmation names the new value and link warning")
+        return question
+      end
+      askPicker().onCancel();eq(#choices,picked,"S02 cancelled picker writes nothing")
+      eq(w.linkNotice,L.linkCancelled,"S02 cancelled picker reports cancellation")
+      shown=false;askPicker();eq(w.linkNotice,L.linkNoDialog,"S02 picker reports unavailable dialog")
+      shown=true
+      local deferred=askPicker();w:release();w.statusAt=getTime();deferred.onConfirm()
+      eq(#choices,picked,"S02 picker rejects a confirmation from a released visit")
+      deferred=askPicker();h.advance(301);deferred.onConfirm()
+      eq(#choices,picked,"S02 picker rechecks fresh STATUS on confirmation")
+      w.statusAt=getTime();deferred=askPicker();w.dirty.rx_config=true;deferred.onConfirm()
+      eq(#choices,picked,"S02 picker rechecks dirty draft on confirmation")
+      question=nil;pick.row.set(pick.value)
+      check(question==nil and w.linkNotice==L.saveFirst,"S02 dirty draft blocks picker dialog")
+      w.dirty={};deferred=askPicker();controller.started=true;running=true
+      check(controller:busy(),"S02 busy confirmation control has an owned running task");deferred.onConfirm()
+      eq(#choices,picked,"S02 picker rechecks task busy state on confirmation")
+      running=false;deferred=askPicker();w.data.rx_config.serialrx_provider=2;deferred.onConfirm()
+      eq(#choices,picked,"S02 picker rechecks CRSF applicability on confirmation")
+      w.data.rx_config.serialrx_provider=9
+      askPicker().onConfirm()
+      eq(#choices,picked+1,"S02 confirmed picker performs one write")
+      eq(choices[#choices][1],pick.kind,"S02 picker selects the requested field")
+      eq(choices[#choices][2],pick.index,"S02 picker uses the correct module option index")
+    end
     for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
       for _,i in ipairs({index}) do
         w.card=i
@@ -1169,8 +1285,8 @@ return function(h)
     local w=world();settle(w);w.step=8;w.data.feature_config.enabledFeatures=0
     local c=step(w,"governor");cardOrder(c,{L.governorMode},"S08 Off")
     c[1].rows[1].set(4);c=step(w,"governor")
-    cardOrder(c,{L.governorMode,L.throttleType},"S08 On")
-    c[2].rows[1].set(2)
+    cardOrder(c,{L.governorMode,L.rpmSource,L.throttleType},"S08 On")
+    c[3].rows[1].set(2)
     eq(w.data.governor_config.gov_mode,3,"S08 Electric mode field")
     eq(w.data.governor_config.gov_throttle_type,1,"S08 Switch throttle field")
     check(w.rebootPending,"S08 mode still requires restart")
@@ -1465,16 +1581,102 @@ return function(h)
     eq(c[1].rows[1].get(),1,"S08 disabled feature overrides latent mode")
     eq(#c,1,"S08 Off omits the throttle type card")
     w.data.feature_config.enabledFeatures=1<<26;c=step(w,"governor")
-    w.data.feature_config.enabledFeatures=0;c[2].rows[1].set(3)
+    w.data.feature_config.enabledFeatures=0;c[3].rows[1].set(3)
     eq(w.data.feature_config.enabledFeatures & (1<<26),0,"S08 throttle edit never enables latent governor")
     w.data.governor_config.gov_throttle_type=1;c[1].rows[1].set(3)
     eq(w.data.governor_config.gov_throttle_type,0,"S08 leaving headspeed resets Switch throttle")
-    c[2].rows[1].set(2)
+    c[3].rows[1].set(2)
     eq(w.data.governor_config.gov_throttle_type,0,"S08 unsupported Switch choice refused")
+    w.rebootPending=nil;w.dirty={}
     w.data.motor_config.motor_pole_count_0=14;w.data.motor_config.motor_pwm_protocol=5;w.data.motor_config.use_dshot_telemetry=1
     check(w:fastRpm(),"S08 bidirectional DShot is fast RPM")
     w.data.motor_config.use_dshot_telemetry=0;w.data.esc_sensor_config.protocol=1
     check(not w:fastRpm(),"S08 serial ESC telemetry does not prove fast RPM")
+  end)
+  case("S08.rpm-source-and-fc-verdict",function()
+    local w=world();settle(w);w.step=8
+    w.data.feature_config.enabledFeatures=1<<26;w.data.governor_config.gov_mode=3
+    local m=w.data.motor_config
+    m.motor_pole_count_0=0;m.use_dshot_telemetry=0;m.motor_pwm_protocol=0
+    local c=step(w,"governor");local source,status=c[2].rows[1],c[2].rows[2]
+    local finish=step(w,"finish")[3].rows[2]
+    eq(source.get(),0,"S08 no source is selected by default")
+    eq(status.get(),L.rpmSetPoles,"S08 zero poles require the Motor step")
+    check(not w:fastRpm(),"S08 zero poles never provide RPM")
+    source.set(1)
+    eq(w.data.feature_config.enabledFeatures & (1<<28),1<<28,"S08 wire enables frequency sensor")
+    eq(m.use_dshot_telemetry,0,"S08 wire preserves disabled DShot telemetry")
+    check(w.rebootPending and w.dirty.feature_config,"S08 wire selection requires save and restart")
+    eq(source.get(),1,"S08 wire selection is reflected")
+    m.motor_pole_count_0=14
+    eq(status.get(),L.rpmAfterReboot,"S08 staged wire does not claim an active source")
+    eq(finish.get(),L.rpmMissing,"S08 Finish does not claim fast RPM before restart")
+    source.set(2)
+    eq(w.data.feature_config.enabledFeatures & (1<<28),0,"S08 DShot clears frequency sensor")
+    eq(m.use_dshot_telemetry,1,"S08 DShot enables motor telemetry")
+    check(w.dirty.motor_config and w.rebootPending,"S08 DShot edits the shared motor draft and requires restart")
+    eq(source.get(),2,"S08 DShot selection is reflected")
+    eq(status.get(),L.rpmNeedsDshot,"S08 DShot selection needs a compatible protocol before restart")
+    source.set(1)
+    eq(m.use_dshot_telemetry,1,"S08 wire preserves enabled DShot telemetry")
+    eq(source.get(),1,"S08 frequency sensor takes precedence over DShot telemetry")
+    source.set(2);m.motor_pwm_protocol=8
+    q.sent={};w:save();settle(w)
+    savedPayload(w,"motor_config","S08 RPM");savedPayload(w,"feature_config","S08 RPM")
+    eq(status.get(),L.rpmAfterReboot,"S08 EEPROM save alone still requires reboot")
+    w.rebootPending=nil;w.dirty.feature_config=true
+    eq(status.get(),L.rpmAfterReboot,"S08 unsaved feature change requires restart")
+    w.dirty={motor_config=true}
+    eq(status.get(),L.rpmAfterReboot,"S08 unsaved motor change requires restart")
+    w.dirty={}
+    for _,mode in ipairs({3,4}) do
+      w.data.governor_config.gov_mode=mode
+      for _,freq in ipairs({false,true}) do
+        w:feature(28,freq);w.dirty={}
+        for _,flags in ipairs({(1<<5)|(1<<6),1<<5,0}) do
+          w.data.status.arming_disable_flags=flags
+          local fast=(flags & (1<<6))==0
+          eq(status.get(),fast and L.rpmFcFast or L.rpmFcMissing,"S08 headspeed mode reports FC RPM_SIGNAL verdict")
+          eq(w:fastRpm(),fast,"S08 fast RPM follows FC verdict, independent of GOVERNOR flag")
+          eq(finish.get(),fast and L.available or L.rpmMissing,"S08 Finish follows the same FC verdict")
+        end
+      end
+    end
+    for _,mode in ipairs({1,2}) do
+      w:feature(28,false);w.dirty={}
+      w.data.governor_config.gov_mode=mode;w.data.status.arming_disable_flags=1<<6
+      for protocol=5,8 do
+        m.motor_pwm_protocol=protocol
+        eq(status.get(),L.rpmConfigured,"S08 Limit/Direct only assert configuration for DShot "..protocol)
+        check(w:fastRpm(),"S08 configured DShot range includes PROSHOT1000")
+      end
+      m.motor_pwm_protocol=4
+      eq(status.get(),L.rpmNeedsDshot,"S08 protocol below DShot range is rejected")
+      m.motor_pwm_protocol=9
+      eq(status.get(),L.rpmNeedsDshot,"S08 protocol above DShot range is rejected")
+      m.use_dshot_telemetry=0;w.data.esc_sensor_config.protocol=1
+      eq(status.get(),L.rpmMissing,"S08 serial ESC telemetry is not a fast configuration")
+      w:feature(28,true);w.dirty={}
+      eq(status.get(),L.rpmConfigured,"S08 Limit/Direct do not claim an FC resource verdict")
+      w:feature(28,false);w.dirty={};m.use_dshot_telemetry=1
+    end
+    w.data.feature_config.enabledFeatures=0;source.set(1)
+    eq(w.data.feature_config.enabledFeatures,0,"S08 hidden source cannot enable a disabled governor")
+    for _,locale in ipairs({"en","de"}) do
+      local strings=load("i18n/"..locale..".lua").app.modules.helicopter_setup
+      for _,key in ipairs({"rpmSource","rpmWire","rpmSourceHint","rpmSetPoles","rpmNeedsDshot","rpmAfterReboot",
+        "rpmFcMissing","rpmFcFast","rpmConfigured","linkPickerQuestion"}) do
+        check(type(strings[key])=="string","S08 RPM and picker text is translated: "..locale.." "..key)
+        eq(load("app/pages/helicopter_setup/labels.lua")[key],"@i18n(app.modules.helicopter_setup."..key..")@",
+          "S08 new text is bound through labels: "..key)
+      end
+      for _,key in ipairs({"help","receiverHint","linkHint","governorHint","rpmSourceHint"}) do
+        check(utf8.len(strings[key])<=600,"S08 help stays within 600 characters: "..locale.." "..key)
+        for line in string.gmatch(strings[key],"[^\n]+") do
+          check(utf8.len(line)<=200,"S08 help line stays within 200 characters: "..locale.." "..key)
+        end
+      end
+    end
   end)
   case("S11.motor-output-read-during-hold",function()
     local w=world();settle(w);w.step=11;local c=step(w,"throttle");w.cards=c;w.card=1
@@ -1552,6 +1754,12 @@ return function(h)
     eq(row.kind,"choice","S09 bidirectional DShot is an on/off choice")
     w.data.motor_config.motor_pwm_protocol=0
     check(not row.enabled(),"S09 bidirectional DShot is inactive for PWM")
+    for protocol=5,8 do
+      w.data.motor_config.motor_pwm_protocol=protocol
+      check(row.enabled(),"S09 bidirectional DShot is offered for protocol "..protocol)
+    end
+    w.data.motor_config.motor_pwm_protocol=9
+    check(not row.enabled(),"S09 bidirectional DShot is inactive above the DShot range")
     w.data.motor_config.motor_pwm_protocol=6;w.data.motor_config.use_dshot_telemetry=0
     check(row.enabled(),"S09 bidirectional DShot is offered for DShot")
     row.set(2);eq(w.data.motor_config.use_dshot_telemetry,1,"S09 On writes 1")

@@ -62,7 +62,8 @@ function M.attach(w, PortLabels)
       local id, mask = self.data.serial_config[p .. "identifier"], self.data.serial_config[p .. "function_mask"]
       if id and id ~= 20 and (mask == 0 or (mask & bit) ~= 0) then
         local name = id==30 and "SOFTSERIAL1" or id==31 and "SOFTSERIAL2" or id==40 and "LPUART1" or "UART" .. (id + 1)
-        local printed = PortLabels.label(self.data.board_info and self.data.board_info.board_design, id)
+        local printed = PortLabels.label(self.data.board_info and self.data.board_info.board_design, id,
+          self.data.board_info and self.data.board_info.board_name)
         ids[#ids + 1] = i; values[#values + 1] = printed and (printed .. " [" .. name .. "]") or name
       end
     end

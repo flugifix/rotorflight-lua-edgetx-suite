@@ -5,7 +5,7 @@ return function(w)
   local dshot = w:c("motor_config", "use_dshot_telemetry", L.bidirectionalDshot, { L.off, L.on }, true)
   dshot.enabled = function()
     local p = w.data.motor_config.motor_pwm_protocol
-    return p >= 5 and p <= 7
+    return p >= 5 and p <= 8
   end
   local cards = {
     w:cardDef(L.throttleProtocol, L.motorHint, {

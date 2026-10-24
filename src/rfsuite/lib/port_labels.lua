@@ -7,8 +7,10 @@
 -- label silkscreened next to that socket. It is data rather than logic, and there is nothing on
 -- a radio to derive it from.
 --
--- A board whose design is not one of these sixteen is named with plain UART names, which is
--- what the Configurator falls back to as well (configuration.js:475-481).
+-- Boards with generic designs can also be identified by a case-insensitive board-name prefix.
+-- byName restates rotorflight-configurator src/tabs/remap_fc/manufacturer_designs.json
+-- (da9cf02b2), matched as in reference_design_labels.js findUsages. The longest prefix wins.
+-- Unknown sockets fall back to plain UART names (configuration.js:475-481).
 --
 -- TRANSLITERATED, and that is the one deliberate difference from the source. The Configurator
 -- writes the circled capitals of the Enclosed Alphanumerics block: its "Port A" is the word
@@ -40,18 +42,29 @@ PortLabels.byDesign = {
   ["F7C6"] = { [0] = "S.BUS", [1] = "TELEM", [2] = "Port G", [3] = "Port A", [4] = "Int.Rx", [5] = "Port G" }
 }
 
+PortLabels.byName = {
+  ["FLYDRAGON_V2_2"] = { [0] = "Int.Rx", [1] = "SBUS / F.Port", [4] = "GPS" }
+}
+
 -- The label a board prints beside one of its ports, or nil where there is none to print.
 --
--- Nil covers two cases and they are treated alike: a design this table does not know, and a
--- design that knows nothing about that particular identifier -- a softserial port on a board
+-- Nil covers an unknown board or an identifier neither table names -- a softserial port on a board
 -- whose entry only names its six UARTs. The Configurator draws the literal text "undefined" in
 -- the second case; here the caller falls back to the UART name, which is at least something the
 -- pilot can act on.
-function PortLabels.label(design, identifier)
-  if type(design) ~= "string" or design == "" then return nil end
-  local names = PortLabels.byDesign[design]
-  if names == nil then return nil end
-  local label = names[identifier]
+function PortLabels.label(design, identifier, name)
+  local names = type(design) == "string" and PortLabels.byDesign[design] or nil
+  local label = names and names[identifier]
+  if type(label) == "string" and label ~= "" then return label end
+  local longest = 0
+  if type(name) == "string" then
+    name = string.upper(name)
+    for prefix, ports in pairs(PortLabels.byName) do
+      if #prefix > longest and string.sub(name, 1, #prefix) == prefix then
+        longest, label = #prefix, ports[identifier]
+      end
+    end
+  end
   if type(label) ~= "string" or label == "" then return nil end
   return label
 end

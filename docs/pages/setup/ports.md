@@ -20,6 +20,7 @@ Read-only while the model is armed.
 The page has one row per serial port the flight controller reports, up to twelve. The USB port is
 not listed. Where the board layout is known, a row is named as the board prints it, with the UART
 name in brackets (`Port A [UART4]` on an F7A1 board); otherwise it carries the UART name alone.
+Some boards are identified by a board-name prefix rather than a board design, including FLYDRAGON_V2_2.
 Each list a row opens is titled with that row's name.
 
 | Setting | What it does |

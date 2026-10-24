@@ -128,8 +128,8 @@ return function(w)
   local function travel(n)
     return function() return string.format(L.travelPair, r.travel[n][1], r.travel[n][2]) end
   end
-  -- Every receiver setting stays locked until the pilot unlocks it: a wrong one can cut the very
-  -- link this wizard talks over, and the setup cannot go on without it.
+  -- Receiver configuration stays locked until the pilot unlocks it: a wrong setting can cut
+  -- the link this wizard talks over. Throttle range and limits do not change that link.
   local function unlocked() return r.advanced == true end
   local function locked(row)
     local own = row.enabled
@@ -194,7 +194,7 @@ return function(w)
     }, nil, "stickGuide"),
     w:cardDef(L.throttleRange, L.throttleCardHint, {
       w:value(L.throttle, throttleNow),
-      locked(w:button(function() return r.record and L.useRange or L.record end, function()
+      w:button(function() return r.record and L.useRange or L.record end, function()
         if r.record then
           if r.high - r.low < 300 then w.message = L.travelShort; return end
           r.record = nil
@@ -206,9 +206,9 @@ return function(w)
         local v=channels and channels[(w.data.rx_map.throttle or 4)+1]
         if type(v)~="number" or v<=500 then w.message=L.waitChannels;return end
         r.low,r.high,r.record=v,v,true;w.message=L.throttleSwitchRange
-      end)),
-      locked(w:n("rc_config", "rc_min_throttle", L.minimum, 0, 2100)),
-      locked(w:n("rc_config", "rc_max_throttle", L.maximum, 0, 2100))
+      end),
+      w:n("rc_config", "rc_min_throttle", L.minimum, 0, 2100),
+      w:n("rc_config", "rc_max_throttle", L.maximum, 0, 2100)
     },nil,"throttle")
   }
   local function lockedSummary(text) return function() return unlocked() and text or L.receiverLocked end end
@@ -220,7 +220,7 @@ return function(w)
   cards[3].dense = true
   cards[4].summary=function()
     if r.record then return r.high>0 and string.format(L.throttleRecording, r.low, r.high) or L.throttleSwitchRange end
-    return unlocked() and L.throttleQuick or L.receiverLocked
+    return L.throttleQuick
   end
   -- Keep the cards present when the protocol is edited; the rows report applicability live.
   for _,kind in ipairs({"combined"}) do

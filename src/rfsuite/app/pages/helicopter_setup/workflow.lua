@@ -28,10 +28,25 @@ function M.attach(w)
     local h=self.holds[kind..index]
     self:hold(kind,index,h and h.value==value and 0 or value)
   end
+  function w:rpmStatus()
+    local m, features = self.data.motor_config, self.data.feature_config.enabledFeatures
+    local freq = (features & (1 << 28)) ~= 0
+    local dshot = m.motor_pwm_protocol >= 5 and m.motor_pwm_protocol <= 8
+    if m.motor_pole_count_0 == 0 then return self.L.rpmSetPoles end
+    if not freq and m.use_dshot_telemetry ~= 0 and not dshot then return self.L.rpmNeedsDshot end
+    if self.rebootPending or self.dirty.feature_config or self.dirty.motor_config then return self.L.rpmAfterReboot end
+    -- The source is selected at boot; a configured frequency sensor still needs a FREQ resource.
+    local mode = (features & (1 << 26)) ~= 0 and self.data.governor_config.gov_mode or 0
+    if mode==3 or mode==4 then
+      if (self.data.status.arming_disable_flags & (1 << 6)) ~= 0 then return self.L.rpmFcMissing end
+      return self.L.rpmFcFast, true
+    end
+    local configured = freq or (dshot and m.use_dshot_telemetry ~= 0)
+    return configured and self.L.rpmConfigured or self.L.rpmMissing, configured
+  end
   function w:fastRpm()
-    local m = self.data.motor_config
-    return m.motor_pole_count_0 > 0 and ((self.data.feature_config.enabledFeatures & (1 << 28)) ~= 0 or
-      (m.motor_pwm_protocol >= 5 and m.motor_pwm_protocol <= 8 and m.use_dshot_telemetry ~= 0))
+    local _, fast = self:rpmStatus()
+    return fast == true
   end
   function w:fixMotor()
     local castle = self.data.motor_config.motor_pwm_protocol == 9

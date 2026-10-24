@@ -28,10 +28,10 @@ function M.new(w)
   function c:usable()
     return self:current() and self:applies() and w:usable()
   end
-  -- A rate or ratio change can cut the link the wizard runs over: it waits for the receiver
-  -- step's Advanced switch, like every other receiver setting. Reading stays open.
+  -- Link changes can briefly cut the wizard's connection and require their own confirmation.
+  -- Reading and confirmation availability are independent of the receiver's Advanced switch.
   function c:writable()
-    return self:usable() and w.rx ~= nil and w.rx.advanced == true and not self:busy()
+    return self:usable() and w.rx ~= nil and not self:busy()
   end
   function c:refresh()
     -- A new cards identity retires the native scene and its controls before publishing new rows.
@@ -146,7 +146,19 @@ function M.new(w)
         local current=kind=="rate" and task.getRateField() or task.getRatioField()
         local index=indices[value]
         if current and index~=nil and index~=current.selectedIndex then
-          self:bind();w.linkNotice=nil;self.started=true;self.rewalk=true;task.selectOption(kind,index)
+          if next(w.dirty) then self:notice(L.saveFirst);return end
+          local dialog=w:loadModule("ui/confirm_dialog.lua")
+          local epoch=self.epoch
+          local shown=dialog and dialog.show({title=L.linkConfirmTitle,
+            message=string.format(L.linkPickerQuestion,values[value]),
+            onConfirm=function()
+              if epoch~=self.epoch or not self:writable() or next(w.dirty) then
+                self:notice(L.linkCancelled);return
+              end
+              self:bind();w.linkNotice=nil;self.started=true;self.rewalk=true;task.selectOption(kind,index)
+            end,
+            onCancel=function() self:notice(L.linkCancelled) end})
+          if not shown then self:notice(L.linkNoDialog) end
         end
       end}
   end
