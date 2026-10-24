@@ -340,6 +340,7 @@ local manifest = {
     -- opens the same assistant bounded to one section, with the same criteria and the same list.
     helicopter_setup_menu = {
       title = "@i18n(app.modules.helicopter_setup.name)@",
+      help = "@i18n(app.modules.helicopter_setup.menuHelp)@",
       pages = {
         { id = "all", title = "@i18n(app.modules.helicopter_setup.completeSetup)@", menuId = "helicopter_setup_page", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true, minApiVersion = {12, 0, 9} },
         { id = "step_01", title = 1 .. ". " .. "@i18n(app.modules.helicopter_setup.sensors)@", menuId = "helicopter_setup_step_01_page", doneWhen = helicopterStepDone(1), icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true, minApiVersion = {12, 0, 9} },

@@ -656,6 +656,10 @@ return {
         gyroCheck = "Gyro check",
         help = "Back: previous task or return to the Suite; pending changes offer Save/Discard.\nContinue: next task; remove all blades and follow the task instructions.\nSave & next: store acknowledged changes and complete this step.",
         help_title = "Helicopter Setup",
+        menuHelp = "Complete setup: all 19 steps in order.
+1. to 19.: one step on its own.
+Tick: this flight controller completed the step before. Only a record: every step reads the current FC settings when it opens.
+Setup history (last tile): how many steps are ticked, and Reset. Resetting changes no FC setting.",
         calibrated = "Calibration complete",
         centreDegrees = "Centre trim (deg)",
         clockwiseDegrees = "CW limit (deg)",

@@ -1183,6 +1183,9 @@ local function onHelp()
   end
   if type(message) ~= "string" or message == "" then
     message = resolveI18nHelpMessageFromPagePath(menuId)
+    if (type(message) ~= "string" or message == "") and state.menu.getCurrentMenuHelp then
+      message = state.menu.getCurrentMenuHelp()
+    end
     if type(message) ~= "string" or message == "" then
       return
     end

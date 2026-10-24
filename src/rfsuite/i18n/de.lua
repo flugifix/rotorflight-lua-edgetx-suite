@@ -656,6 +656,10 @@ return {
         gyroCheck = "Kreiselprüfung",
         help = "Zurück: vorherige Aufgabe oder Suite-Menü; bei Änderungen Speichern/Verwerfen wählen.\nWeiter: nächste Aufgabe; alle Blätter abnehmen und die Aufgabenhinweise beachten.\nSpeichern & weiter: bestätigte Änderungen speichern und diesen Schritt abschließen.",
         help_title = "Helikopter einrichten",
+        menuHelp = "Komplette Einrichtung: alle 19 Schritte der Reihe nach.
+1. bis 19.: ein einzelner Schritt.
+Haken: dieser FC hat den Schritt schon einmal abgeschlossen. Nur ein Vermerk: jeder Schritt liest beim Öffnen die aktuellen FC-Werte.
+Einrichtungsverlauf (letzte Kachel): wie viele Schritte abgehakt sind, und Zurücksetzen. Das ändert keine FC-Einstellung.",
         calibrated = "Kalibrierung abgeschlossen",
         centreDegrees = "Mittentrimmung (Grad)",
         clockwiseDegrees = "CW-Grenze (Grad)",
