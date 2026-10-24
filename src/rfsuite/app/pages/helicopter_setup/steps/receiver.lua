@@ -35,12 +35,24 @@ return function(w)
     -- Travel belongs to one channel map and one stick range; a change starts the measurement over.
     local sig = travelSig()
     if sig ~= r.travelSig then r.travel, r.travelSig = { {0, 0}, {0, 0}, {0, 0}, {0, 0} }, sig end
+    local now = {}
     for n = 1, 4 do
       local v = d.channels[(map[keys[n]] or n - 1) + 1]
       if type(v) == "number" and v > 500 and span > 0 then
         local pct, t = math.floor((v - rc.rc_center) * 100 / span + 0.5), r.travel[n]
+        now[n] = pct
         if pct < 0 and -pct > t[1] then t[1] = math.min(-pct, 100) end
         if pct > 0 and pct > t[2] then t[2] = math.min(pct, 100) end
+      end
+    end
+    -- The guided check names a wrong move: the asked control going the other way, or another one.
+    local axis, dir
+    if r.target then axis, dir = r.target() end
+    r.wrong = nil
+    if axis and now[axis] and now[axis] * dir <= -60 then r.wrong = L.stickReversed
+    elseif axis and (now[axis] or 0) * dir < 30 then
+      for n = 1, 4 do
+        if n ~= axis and now[n] and math.abs(now[n]) >= 60 then r.wrong = string.format(L.stickWrongChannel, names[n]) end
       end
     end
     local throttle = d.channels[(map.throttle or 4) + 1]
@@ -102,9 +114,13 @@ return function(w)
   local function travel(n)
     return function() return string.format(L.travelPair, r.travel[n][1], r.travel[n][2]) end
   end
-  local function input(n)
-    local get=mapped(n)
-    return function() return string.format("CH%d %s",(w.data.rx_map[keys[n]] or n-1)+1,tostring(get())) end
+  -- Every receiver setting stays locked until the pilot unlocks it: a wrong one can cut the very
+  -- link this wizard talks over, and the setup cannot go on without it.
+  local function unlocked() return r.advanced == true end
+  local function locked(row)
+    local own = row.enabled
+    row.enabled = function() return unlocked() and (not own or own()) end
+    return row
   end
   local protocol=w:enum("rx_config","serialrx_provider",L.protocol,w:receiverProtocols(),true)
   local protocolGet,protocolSet=protocol.get,protocol.set
@@ -115,14 +131,35 @@ return function(w)
     protocolSet(v);w:serialReceiver();w:touch("rx_config",true)
   end
   protocol.enabled=function() return not w.trial end
+  -- The guided stick check asks for the first end stop not yet reached: right/forward/up first.
+  local GUIDE = { {1,1},{1,-1},{2,1},{2,-1},{3,1},{3,-1},{4,1},{4,-1} }
+  local words = { {L.dirRight,L.dirLeft},{L.dirForward,L.dirBack},{L.dirRight,L.dirLeft},{L.dirUp,L.dirDown} }
+  r.target = function()
+    for _, g in ipairs(GUIDE) do
+      if r.travel[g[1]][g[2] > 0 and 2 or 1] < TRAVEL then return g[1], g[2] end
+    end
+  end
+  local function prompt()
+    local axis, dir = r.target()
+    if not axis then return L.sticksDone end
+    return string.format(L.stickGuide, names[axis], words[axis][dir > 0 and 1 or 2])
+  end
+  local function throttleNow()
+    local v = mapped(5)(); if type(v) ~= "number" then return "--" end
+    local zero = w.data.rc_config.rc_min_throttle
+    if zero == 0 then zero = H.round(w.data.rc_config.rc_center - 0.9 * w.data.rc_config.rc_deflection) end
+    return v > 0 and v < zero - 5 and string.format(L.throttleLowNow, v) or tostring(v)
+  end
   local cards = {
     w:cardDef(L.receiver, L.receiverHint, {
-      protocol,
+      { kind = "toggle", label = L.advanced, values = { L.no, L.yes },
+        get = function() return unlocked() and 2 or 1 end, set = function(v) r.advanced = v == 2 end },
+      locked(protocol),
       w:button(L.receiverUsb, function() w.message=L.receiverUsbHint end),
-      w:button(L.saveReboot, function() w:serialReceiver(); w:reboot() end)
+      locked(w:button(L.saveReboot, function() w:serialReceiver(); w:reboot() end))
     }),
     w:cardDef(L.channelOrder, L.channelHint, {
-      w:button(function() return r.detect and L.cancelDetect or L.detect end, detect),
+      locked(w:button(function() return r.detect and L.cancelDetect or L.detect end, detect)),
       { kind="choice",label=L.standardOrder,values={"ELRS","FrSky","Futaba / Hitec","DSM / Graupner / JR"},
         get=function()
           for i,preset in ipairs({{0,1,3,2,5,4,6,7},{0,1,3,4,2,5,6,7},{0,1,3,5,2,4,6,7},{1,2,3,5,0,4,6,7}}) do
@@ -134,51 +171,43 @@ return function(w)
           local preset=({{0,1,3,2,5,4,6,7},{0,1,3,4,2,5,6,7},{0,1,3,5,2,4,6,7},{1,2,3,5,0,4,6,7}})[v]
           if not preset then return end
           r.detect=nil;for i,k in ipairs(keys) do w.data.rx_map[k]=preset[i] end;w:touch("rx_map")
-        end },
-      w:value(L.roll, mapped(1)), w:value(L.collective, mapped(4))
+        end, enabled=unlocked }
     }),
-    w:cardDef(L.checkSticks, L.sticksHint, {
-      w:value(L.rollRight, input(1)), w:value(L.pitchForward, input(2)), w:value(L.yawRight, input(3)), w:value(L.collectiveUp, input(4))
-    }, nil, "sticks"),
-    w:cardDef(L.stickTravel, L.travelHint, {
+    w:cardDef(L.checkSticks, L.stickGuideHint, {
       w:value(L.travelRoll, travel(1)), w:value(L.travelPitch, travel(2)), w:value(L.travelYaw, travel(3)),
       w:value(L.travelCollective, travel(4)),
       w:button(L.travelReset, function() r.travel = { {0, 0}, {0, 0}, {0, 0}, {0, 0} } end)
-    }),
-    w:cardDef(L.throttleRange, L.throttleHint, {
-      w:value(L.throttle, mapped(5)),
-      w:button(L.record, function()
+    }, nil, "stickGuide"),
+    w:cardDef(L.throttleRange, L.throttleCardHint, {
+      w:value(L.throttle, throttleNow),
+      locked(w:button(function() return r.record and L.useRange or L.record end, function()
+        if r.record then
+          if r.high - r.low < 300 then w.message = L.travelShort; return end
+          r.record = nil
+          w:field("rc_config", "rc_min_throttle", r.low + 20)
+          w:field("rc_config", "rc_max_throttle", r.high - 20)
+          return
+        end
         local channels=w:channelSnapshot("rx_channels")
         local v=channels and channels[(w.data.rx_map.throttle or 4)+1]
         if type(v)~="number" or v<=500 then w.message=L.waitChannels;return end
         r.low,r.high,r.record=v,v,true;w.message=L.throttleSwitchRange
-      end),
-      w:value(L.range, function() return r.high>0 and string.format("%d / %d", r.low, r.high) or "--" end),
-      w:button(L.useRange, function()
-        if r.high - r.low < 300 then w.message = L.travelShort; return end
-        r.record = nil
-        w:field("rc_config", "rc_min_throttle", r.low + 20)
-        w:field("rc_config", "rc_max_throttle", r.high - 20)
-      end)
-    },nil,"throttle"),
-    w:cardDef(L.throttleRange, L.armThrottleHint, {
-      w:n("rc_config", "rc_min_throttle", L.minimum, 0, 2100),
-      w:n("rc_config", "rc_max_throttle", L.maximum, 0, 2100),
-      w:button(L.defaults, function()
-        w:field("rc_config", "rc_min_throttle", 0); w:field("rc_config", "rc_max_throttle", 0)
-      end),
-      w:value(L.throttleLow, function()
-        local v = mapped(5)(); local zero = w.data.rc_config.rc_min_throttle
-        if zero == 0 then zero = H.round(w.data.rc_config.rc_center - 0.9 * w.data.rc_config.rc_deflection) end
-        return type(v) == "number" and v > 0 and v < zero - 5 and L.yes or L.no
-      end)
-    })
+      end)),
+      locked(w:n("rc_config", "rc_min_throttle", L.minimum, 0, 2100)),
+      locked(w:n("rc_config", "rc_max_throttle", L.maximum, 0, 2100))
+    },nil,"throttle")
   }
-  cards[1].summary=L.receiverQuick
-  cards[2].summary=L.channelQuick
-  cards[3].summary=L.sticksQuick
-  cards[4].summary=L.travelQuick
-  cards[5].summary=L.throttleQuick
+  local function lockedSummary(text) return function() return unlocked() and text or L.receiverLocked end end
+  cards[1].summary=function() return unlocked() and L.receiverUnlocked or L.receiverWarning end
+  cards[1].summaryColor, cards[1].summaryBold = "warning", true
+  cards[2].summary=lockedSummary(L.channelQuick)
+  cards[3].summary=function() return r.wrong or prompt() end
+  cards[3].summaryColor, cards[3].summaryBold = "accent", true
+  cards[3].dense = true
+  cards[4].summary=function()
+    if r.record then return r.high>0 and string.format(L.throttleRecording, r.low, r.high) or L.throttleSwitchRange end
+    return unlocked() and L.throttleQuick or L.receiverLocked
+  end
   -- Keep the cards present when the protocol is edited; the rows report applicability live.
   for _,kind in ipairs({"overview","settings"}) do
     local card=w:cardDef(kind=="overview" and L.linkTitle or L.linkSettings,L.linkHint,{

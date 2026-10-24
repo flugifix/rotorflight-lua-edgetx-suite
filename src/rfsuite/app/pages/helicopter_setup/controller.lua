@@ -3,7 +3,7 @@ local BASE = "/SCRIPTS/TOOLS/rfsuite-core/"
 local READS = { "status", "boxnames", "boxids", "mode_ranges", "mode_ranges_extra", "adjustment_ranges",
   "feature_config", "board_info", "telemetry_config", "board_alignment_config", "serial_config", "rx_map", "rx_config", "rc_config",
   "motor_config", "esc_sensor_config", "governor_config", "mixer_config", "mixer_input",
-  "servo_configurations", "servo", "rc_tuning", "tail_motor_output" }
+  "servo_configurations", "servo", "rc_tuning", "tail_motor_output", "name" }
 local STEPS = { "sensors", "receiver", "modes", "profiles", "rates", "swash", "servoType", "governor", "motor",
   "connect", "throttle", "escTelemetry", "servos", "direction", "level", "pitch", "tail", "gyro", "finish" }
 local function copy(v)
@@ -388,7 +388,7 @@ function M.new(runtime, transport, mathModule, labels)
       if step == 11 then self.calibratedEsc, self.escStage = nil, nil end
       if step == 5 then self.rateStyles, self.rateLoaded = {}, nil end
       -- Stick travel is measured anew on every visit to the receiver step.
-      if step == 2 and self.rx then self.rx.travel, self.rx.travelSig = nil, nil end
+      if step == 2 and self.rx then self.rx.travel, self.rx.travelSig, self.rx.advanced = nil, nil, nil end
     end
     -- Full throttle must remain active while the battery instruction is displayed.
     -- Back and every other transition still release all overrides.
@@ -620,8 +620,11 @@ function M.new(runtime, transport, mathModule, labels)
     if time - (self.lastPoll or 0) < 20 then return end
     self.lastPoll = time
     local attitudeCheck=self.step==1 and self.cards and self.cards[self.card] and self.cards[self.card].art=="attitude"
-    self.pollIndex = (self.pollIndex or 0) % (attitudeCheck and 4 or 3) + 1
-    local api = attitudeCheck and (self.pollIndex%2==1 and "attitude" or self.pollIndex==2 and "status" or "servo") or
+    -- Switch learning reads the channels three polls in four; STATUS keeps its turn.
+    local switches=self.step==3 or self.step==4
+    self.pollIndex = (self.pollIndex or 0) % ((attitudeCheck or switches) and 4 or 3) + 1
+    local api = switches and (self.pollIndex==1 and "status" or "rc") or
+      attitudeCheck and (self.pollIndex%2==1 and "attitude" or self.pollIndex==2 and "status" or "servo") or
       self.pollIndex == 1 and "status" or self.pollIndex == 2 and "servo" or
       ({ [1] = "attitude", [2] = "rx_channels", [3] = "rc", [4] = "rc", [10] = "motor", [11] = "motor",
         [12] = "motor_telemetry", [14] = "rc_command", [17] = self:motorised() and "motor" or "rc_command" })[self.step]

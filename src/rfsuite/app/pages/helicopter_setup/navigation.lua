@@ -95,8 +95,11 @@ function M.attach(w, ctx)
     end
     if not self.modelPreparationRequired or self.modelPreparationDone then return false end
     self.cards={self:cardDef(self.L.modelPreparationTitle,self.L.modelPreparationIntro.."\n"..self.L.modelPreparationHint.."\n"..
-      self.L.activeModel..": "..self.activeModelName.."\n\n"..self.L.sensorsHint,{
-      self:value(self.L.activeModel,function() return self.activeModelName end),
+      self.L.activeModel..": "..self.activeModelName.."\n"..self.L.craftNameHint.."\n\n"..self.L.sensorsHint,{
+      -- The flight controller's own name, set here once so every later screen can show it.
+      { kind = "text", label = self.L.craftName, length = 16,
+        get = function() return self.data.name and self.data.name.name or "" end,
+        set = function(v) if self.data.name then self:field("name", "name", v) end end },
       self:check("modelReady",self.L.modelChecked),
       -- Prerequisites checked up front: the two packed FC state sensors the hints depend on.
       self:value(self.L.fcStatusSensor,function() return self:sensorState(self.systemStatus) end),
@@ -106,7 +109,7 @@ function M.attach(w, ctx)
         return listed and self.L.fcSensorsListed or listed == nil and self.L.fcSensorsUnread or self.L.addFcSensors
       end, function() self:addFcSensors() end, function() return self:fcSensorsListed() == false end)
     })}
-    self.cards[1].summary=self.L.modelPreparationIntro
+    self.cards[1].summary=self.L.modelPreparationIntro.."\n"..self.L.activeModel..": "..self.activeModelName
     self.card,self.modelPreparationCard=1,true
     return true
   end

@@ -52,10 +52,15 @@ function M.new(w, ctx, diagrams)
   button(8, height-controlH-6, math.floor(width * 0.25), w.L.back, function() w:back() end,
     function() return not w.transition end)
   if not w.historyMode and not w.overview and not w.confirmExit and w.requestSteps then
-    button(8, 2, width-controlH-20, title, function() w:requestSteps() end,
+    -- Leaving is a visible button of its own; the title still does the same.
+    local exitW = large and 120 or 76
+    button(8, 2, width-controlH-exitW-26, title, function() w:requestSteps() end,
       function() return w.canEdit == true end)
     all[#all].h, all[#all].font = large and 44 or 24, large and MIDSIZE or SMLSIZE
     all[#all].textColor = palette.accent
+    button(width-controlH-exitW-12, 2, exitW, w.L.exit, function() w:requestSteps() end,
+      function() return w.canEdit == true end)
+    all[#all].h, all[#all].textColor = large and 44 or 24, palette.accent
   end
   button(width-controlH-6, 2, controlH, "?", function()
     local current = w.cards and w.cards[w.card]
@@ -137,6 +142,9 @@ function M.new(w, ctx, diagrams)
     all[#all + 1] = label(10, large and 94 or 48, large and not card.grid and formX-30 or width-20, card.summary or card.detail)
     all[#all].h = large and (card.grid and 30 or illustrated and 98 or height-controlH-154) or rowY-52
     all[#all].color = palette.muted
+    -- A card may lead with a warning or a live prompt instead of a muted summary.
+    if card.summaryColor then all[#all].color = palette[card.summaryColor] or all[#all].color end
+    if card.summaryBold and height > 272 then all[#all].font = BOLD end
     end
     if illustrated then
       local artY = large and 204 or rowY+4
@@ -176,6 +184,10 @@ function M.new(w, ctx, diagrams)
           all[#all + 1] = { type = "choice", x = formX+formW-editW, y = y, w = editW, h = controlH,
             title = r.label, values = r.values, get = r.get,
             set = function(v) w:applyEdit(function() if editable() then r.set(v) end end) end, active = enabled }
+        elseif r.kind == "text" then
+          all[#all + 1] = { type = "textEdit", x = formX+formW-editW, y = y, w = editW, h = controlH,
+            value = r.get(), length = r.length or 16, active = enabled,
+            set = function(v) w:applyEdit(function() if editable() then r.set(v) end end) end }
         else
           local pendingEdit, pendingValue
           local function get()
