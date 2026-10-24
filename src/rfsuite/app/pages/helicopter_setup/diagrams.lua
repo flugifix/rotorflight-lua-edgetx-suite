@@ -26,6 +26,15 @@ function M.append(children, w, card, x, y, width, height)
     children[#children+1] = item
     return item
   end
+  -- A line whose points come from a getter has no native object until its first points pass,
+  -- and EdgeTX runs the visible getter first: hiding it then flags a null object and the radio
+  -- faults (lua_lvgl_widget.cpp: LvglWidgetObjectBase::callRefs, LvglWidgetLine::isVisible).
+  -- Such a line therefore reports itself visible until its points have been read once.
+  local function reactiveLine(item, visible)
+    local get, drawn = item.pts, false
+    item.pts = function() drawn = true; return get() end
+    item.visible = function() return not drawn or visible() end
+  end
   local function rect(a,b,c,d,color)
     local item = { type = "rectangle", x = px(a), y = py(b),
       w = px(a+c)-px(a), h = py(b+d)-py(b), color = color or ink, thickness = 2 }
@@ -127,10 +136,8 @@ function M.append(children, w, card, x, y, width, height)
       end
       prepared[i]=points(p)
     end
-    local curve=line({{22,128},{207,28}},accent,3)
-    curve.pts=function()
-      return prepared[style() or 2]
-    end
+    -- The sketch shows only while no style is known, so its curve is the static Sport example.
+    line({{0,0},{0,0}},accent,3).pts=prepared[2]
     text(5,140,210,L.artExample)
     line({{22,128},{22,132}});line({{207,128},{207,132}})
     for i=sketchStart,#children do children[i].visible=function() return style()==nil end end
@@ -177,7 +184,7 @@ function M.append(children, w, card, x, y, width, height)
     w.refreshPulse()
     local wave=line({{10,112},{210,112}},accent,2)
     wave.pts=function() return pts end
-    wave.visible=function() return not preset and valid end
+    reactiveLine(wave,function() return not preset and valid end)
     text(5,29,210,function() return caption end)
     text(5,140,210,function() return windowText end)
     line({{10,120},{210,120}});line({{10,117},{10,124}});line({{210,117},{210,124}})

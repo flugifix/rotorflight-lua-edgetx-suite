@@ -2046,6 +2046,32 @@ return function(h)
     w.trial={api="esc_sensor_trial",untilAt=getTime()-1,due=0};w:trialTick()
     eq(w.message,L.detectTimeout,"CORE trial deadline is explicit")
   end)
+  case("VISUAL.line-visible-before-points",function()
+    -- EdgeTX evaluates a line's visible getter before its points getter, and a line with a points
+    -- getter has no native object until then: hiding it on that first pass faults the radio.
+    local w=world();settle(w);local diagrams=load("app/pages/helicopter_setup/diagrams.lua")
+    local view=load("app/pages/helicopter_setup/view.lua")
+    local names={"sensors","receiver","modes","profiles","rates","swash","servoType","governor","motor",
+      "connect","throttle","escTelemetry","servos","direction","level","pitch","tail","gyro","finish"}
+    local checked,kinds=0,{}
+    for index,name in ipairs(names) do
+      w.step=index;local cards=step(w,name)
+      if name=="rates" then for _,p in ipairs(w.rateProfiles) do w.rateStyles[p]=2 end end
+      for card=1,#cards do
+        w.cards,w.card=cards,card
+        local job=view.new(w,{w=480,h=320},diagrams)
+        while not job.done do job:step() end
+        for _,item in ipairs(job.children) do
+          if item.type=="line" and type(item.pts)=="function" and type(item.visible)=="function" then
+            checked=checked+1;kinds[cards[card].art or "?"]=true
+            check(item.visible()==true,"VISUAL a line with a points getter is visible before its first points pass: "..name.." card "..card)
+            item.pts()
+          end
+        end
+      end
+    end
+    check(checked>0 and kinds.pulses and kinds.attitude,"VISUAL the first-pass rule covered the pulse wave and the attitude view")
+  end)
   case("VISUAL.cached-reactivity",function()
     local w=world();local diagrams=load("app/pages/helicopter_setup/diagrams.lua")
     local view=load("app/pages/helicopter_setup/view.lua")
