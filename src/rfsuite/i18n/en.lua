@@ -668,7 +668,7 @@ return {
         controlDirections = "Control directions",
         bladePitch = "Blade pitch",
         gyroCheck = "Gyro check",
-        help = "Back: previous task or Suite; pending changes offer Save/Discard. Continue: next task. Save & next: store changes and complete the step.\nThrottle range needs no Advanced. ELRS changes ask for confirmation; the link may drop briefly.\nGovernor: select the RPM source, then Save and reboot. Check live RPM in ESC telemetry with the motor running and all blades removed.",
+        help = "Back: previous task or return to the Suite; pending changes offer Save/Discard.\nContinue: next task; remove all blades and follow the task instructions.\nSave & next: store acknowledged changes and complete this step.",
         help_title = "Helicopter Setup",
         exit = "Exit",
         advanced = "Advanced",

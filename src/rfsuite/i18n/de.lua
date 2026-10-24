@@ -668,7 +668,7 @@ return {
         controlDirections = "Steuerrichtungen",
         bladePitch = "Blattpitch",
         gyroCheck = "Kreiselprüfung",
-        help = "Zurück: vorherige Aufgabe oder Suite; bei Änderungen Speichern/Verwerfen. Weiter: nächste Aufgabe. Speichern & weiter: speichern und Schritt abschließen.\nGasbereich ohne Erweitert. ELRS-Änderungen fragen nach Bestätigung; die Verbindung kann kurz abbrechen.\nGovernor: Drehzahlquelle wählen, speichern und neu starten. Aktuelle Drehzahl unter ESC-Telemetrie bei laufendem Motor prüfen, alle Blätter abnehmen.",
+        help = "Zurück: vorherige Aufgabe oder Suite-Menü; bei Änderungen Speichern/Verwerfen wählen.\nWeiter: nächste Aufgabe; alle Blätter abnehmen und die Aufgabenhinweise beachten.\nSpeichern & weiter: bestätigte Änderungen speichern und diesen Schritt abschließen.",
         help_title = "Helikopter einrichten",
         exit = "Beenden",
         advanced = "Erweitert",
