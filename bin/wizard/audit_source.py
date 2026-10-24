@@ -5,17 +5,18 @@ an explicitly supplied snapshot; CI validates the checked-in map by itself.
 """
 import argparse
 import hashlib
-import json
 from pathlib import Path
 import re
+
+from lua_source import i18n_keys, load_mapping, string_calls
 
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source',type=Path)
     args=parser.parse_args()
-    mapping=json.loads(Path('bin/wizard/source-map.json').read_text(encoding='utf-8'))
-    contracts=set(re.findall(r'case\("([^"\n]+)"',Path('bin/wizard/contracts.lua').read_text(encoding='utf-8')))
+    mapping=load_mapping()
+    contracts=set(string_calls(Path('bin/wizard/contracts.lua').read_text(encoding='utf-8'), 'case'))
     files=mapping['files']
     additions=mapping.get('additions',[])
     written=set()
@@ -25,6 +26,11 @@ def main():
         assert addition['adaptation'] and addition['targets'] and addition['contracts'], 'Unmapped Suite addition'
         for target in addition['targets']:
             assert Path(target).is_file(), f'Missing addition target: {target}'
+        for target, keys in addition.get('flow_cards', {}).items():
+            assert target in addition['targets'], f'Flow cards outside addition targets: {target}'
+            source=Path(target).read_text(encoding='utf-8')
+            for key in keys:
+                assert re.search(r'\bL\.'+re.escape(key)+r'\b',source), f'Untraceable added card: {target}:{key}'
         for contract in addition['contracts']:
             assert contract in contracts, f'Missing addition contract: {contract}'
         wizard='\n'.join(Path(p).read_text(encoding='utf-8') for p in addition['targets'])
@@ -70,7 +76,7 @@ def main():
     for source in (shared,link):
         assert not re.search(r'0x(?:A5|FD|FF)|\b(?:217|218|255)\b|FIELD_SPEC|buildWritePayload|\.parse\(',source), 'ESC codec duplicated outside existing APIs'
     assert 'status.decode(signature)' in shared, 'Restart detection must use esc_status'
-    mode_keys=re.findall(r'@i18n\((app\.pages\.setup_esc_motors\.mode_\w+)\)@',shared)
+    mode_keys=i18n_keys(shared, 'app.pages.setup_esc_motors.mode_')
     assert len(mode_keys)==len(set(mode_keys))==11, 'Mode option keys must have one family descriptor definition'
     assert 'family.modes[value]' in link and 'local names =' not in link, 'Wizard must use descriptor mode options'
     throttle=Path('src/rfsuite/app/pages/setup/esc_motors/throttle/page.lua').read_text(encoding='utf-8')

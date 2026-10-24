@@ -5,6 +5,13 @@
     {
       "id": "governor-targets-ramps-and-filter-signal",
       "beyond_configurator": true,
+      "flow_cards": {
+        "src/rfsuite/app/pages/helicopter_setup/steps/governor.lua": [
+          "headspeedProfile",
+          "rampTimes",
+          "rpmFilter"
+        ]
+      },
       "targets": [
         "src/rfsuite/app/pages/helicopter_setup/steps/governor.lua",
         "src/rfsuite/app/pages/helicopter_setup/controller.lua",
