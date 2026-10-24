@@ -28,6 +28,11 @@ function M.new(w)
   function c:usable()
     return self:current() and self:applies() and w:usable()
   end
+  -- A rate or ratio change can cut the link the wizard runs over: it waits for the receiver
+  -- step's Advanced switch, like every other receiver setting. Reading stays open.
+  function c:writable()
+    return self:usable() and w.rx ~= nil and w.rx.advanced == true and not self:busy()
+  end
   function c:refresh()
     -- A new cards identity retires the native scene and its controls before publishing new rows.
     local cards={};for i,card in ipairs(w.cards or {}) do cards[i]=card end
@@ -98,7 +103,7 @@ function M.new(w)
     end,true)
   end
   function c:sync(mode)
-    if not self:usable() or self:busy() then return end
+    if not self:writable() then return end
     if next(w.dirty) then self:notice(L.saveFirst);return end
     local dialog=w:loadModule("ui/confirm_dialog.lua")
     local epoch=self.epoch
@@ -107,7 +112,7 @@ function M.new(w)
         L.linkFc,self:boardText(),L.linkModule,self:moduleText()),
       onConfirm=function()
         -- Native dialogs may outlive this visit or STATUS. A missing fresh lock is never a yes.
-        if epoch~=self.epoch or not self:usable() or self:busy() or next(w.dirty) then
+        if epoch~=self.epoch or not self:writable() or next(w.dirty) then
           self:notice(L.linkCancelled);return
         end
         self:bind();w.linkNotice=nil;self.started=true;self.rewalk=true;task.start(mode)
@@ -129,7 +134,7 @@ function M.new(w)
     end
     if #values==0 then return w:value(label,function() return L.linkNoOptions end) end
     return {kind="choice",label=label,values=values,
-      enabled=function() return self:applies() and not self:busy() end,
+      enabled=function() return self:writable() end,
       get=function()
         if not self:applies() then return 0 end
         local current=kind=="rate" and task.getRateField() or task.getRatioField()
@@ -137,7 +142,7 @@ function M.new(w)
         return 0
       end,
       set=function(value)
-        if not self:usable() or self:busy() then return end
+        if not self:writable() then return end
         local current=kind=="rate" and task.getRateField() or task.getRatioField()
         local index=indices[value]
         if current and index~=nil and index~=current.selectedIndex then
@@ -149,9 +154,9 @@ function M.new(w)
     self.card.summary=function() return self.summary end
     self.card.rows={
         w:button(L.linkUseFc,function() self:sync(task.MODE_ROTORFLIGHT_TO_ELRS) end,
-          function() return self:applies() and not self:busy() end),
+          function() return self:writable() end),
         w:button(L.linkUseModule,function() self:sync(task.MODE_ELRS_TO_ROTORFLIGHT) end,
-          function() return self:applies() and not self:busy() end),
+          function() return self:writable() end),
         self:picker("rate",L.linkRate),self:picker("ratio",L.linkRatio)}
   end
   function c:updateSummary()

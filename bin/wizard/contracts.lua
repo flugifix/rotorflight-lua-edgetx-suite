@@ -517,6 +517,17 @@ return function(h)
     eq(cards[3].summary(),L.stickReversed,"S02 roll moved left while right is asked names the reversed channel")
     values[w.data.rx_map.aileron+1]=1500;values[w.data.rx_map.elevator+1]=2000;w.onLive("rx_channels",raw())
     eq(cards[3].summary(),string.format(L.stickWrongChannel,L.pitch),"S02 another control moving names it")
+    values[w.data.rx_map.elevator+1]=1500;values[w.data.rx_map.aileron+1]=2000;w.onLive("rx_channels",raw())
+    values[w.data.rx_map.aileron+1]=2000;w.onLive("rx_channels",raw())
+    eq(cards[3].summary(),string.format(L.stickGuide,L.pitch,L.dirBack),"S02 a roll resting at the end stop just reached is no reversal")
+    values[w.data.rx_map.aileron+1]=1500;values[w.data.rx_map.collective+1]=1150;w.onLive("rx_channels",raw())
+    check(cards[3].summary()~=string.format(L.stickWrongChannel,L.roll),"S02 a roll returning to centre is no wrong control")
+    eq(cards[3].summary(),string.format(L.stickWrongChannel,L.collective),"S02 the collective moving away from centre is named")
+    w.onLive("rx_channels",raw())
+    eq(cards[3].summary(),string.format(L.stickWrongChannel,L.collective),"S02 the warning holds while the collective stays out")
+    values[w.data.rx_map.elevator+1]=1000;w.onLive("rx_channels",raw())
+    eq(cards[3].summary(),string.format(L.stickGuide,L.yaw,L.dirRight),"S02 a collective already parked low when the prompt appears is not named")
+    values[w.data.rx_map.elevator+1]=1500;values[w.data.rx_map.collective+1]=1500;w.onLive("rx_channels",raw())
     for i=1,4 do values[i]=1000 end;w.onLive("rx_channels",raw())
     for i=1,4 do values[i]=2000 end;values[w.data.rx_map.collective+1]=1950;w.onLive("rx_channels",raw())
     eq(cards[3].rows[1].get(),string.format(L.travelPair,100,100),"S02 full roll travel reads 100 both ways")
@@ -603,6 +614,12 @@ return function(h)
     -- A refused telemetry read on the card is not a wizard failure.
     h.setFailCommand(73);w.card=index;cards[index].enter();w:tick();drain(w);h.setFailCommand(nil)
     check(not w.error,"S02 a refused link read on the ELRS card does not fail the wizard")
+    local gated=0
+    for _,row in ipairs(cards[index].rows) do
+      if row.enabled then gated=gated+1;check(not row.enabled(),"S02 ELRS controls wait for Advanced") end
+    end
+    check(gated>0,"S02 the ELRS card has controls behind Advanced")
+    w.rx.advanced=true
     -- A picker write is followed by a fresh walk of the module.
     h.fixtures[73]=h.api("telemetry_config").simulatorResponse
     w.cards=cards;w.card=index;cards[index].enter();w:tick();drain(w);w:tick();drain(w)
@@ -651,6 +668,7 @@ return function(h)
     local links=0
     for i,c in ipairs(cards) do if c.link=="combined" then index=i;links=links+1 end end
     eq(links,1,"S02 receiver has one combined ELRS card")
+    w.rx.advanced=true
     check(index~=nil,"S02 inline ELRS card replaces the pointer")
     if not index then session.telemetryType=oldType;return end
     eq(loads,0,"S02 task stays unloaded on other receiver cards")
