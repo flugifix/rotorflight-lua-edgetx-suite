@@ -85,7 +85,7 @@ function Header.resolveActions(ctx)
       if HelpRegistry and HelpRegistry.hasHelp and HelpRegistry.hasHelp(menuId) then
         actions.help = true
       end
-      if menu.getCurrentMenuHelp and menu.getCurrentMenuHelp() then
+      if not actions.help and menu.getCurrentMenuHelp and menu.getCurrentMenuHelp() then
         actions.help = true
       end
     end
