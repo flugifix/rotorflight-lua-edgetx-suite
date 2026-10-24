@@ -24,6 +24,7 @@ end
 local Common = nil
 local Controls = nil
 local FlightLog = nil
+local ModelPreferences = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local t = nil
@@ -55,13 +56,14 @@ local ui = {
   registry = {},
   ordered = nil,
   page = 0,
+  builtThisPass = false,
   filterModel = nil,
   flight = nil,
   batteryId = nil,
   edit = nil,
   editMode = nil,
   editError = nil,
-  config = { enabled = false, min_seconds = 30, ask_on_connect = false, set_fc_profile = false },
+  config = { enabled = false, min_seconds = 30, set_fc_profile = false },
   requestRebuild = nil
 }
 
@@ -200,12 +202,10 @@ local function loadConfig(preferences)
   if type(section) == "table" then
     ui.config.enabled = section.enabled == true
     ui.config.min_seconds = tonumber(section.min_seconds) or 30
-    ui.config.ask_on_connect = section.ask_on_connect == true
     ui.config.set_fc_profile = section.set_fc_profile == true
   else
     ui.config.enabled = false
     ui.config.min_seconds = 30
-    ui.config.ask_on_connect = false
     ui.config.set_fc_profile = false
   end
 end
@@ -219,7 +219,7 @@ local function ensureLoaded(preferences)
 end
 
 -- ---------------------------------------------------------------------------
--- The battery for the next flight
+-- The dashboard's battery choice for this model
 -- ---------------------------------------------------------------------------
 
 local function selectedBatteryId()
@@ -231,18 +231,69 @@ local function selectedBatteryId()
   return FlightLog.storedBatteryId(session and session.modelPreferences)
 end
 
--- The choice is kept twice on purpose: in the session, where the arm edge reads it, and in the
--- model's own store, so that the same pack is offered again next time this craft is connected.
---
--- The recording itself is lib/battery_pick.lua's, and there is one implementation of it: the
--- dashboard's picker writes the same two places from the same code, so a pack picked here and a
--- pack picked there cannot end up recorded differently.
+-- The dashboard records this model's choice in the session and the model's store through
+-- lib/battery_pick.lua. This page only re-points that choice on a rename and clears it on a
+-- delete, using the same recording code to keep both places in agreement.
 local function selectBattery(id)
   local session = getSession()
   if type(session) ~= "table" then return end
   local BatteryPick = loadModule("lib/battery_pick.lua")
   if type(BatteryPick) ~= "table" or type(BatteryPick.select) ~= "function" then return end
   BatteryPick.select(session, id)
+end
+
+local function addModelRow(edit, name, priority)
+  if type(name) ~= "string" then return nil end
+  local label = FlightLog.trim(name)
+  if label == "" or label == "*" or string.find(label, "[,;%c]") ~= nil then return nil end
+  local key = string.lower(label)
+  local row = edit.byKey[key]
+  if row ~= nil then
+    if priority < row.priority then
+      local changed = row.label ~= label
+      row.label = label
+      row.priority = priority
+      return key, changed
+    end
+    return key, false
+  end
+  row = { key = key, label = label, priority = priority }
+  edit.byKey[key] = row
+  edit.rows[#edit.rows + 1] = row
+  return key, true
+end
+
+local function sortModelRows(edit)
+  table.sort(edit.rows, function(a, b) return a.key < b.key end)
+end
+
+-- The press callback has no instruction budget of its own, and reading every store costs more
+-- with every board the card holds. List once, then read one store per wakeup without a build.
+local function modelWalkStep(edit)
+  if edit.records == nil then
+    local ok, records = pcall(function()
+      if not ModelPreferences then ModelPreferences = loadModule("lib/model_preferences.lua") end
+      return ModelPreferences and ModelPreferences.listKnownModelIds()
+    end)
+    edit.records = (ok and type(records) == "table") and records or {}
+    edit.nextRecord = 1
+  else
+    local record = edit.records[edit.nextRecord]
+    edit.nextRecord = edit.nextRecord + 1
+    local ok, result = pcall(function() return ModelPreferences.readKnownModel(record) end)
+    if ok and type(result) == "table" then
+      local _, changed = addModelRow(edit, result.name, 1)
+      if changed then edit.addedRows = true end
+    end
+  end
+
+  if edit.nextRecord > #edit.records then
+    edit.walkDone = true
+    if edit.addedRows then
+      sortModelRows(edit)
+      requestRebuild()
+    end
+  end
 end
 
 -- ---------------------------------------------------------------------------
@@ -259,6 +310,8 @@ function M.getHeaderActions()
 end
 
 function M.wakeup(ctx)
+  local builtThisPass = ui.builtThisPass
+  ui.builtThisPass = false
   ensureDeps()
   if type(ctx) == "table" then
     if type(ctx.requestRebuild) == "function" then ui.requestRebuild = ctx.requestRebuild end
@@ -281,6 +334,10 @@ function M.wakeup(ctx)
       if type(collectgarbage) == "function" then collectgarbage("collect") end
       requestRebuild()
     end
+  end
+
+  if not builtThisPass and ui.edit ~= nil and not ui.edit.walkDone then
+    modelWalkStep(ui.edit)
   end
 end
 
@@ -350,7 +407,6 @@ function M.onSave(ctx)
   if type(ctx.preferences.flightlog) ~= "table" then ctx.preferences.flightlog = {} end
   ctx.preferences.flightlog.enabled = ui.config.enabled == true
   ctx.preferences.flightlog.min_seconds = math.floor(tonumber(ui.config.min_seconds) or 30)
-  ctx.preferences.flightlog.ask_on_connect = ui.config.ask_on_connect == true
   ctx.preferences.flightlog.set_fc_profile = ui.config.set_fc_profile == true
 
   if type(ctx.savePreferences) ~= "function" then return false end
@@ -390,11 +446,13 @@ function M.onClose()
   ui.editMode = nil
   ui.editError = nil
   ui.requestRebuild = nil
+  ui.builtThisPass = false
   resetAggregates()
   ui.registry = {}
   Common = nil
   Controls = nil
   FlightLog = nil
+  ModelPreferences = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
   t = nil
@@ -703,36 +761,36 @@ local function buildModels(children, x, y, w, h, i18n)
   end
 end
 
-local function batteryOptions(i18n)
-  local session = getSession()
-  local modelName = session and session.modelName or nil
-  local list = FlightLog.forModel(ui.registry, modelName or "")
-  local options = { { value = "", label = pageText(i18n, "battery_none", "None") } }
-  for i = 1, #list do
-    local entry = list[i]
-    options[#options + 1] = {
-      value = entry.id,
-      label = (type(entry.name) == "string" and entry.name ~= "") and entry.name or entry.id
-    }
-  end
-  return options
-end
-
 local function startEdit(entry)
-  local models = ""
-  if type(entry) == "table" and type(entry.models) == "table" then
-    models = table.concat(entry.models, ",")
-  end
   ui.edit = {
     originalId = entry and entry.id or nil,
     id = entry and entry.id or FlightLog.freeId(ui.registry),
     name = entry and entry.name or "",
     cap = tonumber(entry and entry.cap) or 0,
     cells = tonumber(entry and entry.cells) or 0,
-    models = models,
+    rows = {},
+    byKey = {},
+    on = {},
     profile = tonumber(entry and entry.profile) or 0,
     cycles = tonumber(entry and entry.cycles) or 0
   }
+  local edit = ui.edit
+  local session = getSession()
+  addModelRow(edit, session and session.modelName, 2)
+  for i = 1, #ui.modelOrder do
+    addModelRow(edit, ui.modelOrder[i], 3)
+  end
+  if type(entry) == "table" and type(entry.models) == "table" then
+    local allModels = false
+    for i = 1, #entry.models do
+      local name = entry.models[i]
+      if FlightLog.trim(name) == "*" then allModels = true end
+      local key = addModelRow(edit, name, 4)
+      if key ~= nil then edit.on[key] = true end
+    end
+    if allModels then edit.on = {} end
+  end
+  sortModelRows(edit)
   ui.editMode = entry and "edit" or "create"
   ui.editError = nil
 end
@@ -761,7 +819,12 @@ local function saveEdit(i18n)
     return
   end
 
-  local models = edit.models
+  local names = {}
+  for i = 1, #edit.rows do
+    local row = edit.rows[i]
+    if edit.on[row.key] then names[#names + 1] = row.label end
+  end
+  local models = FlightLog.sanitizeModelList(table.concat(names, ","))
   if FlightLog.trim(models) == "" then models = false end
 
   local result
@@ -795,9 +858,8 @@ local function saveEdit(i18n)
 
   loadRegistry()
 
-  -- The pack for the next flight is remembered by id, so a rename has to take the choice with it.
-  -- Left behind, the old id names no pack: the list offers it as unknown and refuses to re-select
-  -- it, and the flight is logged against an id the registry no longer has.
+  -- Re-point the dashboard's choice for this model when its pack id changes. selectBattery
+  -- updates both the session and the model's store through lib/battery_pick.lua.
   if edit.originalId ~= nil and edit.originalId ~= id and selectedBatteryId() == edit.originalId then
     selectBattery(id)
   end
@@ -859,13 +921,6 @@ local function buildBatteryForm(children, x, y, w, h, i18n)
       set = function(value) edit.cells = math.floor(tonumber(value) or 0) end
     })
 
-  cursorY = cursorY + Controls.appendTextField(children, x, cursorY, w,
-    pageText(i18n, "battery_models", "Models"), {
-      length = 32,
-      get = function() return edit.models end,
-      set = function(value) edit.models = FlightLog.sanitizeModelList(value) end
-    })
-
   cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w,
     pageText(i18n, "battery_profile", "Battery profile"), {
       min = 0,
@@ -881,6 +936,25 @@ local function buildBatteryForm(children, x, y, w, h, i18n)
       get = function() return math.floor(tonumber(edit.cycles) or 0) end,
       set = function(value) edit.cycles = math.floor(tonumber(value) or 0) end
     })
+
+  -- All models is derived: on exactly when no row is on, and stored as an empty list.
+  appendLabel(children, x + 6, cursorY, w - 12, pageText(i18n, "battery_models", "Models"), COLOR_THEME_PRIMARY1)
+  cursorY = cursorY + 22
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+    pageText(i18n, "models_all", "All models"),
+    function() return next(edit.on) == nil end,
+    function(value)
+      if value == true then edit.on = {} end
+    end)
+  for i = 1, #edit.rows do
+    local row = edit.rows[i]
+    cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+      row.label,
+      function() return edit.on[row.key] == true end,
+      function(value)
+        edit.on[row.key] = value == true or nil
+      end)
+  end
 
   -- The date of last use is not offered: it is a record of what happened, not a setting.
   cursorY = cursorY + 8
@@ -908,8 +982,8 @@ local function confirmDelete(entry, i18n)
       ui.editError = errorText(i18n, result)
     else
       loadRegistry()
-      -- Same reason as a rename: the pack for the next flight cannot be one that has just been
-      -- removed from the registry.
+      -- Clear the dashboard's choice for this model if its pack is deleted. selectBattery
+      -- clears both the session and the model's store through lib/battery_pick.lua.
       if selectedBatteryId() == entry.id then selectBattery(nil) end
       ui.batteryId = nil
       ui.view = "batteries"
@@ -981,15 +1055,6 @@ end
 local function buildBatteries(children, x, y, w, h, i18n)
   local cursorY = y
 
-  cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-    pageText(i18n, "battery_for_next", "Battery for the next flight"),
-    batteryOptions(i18n),
-    selectedBatteryId() or "",
-    function(value)
-      selectBattery((type(value) == "string" and value ~= "") and value or nil)
-      requestRebuild()
-    end)
-
   cursorY = cursorY + 6
   appendButton(children, x + 6, cursorY, 120, 30, pageText(i18n, "new_battery", "New battery"), function()
     startEdit(nil)
@@ -1053,13 +1118,6 @@ local function buildSettings(children, x, y, w, h, i18n)
     })
 
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    pageText(i18n, "setting_ask_on_connect", "Ask which pack after connecting"),
-    function() return ui.config.ask_on_connect == true end,
-    function(value)
-      ui.config.ask_on_connect = value == true
-    end)
-
-  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     pageText(i18n, "setting_set_fc_profile", "Set the pack's battery profile"),
     function() return ui.config.set_fc_profile == true end,
     function(value)
@@ -1071,6 +1129,7 @@ local function buildSettings(children, x, y, w, h, i18n)
 end
 
 function M.build(ctx)
+  ui.builtThisPass = true
   ensureDeps()
   ui.requestRebuild = ctx and ctx.requestRebuild or nil
   ensureLoaded(ctx and ctx.preferences)

@@ -584,6 +584,27 @@ local function findLine(data, want)
   return nil
 end
 
+-- Reads registry text with the rewrite size cap; a known size must match the bytes read.
+-- A failed or incomplete read of a non-empty file answers "unreadable".
+function M.readRegistry()
+  local path = M.registryPath()
+  local size = fileSize(path)
+  if size ~= nil and size > READ_CAP then return nil, "toobig" end
+  local data = readAll(path, READ_CAP)
+  if size == nil and data ~= nil and #data >= READ_CAP then return nil, "toobig" end
+  if size ~= nil and ((data == nil and size > 0) or (data ~= nil and #data ~= size)) then
+    return nil, "unreadable"
+  end
+  return data, nil
+end
+
+-- The same line lookup markUsed makes, without parsing the registry into pack tables.
+function M.hasBattery(data, id)
+  if data == nil or data == "" then return false end
+  local want = trim(id)
+  return want ~= "" and findLine(data, want) ~= nil
+end
+
 -- A ";" would end the field and a line break the line, so neither may reach a value.
 local function cleanValue(value)
   if type(value) == "number" then return string.format("%d", math.floor(value)) end
@@ -650,18 +671,23 @@ end
 --
 -- Returns false rather than raising when there is nothing to stamp: the count is a convenience
 -- and losing one must never cost the flight line that was just written.
-function M.markUsed(batteryId, dt)
+-- Optional `data` is the complete text from readRegistry; nil reads it here instead. A missing
+-- or empty registry answers "noregistry", and an id without a line answers "notfound".
+function M.markUsed(batteryId, dt, data)
   local path = M.registryPath()
   -- The same guarded read the editing calls use: a rewrite may never be built on a read that
   -- could have been cut short, and there is no reason for this one to guard itself differently.
-  local data, err = guardedRead(path)
-  if err ~= nil then return false, err end
-  if data == nil then return false end
+  if data == nil then
+    local err
+    data, err = guardedRead(path)
+    if err ~= nil then return false, err end
+  end
+  if data == nil or data == "" then return false, "noregistry" end
   local want = trim(batteryId)
   if want == "" then return false end
 
   local start, contentEnd = findLine(data, want)
-  if start == nil then return false end
+  if start == nil then return false, "notfound" end
 
   local line = string.sub(data, start, contentEnd)
   -- The two fields that are rewritten are anchored by a frontier, so the match may only begin
@@ -765,7 +791,7 @@ end
 -- "," separates the names and "*" stands for every model. Only ";", which separates the fields of
 -- a registry line, and control characters are removed. Each name is trimmed on its own, so
 -- "a, b" and "a,b" are the same list, and an empty one is dropped rather than kept as a name that
--- nothing can ever match.
+-- nothing can ever match. The joined list is kept whole, however many models it names.
 function M.sanitizeModelList(value)
   local cleaned = string.gsub(tostring(value or ""), "[;%c]", "")
   local names = {}
@@ -777,7 +803,7 @@ function M.sanitizeModelList(value)
     if at == nil then break end
     from = at + 1
   end
-  return string.sub(table.concat(names, ","), 1, 32)
+  return table.concat(names, ",")
 end
 
 M.trim = trim

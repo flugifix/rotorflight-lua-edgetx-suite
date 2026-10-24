@@ -39,6 +39,8 @@ controller's slots (*Active ranges*), and whether there are unsaved changes.
 - While the save runs the page is covered by its progress, so a range cannot be changed half-way
   through it; Save and Reload pressed in the header meanwhile do nothing.
 - Reload reads every range from the flight controller again and discards every unsaved change.
+- If that read does not complete, only a sentence saying the settings could not be read is shown
+  in place of the ranges. Reload reads again; Save stays refused until a read completes.
 
 ## Related
 

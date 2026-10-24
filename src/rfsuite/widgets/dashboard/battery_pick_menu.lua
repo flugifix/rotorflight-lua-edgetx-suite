@@ -1,4 +1,4 @@
--- The battery picker the dashboard shows in fullscreen when the flight log's prompt is on and
+-- The battery picker the dashboard shows in fullscreen when the flight log is on and
 -- the pilot has not answered it yet for this connection.
 --
 -- It is the picker the widget draws for every theme that does not draw its own -- a free-form
@@ -137,8 +137,7 @@ function M.build(children, widget)
 
   -- NO BATTERY has the foot row to itself, reserved before the packs are laid out, so it can
   -- never be the entry that falls off the screen. The pack grid is cut, not scrolled: packs past
-  -- what fits above it are not drawn. The Flight Log page can record one of them as the pack in
-  -- use, but a pick there does not switch the flight controller's battery profile.
+  -- what fits above it are not drawn.
   local noneY = bottom - btnH
   local gridBottom = noneY - gapY
 

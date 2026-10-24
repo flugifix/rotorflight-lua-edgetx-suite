@@ -138,6 +138,7 @@ finish. The tool and the background decoder are not stopped that way.
 
 ## The other files beside them
 
+- `journal/<mcu id>.lua` — the append-only [change journal](change-journal.md), recording each value committed by the Tune Advisor.
 - `reload.req` — a few bytes the tool writes when you save, so the dashboard widget knows to
   re-read the settings. Unchanged by the move to Lua files. Do not delete it while the suite is
   running.

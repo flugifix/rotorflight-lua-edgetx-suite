@@ -77,10 +77,10 @@ telemetry page, and the next log has one column of each name.
 
 ## The graph
 
-*Graph* opens a plot of the log over time. Choose up to four columns, or one of the offered sets
-(*Power*, *Battery*, *Link*, *Governor*, whichever this log can serve), and press *Show*. Zoom,
-page and a cursor readout work on the plotted flight; where the log holds more than one flight,
-the chooser also offers which one.
+*Graph* opens a plot of the log over time. Choose up to four columns, one per *Curve*, or one of
+the offered sets (*Power*, *Battery*, *Link*, *Governor*, whichever this log can serve), and
+press *Show*. Zoom, page and a cursor readout work on the plotted flight; where the log holds
+more than one flight, the chooser also offers which one.
 
 The graph needs the `Date` and `Time` columns and at least one row whose time it can read, written
 the way EdgeTX writes it (`HH:MM:SS.mmm`). A file that lacks either says so instead of offering

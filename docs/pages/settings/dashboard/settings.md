@@ -45,7 +45,7 @@ page, for one -- while its tiles are made, sixteen at a time, and then all of th
 
 | Setting | What it does |
 | --- | --- |
-| Minimum, Maximum | The battery voltage the gauge spans. |
+| Minimum, Maximum | The battery voltage the gauge spans. Editing either limit saves both as an explicit range. Saving another option leaves an automatic or inherited range unchanged. |
 | Colour at alert levels | Off by default. On, the link quality box turns amber at the *Warning (%)* and red at the *Critical (%)* of the *Link Quality* announcement (*Settings* → *Audio* → *Events* → *Link*) — but only while that announcement is switched on; with it off, or with this setting off, the box draws as it always did. |
 
 A theme may split its settings into pages. Its tile then opens a second grid, one tile per
@@ -53,6 +53,12 @@ page, and each of those opens part of the theme's settings — the same settings
 page fits the screen. Themes that do not split show their settings directly.
 
 ## Notes
+
+- The voltage forms of Default, RF Status, @RT-RC and @RT-RC Nitro keep their existing range
+  when neither voltage field was edited. An automatic range therefore stays automatic after
+  saving another option. Editing either field saves both limits; in model settings this also
+  preserves an explicit range equal to the theme's numeric defaults when the radio has none.
+  Reset the model's voltage overrides to return to the standard or automatic range.
 
 - Settings are stored per theme, so a theme copied into
   `/SCRIPTS/TOOLS/rfsuite.user/dashboard/` starts from its defaults rather than inheriting the

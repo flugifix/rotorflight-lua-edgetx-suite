@@ -411,6 +411,7 @@ local function passClass(widget)
   local job = widget._job
   if not job then return "state" end
   if job.kind == "splash" then return "splash" end
+  if job.kind == "standby" then return "standby" end
   if job.kind == "menu" then return "menu" end
   if job.kind == "tuning" or job.kind == "tuning_fs" then return "tuning" end
   if job.swap then return "swap" end
@@ -531,6 +532,73 @@ local function runScenario(themePath, passes)
     refs = Stubs.lvgl.refs,
     widget = widget,
   }
+end
+
+local function bytes(value)
+  local out = {}; for i = 1, #value do out[#out + 1] = string.byte(value, i) end
+  out[#out + 1] = 0; return out
+end
+local function append(out, values) for i = 1, #values do out[#out + 1] = values[i] end end
+local function elrsInfo(count)
+  local out = { 0xEA, 0xEE }; append(out, bytes("ELRS TX"))
+  append(out, { 0x45, 0x4C, 0x52, 0x53, 0, 0, 0, 1, 0, 4, 1, 0, count }); return out
+end
+local function elrsField(id, name, options, selected, unit)
+  local out = { 0xEA, 0xEE, id, 0, 0, 9 }; append(out, bytes(name)); append(out, bytes(table.concat(options, ";")))
+  append(out, { selected, 0, #options - 1, 0 }); append(out, bytes(unit or "")); return out
+end
+
+local function runStandbyScenario(layout, gps, elrsReplies, expectedTiles)
+  World.reset()
+  local savedGps = _G.getTxGPS
+  _G.getTxGPS = function() return gps end
+  local fields = {
+    elrsField(1, "Packet Rate", { "D250", "500Hz" }, 1),
+    elrsField(2, "Telem Ratio", { "Std", "Race", "Off", "1:128" }, 3),
+    elrsField(3, "Max Power", { "25", "1000" }, 1, "mW"),
+    elrsField(4, "Dynamic", { "Off", "Dyn", "AUX9" }, 2),
+  }
+  Stubs.onPush = function(command, data)
+    if not elrsReplies then return true end
+    if command == 0x28 then Stubs.pushFrame(0x29, elrsInfo(#fields))
+    elseif command == 0x2C and fields[data[3]] then Stubs.pushFrame(0x2B, fields[data[3]]) end
+    return true
+  end
+  local Runtime = World.require("widgets/dashboard/runtime.lua")
+  local widget = Runtime.new(ZONE, {})
+  widget.preferences = widget.preferences or {}
+  widget.preferences.dashboard = { theme_preflight = "system/default", standby_enabled = true, standby_layout = layout }
+  local worst, raised = {}, 0
+  for i = 1, 120 do
+    local class = passClass(widget)
+    local logSeq = _G.rfsuite.log_history_seq or 0
+    local n = count(widget.refresh, widget, 0, nil)
+    if n > (worst[class] or 0) then worst[class] = n end
+    local history = _G.rfsuite.log_history or {}
+    local added = (_G.rfsuite.log_history_seq or 0) - logSeq
+    for k = math.max(1, #history - added + 1), #history do
+      if string.find(history[k].msg, "job step error (", 1, true) == 1 then raised = raised + 1 end
+    end
+  end
+  _G.getTxGPS = savedGps
+  if widget.state.fblConnected == true then error("accounting: standby scenario unexpectedly connected to an FC") end
+  if widget._treeKind ~= "standby" or not widget.built then error("accounting: standby scene was not built") end
+  if raised > 0 or (widget._jobFaults.standby or 0) > 0 then error("accounting: standby build raised") end
+  if expectedTiles then
+    local tree = Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}
+    local tiles = 0
+    for i = 1, #tree do
+      local node = tree[i]
+      if node.type == "rectangle" and node.rounded == 7 then tiles = tiles + 1 end
+    end
+    if widget._standbyCache.valueOverflow or tiles ~= expectedTiles then
+      error("accounting: standby scene rendered " .. tostring(tiles) .. " of " .. tostring(expectedTiles)
+        .. " expected tiles (overflow=" .. tostring(widget._standbyCache.valueOverflow) .. ")")
+    end
+  end
+  local control = sweepControl(1000)
+  local sweep, refs = sweepCost(Stubs.lvgl.refs, control)
+  return { worst = worst, sweep = sweep, refs = refs }
 end
 
 --- Run one scenario ARMED, with telemetry that moves between passes.
@@ -836,7 +904,6 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
     error("accounting: the dashboard settled without a connected flight controller (isConnected="
       .. tostring(session.isConnected) .. ", mcu_id=" .. tostring(session.mcu_id) .. ")")
   end
-
   installDeferredLink()
 
   local ToolHost = World.require("widgets/dashboard/tool_host.lua")
@@ -875,6 +942,11 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
   end
   local state = upvalue(home.run, "state")
   for _, condition in ipairs(TOOL_CONDITIONS) do state.menu.setCondition(condition, true) end
+  if pagePath == "settings/dashboard/standby/page.lua" then
+    state.preferences.dashboard = state.preferences.dashboard or {}
+    state.preferences.dashboard.standby_layout = "clock+date+tx_battery+model/"
+      .. "timer1+timer2+timer3+uptime/tx_battery+model+timer1+timer2"
+  end
 
   local function settled(want)
     local quiet = 0
@@ -1264,6 +1336,34 @@ for _, file in ipairs(objectFiles) do
   end
 end
 table.sort(boxTypes)
+
+-- The standby screen: no flight controller, each composition on a fresh world. Placed after
+-- every row that is measured on the world the reference scenario left standing.
+do
+  local largest = runStandbyScenario("clock+date+tx_battery+model/"
+    .. "timer1+timer2+timer3+uptime/tx_battery+model+timer1+timer2", nil, true, 12)
+  local composite = runStandbyScenario("elrs+elrs/elrs+elrs/elrs+elrs", nil, true, 6)
+  local gps = runStandbyScenario("clock+date+tx_battery+model/"
+    .. "timer1+timer2+timer3+uptime/tx_gps", {
+    fix = true, numsat = 12, lat = 52.12345, lon = 13.54321,
+    alt = 1234, speed = 56, heading = 2712, hdop = 85,
+  }, false, 9)
+  local elrsNoReply = runStandbyScenario("elrs", nil, false, 1)
+  local elrsReady = runStandbyScenario("elrs", nil, true, 1)
+  local batteries = runStandbyScenario("tx_battery+tx_battery+tx_battery+tx_battery/"
+    .. "tx_battery+tx_battery+tx_battery+tx_battery/"
+    .. "tx_battery+tx_battery+tx_battery+tx_battery", nil, false, 12)
+  local runs = { largest, composite, gps, elrsNoReply, elrsReady, batteries }
+  local build, state, sweep, refs = 0, 0, 0, 0
+  for i = 1, #runs do
+    build = math.max(build, runs[i].worst.standby or 0); state = math.max(state, runs[i].worst.state or 0)
+    sweep = math.max(sweep, runs[i].sweep); refs = math.max(refs, runs[i].refs)
+  end
+  addRow("pass.standby.build", build,
+    "12-field simple and repeated layouts, six ELRS fields, detailed GPS, ELRS ready and no-response states")
+  addRow("pass.standby.state", state, "cached no-FC snapshot and provider step")
+  addRow("sweep.standby", sweep, refs .. " reactive references")
+end
 
 ------------------------------------------------------------------------------
 -- Per box type: one render, and one sweep of what that render collected.

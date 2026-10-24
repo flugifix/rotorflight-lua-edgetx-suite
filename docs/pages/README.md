@@ -11,7 +11,7 @@ One file per page, at the path of the page under `src/rfsuite/app/pages/` with `
 appended: the page `setup/power/smartfuel/page.lua` is documented in
 `docs/pages/setup/power/smartfuel.md`. Menu entries that only open a submenu have no file.
 
-**Status:** 96 reachable pages, 39 written. 80 of them carry an in-app help text behind the
+**Status:** 97 reachable pages, 40 written. 81 of them carry an in-app help text behind the
 `?` in the header, which is the text to start a page file from; the others start from the
 page source.
 
@@ -110,7 +110,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | --- | --- | --- | --- | --- |
 | Copy Profiles | [tools/copy_profiles.md](tools/copy_profiles.md) | yes | needs the flight controller, read-only while armed | written |
 | Select Profile | [tools/select_profile.md](tools/select_profile.md) | yes | needs the flight controller, read-only while armed | written |
-| Flight Log | [tools/flight_log.md](tools/flight_log.md) | yes | preview switch *Flight Log*, read-only while armed | written |
+| Flight Log | [tools/flight_log.md](tools/flight_log.md) | yes | read-only while armed | written |
 | Diagnostics → FBL Status | `tools/diagnostics/fblstatus.md` | no | needs the flight controller, read-only while armed | to write |
 | Diagnostics → RF Status | `tools/diagnostics/rfstatus.md` | yes | needs the flight controller, read-only while armed | to write |
 | Diagnostics → ELRS Link | [tools/diagnostics/elrs_link.md](tools/diagnostics/elrs_link.md) | yes | read-only while armed | written |
@@ -136,6 +136,8 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Dashboard → Settings (one page per configurable theme) | [settings/dashboard/settings.md](settings/dashboard/settings.md) | yes | always available | written |
 | Dashboard → Settings → Per-Model Settings (and each theme's settings for the model) | [settings/dashboard/overrides.md](settings/dashboard/overrides.md) | yes | shown only while a flight controller is connected and per-model settings are on for its model | written |
 | Dashboard → Quick Settings | [settings/dashboard/quick_menu.md](settings/dashboard/quick_menu.md) | yes | always available | written |
+| Dashboard → Keys | [settings/dashboard/keys.md](settings/dashboard/keys.md) | yes | always available | written |
+| Dashboard → Standby screen | [settings/dashboard/standby.md](settings/dashboard/standby.md) | yes | always available | written |
 | Dashboard → In-Flight Tuning | [settings/dashboard/inflight.md](settings/dashboard/inflight.md) | yes | preview switch *In-flight tuning* | written |
 | Localization | [settings/localization.md](settings/localization.md) | yes | always available | written |
 | Audio → Volume | [settings/audio/volume.md](settings/audio/volume.md) | yes | always available | written |

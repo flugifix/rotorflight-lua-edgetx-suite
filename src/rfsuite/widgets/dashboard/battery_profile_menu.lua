@@ -9,8 +9,8 @@
 -- `battery_profile` record (fullscreen_menu.lua): one option per profile the flight controller
 -- carries, the capacity as its label and the cells and warning voltage as its `detail`. A press
 -- runs the option through the menu's `run`, with a reporter, and the page stays up: the line at
--- its foot says how the write went. While the model is armed the profiles are drawn without a
--- press and the line says why; the profile in force stays marked.
+-- its foot says how the write went. Before the connection is ready and while the model is armed
+-- the profiles are drawn without a press and the line says why; the profile in force stays marked.
 --
 -- The back box returns to the quick menu, the close box leaves fullscreen, and RTN does what the
 -- back box does.
@@ -58,11 +58,13 @@ function M.back(widget)
   navigate(widget, "closeView")
 end
 
---- Rebuilt when the profile in force moves and when the model arms or disarms; a new outcome of a
---- write rebuilds the page on its own (views.lua, `reporter`).
+--- Rebuilt when the profile in force moves, when the model arms or disarms and when the connection
+--- becomes ready or is lost; a new outcome of a write rebuilds the page on its own (views.lua,
+--- `reporter`).
 function M.renderKey(widget)
   local state = widget and widget.state or {}
   return tostring(state.batteryProfile) .. (state.armed == true and "|a" or "|")
+    .. (state.connectionReady == true and "r" or "")
 end
 
 function M.build(children, widget)
@@ -120,6 +122,10 @@ function M.build(children, widget)
 
   local entry = record(widget)
   local armed = widget.state and widget.state.armed == true
+  -- The runtime sets `state.connectionReady` together with the widget's own `connectionReady`,
+  -- which a profile's press asks (fullscreen_menu.lua): before it is ready a press queues nothing.
+  local notReady = not (widget.state and widget.state.connectionReady == true)
+  local inert = armed or notReady
 
   -- The header: the back box, the title, the close box.
   children[#children+1] = {
@@ -151,10 +157,13 @@ function M.build(children, widget)
     text="X", color=WHITE, align=CENTER, font=titleFont
   }
 
-  -- The foot line: why nothing can be pressed while the model is armed, else how the last write
-  -- from this page went, where there was one.
+  -- The foot line: why nothing can be pressed before the connection is ready or while the model
+  -- is armed, else how the last write from this page went, where there was one. Not ready wins:
+  -- the arm state is the last one read and is not cleared when the link drops.
   local foot
-  if armed then
+  if notReady then
+    foot = entry and entry.notReadyNote or ""
+  elseif armed then
     foot = entry and entry.armedNote or ""
   else
     local status = Views and type(Views.status) == "function" and Views.status(widget, ID) or nil
@@ -191,11 +200,11 @@ function M.build(children, widget)
     local x = dX + paddingX + ((i - 1) % cols) * (btnW + paddingX)
     local y = listY + math.floor((i - 1) / cols) * (btnH + gapY)
     local isCurrent = option.current == true
-    local bColor = isCurrent and accent_color or (armed and off_color or btn_color)
+    local bColor = isCurrent and accent_color or (inert and off_color or btn_color)
     local tColor = isCurrent and BLACK or WHITE
 
-    -- Armed, a profile is a filled box rather than a button: nothing to press.
-    if armed then
+    -- Not ready or armed, a profile is a filled box rather than a button: nothing to press.
+    if inert then
       children[#children+1] = { type = "rectangle", x=x, y=y, w=btnW, h=btnH, color=bColor, filled=true }
     else
       children[#children+1] = {

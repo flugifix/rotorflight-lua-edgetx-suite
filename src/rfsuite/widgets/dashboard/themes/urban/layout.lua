@@ -41,6 +41,7 @@ end
 
 local Common = requireModule("widgets/dashboard/themes/urban/common.lua")
 if not Common then return {} end
+local RadioStatus = requireModule("lib/radio_status.lua")
 
 local L = {}
 local C = Common.C
@@ -170,8 +171,8 @@ local CARD_PAD = 3
 -- binds a press of its own gets no host controls over it. This theme binds two small boxed glyphs
 -- at the left end of the top bar, before the clock: this one opens the quick menu, the one beside
 -- it the suite's tool (L.toolControl). There is no close control -- a long press on RTN leaves full screen in the firmware, and
--- init.lua declares that (`fullscreenExit`), which is what the host's theme check reads. The
--- page keys open the menu by the host's default.
+-- init.lua declares that (`fullscreenExit`), which is what the host's theme check reads.
+-- With PAGE on Theme radio-wide, the page keys open the menu only when bound.
 --
 -- The press is a `button`, and everything drawn over it is a LINE: on the full screen surface a
 -- rectangle takes a press and hands it to its PARENT, so a rectangle over the button would
@@ -287,8 +288,7 @@ end
 -- drift apart. The battery picker is not among them: the host opens it while a pick is pending
 -- and at no other time. `suite_tool` is the suite's tool, which the host opens only while the
 -- model is disarmed: armed, the key does nothing. `flight_log` is the same tool opened on its
--- Flight Log page, which the host opens only while that page's preview switch is on as well:
--- otherwise the key does nothing.
+-- Flight Log page, which the host opens under the same condition.
 L.KEY_ACTIONS = {
   { id = "none",       action = "none" },
   { id = "menu",       action = "openView:menu" },
@@ -302,20 +302,23 @@ L.KEY_ACTIONS = {
   { id = "exit",       action = "exitFullscreen" },
 }
 
--- The keys the pilot can bind: the host's name in `ctx.keys`, the stored key, the theme's default
--- and `host`, what the host does with the key when the theme binds nothing -- the page keys open
--- the quick menu, MDL, SYS and TELE do nothing. The defaults are the host's answer for the page
--- keys and MDL; SYS opens the suite's tool and TELE the quick menu, the two places a pilot on
--- the full screen goes most.
+-- The keys the pilot can bind: the host's name in `ctx.keys`, the stored key, and the
+-- unbound default. `host` is the choice that leaves `ctx.keys` empty; all rows start on Nothing.
+-- Quick menu is an explicit binding, including on PAGE keys. The radio-wide defaults of
+-- Settings > Dashboard > Keys (widgets/dashboard/keys.lua) are where PAGE, SYS and TELE get theirs.
+-- A binding here acts only while that page leaves the key on Theme.
+--
+-- The stored keys are `theme_key_*`. The `key_*` ones an earlier build of this page wrote stay in
+-- the pilot's files and bind nothing any more, so a key starts unbound here.
 --
 -- Not rows of L.SETTINGS: those are what the drawing reads, and the page probe holds each of them
 -- to a change in the picture. A key binding draws nothing.
 L.KEYS = {
-  { key = "pageDown", pref = "key_page_down", default = "menu",       host = "menu" },
-  { key = "pageUp",   pref = "key_page_up",   default = "menu",       host = "menu" },
-  { key = "mdl",      pref = "key_mdl",       default = "none",       host = "none" },
-  { key = "sys",      pref = "key_sys",       default = "suite_tool", host = "none" },
-  { key = "tele",     pref = "key_tele",      default = "menu",       host = "none" },
+  { key = "pageDown", pref = "theme_key_page_down", default = "none", host = "none" },
+  { key = "pageUp",   pref = "theme_key_page_up",   default = "none", host = "none" },
+  { key = "mdl",      pref = "theme_key_mdl",       default = "none", host = "none" },
+  { key = "sys",      pref = "theme_key_sys",       default = "none", host = "none" },
+  { key = "tele",     pref = "theme_key_tele",      default = "none", host = "none" },
 }
 
 local KEY_ACTION_IDS = {}
@@ -326,8 +329,8 @@ for i = 1, #L.KEY_ACTIONS do
 end
 L.KEY_ACTION_IDS = KEY_ACTION_IDS
 
--- Fill `ctx.keys` from the pilot's choices, on a host with theme views. A key whose choice is what
--- the host does with it anyway is left unbound, so the host's own answer stands. Every key is
+-- Fill `ctx.keys` from the pilot's choices, on a host with theme views. A key set to `host`
+-- (Nothing) is left unbound, and the host then does nothing with it either. Every key is
 -- written on every build, an unbound one as nil: the host keeps one `ctx` for the whole visit to
 -- full screen, so a binding cleared on the page has to be cleared here as well. A build-time read
 -- like every other setting -- the host reloads the theme when its preferences change.
@@ -354,9 +357,7 @@ end
 -- pill follows the pack at the cost of a rebuild only when it actually moves -- a cadence of
 -- minutes on a radio battery.
 function L.txVoltage()
-  local ok, v = pcall(getValue, "tx-voltage")
-  if ok and type(v) == "number" and v > 0 then return v end
-  return nil
+  return RadioStatus and RadioStatus.txVoltage() or nil
 end
 
 -- The percentage needs the radio's own battery range, which getGeneralSettings answers with
@@ -367,24 +368,8 @@ end
 -- The third answer is "low": below the radio's own battery warning, as a share of the same
 -- range.
 function L.txBattery()
-  local volts = L.txVoltage()
-  local vMin, vMax, vWarn = 6.6, 8.4, nil
-  local okG, g = pcall(getGeneralSettings)
-  if okG and type(g) == "table" then
-    if type(g.battMin) == "number" and g.battMin > 0 then vMin = g.battMin end
-    if type(g.battMax) == "number" and g.battMax > vMin then vMax = g.battMax end
-    if type(g.battWarn) == "number" and g.battWarn > 0 then vWarn = g.battWarn end
-  end
-  local pct, low = nil, false
-  if volts then
-    pct = math.floor((volts - vMin) / (vMax - vMin) * 100 + 0.5)
-    if pct < 0 then pct = 0 elseif pct > 100 then pct = 100 end
-    if vWarn then
-      local warnPct = math.ceil(100 - (100 * (vMax - vWarn) / (vMax - vMin)))
-      low = pct < warnPct
-    end
-  end
-  return volts, pct, low
+  if RadioStatus then return RadioStatus.txBattery() end
+  return nil, nil, false
 end
 
 -- The signal strength as the bar shows it: the headroom of a reading in dBm above the

@@ -15,6 +15,7 @@ local MspRuntime = nil
 local BeeperConfigApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
+local SavePipeline = nil
 local t = nil
 
 -- Each label is a key and fallback pair in the form the packager translates in place, so an
@@ -190,70 +191,47 @@ local function queueBeeperConfigRead(isAutoReload)
 end
 
 local function queueBeeperConfigWrite(requestRebuild)
-  if not MspRuntime or not BeeperConfigApi or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not BeeperConfigApi then
     return false, "msp_runtime_unavailable"
   end
 
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
-  end
-
-  local payload = BeeperConfigApi.buildWritePayload({
-    beeper_off_flags = ui.config.beeper_off_flags,
-    dshotBeaconTone = ui.config.dshotBeaconTone,
-    dshotBeaconOffFlags = ui.config.dshotBeaconOffFlags
+  -- The write and the EEPROM commit belong to the pipeline, not to this page: the page can be
+  -- left while they are on the wire, and its close releases ui.runtime and the module handles
+  -- above. So nothing below may assume the page is still open.
+  local ok, err = SavePipeline.start({
+    pageId = "setup_controls_beepers_configuration",
+    steps = {
+      {
+        label = "MSP_SET_BEEPER_CONFIG",
+        command = BeeperConfigApi.writeCommand,
+        payload = BeeperConfigApi.buildWritePayload({
+          beeper_off_flags = ui.config.beeper_off_flags,
+          dshotBeaconTone = ui.config.dshotBeaconTone,
+          dshotBeaconOffFlags = ui.config.dshotBeaconOffFlags
+        })
+      }
+    },
+    reboot = false,
+    onSaved = function()
+      ui.dirty = false
+    end,
+    onDone = function(result)
+      ui.saving = false
+      if not ui.runtime then return end
+      if result.saved then queueBeeperConfigRead(true) end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
   })
+  if not ok then return false, err end
 
   ui.saving = true
   ui.progress = 0
   if type(requestRebuild) == "function" then
     requestRebuild()
   end
-
-  queue:add({
-    command = BeeperConfigApi.writeCommand,
-    payload = payload,
-    isWrite = true,
-    simulatorResponse = {},
-    processReply = function()
-      -- Step 2: Write EEPROM
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.writeCommand,
-          payload = {},
-          isWrite = true,
-          simulatorResponse = {},
-          processReply = function()
-            ui.dirty = false
-            ui.saving = false
-            queueBeeperConfigRead(true)
-          end,
-          errorHandler = function()
-            ui.saving = false
-            if type(requestRebuild) == "function" then
-              requestRebuild()
-            end
-          end
-        })
-      else
-        ui.dirty = false
-        ui.saving = false
-        if type(requestRebuild) == "function" then
-          requestRebuild()
-        end
-      end
-    end,
-    errorHandler = function()
-      ui.saving = false
-      if type(requestRebuild) == "function" then
-        requestRebuild()
-      end
-    end
-  })
-
   return true, nil
 end
 
@@ -433,6 +411,7 @@ function M.onClose()
   BeeperConfigApi = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
+  SavePipeline = nil
   t = nil
 end
 

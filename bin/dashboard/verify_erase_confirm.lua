@@ -13,8 +13,8 @@
 -- performs nothing and puts the menu back. A question that cannot be raised leaves the press
 -- unperformed, never performed unguarded.
 --
--- What is REAL: widgets/dashboard/views.lua, fullscreen_menu.lua and confirm_menu.lua, loaded
--- from the tree. What is STUBBED: the firmware (lvgl is not reached here, lcd.RGB and
+-- What is REAL: widgets/dashboard/views.lua, fullscreen_menu.lua, confirm_menu.lua and
+-- battery_profile_menu.lua, loaded from the tree. What is STUBBED: the firmware (lvgl is not reached here, lcd.RGB and
 -- lcd.exitFullScreen, and the theme colour and font globals) and the flight controller side
 -- (tasks/msp/runtime.lua and the two dataflash API modules), so a press is judged by what it
 -- queues and whether it leaves full screen, not by anything a radio would do.
@@ -90,6 +90,12 @@ local STUBS = {
   ["tasks/msp/api/dataflash_summary.lua"] = function()
     return { command = 70, simulatorResponse = {}, parse = function() return nil end }
   end,
+  ["tasks/msp/api/battery_profile.lua"] = function()
+    return { writeCommand = 1, buildWritePayload = function() return {} end }
+  end,
+  ["tasks/msp/api/eeprom_write.lua"] = function()
+    return { writeCommand = 250, buildWritePayload = function() return {} end }
+  end,
 }
 
 local function requireStub(path)
@@ -131,13 +137,19 @@ end
 local Views = loadTreeModule("widgets/dashboard/views.lua")
 local Menu = loadTreeModule("widgets/dashboard/fullscreen_menu.lua")
 local Confirm = loadTreeModule("widgets/dashboard/confirm_menu.lua")
+local ProfilePage = loadTreeModule("widgets/dashboard/battery_profile_menu.lua")
 
 -- ---------------------------------------------------------------------------
 -- The cases
 -- ---------------------------------------------------------------------------
 
 local function newWidget()
-  return { zone = { w = 800, h = 480 }, state = {}, built = true, renderKey = "test" }
+  -- Every confirmation-flow case models a connected widget: its FC-side modules are stubbed
+  -- above, and the product offers FC writes only after the connection chain is ready.
+  return {
+    zone = { w = 800, h = 480 }, state = {}, connectionReady = true,
+    built = true, renderKey = "test",
+  }
 end
 
 local function resetWorld()
@@ -243,6 +255,87 @@ local function caseNoQuestionRefuses(menu)
   return nil
 end
 
+-- An offline widget neither offers the row nor accepts a stale press on it. The record is built
+-- first to model a menu that was already on screen when the connection stopped being ready.
+local function caseOfflineHidesAndRefuses(menu)
+  resetWorld()
+  local w = newWidget()
+  local entry = menu.entry(w, "erase_blackbox")
+  w.connectionReady = nil
+  if menu.visible(w, entry) then return "the erase row is visible while offline" end
+  menu.run(w, entry)
+  if #adds ~= 0 then return "an offline press queued " .. #adds .. " message(s)" end
+  if exits ~= 0 then return "an offline press left full screen" end
+  if Views.pendingConfirm(w) ~= nil then return "an offline press raised a confirmation" end
+  return nil
+end
+
+-- The battery profile page takes its presses itself, past the row's own condition, and a key or a
+-- lost link can leave it on screen before the connection is ready: a press there queues nothing.
+local function caseProfilePressNeedsReadyConnection(menu)
+  resetWorld()
+  local w = newWidget()
+  w.state.battery_config = { batteryCapacity_0 = 1000 }
+  local entry = menu.entry(w, "battery_profile")
+  if entry == nil then return "no battery profile entry" end
+  local options = entry.options(w)
+  if #options ~= 1 then return "expected one profile option, got " .. #options end
+  options[1].press(function() end)
+  if #adds == 0 then return "a connected press queued nothing, so the case cannot see a refusal" end
+  resetWorld()
+  w.connectionReady = nil
+  options[1].press(function() end)
+  if #adds ~= 0 then return "a press before the connection is ready queued " .. #adds .. " message(s)" end
+  return nil
+end
+
+local function labelTexts(children)
+  local out = {}
+  for i = 1, #children do
+    local node = children[i]
+    if type(node) == "table" and node.type == "label" then out[node.text or ""] = true end
+  end
+  return out
+end
+
+-- Since such a press queues nothing, the page draws its profiles before the connection is ready
+-- as it does while armed: boxes without a press, and a foot line that says why. The header's back
+-- and close boxes are its only buttons then. Not ready wins over armed, whose state is the last
+-- one read and is not cleared when the link drops.
+local function caseProfilePageInertBeforeReady(_, page)
+  page = page or ProfilePage
+  resetWorld()
+  local w = newWidget()
+  w.state.battery_config = { batteryCapacity_0 = 1000, batteryCapacity_1 = 2000 }
+  w.state.batteryProfile = 1
+  w.state.connectionReady = true
+  local children = {}
+  page.build(children, w)
+  if #buttonsOf(children) ~= 4 then
+    return "a connected page has " .. #buttonsOf(children) .. " buttons, expected 4 (back, close, two profiles)"
+  end
+  local readyKey = page.renderKey(w)
+  local foot = "CHANGEABLE ONLY WHEN CONNECTED"
+  for _, armed in ipairs({ false, true }) do
+    w.connectionReady = nil
+    w.state.connectionReady = nil
+    w.state.armed = armed
+    children = {}
+    page.build(children, w)
+    local n = #buttonsOf(children)
+    if n ~= 2 then
+      return "armed=" .. tostring(armed) .. ": a page before the connection is ready has " .. n
+        .. " buttons, expected 2 (back and close)"
+    end
+    if not labelTexts(children)[foot] then
+      return "armed=" .. tostring(armed) .. ": the foot line does not say " .. foot
+    end
+  end
+  w.state.armed = nil
+  if page.renderKey(w) == readyKey then return "the page's render key ignores the connection" end
+  return nil
+end
+
 -- Agreeing closes the question before the work's own action runs, so a theme's `after` -- handed
 -- in through ctx.run -- acts on the surface the press was written for, the menu, and not on the
 -- question that was on top of it.
@@ -298,6 +391,9 @@ local CASES = {
   { id = "CANCEL runs nothing",                      fn = caseCancelRunsNothing },
   { id = "ERASE performs the press",                 fn = caseAgreePerforms },
   { id = "an unraisable question refuses the press", fn = caseNoQuestionRefuses },
+  { id = "offline hides and refuses the erase row",  fn = caseOfflineHidesAndRefuses },
+  { id = "a profile press needs a ready connection",  fn = caseProfilePressNeedsReadyConnection },
+  { id = "the profile page is inert before ready",    fn = caseProfilePageInertBeforeReady },
   { id = "agreeing closes the question first",       fn = caseAgreeClosesQuestionFirst },
   { id = "a choice confirm guards its options",      fn = caseChoiceConfirmGuardsOptions },
 }
@@ -359,6 +455,29 @@ if selfTest then
     os.exit(1)
   end
   print("(self-test) an unguarded erase went red: " .. held)
+
+  -- A profile page that draws live buttons before the connection is ready must turn its case red.
+  local pagePath = SRC .. "widgets/dashboard/battery_profile_menu.lua"
+  local pageSource = readFile(pagePath)
+  if pageSource == nil then io.stderr:write("cannot read " .. pagePath .. "\n"); os.exit(2) end
+  local pageMutated, pn = string.gsub(pageSource, "local inert = armed or notReady", "local inert = armed", 1)
+  if pn ~= 1 then
+    print("SELF-TEST FAILED: the page's inert condition was found " .. pn .. " times, expected once")
+    os.exit(1)
+  end
+  local pageChunk, pageErr = load(pageMutated, "@mutant/battery_profile_menu.lua")
+  if not pageChunk then print("SELF-TEST FAILED: the broken page did not load: " .. tostring(pageErr)); os.exit(1) end
+  local pok, MutantPage = pcall(pageChunk)
+  if not pok or type(MutantPage) ~= "table" then
+    print("SELF-TEST FAILED: the broken page did not return a module: " .. tostring(MutantPage))
+    os.exit(1)
+  end
+  local live = caseProfilePageInertBeforeReady(Menu, MutantPage)
+  if live == nil then
+    print("SELF-TEST FAILED: a page with live buttons before the connection is ready passed")
+    os.exit(1)
+  end
+  print("(self-test) a live page before ready went red: " .. live)
   print(string.format("SELF-TEST PASSED: removing the confirmation turns '%s' red", CASES[2].id))
   os.exit(0)
 end

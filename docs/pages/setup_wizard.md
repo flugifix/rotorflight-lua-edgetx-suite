@@ -125,7 +125,9 @@ page back, and on the first page it leaves the assistant.
   and *Telemetry ratio* are shown where the module reports the setting and set the module directly;
   they offer this suite's own list, reduced to what the module offers, or the module's whole list
   where it offers none of them. After a write to the module, the module row shows the new values
-  once *Read* has read the module again.
+  once *Read* has read the module again. Leaving the Link step -- for another step, the overview,
+  or by closing the assistant -- stops its current module read and clears that read's result; open
+  the step and press *Read* to start a new one.
 
 ## Related
 
