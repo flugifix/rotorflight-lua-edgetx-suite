@@ -34,7 +34,7 @@ return function(w)
     local span = rc and rc.rc_deflection or 0
     -- Travel belongs to one channel map and one stick range; a change starts the measurement over.
     local sig = travelSig()
-    if sig ~= r.travelSig then r.travel, r.travelSig = { {0, 0}, {0, 0}, {0, 0}, {0, 0} }, sig end
+    if sig ~= r.travelSig then r.travel, r.travelSig, r.guideKey = { {0, 0}, {0, 0}, {0, 0}, {0, 0} }, sig, nil end
     local now = {}
     for n = 1, 4 do
       local v = d.channels[(map[keys[n]] or n - 1) + 1]
@@ -46,19 +46,25 @@ return function(w)
       end
     end
     -- The guided check names a wrong move: the asked control going the other way, or another one.
-    -- Only movement away from centre since the prompt appeared counts, so a stick still resting at
-    -- the end stop just reached, or a collective parked low, is not mistaken for one.
+    -- Each control is measured from where it rested closest to centre since the prompt appeared, so
+    -- a stick still at the end stop just reached, or a collective parked low, is not a wrong move,
+    -- while the same stick brought back and moved again is.
     local axis, dir
     if r.target then axis, dir = r.target() end
     local key = axis and axis * 10 + dir or 0
-    if key ~= r.guideKey then r.guideKey, r.guideBase = key, now end
-    local base = r.guideBase or now
+    if key ~= r.guideKey then r.guideKey, r.guideRest, r.guideBest = key, {}, nil end
+    local rest = r.guideRest
+    for n = 1, 4 do
+      if now[n] and (rest[n] == nil or math.abs(now[n]) < rest[n]) then rest[n] = math.abs(now[n]) end
+    end
+    local signed = axis and now[axis] and now[axis] * dir
+    if signed and (r.guideBest == nil or signed > r.guideBest) then r.guideBest = signed end
     r.wrong = nil
-    if axis and now[axis] and now[axis] * dir <= -60 and now[axis] * dir < (base[axis] or 0) * dir - 60 then
+    if signed and signed <= -60 and signed < r.guideBest - 60 then
       r.wrong = L.stickReversed
-    elseif axis and (now[axis] or 0) * dir < 30 then
+    elseif axis and (signed or 0) < 30 then
       for n = 1, 4 do
-        if n ~= axis and now[n] and math.abs(now[n]) >= 60 and math.abs(now[n]) - math.abs(base[n] or 0) >= 60 then
+        if n ~= axis and now[n] and math.abs(now[n]) - (rest[n] or 0) >= 60 then
           r.wrong = string.format(L.stickWrongChannel, names[n])
         end
       end
@@ -184,7 +190,7 @@ return function(w)
     w:cardDef(L.checkSticks, L.stickGuideHint, {
       w:value(L.travelRoll, travel(1)), w:value(L.travelPitch, travel(2)), w:value(L.travelYaw, travel(3)),
       w:value(L.travelCollective, travel(4)),
-      w:button(L.travelReset, function() r.travel = { {0, 0}, {0, 0}, {0, 0}, {0, 0} } end)
+      w:button(L.travelReset, function() r.travel, r.guideKey = { {0, 0}, {0, 0}, {0, 0}, {0, 0} }, nil end)
     }, nil, "stickGuide"),
     w:cardDef(L.throttleRange, L.throttleCardHint, {
       w:value(L.throttle, throttleNow),
