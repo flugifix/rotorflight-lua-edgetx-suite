@@ -110,7 +110,7 @@ function M.new(w)
         if epoch~=self.epoch or not self:usable() or self:busy() or next(w.dirty) then
           self:notice(L.linkCancelled);return
         end
-        self:bind();w.linkNotice=nil;self.started=true;task.start(mode)
+        self:bind();w.linkNotice=nil;self.started=true;self.rewalk=true;task.start(mode)
       end,
       onCancel=function() self:notice(L.linkCancelled) end})
     if not shown then self:notice(L.linkNoDialog) end
@@ -146,22 +146,20 @@ function M.new(w)
       end}
   end
   function c:rows()
-    if self.card.link=="overview" then
-      self.card.rows={w:value(L.linkFc,function() return self:boardText() end),
-        w:value(L.linkModule,function() return self:moduleText() end),
-        w:value(L.linkStatus,function() return self:status() end),
-        {kind="notice",get=function() return self:difference() end},
-        w:button(L.linkProbe,function() self:probe() end,function() return self:applies() and not self:busy() end)}
-    else
-      self.card.rows={
+    self.card.summary=function() return self.summary end
+    self.card.rows={
         w:button(L.linkUseFc,function() self:sync(task.MODE_ROTORFLIGHT_TO_ELRS) end,
           function() return self:applies() and not self:busy() end),
         w:button(L.linkUseModule,function() self:sync(task.MODE_ELRS_TO_ROTORFLIGHT) end,
           function() return self:applies() and not self:busy() end),
         self:picker("rate",L.linkRate),self:picker("ratio",L.linkRatio)}
-    end
+  end
+  function c:updateSummary()
+    local status,difference=self:status(),self:difference()
+    self.summary=difference~="" and status.."\n"..difference or status
   end
   function c:tick()
+    self:updateSummary()
     if self:current() and not self:applies() then w.message=L.linkNeedsCrsf end
     if not self:current() or not self:applies() or not w:usable() then
       if self:busy() then task.reset();self.asked,self.started=nil,nil end
@@ -173,7 +171,7 @@ function M.new(w)
     if self.rewalk and not self:busy() then self.rewalk,self.asked=nil,nil end
     if not self.asked then self.asked=true;self:probe();return end
     if self:busy() then task.wakeup() end
-    if self.card.link=="settings" then w.message=self:status() end
+    self:updateSummary()
     local rate,ratio=task.getRateField(),task.getRatioField()
     local signature=tostring(rate)..":"..tostring(ratio)..":"..tostring(self:applies())
     if signature~=self.signature then
@@ -183,6 +181,7 @@ function M.new(w)
   function c:enter(card)
     self.card,self.asked,self.signature,self.started=card,nil,nil,nil
     w.linkNotice=nil
+    self:updateSummary()
     task.setOwner("helicopter-elrs",function() return self:current() and self:applies() and w:usable() end)
     self:bind()
     self:rows();self:refresh()

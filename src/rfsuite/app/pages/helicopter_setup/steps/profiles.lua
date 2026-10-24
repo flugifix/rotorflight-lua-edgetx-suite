@@ -51,7 +51,11 @@ return function(w)
   end
   w.onLive=function(api,d)
     if api~="rc" then return end
-    if (p.record or p.listen) and getTime()>p.untilAt then cancel();w.message=L.detectTimeout;return end
+    if p.record and getTime()>p.untilAt then
+      p.record,p.base,p.peaks=nil,nil,nil
+      w.message=#p.positions>=2 and string.format(L.positionsRecorded,#p.positions) or L.twoPositions;return
+    end
+    if p.listen and getTime()>p.untilAt then cancel();w.message=L.detectTimeout;return end
     if p.record then sample(d.channels[p.channel+6]) end
     if not p.listen then return end
     if not p.base then p.base=d.channels;p.peaks={};return end
@@ -104,7 +108,7 @@ return function(w)
         end},
       w:button(function() return (p.listen or p.record) and L.cancelDetect or L.detect end,function() if p.listen or p.record then cancel() else listen("profile") end end,function() return p.mode~=3 end),
       w:value(L.positions,function() local range=H.rangeOf(ranges,2)
-        local count=p.record and math.min(3,#p.positions) or range and range.adjMax-range.adjMin+1 or 0
+        local count=(p.record or #p.positions>0) and math.min(3,#p.positions) or range and range.adjMax-range.adjMin+1 or 0
         return string.format("CH%d: %d",w:channelNumber(p.channel),count) end),
       w:button(L.useSwitch,function()
         if #p.positions<2 then w.message=L.twoPositions;return end
@@ -119,7 +123,10 @@ return function(w)
     },nil,"switch"),
     w:cardDef(L.masterGain,L.gainHint,{
       {kind="choice",label=L.method,values={L.none,L.knob,L.buttons},get=function() return p.gain end,
-        set=function(v) if p.gain==v then return end;cancel();p.gain=v;remove(83);remove(84) end},
+        set=function(v)
+          if p.gain==v then return end;cancel();p.gain=v;remove(83);remove(84)
+          w.buildRequested=true;w:rebuild()
+        end},
       w:button(function() return p.listen and L.cancelDetect or L.detect end,function() if p.listen then cancel() elseif p.gain>1 then listen("gain") end end),
       w:value(L.channel,function() local r=H.rangeOf(ranges,83);return r and "CH"..(w:channelNumber(r.adjChannel)) or L.none end),
       w:value(L.gainNow,function()
@@ -135,28 +142,35 @@ return function(w)
         end
         return L.none
       end)
-    }),
-    w:cardDef(L.trimGuide,L.trimHint,{
+    })
+  }
+  if p.gain==3 then
+    cards[#cards+1]=w:cardDef(L.trimGuide,L.trimHint,{
       w:value(L.cyclicDown,function() return "30% / 1654 us" end),w:value(L.cyclicUp,function() return "40% / 1705 us" end),
       w:value(L.yawDown,function() return "50% / 1756 us" end),w:value(L.yawUp,function() return "60% / 1807 us" end)
-    }),
-    w:cardDef(L.channelPlan,L.channelPlanHint,{
+    })
+  end
+  local rows={
       w:value(L.profileNow,function()
         local r=H.rangeOf(ranges,2);local v=r and channelValue(r.adjChannel)
         return v and H.mappedValue(r,v) or "--"
       end),
       w:value(L.channelCount,function() return w.data.rc and w.data.rc.channel_count or "--" end),
-      w:value("CH"..w:channelNumber(0),function() return plan(0) end),w:value("CH"..w:channelNumber(1),function() return plan(1) end)
-    })
+      w:value("CH"..w:channelNumber(0),function() return plan(0) end),w:value("CH"..w:channelNumber(1),function() return plan(1) end),
+      w:value("CH"..w:channelNumber(2),function() return plan(2) end)
   }
-  local rows={w:value("CH"..w:channelNumber(2),function() return plan(2) end)}
+  local function addPlan()
+    local card=w:cardDef(L.channelPlan,L.channelPlanHint,rows)
+    card.dense=true;cards[#cards+1]=card;rows={}
+  end
   local channels={}
   for _,r in ipairs(w.data.mode_ranges.mode_ranges) do if r.range.start<r.range["end"] then channels[r.auxChannelIndex]=true end end
   for _,fn in ipairs({2,83}) do local r=H.rangeOf(ranges,fn);if r then channels[r.adjChannel]=true end end
   for channel=3,26 do
     if channels[channel] then local ch=channel;rows[#rows+1]=w:value("CH"..w:channelNumber(ch),function() return plan(ch) end) end
-    if #rows==4 then cards[#cards+1]=w:cardDef(L.channelPlan,L.beyondEight,rows);rows={} end
+    -- At 480x272, 135 px remain above the status line: seven rows at 18 px.
+    if #rows==7 then addPlan() end
   end
-  if #rows>0 then cards[#cards+1]=w:cardDef(L.channelPlan,L.channelPlanHint,rows) end
+  if #rows>0 then addPlan() end
   return cards
 end

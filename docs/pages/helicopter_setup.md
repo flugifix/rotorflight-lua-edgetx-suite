@@ -5,7 +5,7 @@ title: Helicopter Setup
 # Helicopter Setup
 
 A guided helicopter setup in the same 19-step order as the Configurator wizard.
-It is a separate page; the existing Setup Assistant is unchanged. Remove the main
+It is the only entry in the Wizards menu; the old Setup Assistant code and templates remain. Remove the main
 and tail blades before bench work. Keep servos unplugged until the connection gate.
 
 ## Where to find it
@@ -25,13 +25,27 @@ Receiver setup requires an already working receiver/MSP link. Run automatic
 receiver wiring detection in USB Configurator: that test reinitializes the same
 UART that carries the radio link. ESC wiring detection and board auto-alignment
 remain available on the radio when supported by firmware.
-The ELRS cards apply only to a serial CRSF receiver (provider 9, serial receiver feature enabled)
-with CRSF telemetry. Otherwise their rows explain that the link is unavailable and cannot start
-reads or writes. STATUS freshness and the wizard's arming lock guard the task; leaving either card
+The single ELRS card applies only to a serial CRSF receiver (provider 9, serial receiver feature enabled)
+with CRSF telemetry. Otherwise its summary explains that the link is unavailable and cannot start
+reads or writes. STATUS freshness and the wizard's arming lock guard the task; leaving the card
 cancels its pending FC requests. A request already sent to the FC cannot be undone by leaving.
-When both sides are known, one extra status line names only differing rates and/or telemetry
+The card reads both sides once on entry and again after an action. Both sync directions,
+packet rate and telemetry ratio share the card with normal-height touch controls.
+The summary shows the status and, when both sides are known, only differing rates and/or telemetry
 ratios, for example **Differs: FC 1:8, module 1:4**. Matching or unknown values add no line.
 For DVDA module modes such as D500 and D250, only the telemetry ratio is compared.
+
+The accelerometer calibration card reports **Calibrated: Yes/No** from the live FC
+status (ACC calibration arming-disable flag, bit 23), or **Unavailable** without an
+accelerometer. This reports stored calibration, independently of calibration progress.
+Mode cards show **ON/OFF** for the live switch/mode state, retaining **Unavailable**
+when there is no reading.
+
+Profile-switch recording stops after its window and retains the found positions for
+**Use switch**, reporting the recorded count. Fewer than two positions keep the
+two-position hint; listening without movement still times out. The trim-button guide
+appears only for the **Buttons** gain method and follows method changes immediately.
+The channel plan fits on one card; a long plan continues on a second.
 
 ## Loading and fresh status
 
@@ -162,9 +176,9 @@ The short instruction area may show only its first lines; **?** opens the full t
 | # | Step | Controls and checks |
 | --- | --- | --- |
 | 1 | Board orientation | Four cards. Confirm servos unplugged and all blades removed. Calibrate the accelerometer with the model standing level and still. Detect orientation by lifting the tail, or enter roll, pitch and yaw in degrees. After restart, compare the live helicopter model with real roll/pitch movements and confirm the directions. Automatic alignment requires firmware support. |
-| 2 | Receiver | Keep the established receiver UART; protocol configuration remains available, and use USB Configurator for receiver wiring detection (the trial interrupts the radio MSP link). Save & reboot is available here. Detect collective, roll, pitch, yaw, the throttle switch (hold / governor) and the arm switch one control at a time, or select ELRS, FrSky, Futaba/Hitec or DSM/Graupner/JR presets. Check FC channel numbers and rising values for roll/yaw right, pitch forward and collective up. Detection uses a fresh pre-click snapshot, so an immediate stick/switch movement is retained. Record all throttle-switch positions (or both proportional endpoints), starting and finishing OFF, with at least 300 µs travel; Use measured range adds a 20 µs margin at each end. Zero limits select firmware defaults. Throttle is low compares the mapped input with the low threshold; it is not permission to arm. The ELRS link cards compare the FC's declared rate and telemetry ratio with the transmitter module, probe the link, and align either side after confirmation. Module pickers offer supported 333 Hz, 500 Hz, D500 and 1:4, 1:8, 1:16, 1:32 options; save wizard changes first, keep the model disarmed, and keep telemetry running. |
+| 2 | Receiver | Keep the established receiver UART; protocol configuration remains available, and use USB Configurator for receiver wiring detection (the trial interrupts the radio MSP link). Save & reboot is available here. Detect collective, roll, pitch, yaw, the throttle switch (hold / governor) and the arm switch one control at a time, or select ELRS, FrSky, Futaba/Hitec or DSM/Graupner/JR presets. Check FC channel numbers and rising values for roll/yaw right, pitch forward and collective up. Detection uses a fresh pre-click snapshot, so an immediate stick/switch movement is retained. Record all throttle-switch positions (or both proportional endpoints), starting and finishing OFF, with at least 300 µs travel; Use measured range adds a 20 µs margin at each end. Zero limits select firmware defaults. Throttle is low compares the mapped input with the low threshold; it is not permission to arm. The single ELRS link card compares the FC's declared rate and telemetry ratio with the transmitter module, automatically probes the link, and aligns either side after confirmation. Module pickers offer supported 333 Hz, 500 Hz, D500 and 1:4, 1:8, 1:16, 1:32 options; save wizard changes first, keep the model disarmed, and keep telemetry running. |
 | 3 | Mode switches | Assign ARM, RESCUE and TRAINER when the FC exposes them. Move the switch to its intended ON position; a clear AUX movement and settled position determine the active window. ARM is read from AUX1 only, the arm channel set in step 2, because ExpressLRS 4.x also outputs its arm flag on CH14 (AUX9), which moves with the arm switch. Reassign or Remove an assignment. ARM assignment is required. No unrelated mode slots are overwritten. Left/right switch pictures follow the same live state; unavailable input keeps its text cue. |
-| 4 | Profiles & gain | Detect a two- or three-position switch; select PID + rate profiles, PID only or None. Visit the positions and Use switch. Optional gain uses a knob, or four trim-button values on one spare channel. Mapped gain is 50–150%; button gain is ±5%, bounded to 25–200%. The trim guide gives MAX mix weights 30/40/50/60%, with 100% at rest. Configure those mixes in EdgeTX; this page does not rewrite the transmitter model. The switch picture remains a labelled example. |
+| 4 | Profiles & gain | Detect a two- or three-position switch; select PID + rate profiles, PID only or None. Visit the positions and Use switch. Optional gain uses a knob, or four trim-button values on one spare channel. Mapped gain is 50–150%; button gain is ±5%, bounded to 25–200%. For Buttons only, the trim guide gives MAX mix weights 30/40/50/60%, with 100% at rest. Configure those mixes in EdgeTX; this page does not rewrite the transmitter model. The switch picture remains a labelled example. |
 | 5 | Rates | One card per offered rate profile, in switch-position order, or one for the active profile. Each has Keep current, Trainer, Sport and 3D, its own collective readout and a curve that follows the selected or matched style. Unmatched rates keep the sketch and explain replacement; Suggest sits above the first profile and fills a three-position switch in order. Trainer uses 180/270°/s, Sport 250/400°/s and 3D 400/600°/s. Collective pitch is preserved. Profiles are selected, read and written sequentially, then the original rate profile is restored. |
 | 6 | Swashplate | Three cards, as in the Configurator: select Direct, 120, 135, 140, 90L or 90V and, for 120/135/140, whether servo 1 sits in front of the shaft or behind it; the main rotor direction, clockwise or counterclockwise seen from above; the variable-pitch, motorised or bidirectional tail with the tail output it uses. Tail changes reset the yaw input rate to ±250 or ±1000. Switching between servo and motor tail sets TTA to 0 or 100 on every PID profile; motor-to-bidirectional changes preserve custom TTA. If supported and required, the tail pin is moved between SERVO 4 and MOTOR 2; a refusal blocks advance. A missing command is reported as unsupported. |
 | 7 | Servo type | Servos must be unplugged. Choose cyclic and tail groups separately: 50 Hz/1520 µs, 333 Hz/1520 µs or 560 Hz/760 µs. Changing pulse band resets centre, travel and scale to the matching defaults. Frame-rate changes require restart. Only the PWM servos belonging to the selected swash/tail are used; bus channels are excluded.  Custom 25–5000 Hz fields are separate for cyclic/tail and preserve centre, travel and scale. Template and Hz controls remain locked until Servos unplugged is confirmed again after a restart. A frequency edit stays visible while waiting for fresh FC status; it is applied only after the arming lock is confirmed. A rate differing from the template shows Custom. Mixed groups are explicit. Manufacturer limits apply; firmware may reduce the rate for pulse limits/shared timers, so verify after restart. Separate cards switch geometry correction for all cyclic servos and, with a servo tail, for the tail servo alone (bit 1; the reverse bit is kept). It turns the servo arm's arc into straight link movement. Use it with the arm at 90 degrees to the link at centre and large servo travel. Leave it off if the arm is not at 90 degrees at centre, a bellcrank or the mechanics already make the movement linear, or the helicopter manual says so. It changes travel near the end stops: recheck blade pitch and tail limits after switching it. No restart is needed. Motorised tails have no tail-servo choice. Exact group presets show the matching Configurator pulse picture; custom Hz/width or mixed groups retain the waveform. |

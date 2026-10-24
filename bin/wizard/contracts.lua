@@ -24,6 +24,9 @@ return function(h)
   local function settle(w) w.buildRequested=nil;drain(w);w.statusAt=getTime() end
   case("CORE.api-12-10-gate",function()
     local manifest=load("app/manifest.lua")
+    eq(#manifest.menus.wizards_menu.pages,1,"CORE Wizards lists only Helicopter Setup")
+    eq(manifest.menus.wizards_menu.pages[1].id,"helicopter_setup","CORE Helicopter Setup is the wizard menu entry")
+    check(manifest.menus.setup_wizard_menu~=nil,"CORE legacy assistant definitions are retained")
     local entries={}
     for _,entry in ipairs(manifest.menus.wizards_menu.pages) do
       if entry.id=="helicopter_setup" then entries[#entries+1]=entry end
@@ -458,8 +461,15 @@ return function(h)
   end)
   case("S01.calibration-alignment",function()
     local w=world();local c=step(w,"sensors")
+    eq(c[2].rows[3].get(),L.yes,"S01 clear ACC calibration flag shows calibrated")
+    local status=w.data.status
+    status.arming_disable_flags=status.arming_disable_flags|(1<<23);w.onLive("status",status)
+    eq(c[2].rows[3].get(),L.no,"S01 ACC calibration flag shows not calibrated live")
+    status.arming_disable_flags=(status.arming_disable_flags&(~(1<<23)))|(1<<12);w.onLive("status",status)
+    eq(c[2].rows[3].get(),L.yes,"S01 general calibration flag does not erase stored ACC calibration")
     w.data.status.sensor_status=0;c=step(w,"sensors")
     check(not c[2].rows[1].enabled(),"S01 missing accelerometer blocks calibration")
+    eq(c[2].rows[3].get(),L.unavailable,"S01 absent accelerometer has no calibration reading")
     w.data.status.sensor_status=1;c=step(w,"sensors")
     c[2].rows[1].press();check(w.calibrationAt==nil,"S01 preparation required")
     w.checks.unplugged,w.checks.blades=true,true;c[2].rows[1].press();settle(w)
@@ -589,7 +599,7 @@ return function(h)
       return realLoad(self,path)
     end
     local cards=step(w,"receiver")
-    local index;for i,c in ipairs(cards) do if c.link=="settings" then index=i end end
+    local index;for i,c in ipairs(cards) do if c.link=="combined" then index=i end end
     -- A refused telemetry read on the card is not a wizard failure.
     h.setFailCommand(73);w.card=index;cards[index].enter();w:tick();drain(w);h.setFailCommand(nil)
     check(not w.error,"S02 a refused link read on the ELRS card does not fail the wizard")
@@ -598,7 +608,7 @@ return function(h)
     w.cards=cards;w.card=index;cards[index].enter();w:tick();drain(w);w:tick();drain(w)
     local probes=#starts
     local picker;for _,row in ipairs(cards[index].rows) do if row.kind=="choice" then picker=row;break end end
-    check(picker~=nil,"S02 the settings card offers a module picker")
+    check(picker~=nil,"S02 the combined card offers a module picker")
     picker.set(2);w:tick();drain(w);w:tick();drain(w);w:tick();drain(w)
     check(#choices==1 and #starts>probes,"S02 a picker write is followed by a fresh module walk")
     h.fixtures[73]=nil;session.telemetryType=oldType
@@ -638,7 +648,9 @@ return function(h)
     end
     local cards=step(w,"receiver")
     local index
-    for i,c in ipairs(cards) do if c.link=="overview" then index=i end end
+    local links=0
+    for i,c in ipairs(cards) do if c.link=="combined" then index=i;links=links+1 end end
+    eq(links,1,"S02 receiver has one combined ELRS card")
     check(index~=nil,"S02 inline ELRS card replaces the pointer")
     if not index then session.telemetryType=oldType;return end
     eq(loads,0,"S02 task stays unloaded on other receiver cards")
@@ -651,16 +663,18 @@ return function(h)
     session.crsfTelemetryConfig={mode=1,linkRate=333,linkRatio=8}
     session.elrsLinkConfig={packetRate=500,telemetryRatio=4,packetRateLabel="500 Hz",telemetryRatioLabel="1:4"}
     local rows=w.cards[index].rows
-    local overviewRows=rows
-    eq(rows[1].get(),string.format(L.linkPair,333,8),"S02 CRSF shows FC rate and ratio")
-    eq(rows[2].get(),string.format(L.linkModulePair,"500 Hz","1:4"),"S02 CRSF shows module rate and ratio")
-    eq(rows[3].get(),"task status","S02 task status text is displayed")
-    local difference=rows[4]
-    check(difference.kind=="notice" and type(difference.get)=="function","S02 ELRS has one full-width difference line")
+    local controller=w.linkController
+    eq(controller:boardText(),string.format(L.linkPair,333,8),"S02 CRSF shows FC rate and ratio in confirmation")
+    eq(controller:moduleText(),string.format(L.linkModulePair,"500 Hz","1:4"),"S02 CRSF shows module rate and ratio in confirmation")
+    controller:updateSummary()
+    eq(cards[index].summary(),"task status\n"..string.format(L.linkDiffPair,333,8,500,4),"S02 summary shows status and FC/module difference")
+    local difference={get=function() return controller:difference() end}
     if difference.get then
       local function differs(rate,ratio,expected)
         session.crsfTelemetryConfig={mode=1,linkRate=rate,linkRatio=ratio}
         eq(difference.get(),expected,"S02 ELRS names only differing known values")
+        controller:updateSummary()
+        eq(cards[index].summary(),expected~="" and "task status\n"..expected or "task status","S02 summary follows the current difference")
       end
       differs(333,8,string.format(L.linkDiffPair,333,8,500,4))
       differs(500,8,string.format(L.linkDiffRatio,8,4))
@@ -690,13 +704,12 @@ return function(h)
         session.elrsLinkConfig[key]=old
       end
     end
-    local probes=#starts;rows[#rows].press();drain(w)
-    eq(#starts,probes+1,"S02 Probe starts a fresh task after the automatic probe")
-    eq(starts[#starts],0,"S02 Probe starts MODE_PROBE")
+    eq(#starts,1,"S02 entry starts exactly one automatic probe")
+    eq(starts[#starts],0,"S02 entry starts MODE_PROBE")
+    running=true
     local before=wakes;h.measure("ELRS wakeup",function() w:tick() end);check(wakes>before,"S02 current ELRS card wakes its task")
-    w:navigate(2,index+1);check(resets>0,"S02 leaving a link card resets the task")
-    drain(w);w:tick();drain(w);w:tick();drain(w)
-    rows=w.cards[index+1].rows
+    eq(#starts,1,"S02 the combined card never probes twice without an action")
+    rows=w.cards[index].rows
     local function ask(row,mode)
       local count=#starts;question=nil;row.press()
       check(question~=nil,"S02 sync asks for confirmation")
@@ -710,7 +723,7 @@ return function(h)
     shown=false;local count=#starts;rows[1].press()
     eq(#starts,count,"S02 impossible confirmation writes nothing")
     eq(w.linkNotice,L.linkNoDialog,"S02 impossible confirmation explains nothing written")
-    eq(w.message,L.linkNoDialog,"S02 impossible confirmation is visible on the settings card")
+    eq(w.message,L.linkNoDialog,"S02 impossible confirmation is visible on the combined card")
     shown=true;rows[1].press();local deferred=question
     w:release();w.statusAt=getTime();deferred.onConfirm()
     eq(#starts,count,"S02 a confirmation from a released visit writes nothing")
@@ -728,9 +741,8 @@ return function(h)
     rate.selectedIndex=3;rows[3].set(2);eq(choices[#choices][2],2,"S02 500 Hz never selects F500 or D500")
     rows[3].set(3);eq(choices[#choices][2],1,"S02 D500 uses the module option index")
     rows[4].set(4);eq(choices[#choices][2],4,"S02 ratio uses the module option index")
-    w.cards[index].rows=overviewRows
     for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
-      for _,i in ipairs({index,index+1}) do
+      for _,i in ipairs({index}) do
         w.card=i
         local card=w.cards[i]
         local scene=h.view.new(w,{w=size[1],h=size[2]},h.diagrams)
@@ -740,25 +752,26 @@ return function(h)
           if item.y and item.h then check(item.y+item.h<=size[2],"S02 ELRS widgets fit "..size[1].."x"..size[2]) end
           if item.type=="choice" then check(item.y+item.h<firstButtonY,"S02 ELRS pickers stay above navigation") end
         end
-        eq(#card.rows,i==index and 5 or 4,"S02 ELRS overview includes one difference row")
-        if i==index and difference.get then
-          local notice
-          for _,item in ipairs(scene.children) do if item.text==difference.get then notice=item end end
-          check(notice and notice.w>=size[1]*.54,"S02 difference uses the full form width")
-          if notice then
-            check(notice.y+notice.h<=firstButtonY-27,"S02 difference stays above footer and navigation")
-            local buttonY
-            for _,item in ipairs(scene.children) do if item.text==L.linkProbe then buttonY=item.y end end
-            check(buttonY and notice.y+notice.h<=buttonY,"S02 difference stays above Probe")
-            session.crsfTelemetryConfig={mode=1,linkRate=500,linkRatio=4}
-            check(notice.visible()==false,"S02 equal settings hide the difference line reactively")
-            session.crsfTelemetryConfig={mode=1,linkRate=333,linkRatio=8}
-            check(notice.visible()==true,"S02 differing settings show the line reactively")
-          end
+        eq(#card.rows,4,"S02 combined ELRS card keeps both sync directions and both pickers")
+        local controls={}
+        local summary
+        for _,item in ipairs(scene.children) do
+          if item.text==card.summary then summary=item end
+          if item.type=="choice" or item.text==L.linkUseFc or item.text==L.linkUseModule then controls[#controls+1]=item end
+          check(item.text~=L.linkProbe,"S02 automatic probe needs no duplicate button")
         end
+        eq(#controls,4,"S02 all four ELRS controls are rendered")
+        check(summary and summary.w>=size[1]*.35,"S02 status and difference use the summary area")
+        local bottom=summary and summary.x+summary.w>controls[1].x and summary.y+summary.h or 0
+        for _,item in ipairs(controls) do
+          eq(item.h,size[1]>=700 and 44 or size[1]>=480 and 32 or 26,"S02 controls retain normal touch height")
+          check(item.y>=bottom,"S02 ELRS controls do not overlap preceding content")
+          bottom=item.y+item.h
+        end
+        check(bottom<=firstButtonY-(size[1]>=700 and 34 or 21),"S02 controls stay above the status line")
       end
     end
-    w.card=index+1
+    w.card=index
     for _,fault in ipairs({"provider","feature","telemetry"}) do
       w.data.rx_config.serialrx_provider=fault=="provider" and 2 or 9
       w.data.feature_config.enabledFeatures=fault=="feature" and 0 or 1<<3
@@ -772,7 +785,8 @@ return function(h)
       eq(rows[3].get(),0,"S02 unavailable picker has a safe value: "..fault)
     end
     w.data.rx_config.serialrx_provider=9;w.data.feature_config.enabledFeatures=1<<3;session.telemetryType="crsf"
-    w:navigate(2,1);drain(w);before=wakes;w:tick()
+    w:navigate(2,1);check(resets>0,"S02 leaving the combined card resets the task")
+    drain(w);before=wakes;w:tick()
     eq(wakes,before,"S02 other cards never wake the link task")
     w.card=index;w.cards=step(w,"receiver");w.cards[index].enter();drain(w)
     local resetBefore=resets;w:close();check(resets>resetBefore,"S02 closing the wizard resets the task")
@@ -939,10 +953,10 @@ return function(h)
     w.data.rx_map.aux1=4
     eq(w:channelNumber(0),5,"S03 displayed receiver channel follows RX_MAP")
     check(string.find(c[1].rows[1].get(),"CH5",1,true)~=nil,"S03 switch assignment names physical receiver channel")
-    eq(c[1].rows[4].get(),L.yes,"S03 ARM shows switch position despite arming inhibit")
-    eq(c[2].rows[4].get(),L.no,"S03 rescue requires actual mode flag")
+    eq(c[1].rows[4].get(),L.switchOn,"S03 ARM shows switch position despite arming inhibit")
+    eq(c[2].rows[4].get(),L.switchOff,"S03 rescue requires actual mode flag")
     w.data.status.flight_mode_flags=2
-    eq(c[2].rows[4].get(),L.yes,"S03 actual rescue mode flag")
+    eq(c[2].rows[4].get(),L.switchOn,"S03 actual rescue mode flag")
     c[2].rows[3].press();check(w.dirty.mode_ranges,"S03 remove live write")
     eq(w.data.mode_ranges.mode_ranges[2].range.start,1500,"S03 remove disables slot")
     check(w.validate(),"S03 ARM assignment required and present")
@@ -970,10 +984,54 @@ return function(h)
     for _,card in ipairs(c) do
       if card.title==L.channelPlan then
         seen=seen+1
+        check(card.dense and #card.rows<=7,"S04 plan uses dense rows within the compact display limit")
         check(card.detail==L.channelPlanHint or card.detail==L.beyondEight,"S04 channel-use card explains the channel list")
       end
     end
-    check(seen>=2,"S04 channel use is shown on its own cards")
+    eq(seen,1,"S04 channel plan fits on one dense card")
+    for channel=3,5 do
+      w.data.mode_ranges.mode_ranges[channel]={id=53,auxChannelIndex=channel,range={start=1800,["end"]=2100}}
+    end
+    c=step(w,"profiles");local counts={};local total=0
+    for _,card in ipairs(c) do if card.title==L.channelPlan then
+      counts[#counts+1]=#card.rows;total=total+#card.rows
+      check(card.dense and #card.rows<=7,"S04 overflow remains dense with at least 18 px per row")
+    end end
+    eq(table.concat(counts,","),"7,1","S04 eighth plan row starts a second dense card")
+    eq(total,8,"S04 splitting preserves every channel-plan row")
+  end)
+  case("S04.recording-expiry-and-trim-guide",function()
+    local w=world();settle(w);w.step=4;w.card=2
+    local c=step(w,"profiles")
+    local function guides(cards)
+      local n=0;for _,card in ipairs(cards) do if card.title==L.trimGuide then n=n+1 end end;return n
+    end
+    eq(guides(c),0,"S04 None has no trim-button guide")
+    for _,method in ipairs({3,2,3,1}) do
+      c[2].rows[1].set(method)
+      check(w.buildRequested,"S04 method change requests the existing card rebuild")
+      drain(w);c=w.cards
+      eq(w.card,2,"S04 method rebuild retains the gain card")
+      eq(guides(c),method==3 and 1 or 0,"S04 only Buttons includes the trim guide after rebuilding")
+    end
+    c[1].rows[1].set(1)
+    w.profile.record,w.profile.untilAt=true,getTime()-1
+    w.profile.positions={{low=1000,high=1000},{low=2000,high=2000}}
+    w.onLive("rc",{channels={}})
+    check(not w.profile.record and #w.profile.positions==2,"S04 recording expiry preserves learned positions")
+    eq(w.message,string.format(L.positionsRecorded,2),"S04 recording expiry reports the recorded count")
+    check(c[1].rows[4].enabled(),"S04 recorded switch remains usable after expiry")
+    check(string.find(c[1].rows[3].get(),": 2",1,true)~=nil,"S04 position row retains the recorded count")
+    c[1].rows[4].press()
+    check(H.rangeOf(w.data.adjustment_ranges.adjustment_ranges,2)~=nil,"S04 expired recording can still install the switch")
+    w.profile.record,w.profile.untilAt=true,getTime()-1;w.profile.positions={{low=1500,high=1500}}
+    w.onLive("rc",{channels={}})
+    eq(w.message,L.twoPositions,"S04 a short recording gives the two-position hint")
+    eq(#w.profile.positions,1,"S04 short recording also retains its position")
+    w.profile.listen,w.profile.untilAt="profile",getTime()-1
+    w.onLive("rc",{channels={}})
+    eq(w.message,L.detectTimeout,"S04 listening without movement keeps timeout feedback")
+    eq(#w.profile.positions,0,"S04 listening timeout still cancels detection")
   end)
   case("S04.readback-paired-capacity",function()
     local w=world();local ranges=w.data.adjustment_ranges.adjustment_ranges
