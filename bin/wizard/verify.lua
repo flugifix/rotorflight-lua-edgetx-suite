@@ -145,6 +145,7 @@ local L = load(PATH .. "labels.lua")
 local locale="en"
 for i=1,#arg do if arg[i]=="--locale" then locale=arg[i+1] end end
 local bundle = load("i18n/"..locale..".lua")
+local i18n = load("i18n/init.lua").new(locale)
 for k, value in pairs(L) do
   local key = type(value)=="string" and string.match(value,"^@i18n%((.-)%)@$")
   if key then
@@ -192,10 +193,12 @@ end
 local function beginWorld()
   q.messages,q.sent = {},{}
   local w = load(PATH .. "controller.lua").new(runtime,load(PATH .. "transport.lua"),H,L)
+  w.i18n=i18n
   w.palette=load(PATH .. "palette.lua")
   w.newAttitudeView=load(PATH .. "attitude_view.lua").new
   w.newServoGrid=load(PATH .. "servo_grid.lua").append
   load(PATH .. "forms.lua").attach(w,load("lib/port_labels.lua"));load(PATH .. "workflow.lua").attach(w);load(PATH .. "navigation.lua").attach(w)
+  load(PATH .. "esc_link.lua").attach(w,load("lib/esc_params.lua"),load("lib/esc_status.lua"))
   w.requestRebuild = function() w.rebuilds = (w.rebuilds or 0)+1 end
   -- Controller-only worlds have no telemetry poller: both packed FC state words are live.
   local packed = load("lib/system_state.lua")
@@ -776,6 +779,12 @@ local function contractWorld()
         end
       end
       return read(self,name,after,optional,payload)
+    end
+  elseif mutation=="esc-family" then
+    local family=load("lib/esc_params.lua").families[9]
+    local escFamily=v.escFamily
+    v.escFamily=function(self)
+      return self.data.esc_sensor_config.protocol==0 and family or escFamily(self)
     end
   elseif mutation and mutation~="bulk-read" and mutation~="history-early" and mutation~="stale-status" and mutation~="retry-stale"
     and mutation~="pitch-discard" and mutation~="back-commit" and mutation~="stale-blades"

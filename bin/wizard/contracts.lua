@@ -3034,5 +3034,388 @@ return function(h)
     check(w.overview and (w.history.mask&(1<<14))==0,"CORE explicit continue leaves failed visit unrecorded")
     fs:restore()
   end)
+  local function escWorld(protocol, throttle, governor)
+    local w=world();settle(w)
+    w.step,w.overview,w.card=11,nil,1
+    w.data.motor_config.motor_pwm_protocol=throttle or 0
+    w.data.esc_sensor_config.protocol,w.data.esc_sensor_config.half_duplex=protocol,1
+    w.data.serial_config.port_1_function_mask=1024
+    w.data.feature_config.enabledFeatures=w.data.feature_config.enabledFeatures | (1<<26)
+    w.data.governor_config.gov_mode=governor or 3
+    w.data.motor_telemetry={motors={{voltage=24000,temperature=200}}}
+    w.motorTelemetryAt=getTime()
+    w.dirty,w.rebootPending={},nil
+    return w
+  end
+  local function findCard(cards,title)
+    for _,card in ipairs(cards) do if card.title==title then return card end end
+  end
+  local function escRead(w,block)
+    h.fixtures[217]=block
+    w:readEsc();settle(w)
+    w.motorTelemetryAt=getTime()
+    return step(w,"escTelemetry")
+  end
+  case("S11.esc-read-before-write-and-signature",function()
+    local w=escWorld(9)
+    local shared=load("lib/esc_params.lua")
+    local s=shared.new(w.bus,shared.families[9],load("lib/esc_status.lua"))
+    local failed
+    q.sent={};s:write({stick_zero_us=1070},function(_,err) failed=err end)
+    eq(failed,"esc_not_read","S11 no ESC write without read")
+    check(w.bus:idle() and #q.sent==0,"S11 unread write enqueues nothing")
+    local before=#w.bus.jobs
+    step(w,"escTelemetry")
+    eq(#w.bus.jobs,before,"S11 building telemetry cards never reads ESC parameters")
+    h.fixtures[217]=h.api("esc_parameters_yge").simulatorResponse
+    w:escTick();settle(w)
+    check(w.escParams and w.escParams.block,"S11 parameter read runs after load")
+    local read
+    for _,m in ipairs(q.sent) do
+      check(m.command~=218,"S11 no ESC write without a button press")
+      if m.command==217 then read=m end
+    end
+    check(read and read.retryOnErrorReply==true and read.maxRetries==3 and read.timeout==1,
+      "S11 cache errors use bounded transport retry option")
+    w.escParams=nil;w.escAttempted=nil
+    escRead(w,h.api("esc_parameters_hw5").simulatorResponse)
+    check(not w.escParams.block and w.escResultKey=="escLinkFailure","S11 signature mismatch rejects the block")
+    w.rangeChoice="esc_link";w:useEscRange();settle(w)
+    for _,m in ipairs(q.sent) do check(m.command~=218,"S11 signature mismatch prevents writes") end
+    h.setFailCommand(217);w:readEsc();settle(w);h.setFailCommand(nil)
+    check(not w.error and not w.escParams.block and w.escResultKey=="escLinkFailure","S11 read timeout offers fallback without failing wizard")
+    local cards=step(w,"escTelemetry")
+    local route=findCard(cards,L.throttleRange).rows[1]
+    route.set(2);cards=step(w,"escTelemetry")
+    local assertion=cards[#cards-1]
+    for _,card in ipairs(cards) do for _,row in ipairs(card.rows) do
+      if row.label==L.rangeConfirm then row.set(2) end
+    end end
+    eq(w.rangeSource,"asserted","S11 manual fallback needs explicit confirmation")
+    h.fixtures[217]=nil
+  end)
+  case("S11.range-routes-and-spin-gate",function()
+    local w=escWorld(9)
+    for protocol=0,14 do
+      w.data.esc_sensor_config.protocol=protocol
+      for _,throttle in ipairs({0,1,2,3,5,6,7,8,9,10,11}) do
+        w.data.motor_config.motor_pwm_protocol=throttle
+        local cards=step(w,"escTelemetry")
+        local card=findCard(cards,L.throttleRange)
+        eq(card~=nil,throttle<=3,"S11 range card only for analog throttle")
+        if card then
+          local calibration,link=false,false
+          for _,label in ipairs(card.rows[1].values) do
+            if label==L.rangeLink then link=true end
+            if label==L.rangeCalibrate then calibration=true end
+          end
+          eq(link,protocol==9,"S11 route c not offered for non-YGE protocols")
+          eq(calibration,throttle==0,"S11 calibration offered only for PWM")
+        end
+      end
+    end
+    w.data.motor_config.motor_pwm_protocol=0;w.data.esc_sensor_config.protocol=9
+    w.data.motor={motor_1=1000};w.bladesOff=true
+    local route=findCard(step(w,"escTelemetry"),L.throttleRange).rows[1]
+    route.set(2)
+    check(not w.rangeSource and not w:canSpin(0),"S11 manual route alone cannot authorize spin")
+    local c=step(w,"escTelemetry")
+    for _,card in ipairs(c) do for _,row in ipairs(card.rows) do if row.label==L.rangeConfirm then row.set(2) end end end
+    check(w:canSpin(0),"S11 explicit pilot assertion satisfies PWM gate")
+    w:spin(0,1);check(w.motorHold~=nil,"S11 controller gate accepts asserted range");w:stopMotor();settle(w)
+    w.step=12;c=step(w,"throttle")
+    check(not findCard(c,L.fullThrottleTitle),"S11 asserted route skips calibration cards")
+    local summary=step(w,"finish")
+    eq(summary[#summary].rows[1].get(),L.rangeByPilot,"S11 Finish distinguishes pilot assertion")
+    w.rangeSource="esc_link";eq(summary[#summary].rows[1].get(),L.rangeViaLink,"S11 Finish distinguishes ESC link")
+    w.rangeSource="calibrated";eq(summary[#summary].rows[1].get(),L.rangeCalibrated,"S11 Finish distinguishes calibration")
+  end)
+  case("S11.yge-range-transaction",function()
+    local w=escWorld(9)
+    local yge=h.api("esc_parameters_yge")
+    local original=yge.parse(yge.simulatorResponse)
+    local cards=escRead(w,yge.simulatorResponse)
+    findCard(cards,L.throttleRange).rows[1].set(3)
+    cards=step(w,"escTelemetry")
+    local editor=cards[#cards]
+    eq(editor.rows[1].get(),1000,"S11 proposed mincommand is firmware default")
+    eq(editor.rows[2].get(),1070,"S11 proposed minthrottle is firmware default")
+    eq(editor.rows[3].get(),2000,"S11 proposed maxthrottle is firmware default")
+    eq(editor.rows[2].min,h.api("motor_config").limits.minthrottle.min,"S11 pulse limits come from API")
+    local oldRead,oldWrite,oldEscWrite=h.fixtures[131],h.fixtures[222],h.fixtures[218]
+    local fc={};for i,v in ipairs(h.api("motor_config").simulatorResponse) do fc[i]=v end
+    local escWrites,fcWrites=0,0
+    h.fixtures[131]=fc
+    h.fixtures[222]=function(m)
+      fcWrites=fcWrites+1
+      for i=1,6 do fc[i]=m.payload[i] end
+      -- MOTOR_CONFIG read alone includes motor_count_blheli between these parts.
+      for i=7,#m.payload do fc[i+1]=m.payload[i] end
+      return {}
+    end
+    h.fixtures[218]=function(m)
+      escWrites=escWrites+1;h.fixtures[217]=m.payload;return {}
+    end
+    q.sent={}
+    editor.rows[2].set(1100);editor.rows[3].set(1950);settle(w)
+    eq(escWrites+fcWrites,0,"S11 editing pulse fields sends no writes")
+    editor.rows[4].press();settle(w)
+    eq(fcWrites,1,"S11 button writes FC exactly once")
+    eq(escWrites,1,"S11 button writes ESC exactly once")
+    eq(w.rangeSource,"esc_link","S11 only matching re-read establishes ESC link range")
+    local actual=yge.parse(h.fixtures[217])
+    eq(actual.stick_zero_us,1100,"S11 FC and ESC written with the same minimum")
+    eq(actual.stick_range_us,850,"S11 FC and ESC written with the same span")
+    eq(w.data.motor_config.minthrottle,actual.stick_zero_us,"S11 verified FC minimum equals ESC zero")
+    eq(w.data.motor_config.maxthrottle,actual.stick_zero_us+actual.stick_range_us,"S11 verified FC maximum equals ESC endpoint")
+    for key,value in pairs(original) do
+      if key~="stick_zero_us" and key~="stick_range_us" then eq(actual[key],value,"S11 range preserves YGE "..key) end
+    end
+    check(w.rebootPending,"S11 motor_config retains existing reboot requirement")
+    local commands={};for _,m in ipairs(q.sent) do commands[#commands+1]=m.command end
+    eq(commands[1],217,"S11 range button refreshes ESC before any write")
+    eq(commands[#commands],217,"S11 range write ends with a readback")
+    w.rebootPending=nil;w.motorTelemetryAt=getTime()
+    w.data.governor_config.gov_mode=2
+    w:setEscMode(2);settle(w)
+    actual=yge.parse(h.fixtures[217])
+    eq(actual.governor,2,"S11 mode button uses the shared range block")
+    eq(actual.stick_zero_us,1100,"S11 later mode write retains range")
+    eq(actual.stick_range_us,850,"S11 later mode write retains span")
+    eq(escWrites,2,"S11 both explicit buttons own one ESC write")
+    w.escSignature=255;w:tick()
+    check(w.escParams.restart and w.escParams.changes,"S11 restart detection reuses ESC status decoder")
+    eq(w.escResultKey,"escRestart","S11 transient restart asks for battery cycle")
+    local reads=#q.sent;w:verifyEscRestart();eq(#q.sent,reads,"S11 restart read needs pilot acknowledgement")
+    w.checks.escBatteryCycle=true;w.escSignature=nil;w:verifyEscRestart();settle(w)
+    eq(w.escResultKey,"escVerified","S11 acknowledged battery cycle verifies mode")
+    w.escRangeDraft={minthrottle=1110,maxthrottle=1940}
+    h.fixtures[218]=function() return {} end
+    w:useEscRange();settle(w)
+    check(w.rangeSource==nil and w.escParams.changes~=nil,"S11 unmatched range readback cannot authorize spin")
+    eq(w.escResultKey,"escRestart","S11 unmatched range requests battery restart")
+    check(not w.validate(),"S11 unresolved ESC write prevents leaving telemetry")
+    w.returnToSuite,w.buildRequested=true,true
+    w:tick()
+    check(not w.entryRebootGate and findCard(w.cards,L.escRestartTitle)~=nil,
+      "S11 FC reboot gate keeps ESC restart verification reachable")
+    local changed=yge.parse(h.fixtures[217])
+    for key,value in pairs(w.escParams.changes) do changed[key]=value end
+    h.fixtures[217]=yge.buildWritePayload(changed)
+    w.checks.escBatteryCycle=true;w:verifyEscRestart();settle(w)
+    eq(w.rangeSource,"esc_link","S11 range confirmed only after matching battery-cycle re-read")
+    h.fixtures[131],h.fixtures[222],h.fixtures[218],h.fixtures[217]=oldRead,oldWrite,oldEscWrite,nil
+  end)
+  case("S11.hw-mode-transaction",function()
+    local w=escWorld(3,6,3)
+    local hw=h.api("esc_parameters_hw5")
+    local initialData=hw.parse(hw.simulatorResponse);initialData.flight_mode=2
+    local initial=hw.buildWritePayload(initialData)
+    local cards=escRead(w,initial)
+    local card=findCard(cards,L.escMode)
+    eq(card.rows[1].get(),w.i18n.t("app.pages.setup_esc_motors.mode_hw5_elf"),"S11 HW current mode is displayed by name")
+    local before=#q.sent
+    card.rows[2].set(1);settle(w)
+    for i=before+1,#q.sent do check(q.sent[i].command~=218,"S11 mode selection alone never writes") end
+    local old=h.fixtures[218]
+    h.fixtures[218]=function(m) h.fixtures[217]=m.payload;return {} end
+    q.sent={};card.rows[3].press();settle(w)
+    local payload
+    for _,m in ipairs(q.sent) do if m.command==218 then payload=m.payload end end
+    check(payload~=nil,"S11 HW Set ESC mode button writes")
+    local expected=hw.parse(initial);expected.flight_mode=1
+    local bytes=hw.buildWritePayload(expected)
+    eq(#payload,#bytes,"S11 HW write uses complete API block")
+    for i,value in ipairs(bytes) do eq(payload[i],value,"S11 HW mode preserves byte "..i) end
+    eq(w.escResultKey,"escVerified","S11 HW mode verified by re-read")
+    cards=step(w,"escTelemetry");card=findCard(cards,L.escMode)
+    eq(#card.rows,1,"S11 successful linear mode removes mismatch warning")
+    w.data.governor_config.gov_mode=2
+    cards=step(w,"escTelemetry");card=findCard(cards,L.escMode)
+    eq(#card.rows,3,"S11 later governor edit re-evaluates mode without writes")
+    q.sent={};h.fixtures[217]=h.api("esc_parameters_yge").simulatorResponse
+    card.rows[3].press();settle(w)
+    for _,m in ipairs(q.sent) do check(m.command~=218,"S11 fresh-read signature mismatch prevents mode write") end
+    eq(w.escResultKey,"escLinkFailure","S11 fresh-read mismatch is visible")
+    h.fixtures[217],h.fixtures[218]=nil,old
+  end)
+  case("S11.cache-retry-and-card-layout",function()
+    local Queue=load("tasks/msp/queue.lua")
+    for _,readyAt in ipairs({3,0}) do
+      local sends,polled,reply,errors=0,0,0,0
+      local queue=Queue.new({sendRequest=function() sends=sends+1;return true end,
+        pollReply=function()
+          if sends>polled then
+            polled=sends
+            if readyAt>0 and sends>=readyAt then return 217,h.api("esc_parameters_yge").simulatorResponse end
+            return 217,{},true
+          end
+        end})
+      queue._simDetectDone,queue._simDetected=true,false
+      local runtime={getState=function() return {queue=queue} end}
+      local bus=load("app/pages/helicopter_setup/transport.lua").new(runtime,function() return true end,function() errors=errors+1 end)
+      local shared=load("lib/esc_params.lua")
+      local s=shared.new(bus,shared.families[9],load("lib/esc_status.lua"))
+      s:read(function(block,err) if block then reply=reply+1 elseif err then errors=errors+1 end end)
+      for _=1,700 do
+        h.advance(1);bus:tick();queue:processQueue()
+        if bus:idle() then break end
+      end
+      eq(sends,readyAt>0 and 3 or 4,"S11 cache error retries are bounded")
+      eq(reply,readyAt>0 and 1 or 0,"S11 cache retry positive control succeeds")
+      eq(errors,readyAt>0 and 0 or 1,"S11 persistent cache error has visible failure")
+    end
+    local w=escWorld(9)
+    escRead(w,h.api("esc_parameters_yge").simulatorResponse)
+    w.rangeChoice="esc_link"
+    local cards=step(w,"escTelemetry")
+    for _,size in ipairs({{480,320},{480,272},{320,240},{800,480}}) do
+      w.wideScreen=size[1]>=700
+      for i,card in ipairs(cards) do
+        w.cards,w.card=cards,i
+        local job=h.view.new(w,{w=size[1],h=size[2]},h.diagrams)
+        while not job.done do h.measure("ESC view slice",function() job:step() end) end
+        for _,node in ipairs(job.children) do
+          if node.y and node.h then check(node.y+node.h<=size[2],"S11 ESC cards fit without scrolling") end
+        end
+      end
+    end
+    for _,locale in ipairs({"en","de"}) do
+      local strings=load("i18n/"..locale..".lua").app.modules.helicopter_setup
+      local helps={rangeChoiceHelp={"rangeQuestion"},rangeManualHelp={"rangeConfirm"},rangeSummaryHelp={"throttleRange"},
+        escLinkHelp={"escRead"},escRestartHelp={"escBatteryCycle","escVerify"},
+        escModeHelp={"escCurrentMode","escExpectedMode","escSetMode"},
+        escCurrentHelp={"escModel","escFirmware","escZero","escFull"},
+        escRangeHelp={"rangeStop","rangeMin","rangeMax","rangeUse"}}
+      for key,labels in pairs(helps) do
+        check(utf8.len(strings[key])<=600,"S11 help key stays within 600 characters")
+        local i=0
+        for line in string.gmatch(strings[key],"[^\n]+") do
+          i=i+1
+          check(utf8.len(line)<=200,"S11 help line stays within 200 characters")
+          eq(string.sub(line,1,#strings[labels[i]]+1),strings[labels[i]]..":","S11 help starts with on-screen label")
+        end
+        eq(i,#labels,"S11 one help line per setting")
+      end
+    end
+    h.fixtures[217]=nil
+  end)
+  case("S11.mode-expectations-and-layouts",function()
+    local shared=load("lib/esc_params.lua")
+    for _,protocol in ipairs({9,3}) do
+      local family=shared.families[protocol]
+      local api=h.api(family.api)
+      local w=escWorld(protocol,6)
+      escRead(w,api.simulatorResponse)
+      for governor=0,4 do
+        w.data.governor_config.gov_mode=governor
+        for mode=0,(protocol==9 and 6 or 3) do
+          w.escParams.block[family.modeField]=mode
+          local cards=step(w,"escTelemetry")
+          local card=findCard(cards,L.escMode)
+          if governor==4 then
+            check(not card and not findCard(cards,L.escLink),"S11 Nitro has no ESC cards")
+          else
+            check(card~=nil,"S11 mode card works with DShot independent of range route")
+            local valid=governor==0 or governor==1 or governor==3 and
+              ((protocol==9 and mode==1) or (protocol==3 and (mode==0 or mode==1))) or
+              governor==2 and ((protocol==9 and (mode==2 or mode==3)) or (protocol==3 and (mode==2 or mode==3)))
+            eq(#card.rows,valid and 1 or 3,"S11 expected ESC modes per governor mode")
+            if not valid then
+              eq(card.summary,L.escModeWarning,"S11 mismatched mode has explicit warning")
+              eq(card.rows[2].get(),1,"S11 expected mode preselection is first descriptor value")
+              local expected=shared.expected(family,governor)
+              eq(expected[1],governor==3 and 1 or 2,"S11 preferred external or internal governor mode")
+              eq(card.rows[2].values[1],w:escModeName(expected[1]),"S11 mode names reuse locale labels")
+            end
+          end
+        end
+      end
+      w.data.governor_config.gov_mode=3
+      w.data.esc_sensor_config.half_duplex=0
+      check(not w:escLinkReady() and not w:escCanWrite(),"S11 half-duplex gates parameter access")
+      w.data.esc_sensor_config.half_duplex=1
+      w.motorTelemetryAt=getTime()-301
+      check(not w:escLinkReady(),"S11 stale telemetry cannot authorize parameter access")
+    end
+    local hw=h.api("esc_parameters_hw5")
+    local w=escWorld(3)
+    for _,hardware in ipairs({"HW1128","HW1132_V100456NB"}) do
+      local data=hw.parse(hw.simulatorResponse)
+      data.hardware_version,data.raw_strings,data._profile=hardware,nil,nil
+      local cards=escRead(w,hw.buildWritePayload(data))
+      check(w.escParams.block._supported.flight_mode==false,"S11 API marks missing mode field")
+      check(not findCard(cards,L.escMode),"S11 HW1128/HW1132 layouts skip mode card")
+      local found=false
+      for _,card in ipairs(cards) do if card.summary==L.escModeUnavailable then found=true end end
+      check(found,"S11 absent mode has explicit unavailable message")
+      q.sent={};w:setEscMode(1);settle(w)
+      for _,m in ipairs(q.sent) do check(m.command~=218,"S11 unavailable mode never writes") end
+    end
+    h.fixtures[217]=nil
+  end)
+  case("S11.shared-mode-labels-and-pulse-limits",function()
+    local shared=load("lib/esc_params.lua")
+    for _,locale in ipairs({"en","de"}) do
+      local i18n=load("i18n/init.lua").new(locale)
+      local w=escWorld(9);w.i18n=i18n
+      local seen={}
+      local count=0
+      for protocol,family in pairs(shared.families) do
+        w.data.esc_sensor_config.protocol=protocol
+        for value,marker in pairs(family.modes) do
+          local key=string.match(marker,"^@i18n%((app%.pages%.setup_esc_motors%.[%w_]+)%)@$")
+          check(key~=nil,"S11 descriptor owns literal mode i18n keys")
+          check(not seen[key],"S11 mode labels have one descriptor definition")
+          seen[key],count=true,count+1
+          local label=i18n.resolve(marker)
+          check(label~=key and label~=marker and #label>0,"S11 descriptor mode label resolves in "..locale)
+          eq(w:escModeName(value),label,"S11 wizard consumes descriptor mode labels")
+        end
+      end
+      eq(count,11,"S11 seven YGE and four HW5 mode labels")
+    end
+    -- Capture the Suite throttle page's actual control definitions after its read.
+    local originalLoadScript=loadScript
+    local pending,editors={},{}
+    local motor=h.api("motor_config")
+    local controls={
+      appendComboSelect=function() return 30 end,
+      appendRadioSwitch=function() return 30 end,
+      appendNumberField=function(_,_,_,_,label,options) editors[label]=options;return 30 end
+    }
+    function loadScript(path)
+      local relative=string.sub(path,#"/SCRIPTS/TOOLS/rfsuite-core/"+1)
+      if relative=="ui/controls.lua" then return function() return controls end end
+      if relative=="tasks/msp/runtime.lua" then return function() return {getState=function()
+        return {queue={add=function(_,message) pending[#pending+1]=message end}} end} end end
+      if relative=="tasks/msp/api/motor_config.lua" then return function() return motor end end
+      if relative=="tasks/msp/save_pipeline.lua" then return function() return {} end end
+      if relative=="ui/loading_overlay.lua" then return function() return {append=function() end} end end
+      if relative=="app/pages/settings/common.lua" then return function() return {
+        pageT=function() return function(_,_,fallback) return fallback end end} end end
+      return originalLoadScript(path)
+    end
+    local session=_G.rfsuite.session
+    local cached=session.setup_esc_motors_throttle;session.setup_esc_motors_throttle=nil
+    local page=load("app/pages/setup/esc_motors/throttle/page.lua")
+    local ctx={children={},x=0,y=0,w=480,h=480}
+    page.build(ctx)
+    eq(#pending,1,"S11 throttle page reads its own motor configuration")
+    pending[1].processReply(pending[1],motor.simulatorResponse)
+    page.build(ctx)
+    local count=0
+    for _,options in pairs(editors) do
+      if options.suffix=="us" then
+        count=count+1
+        eq(options.min,motor.limits.minthrottle.min,"S11 throttle page uses shared pulse minimum")
+        eq(options.max,motor.limits.maxthrottle.max,"S11 throttle page uses shared pulse maximum")
+      end
+    end
+    eq(count,3,"S11 stop, minimum and maximum share the API pulse limits")
+    eq(motor.limits.minthrottle.min,50,"S11 existing pulse minimum unchanged")
+    eq(motor.limits.maxthrottle.max,2250,"S11 existing pulse maximum unchanged")
+    page.onClose();session.setup_esc_motors_throttle=cached;loadScript=originalLoadScript
+  end)
   return cases
 end

@@ -169,6 +169,8 @@ function M.new(w, ctx, diagrams)
         if attitudeCard and large then
           all[#all+1]=label(formX,y-34,formW,r.label)
           editW=formW
+        elseif r.fullWidth then
+          editW=formW
         else
         all[#all + 1] = label(formX, y+3, formW-editW-8, illustrated and compact[r.label] or r.label)
         end

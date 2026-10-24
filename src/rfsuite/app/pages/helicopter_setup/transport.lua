@@ -105,7 +105,8 @@ function M.new(runtime, allowed, failed)
       command = j.write and api.writeCommand or api.command,
       payload = payload or {}, isWrite = j.write == true,
       client = j.override and "helicopter-overrides" or "helicopter-setup",
-      timeout = j.timeout or 2, maxRetries = 0,
+      timeout = j.timeout or 2, maxRetries = j.maxRetries or 0,
+      retryOnErrorReply = j.retryOnErrorReply,
       processReply = function(_, buf)
         if self.generation == generation then p.buf, p.done = buf, true end
       end,

@@ -5,7 +5,7 @@ return function(w)
     for _,e in ipairs(entries) do if e[1]==value then return e[2] end end;return L.unknown
   end
   local motorProtocols,telemetryProtocols=w:motorProtocols(),w:telemetryProtocols()
-  return {
+  local cards = {
     w:cardDef(L.finish,L.finishHint,{
       w:value(L.swashType,function() return ({L.none,L.direct,"120","135","140","90L","90V"})[w.data.mixer_config.swash_type+1] or L.unknown end),
       w:value(L.rotorDirection,function() return w.data.mixer_config.main_rotor_dir==0 and L.clockwise or L.counterclockwise end),
@@ -31,4 +31,13 @@ return function(w)
       w:check("finish",L.finalCheck)
     })
   }
+  if w:analogThrottle() then
+    cards[#cards+1] = w:cardDef(L.finish,L.rangeSummaryHelp,{
+      w:value(L.throttleRange,function()
+        return w.rangeSource == "esc_link" and L.rangeViaLink or w.rangeSource == "asserted" and L.rangeByPilot
+          or w.rangeSource == "calibrated" and L.rangeCalibrated or L.unknown
+      end)
+    })
+  end
+  return cards
 end

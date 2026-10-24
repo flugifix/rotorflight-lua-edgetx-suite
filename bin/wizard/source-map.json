@@ -11,17 +11,102 @@
         "src/rfsuite/lib/governor_fields.lua"
       ],
       "writes": {
-        "governor_profile": ["governor_headspeed"],
-        "governor_config": ["gov_spoolup_time", "gov_spooldown_time", "gov_recovery_time"]
+        "governor_profile": [
+          "governor_headspeed"
+        ],
+        "governor_config": [
+          "gov_spoolup_time",
+          "gov_spooldown_time",
+          "gov_recovery_time"
+        ]
       },
       "reads": {
-        "governor_profile": ["governor_headspeed"],
-        "governor_config": ["gov_spoolup_time", "gov_spooldown_time", "gov_recovery_time"],
-        "filter_config": ["rpm_preset"],
-        "rpm_filter_v2": ["notch_source_1..16 (axes 0..2, CUSTOM only)"]
+        "governor_profile": [
+          "governor_headspeed"
+        ],
+        "governor_config": [
+          "gov_spoolup_time",
+          "gov_spooldown_time",
+          "gov_recovery_time"
+        ],
+        "filter_config": [
+          "rpm_preset"
+        ],
+        "rpm_filter_v2": [
+          "notch_source_1..16 (axes 0..2, CUSTOM only)"
+        ]
       },
-      "contracts": ["S08.headspeed-and-ramps", "S08.headspeed-scope-and-help", "S08.rpm-filter-signal"],
+      "contracts": [
+        "S08.headspeed-and-ramps",
+        "S08.headspeed-scope-and-help",
+        "S08.rpm-filter-signal"
+      ],
       "adaptation": "Additional Suite controls beyond the pinned Configurator wizard: exact FC headspeed per configured PID profile (profile one if unknown), ramp seconds and read-only RPM-filter signal warning in every mode. Existing profileLoop owns selection/read/write/restore; per-profile reads stay outside startup and scene build. Full API records retain untouched fields. Shared Governor page limits and seconds formatter replace page-local definitions."
+    },
+    {
+      "id": "esc-range-and-operating-mode",
+      "beyond_configurator": true,
+      "targets": [
+        "src/rfsuite/lib/esc_params.lua",
+        "src/rfsuite/app/pages/helicopter_setup/esc_link.lua",
+        "src/rfsuite/app/pages/helicopter_setup/steps/escTelemetry.lua",
+        "src/rfsuite/app/pages/helicopter_setup/transport.lua",
+        "src/rfsuite/app/pages/setup/esc_motors/throttle/page.lua"
+      ],
+      "writes": {
+        "esc_parameters_yge": [
+          "governor",
+          "stick_zero_us",
+          "stick_range_us"
+        ],
+        "esc_parameters_hw5": [
+          "flight_mode"
+        ],
+        "motor_config": [
+          "mincommand",
+          "minthrottle",
+          "maxthrottle"
+        ]
+      },
+      "reads": {
+        "esc_parameters_yge": [
+          "governor",
+          "stick_zero_us",
+          "stick_range_us",
+          "esc_model",
+          "esc_type",
+          "firmware_version"
+        ],
+        "esc_parameters_hw5": [
+          "flight_mode",
+          "model_name",
+          "firmware_version",
+          "_supported"
+        ],
+        "motor_config": [
+          "mincommand",
+          "minthrottle",
+          "maxthrottle"
+        ],
+        "esc_sensor_config": [
+          "protocol",
+          "half_duplex"
+        ],
+        "motor_telemetry": [
+          "voltage",
+          "temperature"
+        ]
+      },
+      "contracts": [
+        "S11.esc-read-before-write-and-signature",
+        "S11.range-routes-and-spin-gate",
+        "S11.yge-range-transaction",
+        "S11.mode-expectations-and-layouts",
+        "S11.hw-mode-transaction",
+        "S11.cache-retry-and-card-layout",
+        "S11.shared-mode-labels-and-pulse-limits"
+      ],
+      "adaptation": "Suite additions beyond the pinned Configurator: protocol descriptor capabilities; YGE analog throttle range and YGE/Hobbywing V5 operating mode with explicit button writes. Existing API modules exclusively own codecs. Shared esc_params owns bounded cache retries, fresh complete-block transactions, status-based restart detection and changed-field readback. Parameter reads run after load, never during page construction; pilot assertions and calibration remain distinct. Mode option value-to-i18n-key mappings live only in the family descriptor. The Suite throttle page and wizard share API pulse limits without changing the 50..2250 us bounds."
     }
   ],
   "files": [

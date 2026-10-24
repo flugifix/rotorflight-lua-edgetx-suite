@@ -6,7 +6,8 @@ local modules, stage, w, context, viewJob, scene, sceneKey = {}, 1
 local deps = { "tasks/msp/runtime.lua", PATH .. "transport.lua", PATH .. "math.lua", PATH .. "labels.lua",
   PATH .. "controller.lua", PATH .. "forms.lua", PATH .. "workflow.lua", PATH .. "view.lua", "lib/armed.lua", PATH .. "diagrams.lua", PATH .. "navigation.lua",
   "lib/system_state.lua", "lib/sensors.lua", PATH .. "feedback.lua", PATH .. "history_store.lua", PATH .. "history.lua", PATH .. "attitude_view.lua",
-  PATH .. "servo_grid.lua", "lib/port_labels.lua", PATH .. "palette.lua" }
+  PATH .. "servo_grid.lua", "lib/port_labels.lua", PATH .. "palette.lua",
+  "lib/esc_params.lua", "lib/esc_status.lua", PATH .. "esc_link.lua" }
 local palette
 local loadingPoints = {{24,0},{24,0}}
 local loadingFraction = 0
@@ -61,8 +62,8 @@ function M.wakeup(ctx)
   if ctx and ctx.requestRebuild then context.requestRebuild = ctx.requestRebuild end
   loadingFraction = w and (w.ready and 1 or 0.2+0.8*(w.progress or 0)/math.max(1,w.loadTotal or 1)) or 0.2*(stage-1)/#deps
   loadingPoints[2][1]=24+math.floor((context.w-48)*math.min(1,loadingFraction))
-  if not palette then palette = assert(loadScript(BASE .. deps[#deps], "t"))() end
-  modules[#deps] = modules[#deps] or palette
+  if not palette then palette = assert(loadScript(BASE .. deps[20], "t"))() end
+  modules[20] = modules[20] or palette
   if not loadingScene then
     loadingScene=buildLoading(context);context.requestRebuild();return
   end
@@ -81,6 +82,7 @@ function M.wakeup(ctx)
     modules[6].attach(w, modules[19]); modules[7].attach(w); modules[11].attach(w, context)
     modules[14].attach(w, modules[12], modules[13])
     modules[16].attach(w, modules[15])
+    modules[23].attach(w, modules[21], modules[22])
     w.requestClose, w.requestRebuild, w.openPage = context.requestClose, context.requestRebuild, context.openPage
     w.menuChanged = function()
       local menu = context.menu

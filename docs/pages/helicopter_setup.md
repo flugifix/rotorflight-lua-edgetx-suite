@@ -208,6 +208,35 @@ The short instruction area may show only its first lines; **?** opens the full t
 | 19 | Finish | Review readable swash, rotor direction, tail, collective/cyclic limits, ESC protocol, telemetry, governor/throttle type, fast RPM and ARM assignment. Confirm the final checks, then Finish. Check failsafe, governor behaviour and every control before flight. |
 
 <!-- radio pictures: begin -->
+## ESC throttle range and operating mode (step 11)
+
+Throttle range appears for PWM, ONESHOT125, ONESHOT42 and MULTISHOT. It is split
+into task cards and never scrolls. DShot, ProShot, Castle and SRXL2 omit the range
+cards. The choice lasts for this wizard visit and is not stored on the radio.
+
+| Setting | Behaviour |
+| --- | --- |
+| How is the ESC's throttle range set? | Calibrate the ESC is offered only for PWM and uses the existing step 12 procedure. Set in the ESC by hand / already set requires explicit pilot confirmation. Set through the ESC link is offered only for OpenYGE (telemetry protocol 9). |
+| I confirm the ESC range is set | Confirms that the manually set ESC range agrees with the FC outputs; sends no configuration writes. |
+| Read ESC parameters | Requires a powered ESC, live voltage or temperature, the matching saved telemetry protocol, an assigned ESC UART and half-duplex. Save and reboot after wiring changes. Timeout or a family-signature mismatch reports battery, wire, half-duplex and protocol checks; calibration/manual routes remain available. |
+| ESC model / ESC firmware | Shows the model identifier and firmware exposed by the API. |
+| Stick zero (us) / Zero + range (us) | Shows the current YGE zero and the sum of its zero and range fields. |
+| Stop pulse (us) | Proposed FC firmware default: 1000. |
+| Minimum pulse (us) | Starts at 1070; editable within the motor API's pulse limits. It must exceed the stop pulse. |
+| Maximum pulse (us) | Starts at 2000; editable within the motor API's pulse limits. It must exceed the minimum. |
+| Use these values | Explicitly reads the ESC again, saves and reads back FC mincommand/minthrottle/maxthrottle through the existing save path, then writes the complete YGE block with the selected zero/range. Other ESC parameters remain unchanged. Only matching ESC readback confirms the range; FC changes retain the existing reboot requirement. Editing a number sends no writes. |
+| Current ESC mode | Read-only named mode for YGE and Hobbywing V5 (telemetry protocol 3), independently of the throttle protocol or range route. HW1128/HW1132 report that the mode is unavailable and omit the mode card. Nitro omits ESC parameter cards. |
+| Expected ESC mode | Electric requires YGE Ext or Hobbywing Heli (Linear Throttle)/Fixed-wing. Direct requires YGE Heli/Store or Hobbywing Heli (Elf Gov)/Heli (Store Gov). Off/Limit display the current mode without an expectation. The first listed heli option is preselected. Returning after changing step 8 re-evaluates the expectation. |
+| Set ESC mode | Appears with a mismatch warning. Only this button reads again, overlays the selected mode on the complete block, writes it and verifies by reading. Range and mode share the same transaction owner; neither can overwrite the other's earlier change. |
+| Battery unplugged and reconnected | Explicit acknowledgement after the FC requests an ESC restart or acknowledged values do not yet match. Remove all blades, unplug and reconnect the flight battery. |
+| Re-read after battery restart | Verifies the requested values; acknowledgement alone never confirms them. |
+| Throttle range (Finish) | Distinguishes set via ESC link, confirmed by pilot and calibrated. PWM spinning accepts pilot confirmation or verified link range as alternatives to calibration. |
+
+Parameter reads run after the step has loaded and live telemetry is present;
+they are not in startup READS or page construction. Reads retry FC cache error
+replies with a bounded transport job. No ESC write is possible without a
+successful read in the current visit and an explicit button press.
+
 ## The steps on the radio
 
 Taken on the EdgeTX simulator (TX16S MK3, 800x480) against a Rotorflight SITL flight controller,

@@ -57,8 +57,10 @@ function M.attach(w)
     local m=self.data.motor
     local output=m and m["motor_"..(index+1)] or 0
     return self.bladesOff and not self.rebootPending and output>0 and
+      not (self.escParams and self.escParams.changes) and
       index<(self.data.status.motor_count or 0) and
-      (index~=0 or self.data.motor_config.motor_pwm_protocol~=0 or self.calibratedEsc)
+      (index~=0 or self.data.motor_config.motor_pwm_protocol~=0 or self.calibratedEsc
+        or self.rangeSource=="asserted" or self.rangeSource=="esc_link")
   end
   function w:motorOutputsOk()
     local m = self.data.motor

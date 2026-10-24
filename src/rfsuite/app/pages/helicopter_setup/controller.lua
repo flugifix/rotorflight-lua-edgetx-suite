@@ -52,6 +52,7 @@ function M.new(runtime, transport, mathModule, labels)
       and (not self.identity or self.identity == s.mcu_id)
   end
   function w:fail(api, reason)
+    self.escBusy = nil
     self.bus:cancel()
     self.statusQueued, self.pendingEdit = nil, nil
     self.statusFailure = api == "status" or api == "arming_disable"
@@ -317,7 +318,8 @@ function M.new(runtime, transport, mathModule, labels)
   function w:spin(index, direction)
     if not self:usable() or not self.bladesOff or self.rebootPending then return end
     if index >= (self.data.status.motor_count or 0) then return end
-    if index == 0 and self.data.motor_config.motor_pwm_protocol == 0 and not self.calibratedEsc then
+    if index == 0 and self.data.motor_config.motor_pwm_protocol == 0 and not self.calibratedEsc
+      and self.rangeSource ~= "asserted" and self.rangeSource ~= "esc_link" then
       self.message = self.L.calibrateEscFirst; return
     end
     self.message = self.L.holding
@@ -389,7 +391,11 @@ function M.new(runtime, transport, mathModule, labels)
         [17] = {"tailCentre", "tailDirection"}, [18] = {"gyro1", "gyro2", "gyro3"}, [19] = {"finish"} })[step]
       for _, name in ipairs(owned or {}) do self.checks[name] = nil end
       if step == 12 or step == 17 then self.bladesOff, self.percent = false, 10 end
-      if step == 12 then self.calibratedEsc, self.escStage = nil, nil end
+      if step == 12 then
+        self.calibratedEsc, self.escStage = nil, nil
+        if self.rangeSource == "calibrated" then self.rangeSource = nil end
+      end
+      if step == 11 then self.escParams,self.escAttempted,self.escBusy,self.escResultKey=nil,nil,nil,nil end
       if step == 5 then self.rateStyles, self.rateLoaded = {}, nil end
       if step == 8 then self.governorLoaded, self.governorFilterLoaded = nil, nil end
       -- Stick travel is measured anew on every visit to the receiver step.
@@ -414,6 +420,7 @@ function M.new(runtime, transport, mathModule, labels)
     self.buildRequested = true; self:rebuild()
   end
   function w:next()
+    if self.escBusy then return end
     if not self:usable() or not self.cards then return end
     if self.recoveryCard then
       if not self:ack("recoveryPowerCycle") then return end
@@ -458,6 +465,7 @@ function M.new(runtime, transport, mathModule, labels)
     if not self:allowed() then
       self:release();self.disconnectExit=true;self:rebuild();return
     end
+    if self.escBusy then return end
     if not self.ready then
       self.bus:cancel();self.transition=nil;self:close();return
     end
@@ -539,6 +547,8 @@ function M.new(runtime, transport, mathModule, labels)
   function w:load()
     self.ready, self.error, self.progress, self.transition = false, nil, 0, true
     self.checks,self.card,self.bladesOff,self.calibratedEsc={},1,false,nil
+    self.escParams,self.escAttempted,self.escBusy,self.rangeSource=nil,nil,nil,nil
+    self.rangeNeedsVerification = self.rangeChoice == "esc_link" and self.escRangeExpected ~= nil
     self.preparationDone,self.preparationCard=nil,nil
     self.governorLoaded,self.governorSpeeds,self.governorChanged,self.governorFilterLoaded=nil,nil,nil,nil
     self.statusQueued, self.statusWaiting, self.beforeStatusWait = nil, nil, nil
@@ -639,6 +649,7 @@ function M.new(runtime, transport, mathModule, labels)
     if not api then return end
     self:read(api, function(d)
       self.data[api] = d
+      if api == "motor_telemetry" then self.motorTelemetryAt = now() end
       if api == "attitude" then self.attitudeAt = now() end
       if api == "rc" then self.rcAt = now() end
       if api == "rx_channels" then self.rxChannelsAt = now() end
@@ -664,6 +675,9 @@ function M.new(runtime, transport, mathModule, labels)
     return list
   end
   function w:tick()
+    if self.escParams and self.escParams:observe(self.escSignature) and not self.escBusy then
+      self:escResult(nil,"restart")
+    end
     if self.linkTick then self:linkTick() end
     if self.attitudeView then
       self.attitudeView:update(self.data.attitude,self.attitudeAt,now(),
@@ -672,7 +686,7 @@ function M.new(runtime, transport, mathModule, labels)
     if not self.active then return end
     if not self:allowed() then
       if not self.suspended then
-        self.suspended = true; self.bus:cancel(); self:release(); self.message = self.L.disconnected
+        self.suspended, self.escBusy = true, nil; self.bus:cancel(); self:release(); self.message = self.L.disconnected
         self.ready = false; self:rebuild()
       end
       return
@@ -737,7 +751,9 @@ function M.new(runtime, transport, mathModule, labels)
         self:rebuild();return
       end
       if self:buildModelPreparation() then self:rebuild();return end
-      self.entryRebootGate = self.returnToSuite and self.step > 10 and self.rebootPending or nil
+      -- A range transaction owns its motor reboot; first keep ESC restart/readback reachable.
+      self.entryRebootGate = self.returnToSuite and self.step > 10 and self.rebootPending
+        and not (self.step == 11 and self.escRangeExpected) or nil
       if self.entryRebootGate then
         self.cards={self:cardDef(self.L.pendingReboot,self.L.entryRestartHint,{
           self:check("unplugged",self.L.servosUnplugged),self:check("blades",self.L.bladesRemoved)
@@ -757,6 +773,7 @@ function M.new(runtime, transport, mathModule, labels)
     if self.live and next(self.live) then
       local api = next(self.live); self.live[api] = nil; self:sendDirty(api); return
     end
+    if self.escTick and self:escTick() then return end
     if self.motorHold then
       local h = self.motorHold
       if now() >= h.untilAt then self:stopMotor(); return end

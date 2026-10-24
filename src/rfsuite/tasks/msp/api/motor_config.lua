@@ -4,6 +4,10 @@ local Api = {
     writeCommand = 222
 }
 
+-- Pulse editor limits used by the Suite throttle page (microseconds).
+local PULSE_LIMITS = {min = 50, max = 2250}
+Api.limits = {mincommand = PULSE_LIMITS, minthrottle = PULSE_LIMITS, maxthrottle = PULSE_LIMITS}
+
 local FIELD_SPEC = {
     {"minthrottle", "U16"},
     {"maxthrottle", "U16"},

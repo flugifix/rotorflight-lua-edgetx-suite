@@ -21,7 +21,8 @@ def main():
             ('cleanup-unlock','FAIL REVIEW failed cleanup never re-enables arming'),
             ('drop-stale-edit','FAIL CORE an edit made while a list was open applies after fresh STATUS'),
             ('governor-headspeed','FAIL S08 headspeed payload preserves every other profile field'),
-            ('rpm-custom-off','FAIL S08 custom/preset filter enablement includes every axis')]
+            ('rpm-custom-off','FAIL S08 custom/preset filter enablement includes every axis'),
+            ('esc-family','FAIL S11 route c not offered for non-YGE protocols')]
     def verify(control):
         mutation,marker=control
         command=[args.lua,'bin/wizard/verify.lua']

@@ -11,7 +11,7 @@ return function(w)
     w:value(L.output, function() return output() end)
   }
   local cards = {}
-  if w.data.motor_config.motor_pwm_protocol == 0 then
+  if w.data.motor_config.motor_pwm_protocol == 0 and w.rangeChoice ~= "asserted" and w.rangeChoice ~= "esc_link" then
     cards[1] = w:cardDef(L.fullThrottleTitle, L.fullThrottleHint, {
       w:check("escBlades", L.bladesRemoved),
       w:button(function() return w.escStage=="full" and L.cancelTest or L.fullThrottle end, function()
@@ -29,7 +29,9 @@ return function(w)
     })
     cards[3] = w:cardDef(L.lowThrottle, L.lowThrottleHint, {
       w:button(L.calibrationDone, function()
-        if w.escStage == "low" and output() > 0 and output() <= 1005 then w.calibratedEsc = true; w.message = L.ready end
+        if w.escStage == "low" and output() > 0 and output() <= 1005 then
+          w.calibratedEsc, w.rangeSource = true, "calibrated"; w.message = L.ready
+        end
       end),
       w:value(L.output, function() return output() end)
     })
