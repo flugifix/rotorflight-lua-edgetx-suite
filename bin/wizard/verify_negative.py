@@ -22,7 +22,8 @@ def main():
             ('drop-stale-edit','FAIL CORE an edit made while a list was open applies after fresh STATUS'),
             ('governor-headspeed','FAIL S08 headspeed payload preserves every other profile field'),
             ('rpm-custom-off','FAIL S08 custom/preset filter enablement includes every axis'),
-            ('esc-family','FAIL S11 route c not offered for non-YGE protocols')]
+            ('esc-family','FAIL S11 route c not offered for non-YGE protocols'),
+            ('battery-slots','FAIL POWER battery write preserves every profile block')]
     def verify(control):
         mutation,marker=control
         command=[args.lua,'bin/wizard/verify.lua']

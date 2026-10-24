@@ -1428,7 +1428,7 @@ return function(h)
     local w=world();settle(w);w.step=11;w.data.motor_config.motor_pwm_protocol=5
     w.data.esc_sensor_config.protocol=1
     local c=step(w,"escTelemetry")
-    cardOrder(c,{L.connectBattery,L.escTelemetry,L.port,L.telemetryCheck,L.telemetryStatus},"S11 serial")
+    cardOrder(c,{L.connectBattery,L.escTelemetry,L.port,L.telemetryCheck,L.telemetryStatus,L.voltageSource,L.currentSource,L.powerBattery,L.capacity,L.capacity,L.smartFuel},"S11 serial")
     eq(c[1].detail,L.telemetryBatteryHint,"S11 powers the ESC before configuration and live readings")
     c[2].rows[1].set(3);c[3].rows[1].set(1)
     eq(w.data.esc_sensor_config.protocol,2,"S11 protocol field")
@@ -1453,9 +1453,9 @@ return function(h)
     eq(serialWrites,#expected,"S11 saves every configured serial port")
     check(serialWrites>0,"S11 port assignment is saved")
     c=step(w,"escTelemetry");c[2].rows[1].set(1);c=step(w,"escTelemetry")
-    cardOrder(c,{L.connectBattery,L.escTelemetry,L.telemetryCheck,L.telemetryStatus},"S11 Off")
+    cardOrder(c,{L.connectBattery,L.escTelemetry,L.telemetryCheck,L.telemetryStatus,L.voltageSource,L.currentSource,L.powerBattery,L.capacity,L.capacity,L.smartFuel},"S11 Off")
     w.data.motor_config.motor_pwm_protocol=9;c=step(w,"escTelemetry")
-    cardOrder(c,{L.connectBattery,L.escTelemetry,L.telemetryCheck,L.telemetryStatus},"S11 Castle")
+    cardOrder(c,{L.connectBattery,L.escTelemetry,L.telemetryCheck,L.telemetryStatus,L.voltageSource,L.currentSource,L.powerBattery,L.capacity,L.capacity,L.smartFuel},"S11 Castle")
     eq(c[1].detail,L.telemetryBatteryHint,"S11 Castle also starts with battery connection")
     eq(c[2].detail,L.castleTelemetryHint,"S11 Castle explains its throttle wire")
     check(not c[2].rows[1].enabled(),"S11 Castle protocol stays read-only")
@@ -3416,6 +3416,209 @@ return function(h)
     eq(motor.limits.minthrottle.min,50,"S11 existing pulse minimum unchanged")
     eq(motor.limits.maxthrottle.max,2250,"S11 existing pulse maximum unchanged")
     page.onClose();session.setup_esc_motors_throttle=cached;loadScript=originalLoadScript
+  end)
+  local function powerCard(cards, title)
+    for _, card in ipairs(cards) do if card.power and card.title == title then return card end end
+  end
+  case("S11.power-shared-specs-and-availability",function()
+    local w=world();settle(w)
+    local fields,versions=w.powerFields,w.powerApiVersion
+    for _,version in ipairs({"12.08","12.09","12.10","12.0.10","13.0"}) do
+      local options=fields.sourceOptions(w.i18n,1,version,versions)
+      eq(#options,versions.isAtLeast(version,{12,0,10}) and 5 or 4,"POWER CRSF source gate matches Power page")
+      for i,option in ipairs(options) do eq(option.value,i-1,"POWER sources retain explicit wire IDs") end
+      eq(fields.supportsSmartFuel(version,versions),versions.isAtLeast(version,{12,0,9}),"POWER SmartFuel gate matches menu")
+    end
+    eq(#fields.sourceOptions(w.i18n,1,nil,versions),4,"POWER unknown API offers no CRSF")
+    local unknown=fields.sourceOptions(w.i18n,19,nil,versions)
+    eq(unknown[#unknown].value,19,"POWER unknown stored source is preserved")
+    eq(#fields.modeOptions(w.i18n),4,"POWER all four SmartFuel modes share page options")
+    local reads={}
+    for _,m in ipairs(q.sent) do reads[m.command]=(reads[m.command] or 0)+1 end
+    for _,command in ipairs({32,175,0x4000}) do eq(reads[command],1,"POWER single cheap startup read") end
+    eq(reads[110],nil,"POWER analog is absent from startup chain")
+    for _,command in ipairs({32,175,0x4000}) do
+      h.setFailCommand(command);local absent=h.beginWorld();drain(absent);h.setFailCommand(nil)
+      check(absent.ready and not absent.error,"POWER missing API does not block the wizard")
+      local cards=step(absent,"escTelemetry")
+      if command==32 then
+        for _,card in ipairs(cards) do check(not card.power,"POWER missing battery API hides power cards") end
+      elseif command==0x4000 then
+        check(not powerCard(cards,L.smartFuel),"POWER missing SmartFuel API hides its card")
+      else
+        local battery=powerCard(cards,L.powerBattery)
+        eq(battery.rows[1].get(),L.powerProfileUnknown,"POWER absent profile is never guessed")
+        eq(battery.rows[2].kind,"value","POWER unknown per-profile cells stay read-only")
+      end
+    end
+    local session=_G.rfsuite.session;local version=session.apiVersion
+    session.apiVersion=nil
+    local unknownApi=h.beginWorld();drain(unknownApi)
+    check(not unknownApi.data.smartfuel_config,"POWER unknown API does not read SmartFuel")
+    for _,m in ipairs(q.sent) do check(m.command~=0x4000,"POWER unknown API skips gated MSP read") end
+    session.apiVersion=version
+  end)
+  case("S11.power-live-sources-and-warning",function()
+    local w=world();settle(w);w.step=11
+    local cards=step(w,"escTelemetry")
+    local voltage=powerCard(cards,L.voltageSource);local current=powerCard(cards,L.currentSource)
+    local liveIndex,powerIndex
+    for i,card in ipairs(cards) do
+      if card.title==L.telemetryStatus then liveIndex=i end
+      if card==voltage then powerIndex=i end
+    end
+    check(powerIndex>liveIndex,"POWER cards follow existing live telemetry cards")
+    for _,row in ipairs({voltage.rows[1],current.rows[1]}) do row.set(3) end
+    eq(w.data.battery_config.voltageMeterSource,2,"POWER ESC source uses wire ID 2")
+    w.data.motor_telemetry={motors={}}
+    eq(voltage.rows[2].get(),L.powerNoEscVoltage,"POWER absent ESC reports missing voltage explicitly")
+    w.data.motor_telemetry={motors={{voltage=24680,current=1234}}};w.motorTelemetryAt=getTime()
+    eq(voltage.rows[2].get(),"24.68 V","POWER ESC voltage scales millivolts")
+    eq(current.rows[2].get(),"1.23 A","POWER ESC current scales milliamperes")
+    w.data.motor_telemetry.motors[1].voltage=0
+    eq(voltage.rows[2].get(),L.powerNoEscVoltage,"POWER selected ESC explicitly reports missing voltage")
+    w.motorTelemetryAt=getTime()-201
+    eq(voltage.rows[2].get(),L.noTelemetry,"POWER stale ESC sample is not live")
+    voltage.rows[1].set(4)
+    eq(voltage.rows[2].get(),L.powerSaveFirst,"POWER draft external source never borrows another source's reading")
+    voltage.rows[1].set(2);current.rows[1].set(2)
+    w.card=powerIndex;w.pollIndex=1;w.lastPoll=nil;q.sent={}
+    w:poll();settle(w)
+    eq(q.sent[1].command,110,"POWER analog replaces the unused servo poll on power cards")
+    eq(voltage.rows[2].get(),"24.80 V","POWER analog voltage uses hundredths")
+    eq(current.rows[2].get(),"0.50 A","POWER analog current uses hundredths")
+    w.analogSources.voltageMeterSource=3
+    eq(voltage.rows[2].get(),L.noTelemetry,"POWER previous source analog sample is rejected")
+    w.analogSources.voltageMeterSource=1;w.analogAt=getTime()-201
+    eq(voltage.rows[2].get(),L.noTelemetry,"POWER stale analog reading is rejected")
+    w.data.analog=nil;w.analogAt=nil
+    h.setFailCommand(110);w.pollIndex=1;w.lastPoll=nil;w:poll();settle(w);h.setFailCommand(nil)
+    check(not w.error and not w.data.analog,"POWER unavailable analog is optional and clears its sample")
+    local smart=powerCard(cards,L.smartFuel)
+    voltage.rows[1].set(1)
+    for mode=0,3 do
+      smart.rows[1].set(mode+1)
+      eq(smart.rows[2].get(),(mode==1 or mode==3) and L.powerVoltageWarning or "","POWER only voltage-dependent modes warn with source off")
+    end
+    voltage.rows[1].set(2)
+    eq(smart.rows[2].get(),"","POWER warning clears with a voltage source")
+    for _,m in ipairs(q.sent) do check(not m.isWrite,"POWER drafts send no immediate writes") end
+  end)
+  case("S11.power-roundtrip-save-discard-and-failure",function()
+    local w=world();settle(w);w.step=11
+    local original=h.api("battery_config").buildWritePayload(w.saved.battery_config)
+    for _,length in ipairs({15,27,81}) do
+      local raw={};for i=1,length do raw[i]=h.api("battery_config").simulatorResponse[i] end
+      local roundtrip=h.api("battery_config").buildWritePayload(h.api("battery_config").parse(raw))
+      eq(#roundtrip,length,"POWER reply capability controls write length")
+      for i,byte in ipairs(raw) do eq(roundtrip[i],byte,"POWER parse/build round-trip preserves raw byte") end
+    end
+    local originalSmart=h.api("smartfuel_config").buildWritePayload(w.saved.smartfuel_config)
+    local cards=step(w,"escTelemetry");local caps={}
+    for _,card in ipairs(cards) do
+      if card.power and card.title==L.capacity then for _,row in ipairs(card.rows) do caps[#caps+1]=row end end
+    end
+    eq(#caps,6,"POWER all six capacity slots fit two cards")
+    for i,row in ipairs(caps) do
+      eq(row.min,w.powerFields.capacity.min,"POWER capacity minimum shares Battery page spec")
+      eq(row.max,w.powerFields.capacity.max,"POWER capacity maximum shares Battery page spec")
+      row.set(2000+i*100)
+    end
+    local battery=powerCard(cards,L.powerBattery)
+    eq(battery.rows[2].max,w.powerFields.cellCount.max,"POWER cell count shares Battery page range")
+    battery.rows[2].set(12)
+    local profile=w.data.battery_profile.batteryProfile
+    eq(w.data.battery_config["batteryCellCount_"..profile],12,"POWER cell count edits active profile block")
+    eq(w.data.battery_config.batteryCellCount,12,"POWER active legacy cell count stays consistent")
+    powerCard(cards,L.smartFuel).rows[1].set(4)
+    q.sent={};w:save();settle(w)
+    local payload,smart
+    for _,m in ipairs(q.sent) do
+      if m.command==33 then payload=m.payload elseif m.command==0x4001 then smart=m.payload end
+      check(m.command~=176,"POWER never switches battery profile")
+    end
+    check(payload~=nil and #payload==#original,"POWER battery write preserves every profile block")
+    for i=1,#original do
+      local changed=i<=3 or (i>=16 and i<=27) or i==28+profile
+      if not changed then eq(payload and payload[i],original[i],"POWER untouched battery byte "..i.." preserved") end
+    end
+    for i=0,5 do
+      local at=16+i*2
+      local capacity=payload and payload[at] and payload[at+1] and payload[at]+256*payload[at+1]
+      eq(capacity,2100+i*100,"POWER saved slot capacity is serialized")
+    end
+    eq(smart and smart[1],3,"POWER SmartFuel mode uses wire ID 3")
+    for i=2,4 do eq(smart and smart[i],originalSmart[i],"POWER SmartFuel tuning preserved") end
+    eq(next(w.dirty),nil,"POWER successful save clears drafts after EEPROM")
+    w=world();settle(w);w.step=11;cards=step(w,"escTelemetry")
+    powerCard(cards,L.voltageSource).rows[1].set(3)
+    powerCard(cards,L.smartFuel).rows[1].set(4)
+    q.sent={};w:discard(function() end);settle(w)
+    eq(w.data.battery_config.voltageMeterSource,w.saved.battery_config.voltageMeterSource,"POWER discard restores battery source")
+    eq(w.data.smartfuel_config.smartfuel_mode,w.saved.smartfuel_config.smartfuel_mode,"POWER discard restores SmartFuel mode")
+    for _,m in ipairs(q.sent) do
+      if m.command==33 then for i,v in ipairs(original) do eq(m.payload[i],v,"POWER discard round-trips original battery byte") end end
+      check(m.command~=250,"POWER discard does not persist a draft")
+    end
+    for _,command in ipairs({33,0x4001}) do
+      w=world();settle(w);w.step=11;cards=step(w,"escTelemetry")
+      powerCard(cards,command==33 and L.voltageSource or L.smartFuel).rows[1].set(3)
+      q.sent={};h.setFailCommand(command);w:save();drain(w);h.setFailCommand(nil)
+      check(w.error~=nil,"POWER failed configuration write remains visible")
+      for _,m in ipairs(q.sent) do check(m.command~=250,"POWER failed write prevents EEPROM") end
+    end
+    -- Legacy replies without capacity slots use the single capacity and cell fields.
+    w=world();settle(w)
+    local legacy={};for i=1,15 do legacy[i]=original[i] end
+    w.data.battery_config=h.api("battery_config").parse(legacy)
+    w.data.battery_profile=nil
+    cards=step(w,"escTelemetry")
+    eq(#powerCard(cards,L.capacity).rows,1,"POWER legacy battery has one capacity editor")
+    eq(powerCard(cards,L.powerBattery).rows[2].kind,"number","POWER legacy cells remain editable without profile API")
+    eq(#h.api("battery_config").buildWritePayload(w.data.battery_config),15,"POWER legacy round-trip adds no capacity or cell blocks")
+  end)
+  case("S11.power-help-and-layout",function()
+    for _,locale in ipairs({"en","de"}) do
+      local bundle=load("i18n/"..locale..".lua")
+      local s,p=bundle.app.modules.helicopter_setup,bundle.app.pages
+      local expected={
+        powerVoltageHelp={p.setup_power_sources.voltage_meter_source,s.voltage},
+        powerCurrentHelp={p.setup_power_sources.current_meter_source,s.current},
+        powerBatteryHelp={p.setup_power_battery.selected,p.setup_power_battery.cell_count},
+        powerCapacityHelp={p.setup_power_battery.capacity},
+        powerSmartFuelHelp={p.setup_power_smartfuel.firmware_mode}
+      }
+      for first=1,4,3 do
+        expected[first==1 and "powerCapacityFirstHelp" or "powerCapacityLastHelp"]={}
+        for i=first,first+2 do
+          table.insert(expected[first==1 and "powerCapacityFirstHelp" or "powerCapacityLastHelp"],p.setup_power_battery.battery_slot.." "..i)
+        end
+      end
+      for key,labels in pairs(expected) do
+        check(utf8.len(s[key])<=600,"POWER help key fits 600 characters")
+        local index=0
+        for line in string.gmatch(s[key],"[^\n]+") do
+          index=index+1
+          check(utf8.len(line)<=200,"POWER help line fits 200 characters")
+          eq(string.sub(line,1,#labels[index]+1),labels[index]..":","POWER help starts with its displayed label in "..locale)
+        end
+        eq(index,#labels,"POWER one help line per row")
+      end
+      local w=world();settle(w);w.step=11
+      w.i18n=load("i18n/init.lua").new(locale)
+      local cards=step(w,"escTelemetry")
+      for _,size in ipairs({{480,320},{480,272},{320,240},{800,480}}) do
+        for i,card in ipairs(cards) do if card.power then
+          check(#card.rows<=3,"POWER card has at most three rows")
+          w.cards,w.card=cards,i
+          local job=h.view.new(w,{w=size[1],h=size[2]},h.diagrams)
+          while not job.done do h.measure("Power view slice",function() job:step() end) end
+          for _,node in ipairs(job.children) do
+            if node.y and node.h then check(node.y+node.h<=size[2],"POWER cards fit without scrolling") end
+          end
+        end end
+      end
+    end
   end)
   return cases
 end

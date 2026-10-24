@@ -80,6 +80,21 @@ return {
     header_configuration = "Configuration",
     modules = {
       helicopter_setup = {
+        powerSourceShort = "Choose a source and check its live reading.",
+        powerBatteryShort = "Cell count: 0 = automatic. Active profile is read-only.",
+        powerCapacityShort = "Capacity in mAh. Editing a slot does not activate it.",
+        powerSmartFuelShort = "Choose the FC's remaining-fuel calculation.",
+        powerNoEscVoltage = "No ESC voltage",
+        powerSaveFirst = "Save source first",
+        powerProfileUnknown = "Active profile unknown",
+        powerVoltageWarning = "SmartFuel needs a voltage source.",
+        powerVoltageHelp = "Voltage Source: Choose the FC's voltage input; options match Power > Sources.\nVoltage: ESC telemetry is live before saving. Other sources show the FC reading after saving; missing ESC voltage is reported explicitly.",
+        powerCurrentHelp = "Current Source: Choose the FC's current input; options match Power > Sources.\nCurrent: ESC telemetry is live before saving. Other sources show the FC reading after saving; zero current can be normal at rest.",
+        powerBatteryHelp = "Selected: Read-only active battery profile; unknown if its API does not answer.\nCell count: 0-24; 0 detects cells automatically. Per-profile cells edit the active slot only; with an unknown active profile the value is read-only.",
+        powerCapacityHelp = "Capacity: Battery capacity, 0-40000 mAh. Saved through the wizard; other battery settings are preserved.",
+        powerCapacityFirstHelp = "Battery 1: Capacity of slot 1, 0-40000 mAh; editing does not activate it.\nBattery 2: Capacity of slot 2, 0-40000 mAh; editing does not activate it.\nBattery 3: Capacity of slot 3, 0-40000 mAh; editing does not activate it.",
+        powerCapacityLastHelp = "Battery 4: Capacity of slot 4, 0-40000 mAh; editing does not activate it.\nBattery 5: Capacity of slot 5, 0-40000 mAh; editing does not activate it.\nBattery 6: Capacity of slot 6, 0-40000 mAh; editing does not activate it.",
+        powerSmartFuelHelp = "Firmware Source: OFF (LOCAL), VOLTAGE, CURRENT or COMBINED; VOLTAGE and COMBINED require a voltage source. The warning follows the draft source selection. Tuning values are preserved.",
         rangeQuestion = "How is the ESC's throttle range set?",
         rangeCalibrate = "Calibrate the ESC",
         rangeManual = "Set in the ESC by hand / already set",
@@ -1799,6 +1814,10 @@ return {
         help_message = "Announces the start and the end of a rescue, once each and without vibration. Needs the Rescue State (92) or System Status (120) sensor, Setup > Telemetry.\nRescue Active: spoken as soon as a rescue starts.\nRescue Off: spoken when the rescue is over."
       },
       setup_power_smartfuel = {
+        mode_off = "OFF (LOCAL)",
+        mode_voltage = "VOLTAGE",
+        mode_current = "CURRENT",
+        mode_combined = "COMBINED",
         section_mode = "SmartFuel Mode",
         firmware_mode = "Firmware Source",
         section_tuning = "SmartFuel Tuning",

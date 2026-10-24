@@ -107,6 +107,78 @@
         "S11.shared-mode-labels-and-pulse-limits"
       ],
       "adaptation": "Suite additions beyond the pinned Configurator: protocol descriptor capabilities; YGE analog throttle range and YGE/Hobbywing V5 operating mode with explicit button writes. Existing API modules exclusively own codecs. Shared esc_params owns bounded cache retries, fresh complete-block transactions, status-based restart detection and changed-field readback. Parameter reads run after load, never during page construction; pilot assertions and calibration remain distinct. Mode option value-to-i18n-key mappings live only in the family descriptor. The Suite throttle page and wizard share API pulse limits without changing the 50..2250 us bounds."
+    },
+    {
+      "id": "esc-telemetry-power-and-battery",
+      "beyond_configurator": true,
+      "targets": [
+        "src/rfsuite/app/pages/helicopter_setup/power_cards.lua",
+        "src/rfsuite/app/pages/helicopter_setup/controller.lua",
+        "src/rfsuite/lib/power_fields.lua",
+        "src/rfsuite/tasks/msp/api/battery_config.lua",
+        "src/rfsuite/tasks/msp/api/smartfuel_config.lua",
+        "src/rfsuite/app/pages/setup/power/sources/page.lua",
+        "src/rfsuite/app/pages/setup/power/battery/page.lua",
+        "src/rfsuite/app/pages/setup/power/smartfuel/page.lua"
+      ],
+      "writes": {
+        "battery_config": [
+          "voltageMeterSource",
+          "currentMeterSource",
+          "batteryCellCount",
+          "batteryCapacity",
+          "batteryCapacity_0..5",
+          "batteryCellCount_0..5"
+        ],
+        "smartfuel_config": [
+          "smartfuel_mode"
+        ]
+      },
+      "reads": {
+        "battery_config": [
+          "batteryCapacity",
+          "batteryCellCount",
+          "voltageMeterSource",
+          "currentMeterSource",
+          "vbatmincellvoltage",
+          "vbatmaxcellvoltage",
+          "vbatfullcellvoltage",
+          "vbatwarningcellvoltage",
+          "lvcPercentage",
+          "consumptionWarningPercentage",
+          "batteryCapacity_0..5",
+          "batteryCellCount_0..5",
+          "vbatmincellvoltage_0..5",
+          "vbatmaxcellvoltage_0..5",
+          "vbatfullcellvoltage_0..5",
+          "vbatwarningcellvoltage_0..5",
+          "hasProfileCells"
+        ],
+        "battery_profile": [
+          "batteryProfile"
+        ],
+        "smartfuel_config": [
+          "smartfuel_mode",
+          "voltage_drop_rate",
+          "charge_drop_rate",
+          "sag_gain"
+        ],
+        "motor_telemetry": [
+          "voltage",
+          "current"
+        ],
+        "analog": [
+          "voltage",
+          "current"
+        ]
+      },
+      "contracts": [
+        "S11.power-shared-specs-and-availability",
+        "S11.power-live-sources-and-warning",
+        "S11.power-roundtrip-save-discard-and-failure",
+        "S11.power-help-and-layout"
+      ],
+      "adaptation": "Additional Power cards after live telemetry, beyond the pinned Configurator. Three optional single-message startup reads use transport only; SmartFuel follows the menu API 12.0.9 gate, Battery has no version gate and capability comes from the reply. All six capacity slots fit two cards; active profile is read-only and never switched. Source options, capacity/cell limits and capacity scaling are extracted from existing Power pages into power_fields, which both pages and wizard consume. Analog replaces the servo live poll only on Power cards; ESC readings reuse motor_telemetry. Complete received battery and SmartFuel records round-trip through the existing wizard save/discard/EEPROM boundary; the battery codec also accepts its flat parse result."
     }
   ],
   "files": [

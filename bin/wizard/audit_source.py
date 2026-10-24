@@ -31,7 +31,9 @@ def main():
         for api,fields in addition['writes'].items():
             source=Path(f'src/rfsuite/tasks/msp/api/{api}.lua').read_text(encoding='utf-8')
             for field in fields:
-                assert field in source and field in wizard, f'Untraceable added write: {api}.{field}'
+                indexed=re.fullmatch(r'(\w+_)0\.\.5',field)
+                token=indexed[1] if indexed else field
+                assert token in source and token in wizard, f'Untraceable added write: {api}.{field}'
                 written.add(f'{api}.{field}')
         for api,fields in addition.get('reads',{}).items():
             source=Path(f'src/rfsuite/tasks/msp/api/{api}.lua').read_text(encoding='utf-8')
@@ -43,9 +45,26 @@ def main():
     expected={'governor_profile.governor_headspeed','governor_config.gov_spoolup_time',
               'governor_config.gov_spooldown_time','governor_config.gov_recovery_time',
               'esc_parameters_yge.governor','esc_parameters_yge.stick_zero_us','esc_parameters_yge.stick_range_us',
-              'esc_parameters_hw5.flight_mode','motor_config.mincommand','motor_config.minthrottle','motor_config.maxthrottle'}
+              'esc_parameters_hw5.flight_mode','motor_config.mincommand','motor_config.minthrottle','motor_config.maxthrottle',
+              'battery_config.voltageMeterSource','battery_config.currentMeterSource','battery_config.batteryCellCount',
+              'battery_config.batteryCapacity','battery_config.batteryCapacity_0..5','battery_config.batteryCellCount_0..5',
+              'smartfuel_config.smartfuel_mode'}
     assert written==expected, f'Added MSP write inventory changed: {written ^ expected}'
     assert not any(field.startswith(('filter_config.','rpm_filter_v2.')) for field in written), 'Filter check must be read-only'
+    power=Path('src/rfsuite/app/pages/helicopter_setup/power_cards.lua').read_text(encoding='utf-8')
+    assert 'tasks/msp/api/' not in power and 'buildWritePayload' not in power, 'Power cards must use wizard transport'
+    assert 'battery_profile.batteryProfile' not in written, 'Power cards must not switch the active battery profile'
+    for page,call in [('sources','sourceOptions'),('smartfuel','modeOptions')]:
+        source=Path(f'src/rfsuite/app/pages/setup/power/{page}/page.lua').read_text(encoding='utf-8')
+        assert f'PowerFields.{call}' in source, f'Power {page} page must share choices with wizard'
+        assert f'fields.{call}' in power, f'Wizard must share Power {page} choices'
+    battery=Path('src/rfsuite/app/pages/setup/power/battery/page.lua').read_text(encoding='utf-8')
+    for spec in ('capacity','cellCount'):
+        for bound in ('min','max'):
+            assert f'PowerFields.{spec}.{bound}' in battery and f'fields.{spec}.{bound}' in power, 'Battery limits duplicated'
+    for api,fields in {'analog':('voltage','current'),'battery_profile':('batteryProfile',),
+                       'smartfuel_config':('smartfuel_mode','voltage_drop_rate','charge_drop_rate','sag_gain')}.items():
+        assert all(f'{api}.{field}' in read for field in fields), f'Missing Power read inventory: {api}'
     shared=Path('src/rfsuite/lib/esc_params.lua').read_text(encoding='utf-8')
     link=Path('src/rfsuite/app/pages/helicopter_setup/esc_link.lua').read_text(encoding='utf-8')
     for source in (shared,link):
@@ -77,7 +96,7 @@ def main():
         assert actual==covered,f'Unmapped/removed wizard files: {actual ^ covered}'
     print(f'Traceability: {len(files)} files, {sum(len(f["functions"]) for f in files)} named functions, {len(contracts)} scenario groups; no missing targets/contracts')
     print(f'Suite additions beyond Configurator: {len(additions)}; {len(written)} added MSP fields: '+', '.join(sorted(written)))
-    print(f'Additional read inventory: {len(read)} API field dependencies; ESC codecs and restart reuse checked')
+    print(f'Additional read inventory: {len(read)} API field dependencies; ESC codec/restart and Power choice/limit reuse checked')
     if args.source:
         print(f'Pinned source: all {len(files)} SHA-256 fingerprints match; complete wizard directory accounted for')
 

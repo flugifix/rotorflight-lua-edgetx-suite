@@ -3,7 +3,8 @@ local BASE = "/SCRIPTS/TOOLS/rfsuite-core/"
 local READS = { "status", "boxnames", "boxids", "mode_ranges", "mode_ranges_extra", "adjustment_ranges",
   "feature_config", "board_info", "telemetry_config", "board_alignment_config", "serial_config", "rx_map", "rx_config", "rc_config",
   "motor_config", "esc_sensor_config", "governor_config", "mixer_config", "mixer_input",
-  "servo_configurations", "servo", "rc_tuning", "tail_motor_output", "name" }
+  "servo_configurations", "servo", "rc_tuning", "tail_motor_output", "name",
+  "battery_config", "battery_profile", "smartfuel_config" }
 local STEPS = { "sensors", "receiver", "modes", "profiles", "rates", "swash", "servoType", "governor", "motor",
   "connect", "escTelemetry", "throttle", "servos", "direction", "level", "pitch", "tail", "gyro", "finish" }
 local function copy(v)
@@ -551,6 +552,8 @@ function M.new(runtime, transport, mathModule, labels)
     self.rangeNeedsVerification = self.rangeChoice == "esc_link" and self.escRangeExpected ~= nil
     self.preparationDone,self.preparationCard=nil,nil
     self.governorLoaded,self.governorSpeeds,self.governorChanged,self.governorFilterLoaded=nil,nil,nil,nil
+    self.data.battery_config, self.data.battery_profile, self.data.smartfuel_config = nil, nil, nil
+    self.data.analog, self.analogAt = nil, nil
     self.statusQueued, self.statusWaiting, self.beforeStatusWait = nil, nil, nil
     self.recoveryRequired=self:session().helicopterSetupRecovery==self:session().mcu_id
     self.loadingText, self.loadTotal = self.L.loading, #READS + 66
@@ -599,11 +602,14 @@ function M.new(runtime, transport, mathModule, labels)
       local api = name
       -- Bulk adjustment/servo tables can exceed the firmware's 320-byte
       -- telemetry response buffer. Read their records through the Suite APIs.
-      if api == "adjustment_ranges" then
+      if api == "smartfuel_config" and not self.powerFields.supportsSmartFuel(self:session().apiVersion, self.powerApiVersion) then
+        self:run(function() self:loadProgress() end)
+      elseif api == "adjustment_ranges" then
         self:readRecords(api, "get_adjustment_range", "adjustment_range")
       elseif api == "servo_configurations" then
         self:readRecords(api, "get_servo_config", "servo_config", true)
-      else self:read(api, function(d)
+      else self:read(api, function(d, err)
+        if err and (api == "battery_config" or api == "battery_profile" or api == "smartfuel_config") then d = nil end
         if api == "board_alignment_config" and d then
           for _, key in ipairs({"roll_degrees", "pitch_degrees", "yaw_degrees"}) do d[key] = self.math.signed(d[key]) end
         end
@@ -612,7 +618,9 @@ function M.new(runtime, transport, mathModule, labels)
           -- The ARM box bit is identified by BOXIDS below, never assumed to be bit zero.
           self:acceptStatus(d)
         end
-      end, api == "tail_motor_output" or api == "board_info" or api == "telemetry_config", api == "tail_motor_output" and {0} or nil) end
+      end, api == "tail_motor_output" or api == "board_info" or api == "telemetry_config"
+        or api == "battery_config" or api == "battery_profile" or api == "smartfuel_config",
+        api == "tail_motor_output" and {0} or nil) end
       self:run(function() self.saved[api] = copy(self.data[api]) end)
     end
     -- Loading many API blocks can take seconds over telemetry. Read the lock
@@ -645,10 +653,20 @@ function M.new(runtime, transport, mathModule, labels)
       self.pollIndex == 1 and "status" or self.pollIndex == 2 and "servo" or
       ({ [1] = "attitude", [2] = "rx_channels", [3] = "rc", [4] = "rc", [10] = "motor", [11] = "motor_telemetry",
         [12] = "motor", [14] = "rc_command", [17] = self:motorised() and "motor" or "rc_command" })[self.step]
+    -- On Power cards, replace the unused servo poll with one nine-byte selected-source reading.
+    local card = self.cards and self.cards[self.card]
+    if self.step == 11 and card and card.power and self.pollIndex == 2 then api = "analog" end
     if self.motorHold then api = "motor" end
     if not api then return end
-    self:read(api, function(d)
-      self.data[api] = d
+    local selectedSources = self.saved.battery_config
+    local voltageSource = selectedSources and selectedSources.voltageMeterSource
+    local currentSource = selectedSources and selectedSources.currentMeterSource
+    self:read(api, function(d, err)
+      self.data[api] = not err and d or nil
+      if api == "analog" then
+        self.analogAt = not err and now() or nil
+        self.analogSources = {voltageMeterSource = voltageSource, currentMeterSource = currentSource}
+      end
       if api == "motor_telemetry" then self.motorTelemetryAt = now() end
       if api == "attitude" then self.attitudeAt = now() end
       if api == "rc" then self.rcAt = now() end
@@ -657,7 +675,7 @@ function M.new(runtime, transport, mathModule, labels)
         self:acceptStatus(d)
       end
       if self.onLive then self.onLive(api, d) end
-    end)
+    end, api == "analog")
   end
   function w:motorised() return self.data.mixer_config and self.data.mixer_config.tail_rotor_mode ~= 0 end
   function w:servos()

@@ -80,6 +80,21 @@ return {
     header_configuration = "Konfiguration",
     modules = {
       helicopter_setup = {
+        powerSourceShort = "Quelle wählen und den Live-Messwert prüfen.",
+        powerBatteryShort = "Zellenzahl: 0 = automatisch. Aktives Profil nur zur Anzeige.",
+        powerCapacityShort = "Kapazität in mAh. Bearbeiten aktiviert das Profil nicht.",
+        powerSmartFuelShort = "Berechnung der Restkapazität im FC wählen.",
+        powerNoEscVoltage = "Keine ESC-Spannung",
+        powerSaveFirst = "Quelle zuerst speichern",
+        powerProfileUnknown = "Aktives Profil unbekannt",
+        powerVoltageWarning = "SmartFuel benötigt eine Spannungsquelle.",
+        powerVoltageHelp = "Spannungsquelle: Spannungseingang des FC wählen; Optionen wie unter Power > Quellen.\nSpannung: ESC-Telemetrie ist vor dem Speichern live. Andere Quellen zeigen den FC-Wert nach dem Speichern; fehlende ESC-Spannung wird ausdrücklich gemeldet.",
+        powerCurrentHelp = "Stromquelle: Stromeingang des FC wählen; Optionen wie unter Power > Quellen.\nStrom: ESC-Telemetrie ist vor dem Speichern live. Andere Quellen zeigen den FC-Wert nach dem Speichern; im Stillstand kann der Strom null sein.",
+        powerBatteryHelp = "Ausgewählt: Aktives Akkuprofil, nur zur Anzeige; unbekannt, wenn seine API nicht antwortet.\nZellenzahl: 0-24; 0 erkennt die Zellen automatisch. Bei Zellen pro Profil wird nur das aktive Profil bearbeitet; bei unbekanntem Profil ist der Wert schreibgeschützt.",
+        powerCapacityHelp = "Kapazität: Akkukapazität, 0-40000 mAh. Speichern über den Wizard; andere Akkueinstellungen bleiben erhalten.",
+        powerCapacityFirstHelp = "Akku 1: Kapazität von Profil 1, 0-40000 mAh; Bearbeiten aktiviert es nicht.\nAkku 2: Kapazität von Profil 2, 0-40000 mAh; Bearbeiten aktiviert es nicht.\nAkku 3: Kapazität von Profil 3, 0-40000 mAh; Bearbeiten aktiviert es nicht.",
+        powerCapacityLastHelp = "Akku 4: Kapazität von Profil 4, 0-40000 mAh; Bearbeiten aktiviert es nicht.\nAkku 5: Kapazität von Profil 5, 0-40000 mAh; Bearbeiten aktiviert es nicht.\nAkku 6: Kapazität von Profil 6, 0-40000 mAh; Bearbeiten aktiviert es nicht.",
+        powerSmartFuelHelp = "Firmware Quelle: AUS (LOKAL), SPANNUNG, STROM oder KOMBINIERT; SPANNUNG und KOMBINIERT benötigen eine Spannungsquelle. Die Warnung folgt der gewählten Quelle. Abstimmwerte bleiben erhalten.",
         rangeQuestion = "Wie wird der Gasbereich des Reglers eingestellt?",
         rangeCalibrate = "Regler kalibrieren",
         rangeManual = "Am Regler von Hand / bereits eingestellt",
@@ -1799,6 +1814,10 @@ return {
         help_message = "Sagt Beginn und Ende einer Rettung an, je einmal und ohne Vibration. Braucht den Sensor Rescue State (92) oder System Status (120), Setup > Telemetry.\nRettung aktiv: wird angesagt, sobald eine Rettung beginnt.\nRettung beendet: wird angesagt, wenn die Rettung vorbei ist."
       },
       setup_power_smartfuel = {
+        mode_off = "AUS (LOKAL)",
+        mode_voltage = "SPANNUNG",
+        mode_current = "STROM",
+        mode_combined = "KOMBINIERT",
         section_mode = "SmartFuel Modus",
         firmware_mode = "Firmware Quelle",
         section_tuning = "SmartFuel Tuning",
@@ -1845,8 +1864,8 @@ return {
       setup_power_battery = {
         section_profiles = "Profile",
         battery_slot = "Akku",
-        selected = "Ausgewaehlt",
-        capacity = "Kapazitaet",
+        selected = "Ausgewählt",
+        capacity = "Kapazität",
         section_battery = "Batterie",
         max_cell_voltage = "Max Zellspannung",
         full_cell_voltage = "Voll Zellspannung",

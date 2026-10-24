@@ -194,6 +194,129 @@ Local ESC-page duplication retained for a later migration:
   Those transaction responsibilities duplicate the new shared module. Both pages
   remain unchanged; their UI state and field adapters are outside this part.
 
+## Power/battery addition beyond Configurator (step 11)
+
+The Power block follows the existing live telemetry cards and precedes the ESC
+parameter/range cards. It adds source, battery and SmartFuel editors through
+`w:enum`, `w:n`, `w:field` and the existing touch/save/discard/EEPROM transaction.
+No additional profile-selection write is sent. The source and SmartFuel option
+lists, cell/capacity limits and mAh formatter live in `lib/power_fields.lua`,
+extracted from the Power pages, which consume the same helper. Labels reuse the
+Power pages' keys; only block-specific help, status and warning strings are new.
+
+Read scheduling and capability rules:
+
+- `battery_config` (32), `battery_profile` (175) and `smartfuel_config` (0x4000)
+  are optional single cheap startup reads, not indexed chains. Their snapshots
+  join the existing per-API save/discard snapshots. An unavailable battery API
+  hides the Power block; an unavailable SmartFuel API hides its own card.
+- The current Sources/Battery pages have no battery-profile API version gate.
+  Battery itself resolves its active profile from telemetry/session state, not
+  an MSP read. This block uses the Suite's existing battery_profile codec to
+  read the active index, never assumes profile 0, and never sends command 176.
+- SmartFuel uses the exact Power menu minimum `{12, 0, 9}` with the Suite's
+  `api_version` parser. Unknown versions do not issue that read. CRSF source 4
+  needs a known `{12, 0, 10}` or newer API, matching Sources. Unknown stored
+  source IDs remain selectable. The overall wizard API 12.10 gate still applies.
+- Capacity/profile-cell capability follows `battery_config.parse` reply length.
+  Six capacities occupy two three-row cards. With per-profile cells, the active
+  slot and its legacy alias are edited together. If the active index is unknown,
+  the legacy cell count is displayed read-only; capacity slots remain editable.
+- On Power cards, `analog` (110) replaces the unused servo polling slot. It adds
+  no load-chain read and leaves STATUS and motor telemetry polling in place.
+  Analog values are 0.01 V/A and retain the saved source IDs from their request;
+  an unsaved source or an old-source response cannot masquerade as its reading.
+  ESC uses existing motor telemetry in 0.001 V/A. Both caches expire at two seconds.
+- `voltage_meter_config` was inspected for meaning and scaling; this task adds
+  no calibration controls or reads/writes to that API.
+
+The battery builder now accepts its own flattened parse result as well as the
+Power pages' legacy `batteryCapacities` array adapter. It emits six capacities
+only when received, and all per-profile cells/voltages only when the parser found
+them. The change introduces no second encoder. SmartFuel sends its complete four
+bytes, preserving tuning. Writes finish before the existing EEPROM boundary;
+a failed write prevents EEPROM. Existing ESC protocol/motor changes retain their
+normal reboot handling; these Power pages add no new reboot requirement.
+
+Remaining pre-existing duplication: Sources and Battery still each own their
+page-specific full-record payload adapters and session/default handling; this
+block adds neither adapter. The SmartFuel API's raw field metadata still names
+the four protocol modes separately from the translated UI option helper; it is
+codec metadata, and is not loaded by the wizard outside transport. These were
+left in place to keep the work limited to this addition. No workaround is used.
+
+The following is every wire field used or preserved by this addition. Indexed
+rows exist only when received. `hasProfileCells` is derived parser metadata, not
+a wire field; `batteryCapacities` is an encoder adapter, not another MSP field.
+The existing wizard also uses STATUS and the existing save/lock/cleanup APIs;
+those are unchanged and listed above. Unused analog outputs (legacy_voltage,
+mah_drawn, rssi) are decoded by its existing API but not consumed by this block.
+
+| API | MSP field | Access | Source |
+| --- | --- | --- | --- |
+| battery_config | batteryCapacity | read/write (editable or active-slot mirror) | src/rfsuite/tasks/msp/api/battery_config.lua:55 |
+| battery_config | batteryCellCount | read/write (editable or active-slot mirror) | src/rfsuite/tasks/msp/api/battery_config.lua:57 |
+| battery_config | voltageMeterSource | read/write (editable or active-slot mirror) | src/rfsuite/tasks/msp/api/battery_config.lua:59 |
+| battery_config | currentMeterSource | read/write (editable or active-slot mirror) | src/rfsuite/tasks/msp/api/battery_config.lua:61 |
+| battery_config | vbatmincellvoltage | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:63 |
+| battery_config | vbatmaxcellvoltage | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:65 |
+| battery_config | vbatfullcellvoltage | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:67 |
+| battery_config | vbatwarningcellvoltage | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:69 |
+| battery_config | lvcPercentage | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:71 |
+| battery_config | consumptionWarningPercentage | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:73 |
+| battery_config | batteryCapacity_0 | read/write (capacity slot) | src/rfsuite/tasks/msp/api/battery_config.lua:90 |
+| battery_config | batteryCapacity_1 | read/write (capacity slot) | src/rfsuite/tasks/msp/api/battery_config.lua:90 |
+| battery_config | batteryCapacity_2 | read/write (capacity slot) | src/rfsuite/tasks/msp/api/battery_config.lua:90 |
+| battery_config | batteryCapacity_3 | read/write (capacity slot) | src/rfsuite/tasks/msp/api/battery_config.lua:90 |
+| battery_config | batteryCapacity_4 | read/write (capacity slot) | src/rfsuite/tasks/msp/api/battery_config.lua:90 |
+| battery_config | batteryCapacity_5 | read/write (capacity slot) | src/rfsuite/tasks/msp/api/battery_config.lua:90 |
+| battery_config | batteryCellCount_0 | read/write (active slot editable) | src/rfsuite/tasks/msp/api/battery_config.lua:100 |
+| battery_config | batteryCellCount_1 | read/write (active slot editable) | src/rfsuite/tasks/msp/api/battery_config.lua:100 |
+| battery_config | batteryCellCount_2 | read/write (active slot editable) | src/rfsuite/tasks/msp/api/battery_config.lua:100 |
+| battery_config | batteryCellCount_3 | read/write (active slot editable) | src/rfsuite/tasks/msp/api/battery_config.lua:100 |
+| battery_config | batteryCellCount_4 | read/write (active slot editable) | src/rfsuite/tasks/msp/api/battery_config.lua:100 |
+| battery_config | batteryCellCount_5 | read/write (active slot editable) | src/rfsuite/tasks/msp/api/battery_config.lua:100 |
+| battery_config | vbatmincellvoltage_0 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatmincellvoltage_1 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatmincellvoltage_2 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatmincellvoltage_3 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatmincellvoltage_4 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatmincellvoltage_5 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatmaxcellvoltage_0 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatmaxcellvoltage_1 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatmaxcellvoltage_2 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatmaxcellvoltage_3 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatmaxcellvoltage_4 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatmaxcellvoltage_5 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatfullcellvoltage_0 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatfullcellvoltage_1 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatfullcellvoltage_2 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatfullcellvoltage_3 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatfullcellvoltage_4 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatfullcellvoltage_5 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatwarningcellvoltage_0 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatwarningcellvoltage_1 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatwarningcellvoltage_2 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatwarningcellvoltage_3 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatwarningcellvoltage_4 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_config | vbatwarningcellvoltage_5 | read/write (preserved) | src/rfsuite/tasks/msp/api/battery_config.lua:106 |
+| battery_profile | batteryProfile | read only; no profile selection write | src/rfsuite/tasks/msp/api/battery_profile.lua:13 |
+| smartfuel_config | smartfuel_mode | read/write (edited) | src/rfsuite/tasks/msp/api/smartfuel_config.lua:34 |
+| smartfuel_config | voltage_drop_rate | read/write (preserved) | src/rfsuite/tasks/msp/api/smartfuel_config.lua:35 |
+| smartfuel_config | charge_drop_rate | read/write (preserved) | src/rfsuite/tasks/msp/api/smartfuel_config.lua:36 |
+| smartfuel_config | sag_gain | read/write (preserved) | src/rfsuite/tasks/msp/api/smartfuel_config.lua:37 |
+| motor_telemetry | voltage | read only; live display | src/rfsuite/tasks/msp/api/motor_telemetry.lua:18 |
+| motor_telemetry | current | read only; live display | src/rfsuite/tasks/msp/api/motor_telemetry.lua:19 |
+| analog | voltage | read only; live display | src/rfsuite/tasks/msp/api/analog.lua:38 |
+| analog | current | read only; live display | src/rfsuite/tasks/msp/api/analog.lua:37 |
+
+`S11.power-*` contracts cover field ranges, version gates, optional failures,
+source identity and freshness, warnings, all capacity slots, complete-record
+save/discard bytes, failure before EEPROM, English/German help limits and card
+geometry down to 320x240 (including 480x320). The `battery-slots` negative control
+drops a capacity field and must fail the complete-record assertions. These are
+offline checks; no physical FC/radio behaviour was measured.
+
 ## Governor write audit
 
 This inventories settings changed by the governor step, rather than every field

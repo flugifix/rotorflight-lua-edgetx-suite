@@ -64,7 +64,7 @@ local byCommand = {}
 for _, name in ipairs({ "board_info","telemetry_config","status","boxnames","boxids","mode_ranges","mode_ranges_extra","adjustment_ranges",
   "feature_config","board_alignment_config","serial_config","rx_map","rx_config","rc_config","motor_config",
   "esc_sensor_config","governor_config","mixer_config","mixer_input","servo_configurations","servo","rc_tuning",
-  "tail_motor_output","governor_profile","filter_config","rpm_filter_v2","rc","attitude","motor","motor_telemetry","rx_channels","rc_command" }) do
+  "battery_config","battery_profile","smartfuel_config","analog","tail_motor_output","governor_profile","filter_config","rpm_filter_v2","rc","attitude","motor","motor_telemetry","rx_channels","rc_command" }) do
   local a = api(name); byCommand[a.command] = a
 end
 local defaultRx, rxSweep = fixtures[114], false
@@ -194,6 +194,7 @@ local function beginWorld()
   q.messages,q.sent = {},{}
   local w = load(PATH .. "controller.lua").new(runtime,load(PATH .. "transport.lua"),H,L)
   w.i18n=i18n
+  w.powerFields,w.powerApiVersion=load("lib/power_fields.lua"),load("lib/api_version.lua")
   w.palette=load(PATH .. "palette.lua")
   w.newAttitudeView=load(PATH .. "attitude_view.lua").new
   w.newServoGrid=load(PATH .. "servo_grid.lua").append
@@ -779,6 +780,15 @@ local function contractWorld()
         end
       end
       return read(self,name,after,optional,payload)
+    end
+  elseif mutation=="battery-slots" then
+    local send=v.sendDirty
+    v.sendDirty=function(self,name,from)
+      if name~="battery_config" then return send(self,name,from) end
+      -- Negative control: the old array-only builder lost the parsed capacity slots.
+      local d={}
+      for key,value in pairs((from or self.data)[name]) do if key~="batteryCapacity_5" then d[key]=value end end
+      self:write(name,d)
     end
   elseif mutation=="esc-family" then
     local family=load("lib/esc_params.lua").families[9]

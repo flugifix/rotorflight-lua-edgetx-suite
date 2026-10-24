@@ -7,7 +7,8 @@ local deps = { "tasks/msp/runtime.lua", PATH .. "transport.lua", PATH .. "math.l
   PATH .. "controller.lua", PATH .. "forms.lua", PATH .. "workflow.lua", PATH .. "view.lua", "lib/armed.lua", PATH .. "diagrams.lua", PATH .. "navigation.lua",
   "lib/system_state.lua", "lib/sensors.lua", PATH .. "feedback.lua", PATH .. "history_store.lua", PATH .. "history.lua", PATH .. "attitude_view.lua",
   PATH .. "servo_grid.lua", "lib/port_labels.lua", PATH .. "palette.lua",
-  "lib/esc_params.lua", "lib/esc_status.lua", PATH .. "esc_link.lua" }
+  "lib/esc_params.lua", "lib/esc_status.lua", PATH .. "esc_link.lua",
+  "lib/power_fields.lua", "lib/api_version.lua" }
 local palette
 local loadingPoints = {{24,0},{24,0}}
 local loadingFraction = 0
@@ -74,6 +75,7 @@ function M.wakeup(ctx)
     w = modules[5].new(modules[1], modules[2], modules[3], modules[4])
     w.palette = palette
     w.i18n = context.i18n
+    w.powerFields, w.powerApiVersion = modules[24], modules[25]
     w.newAttitudeView = modules[17].new
     w.newServoGrid = modules[18].append
     -- Steps lay out for the screen class: the servo step puts the tail beside the swash servos

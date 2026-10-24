@@ -18,15 +18,16 @@ local BatteryProfileApi = nil
 local Sensors = nil
 local SmartFuelReserve = nil
 local t = nil
+local PowerFields = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/power_fields.lua", "t"))()
 
 M.eepromWrite = true
 
 local PROFILE_MIN = 0
 local PROFILE_MAX = 5
-local CAPACITY_MIN = 0
-local CAPACITY_MAX = 40000
-local CELL_COUNT_MIN = 0
-local CELL_COUNT_MAX = 24
+local CAPACITY_MIN = PowerFields.capacity.min
+local CAPACITY_MAX = PowerFields.capacity.max
+local CELL_COUNT_MIN = PowerFields.cellCount.min
+local CELL_COUNT_MAX = PowerFields.cellCount.max
 local RESERVE_MIN = 15
 local RESERVE_MAX = 60
 
@@ -783,7 +784,7 @@ function M.build(ctx)
 				helpText = pageText(i18n, "help_capacity"),
 				helpTitle = label,
 				onHelp = getInlineHelpHandler(),
-				display = function(v) return tostring(v) .. " mAh" end
+				display = PowerFields.capacityText
 			})
 	end
 

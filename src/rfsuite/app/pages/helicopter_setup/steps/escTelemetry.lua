@@ -41,18 +41,19 @@ return function(w)
     w:button(function() return w.trial and L.cancelDetect or L.detectWiring end,
       function() if w.trial then w:stopTrial(true) else w:startTrial("esc_sensor_trial") end end,
       function() return w.trial ~= nil or w:canDetect(1024) end),
-    w:value(L.voltage, function() local m = motor(); return m and string.format("%.2f V", m.voltage / 1000) or "--" end),
+    w:value(L.voltage, function() local m = motor(); return m and w.powerFields.reading(m.voltage, 1000, "V") or "--" end),
     w:value(L.temperature, function() local m = motor(); return m and string.format("%.1f°C", m.temperature / 10) or "--" end),
   })
   cards[#cards].summary=L.telemetryCheckShort
   cards[#cards+1]=w:cardDef(L.telemetryStatus,L.telemetryStatusHint,{
-    w:value(L.current, function() local m = motor(); return m and string.format("%.2f A", m.current / 1000) or "--" end),
+    w:value(L.current, function() local m = motor(); return m and w.powerFields.reading(m.current, 1000, "A") or "--" end),
     w:value(L.rpm, function() local m = motor(); return m and m.rpm or "--" end),
     w:value(L.active,function()
       local m=motor();return m and (m.voltage>0 or m.temperature>0) and L.receiving or L.noTelemetry
     end),
     w:value(L.protocol,function() return castle and "Castle Link" or w.data.esc_sensor_config.protocol==0 and L.off or L.on end)
   })
+  w:loadModule("app/pages/helicopter_setup/power_cards.lua")(w, cards)
   w:escCards(cards)
   return cards
 end
