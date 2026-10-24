@@ -206,6 +206,7 @@ function M.new(w, ctx, diagrams)
           all[#all + 1] = { type = "numberEdit", x = formX+formW-editW, y = y, w = editW, h = controlH,
             min = r.min, max = r.max, get = get, set = set,
             display = function(v)
+              if r.display then return r.display(v) end
               if r.divisor then return string.format("%.1f", v / r.divisor) end
               return tostring(v)
             end, active = enabled }

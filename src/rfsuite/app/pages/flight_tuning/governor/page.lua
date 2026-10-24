@@ -14,6 +14,7 @@ local Common = nil
 local MspRuntime = nil
 local GovernorApi = nil
 local GovernorConfigApi = nil
+local GovernorFields = nil
 local LoadingOverlay = nil
 local Sensors = nil
 local Profile = nil
@@ -89,7 +90,7 @@ local ui = {
 
 local function getFieldLimit(key)
 	if key == "governor_headspeed" then
-		return { min = 0, max = 30000, step = 10 }
+		return GovernorFields.headspeed
 	end
 	-- The firmware's range for both limits (cli/settings.c gov_min_throttle / gov_max_throttle)
 	if key == "governor_min_throttle" or key == "governor_max_throttle" then
@@ -123,6 +124,7 @@ local function ensureDeps()
 	if not Controls then Controls = loadModule("ui/controls.lua") end
 	if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
 	if not GovernorApi then GovernorApi = loadModule("tasks/msp/api/governor_profile.lua") end
+	if not GovernorFields then GovernorFields = loadModule("lib/governor_fields.lua") end
 	if not GovernorConfigApi then GovernorConfigApi = loadModule("tasks/msp/api/governor_config.lua") end
 	if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
 	if not Sensors then Sensors = loadModule("lib/sensors.lua") end
@@ -791,6 +793,7 @@ function M.onClose()
 	Common = nil
 	MspRuntime = nil
 	GovernorApi = nil
+	GovernorFields = nil
 	LoadingOverlay = nil
 	Sensors = nil
 	t = nil

@@ -64,7 +64,7 @@ local byCommand = {}
 for _, name in ipairs({ "board_info","telemetry_config","status","boxnames","boxids","mode_ranges","mode_ranges_extra","adjustment_ranges",
   "feature_config","board_alignment_config","serial_config","rx_map","rx_config","rc_config","motor_config",
   "esc_sensor_config","governor_config","mixer_config","mixer_input","servo_configurations","servo","rc_tuning",
-  "tail_motor_output","governor_profile","rc","attitude","motor","motor_telemetry","rx_channels","rc_command" }) do
+  "tail_motor_output","governor_profile","filter_config","rpm_filter_v2","rc","attitude","motor","motor_telemetry","rx_channels","rc_command" }) do
   local a = api(name); byCommand[a.command] = a
 end
 local defaultRx, rxSweep = fixtures[114], false
@@ -98,6 +98,7 @@ local function pump()
   end
   if b and recordFault and m.command==recordFault.command and m.payload[1]==recordFault.index and recordFault.short then b[#b]=nil end
   b = b or fixtures[m.command] or (byCommand[m.command] and byCommand[m.command].simulatorResponse) or {}
+  if type(b)=="function" then b=b(m) end
   -- The walks move the four sticks end to end between replies, as a pilot does on the stick travel card.
   if m.command==114 and fixtures[114]==defaultRx then
     rxSweep=not rxSweep
@@ -144,7 +145,15 @@ local L = load(PATH .. "labels.lua")
 local locale="en"
 for i=1,#arg do if arg[i]=="--locale" then locale=arg[i+1] end end
 local bundle = load("i18n/"..locale..".lua")
-for k in pairs(L) do if bundle.app.modules.helicopter_setup[k] then L[k] = bundle.app.modules.helicopter_setup[k] end end
+for k, value in pairs(L) do
+  local key = type(value)=="string" and string.match(value,"^@i18n%((.-)%)@$")
+  if key then
+    local translated = bundle
+    for part in string.gmatch(key,"[^.]+") do translated = translated and translated[part] end
+    check(type(translated)=="string","I18N wizard label resolves: "..key)
+    L[k] = translated or value
+  end
+end
 L.steps = { L.sensors,L.receiver,L.modeSwitches,L.profiles,L.rates,L.swash,L.servoType,L.governor,L.motor,L.connect,
   L.escTelemetry,L.spinTest,L.servoDirectionCentre,L.controlDirections,L.level,L.bladePitch,L.tail,L.gyroCheck,L.finish }
 local rawLabels = load(PATH .. "labels.lua")
@@ -749,6 +758,25 @@ local function contractWorld()
       return entries
     end
   elseif mutation=="mode-flag" then v.modeActive=function() return true end
+  elseif mutation=="governor-headspeed" then
+    local loop=v.profileLoop
+    v.profileLoop=function(self,kind,count,apply,indexes,loaded)
+      local edit=apply
+      if apply and kind=="pid" then edit=function(d,index) apply(d,index);d.governor_headspeed=0 end end
+      return loop(self,kind,count,edit,indexes,loaded)
+    end
+  elseif mutation=="rpm-custom-off" then
+    local read=v.read
+    v.read=function(self,name,after,optional,payload)
+      if name=="rpm_filter_v2" then
+        local accept=after
+        after=function(d,err)
+          for i=1,16 do d["notch_source_"..i]=0 end
+          accept(d,err)
+        end
+      end
+      return read(self,name,after,optional,payload)
+    end
   elseif mutation and mutation~="bulk-read" and mutation~="history-early" and mutation~="stale-status" and mutation~="retry-stale"
     and mutation~="pitch-discard" and mutation~="back-commit" and mutation~="stale-blades"
     and mutation~="shared-timeout-probe" and mutation~="cleanup-unlock" and mutation~="drop-stale-edit" then error("Unknown negative control: "..mutation) end

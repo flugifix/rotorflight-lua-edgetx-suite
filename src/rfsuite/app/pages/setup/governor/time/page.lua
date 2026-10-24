@@ -13,6 +13,7 @@ local Controls = nil
 local Common = nil
 local MspRuntime = nil
 local GovernorConfigApi = nil
+local GovernorFields = nil
 local LoadingOverlay = nil
 local t = nil
 
@@ -49,6 +50,7 @@ local function ensureDeps()
   if not Controls then Controls = loadModule("ui/controls.lua") end
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not GovernorConfigApi then GovernorConfigApi = loadModule("tasks/msp/api/governor_config.lua") end
+  if not GovernorFields then GovernorFields = loadModule("lib/governor_fields.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not t then t = Common and Common.pageT("setup_governor") or nil end
 end
@@ -364,17 +366,15 @@ function M.build(ctx)
     children, x, cursorY, w,
     pageText(i18n, "spoolup_time", "Spoolup time"),
     {
-      min = 0,
-      max = 600,
-      step = 1,
+      min = GovernorFields.gov_spoolup_time.min,
+      max = GovernorFields.gov_spoolup_time.max,
+      step = GovernorFields.gov_spoolup_time.step,
       get = function() return ui.config.gov_spoolup_time end,
       set = function(v)
         ui.config.gov_spoolup_time = tonumber(v) or 100
         ui.dirty = true
       end,
-      display = function(v)
-        return string.format("%.1fs", (tonumber(v) or 0) / 10)
-      end
+      display = GovernorFields.seconds
     }
   )
 
@@ -383,17 +383,15 @@ function M.build(ctx)
     children, x, cursorY, w,
     pageText(i18n, "spooldown_time", "Spooldown time"),
     {
-      min = 0,
-      max = 600,
-      step = 1,
+      min = GovernorFields.gov_spooldown_time.min,
+      max = GovernorFields.gov_spooldown_time.max,
+      step = GovernorFields.gov_spooldown_time.step,
       get = function() return ui.config.gov_spooldown_time end,
       set = function(v)
         ui.config.gov_spooldown_time = tonumber(v) or 30
         ui.dirty = true
       end,
-      display = function(v)
-        return string.format("%.1fs", (tonumber(v) or 0) / 10)
-      end
+      display = GovernorFields.seconds
     }
   )
 
@@ -410,9 +408,7 @@ function M.build(ctx)
         ui.config.gov_tracking_time = tonumber(v) or 20
         ui.dirty = true
       end,
-      display = function(v)
-        return string.format("%.1fs", (tonumber(v) or 0) / 10)
-      end
+      display = GovernorFields.seconds
     }
   )
 
@@ -421,17 +417,15 @@ function M.build(ctx)
     children, x, cursorY, w,
     pageText(i18n, "recovery_time", "Recovery time"),
     {
-      min = 0,
-      max = 100,
-      step = 1,
+      min = GovernorFields.gov_recovery_time.min,
+      max = GovernorFields.gov_recovery_time.max,
+      step = GovernorFields.gov_recovery_time.step,
       get = function() return ui.config.gov_recovery_time end,
       set = function(v)
         ui.config.gov_recovery_time = tonumber(v) or 20
         ui.dirty = true
       end,
-      display = function(v)
-        return string.format("%.1fs", (tonumber(v) or 0) / 10)
-      end
+      display = GovernorFields.seconds
     }
   )
 
@@ -495,6 +489,7 @@ function M.onClose()
   Common = nil
   MspRuntime = nil
   GovernorConfigApi = nil
+  GovernorFields = nil
   LoadingOverlay = nil
   t = nil
 end

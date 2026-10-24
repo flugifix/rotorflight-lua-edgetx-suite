@@ -1285,7 +1285,7 @@ return function(h)
     local w=world();settle(w);w.step=8;w.data.feature_config.enabledFeatures=0
     local c=step(w,"governor");cardOrder(c,{L.governorMode},"S08 Off")
     c[1].rows[1].set(4);c=step(w,"governor")
-    cardOrder(c,{L.governorMode,L.rpmSource,L.throttleType},"S08 On")
+    cardOrder(c,{L.governorMode,L.rpmSource,L.throttleType,string.format(L.headspeedProfile,1),L.rampTimes},"S08 On")
     c[3].rows[1].set(2)
     eq(w.data.governor_config.gov_mode,3,"S08 Electric mode field")
     eq(w.data.governor_config.gov_throttle_type,1,"S08 Switch throttle field")
@@ -1623,6 +1623,213 @@ return function(h)
     eq(s.mid,1530,"S07 same pulse band preserves centre")
     w.checks.unplugged=false;c[1].rows[2].set(3)
     eq(s.mid,1530,"S07 plugged servos block band change")
+  end)
+  case("S08.headspeed-and-ramps",function()
+    local w=world();settle(w);w.step=8
+    for _,m in ipairs(q.sent) do
+      check(m.command~=148 and m.command~=92 and m.command~=154,"S08 new reads stay outside startup")
+    end
+    w.data.feature_config.enabledFeatures=(1<<26)|(1<<28)
+    w.data.governor_config.gov_mode=3
+    w.data.adjustment_ranges.adjustment_ranges[1]=H.mapped(2,1,1000,2000,1,3)
+    local selected=w.data.status.current_pid_profile_index
+    local original=selected
+    local profileApi=load("tasks/msp/api/governor_profile.lua")
+    local fields=load("lib/governor_fields.lua")
+    local values={1701,2055,2345}
+    local records={}
+    for i=0,2 do
+      local record={};for n,v in ipairs(profileApi.simulatorResponse) do record[n]=v end
+      record[1],record[2]=values[i+1]&255,values[i+1]>>8
+      records[i]=record
+    end
+    local fixtures=h.fixtures
+    fixtures[210]=function(m) selected=m.payload[1];return {} end
+    fixtures[148]=function() return records[selected] end
+    fixtures[149]=function(m) records[selected]=m.payload;return {} end
+    q.sent={}
+    local queued=#w.bus.jobs
+    local c=step(w,"governor")
+    eq(#w.bus.jobs,queued,"S08 build queues no MSP reads")
+    eq(#c,7,"S08 offers exactly three configured PID cards and separate ramp card")
+    check(not c[4].rows[1].enabled(),"S08 headspeed waits for per-profile readback")
+    c[1].enter();settle(w);c=step(w,"governor")
+    for card=1,#c do
+      w.cards,w.card=c,card
+      local scene=h.view.new(w,{w=480,h=320},h.diagrams)
+      while not scene.done do h.measure("governor view slice",function() scene:step() end) end
+      h.measure("governor reactive",function() h.resolve(scene.children) end)
+      for _,item in ipairs(scene.children) do
+        if item.y and item.h then check(item.y+item.h<=320,"S08 all target/ramp cards fit 480x320") end
+      end
+    end
+    eq(selected,original,"S08 entry restores active PID profile")
+    check(w.restoreProfile==nil and not w.transition,"S08 entry completes restoration before editing")
+    check(w.profileOriginal==nil,"S08 read-only profile loop creates no rollback writes")
+    local selections={}
+    for _,m in ipairs(q.sent) do
+      if m.command==210 then selections[#selections+1]=m.payload[1] end
+      check(m.command~=149 and m.command~=93 and m.command~=155,"S08 entry never writes profiles or filters")
+    end
+    eq(table.concat(selections,","),"0,1,2,1","S08 profiles read sequentially then original selection restored")
+    for i=1,3 do
+      local row=c[3+i].rows[1]
+      eq(row.get(),values[i],"S08 shows exact FC RPM, including non-tens values")
+      eq(row.min,fields.headspeed.min,"S08 shared headspeed minimum")
+      eq(row.max,fields.headspeed.max,"S08 shared headspeed maximum")
+      eq(row.display(row.get()),tostring(values[i]),"S08 headspeed displays RPM without scaling")
+    end
+    local keys={"gov_spoolup_time","gov_spooldown_time","gov_recovery_time"}
+    for i,key in ipairs(keys) do
+      local row=c[7].rows[i]
+      eq(row.get(),w.data.governor_config[key],"S08 ramp starts with FC value: "..key)
+      eq(row.display(row.get()),fields.seconds(row.get()),"S08 shared seconds conversion: "..key)
+      eq(row.min,fields[key].min,"S08 shared ramp minimum: "..key)
+      eq(row.max,fields[key].max,"S08 shared ramp maximum: "..key)
+      row.set(({123,87,34})[i])
+    end
+    c[4].rows[1].set(1817);c[6].rows[1].set(2561)
+    q.sent={};w:save();settle(w)
+    eq(selected,original,"S08 save restores active PID profile")
+    local writes,chosen=0,{}
+    for _,m in ipairs(q.sent) do
+      if m.command==210 then chosen[#chosen+1]=m.payload[1] end
+      if m.command==149 then
+        writes=writes+1
+        local expected=profileApi.parse(profileApi.simulatorResponse)
+        expected.governor_headspeed=writes==1 and 1817 or 2561
+        eq(table.concat(m.payload,","),table.concat(profileApi.buildWritePayload(expected),","),
+          "S08 headspeed payload preserves every other profile field")
+      end
+      check(m.command~=93 and m.command~=155,"S08 save never writes filter settings")
+    end
+    eq(writes,2,"S08 saves only edited headspeed profiles")
+    eq(table.concat(chosen,","),"0,2,1","S08 writes selected profiles then restores original")
+    savedPayload(w,"governor_config","S08 ramps")
+    eq(w.data.governor_config.gov_spoolup_time,123,"S08 spoolup writes deciseconds")
+    eq(w.data.governor_config.gov_spooldown_time,87,"S08 spooldown writes deciseconds")
+    eq(w.data.governor_config.gov_recovery_time,34,"S08 recovery writes deciseconds")
+    check(w.governorChanged==nil,"S08 committed headspeed draft clears")
+    -- Readback is per profile, and a discarded edit cannot return on the next visit.
+    c=step(w,"governor");c[4].rows[1].set(1999)
+    w:discard(function() end);settle(w)
+    check(w.governorSpeeds==nil and w.governorChanged==nil,"S08 discarded headspeed draft is removed")
+    c=step(w,"governor");c[1].enter();settle(w);c=step(w,"governor")
+    eq(c[4].rows[1].get(),1817,"S08 discarded headspeed cannot return")
+    c[4].rows[1].set(1919);h.setFailCommand(149)
+    q.sent={};w:save();settle(w);h.setFailCommand(nil);drain(w)
+    check(w.error~=nil,"S08 failed headspeed write stops save")
+    eq(selected,original,"S08 failed headspeed write restores active profile")
+    for _,m in ipairs(q.sent) do check(m.command~=250,"S08 failed profile save cannot reach EEPROM") end
+    fixtures[210],fixtures[148],fixtures[149]=nil,nil,nil
+  end)
+  case("S08.headspeed-scope-and-help",function()
+    local w=world();settle(w);w.step=8;w.governorRpmFilter=false
+    local ranges=w.data.adjustment_ranges.adjustment_ranges
+    ranges[1]=H.mapped(2,1,1000,2000,1,2)
+    w.data.feature_config.enabledFeatures=1<<26
+    for _,mode in ipairs({0,1,2,3,4}) do
+      w.data.governor_config.gov_mode=mode
+      local c=step(w,"governor")
+      eq(#c,mode==0 and 1 or mode<3 and 3 or 6,"S08 headspeed and ramp cards only in Electric/Nitro")
+    end
+    w.data.governor_config.gov_mode=3;w.data.status.pid_profile_count=1
+    eq(#step(w,"governor"),5,"S08 configured profile count is bounded by FC capacity")
+    w.data.status.pid_profile_count=3;ranges[1]=H.mapped(2,1,1000,2000,2,3)
+    local c=step(w,"governor")
+    eq(c[4].title,string.format(L.headspeedProfile,2),"S08 respects configured first PID profile")
+    w.data.status.pid_profile_count=6;ranges[1]=H.mapped(2,1,1000,2000,4,6)
+    c=step(w,"governor")
+    eq(#c,7,"S08 three configured targets may use higher PID profile numbers")
+    eq(c[4].title,string.format(L.headspeedProfile,4),"S08 higher configured first PID profile is retained")
+    eq(c[6].title,string.format(L.headspeedProfile,6),"S08 higher configured last PID profile is retained")
+    ranges[1]=H.mapped(2,1,1000,2000,1,6)
+    eq(#step(w,"governor"),7,"S08 offers at most the three positions supported by Profiles setup")
+    ranges[1]=H.mapped(0,0,1500,1500,0,0)
+    c=step(w,"governor")
+    eq(#c,5,"S08 unknown profile setup offers one target")
+    eq(c[4].title,string.format(L.headspeedProfile,1),"S08 unknown setup uses profile one, not the active profile")
+    for _,locale in ipairs({"en","de"}) do
+      local bundle=load("i18n/"..locale..".lua")
+      local strings=bundle.app.modules.helicopter_setup
+      local labels={headspeedHint={bundle.app.pages.flight_tuning_governor.full_headspeed},
+        rampHint={bundle.app.pages.setup_governor.spoolup_time,bundle.app.pages.setup_governor.spooldown_time,
+          bundle.app.pages.setup_governor.recovery_time},rpmFilterHint={bundle.app.pages.flight_tuning_advanced_filters.rpm_filter}}
+      for key,expected in pairs(labels) do
+        check(utf8.len(strings[key])<=600,"S08 new help stays within 600 characters: "..locale.." "..key)
+        local i=0
+        for line in string.gmatch(strings[key],"[^\n]+") do
+          i=i+1
+          check(utf8.len(line)<=200,"S08 new help line stays within 200 characters: "..locale.." "..key)
+          eq(string.sub(line,1,#expected[i]+1),expected[i]..":","S08 help starts with the on-screen label")
+        end
+        eq(i,#expected,"S08 one help line per setting")
+      end
+    end
+  end)
+  case("S08.rpm-filter-signal",function()
+    local filterApi=load("tasks/msp/api/filter_config.lua")
+    local notchApi=load("tasks/msp/api/rpm_filter_v2.lua")
+    check(notchApi.parse({})==nil,"S08 incomplete custom notch reply is refused")
+    local fixtures=h.fixtures
+    for _,preset in ipairs({0,1,2,3}) do
+      for _,notchAxis in ipairs({-1,0,1,2}) do
+        local w=world();settle(w);w.step=8
+        w.data.feature_config.enabledFeatures=0;w.data.motor_config.use_dshot_telemetry=0
+        local filter=filterApi.parse(filterApi.simulatorResponse);filter.rpm_preset=preset
+        fixtures[92]=filterApi.buildWritePayload(filter)
+        fixtures[154]=function(m)
+          local bytes={};for i,v in ipairs(notchApi.simulatorResponse) do bytes[i]=v end
+          if m.payload[1]==notchAxis then bytes[61]=11 end
+          return bytes
+        end
+        q.sent={};local c=step(w,"governor");c[1].enter();settle(w)
+        local enabled=preset~=0 or notchAxis>=0
+        eq(w.governorRpmFilter,enabled,"S08 custom/preset filter enablement includes every axis")
+        c=step(w,"governor")
+        eq(#c,enabled and 3 or 1,"S08 Off shows RPM source and missing-signal warning when filter is on")
+        local axes,reads={},0
+        for _,m in ipairs(q.sent) do
+          if m.command==154 then axes[#axes+1]=m.payload[1] end
+          if m.command==92 then reads=reads+1 end
+          check(m.command~=93 and m.command~=155 and m.command~=148,"S08 filter check is read-only and Off reads no profiles")
+        end
+        eq(reads,1,"S08 filter configuration read once after entry")
+        eq(table.concat(axes,","),preset==0 and "0,1,2" or "","S08 only CUSTOM reads all three notch axes")
+        q.sent={};c[1].enter();settle(w)
+        for _,m in ipairs(q.sent) do check(m.command~=92 and m.command~=154,"S08 cached card entry does not reread filters") end
+        -- The count assertion already rejects a missing card; negative controls must still finish their report.
+        if enabled and c[3] then
+          eq(c[3].title,L.rpmFilter,"S08 warning reuses Filters label")
+          eq(c[3].rows[1].get(),L.rpmFilterMissing,"S08 warning names missing RPM signal")
+          eq(c[3].rows[2].get(),L.rpmFilterChoose,"S08 warning names source correction here")
+          eq(c[3].rows[3].get(),L.rpmFilterDisable,"S08 warning names Filters correction")
+          w.cards,w.card=c,3
+          local scene=h.view.new(w,{w=480,h=320},h.diagrams)
+          while not scene.done do scene:step() end
+          local visible=0
+          for _,item in ipairs(scene.children) do
+            if item.y and item.h then check(item.y+item.h<=320,"S08 warning fits 480x320") end
+            if item.type=="label" and type(item.text)=="function" then
+              local text=item.text()
+              if text==L.rpmFilterMissing or text==L.rpmFilterChoose or text==L.rpmFilterDisable then visible=visible+1 end
+            end
+          end
+          eq(visible,3,"S08 warning and both corrections are rendered")
+          for _,mode in ipairs({0,1,2,3,4}) do
+            w.data.feature_config.enabledFeatures=mode==0 and 0 or 1<<26
+            w.data.governor_config.gov_mode=mode;c=step(w,"governor")
+            eq(c[3].title,L.rpmFilter,"S08 missing-signal warning applies in every governor mode")
+          end
+          w.data.feature_config.enabledFeatures=0;c=step(w,"governor");c[2].rows[1].set(1)
+          c=step(w,"governor");eq(#c,2,"S08 frequency sensor clears warning with governor Off")
+          eq(w.data.feature_config.enabledFeatures & (1<<26),0,"S08 filter source edit keeps governor disabled")
+          c[2].rows[1].set(2);c=step(w,"governor")
+          eq(#c,2,"S08 bidirectional DShot clears missing-source warning")
+        end
+      end
+    end
+    fixtures[92],fixtures[154]=nil,nil
   end)
   case("S08.governor-feature-and-rpm",function()
     local w=world();w.data.feature_config.enabledFeatures=0;w.data.governor_config.gov_mode=3

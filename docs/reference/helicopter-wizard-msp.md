@@ -22,6 +22,10 @@ MSP queue and API modules. It never opens another telemetry transport.
 | `get_servo_config` / `servo_configurations` | 125/212 | Read U8 raw servo-parameter index, reply one 16-byte record. PWM slots retain their index; packed bus slots map to raw 8–25. Writes retain packed U8 index plus one complete record. Bulk command 120 is not used. |
 | `get_adjustment_range` / `set_adjustment_range` | 156/53 | Read U8 index, reply one 14-byte record; all 42 slots are read sequentially. Bulk command 52 is not used. |
 | `rc_config` | 66/67 | A complete 12-byte RC configuration is required; truncated throttle/deflection data is refused. |
+| `governor_profile` | 148/149 | Per PID profile: U16 RPM target `governor_headspeed`. Read complete profiles through `profileLoop`, save only edited targets and preserve all other fields. Restore the active PID profile after reads/writes; profile 1 only when assignment is unknown. Never part of startup `READS`. |
+| `governor_config` | 142/143 | Existing shared configuration read. New U16 fields `gov_spoolup_time`, `gov_spooldown_time`, `gov_recovery_time` are deciseconds; display seconds with the same shared formatter/limits as the Governor ramp page. |
+| `filter_config` | 92 | Read-only `rpm_preset` after governor entry: 0 means CUSTOM; 1/2/3 mean Low/Medium/High. No command 93 from the wizard. |
+| `rpm_filter_v2` | 154 | Read-only CUSTOM check: request U8 axis 0/1/2, read 16 source/U16 center/Q records per axis. Any nonzero `notch_source_1..16` enables a custom notch. A complete 64-byte response is required. No command 155 from the wizard. |
 | `acc_calibration` / `attitude` | 205 / 108 | Empty calibration command; S16 tenths of degrees roll/pitch and S16 degree yaw. |
 | `board_auto_align` | `0x5F13` | U8 start; query state and three signed alignment angles. Optional firmware extension. |
 | `rx_serial_trial` | `0x5F12` | U8 start/stop; state, combination, inversion, half-duplex, pin swap and elapsed time. Wire codec retained; radio wizard directs detection to USB and sends no START. |
@@ -58,6 +62,29 @@ The transport decodes one reply, loads one API, dispatches one request, or expan
 one indexed record per call. It never recursively continues from an MSP callback.
 Configuration writes remain ordered before EEPROM. Profile transactions restore
 the previous PID/rate profile, including a best-effort restore after failure.
+
+## Governor write audit
+
+This inventories settings changed by the governor step, rather than every field
+serialized unchanged by the full-record API codecs. The four marked additions
+extend the pinned Configurator wizard; they do not claim source parity.
+
+| API | Fields changed | Scope |
+| --- | --- | --- |
+| `feature_config` | `enabledFeatures` bits 26 (governor) and 28 (frequency sensor) | Existing mode/source controls; source selection also works for filtering with governor Off. |
+| `motor_config` | `use_dshot_telemetry` | Existing bidirectional DShot source control. |
+| `governor_config` | `gov_mode`, `gov_throttle_type` | Existing mode/type controls. |
+| `governor_profile` | `governor_headspeed` | **Addition beyond Configurator**: only edited configured PID profiles, Electric/Nitro only. |
+| `governor_config` | `gov_spoolup_time`, `gov_spooldown_time`, `gov_recovery_time` | **Additions beyond Configurator**: Electric/Nitro editors, shared limits 0–600 / 0–600 / 0–100 raw deciseconds. |
+| `set_pid_profile` | Selection byte | Existing sequential transaction reused for read-only entry and edited-profile saves; original selection restored. |
+| `eeprom_write` | Empty payload | Existing save boundary after successful configuration writes. |
+
+`bin/wizard/source-map.json` records all four additional writable fields and the
+read-only filter dependencies. `audit_source.py` checks their API/source bindings
+and named contracts. Contracts verify exact payloads, untouched profile fields,
+profile selection/restoration, discard, failure before EEPROM and filter reads
+without filter writes. `lib/governor_fields.lua` holds the page's extracted editor
+limits and seconds formatter; wire parsing/encoding remains in the existing APIs.
 
 The host's `buildScene` recognizes `hideSuiteFrame = true` on a page module. It
 omits the native page/header while reserving space for its independent ARMED banner. Lifecycle, queue ownership

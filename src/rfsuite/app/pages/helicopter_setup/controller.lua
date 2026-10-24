@@ -333,7 +333,8 @@ function M.new(runtime, transport, mathModule, labels)
       for i = 0, 1 do self:write("motor_override", { index = i, value = 0 }) end
     end
   end
-  function w:profileLoop(kind, count, apply, indexes)
+  function w:profileLoop(kind, count, apply, indexes, loaded)
+    -- A nil apply reads profiles without profile writes or rollback snapshots; selection still restores.
     local status = self.data.status
     local original = kind == "rates" and status.current_control_rate_profile_index + 128 or status.current_pid_profile_index
     local api = kind == "rates" and "rc_tuning" or "governor_profile"
@@ -343,14 +344,17 @@ function M.new(runtime, transport, mathModule, labels)
       self:action("set_pid_profile", { index + (kind == "rates" and 128 or 0) })
       self:read(api, function(d)
         self.profileData = d
-        self.profileOriginal = self.profileOriginal or {}
-        self.profileOriginal[kind] = self.profileOriginal[kind] or {}
-        self.profileOriginal[kind][index] = self.profileOriginal[kind][index] or copy(d)
+        if loaded then loaded(d, index) end
+        if apply then
+          self.profileOriginal = self.profileOriginal or {}
+          self.profileOriginal[kind] = self.profileOriginal[kind] or {}
+          self.profileOriginal[kind][index] = self.profileOriginal[kind][index] or copy(d)
+        end
       end)
-      self:write(api, function()
+      if apply then self:write(api, function()
         if apply(self.profileData, index) == false then return false end
         return self.profileData
-      end)
+      end) end
     end
     self:action("set_pid_profile", { original }, function() self.restoreProfile = nil end)
     self:read(api, function(d) self.data[api] = d end)
@@ -387,6 +391,7 @@ function M.new(runtime, transport, mathModule, labels)
       if step == 12 or step == 17 then self.bladesOff, self.percent = false, 10 end
       if step == 12 then self.calibratedEsc, self.escStage = nil, nil end
       if step == 5 then self.rateStyles, self.rateLoaded = {}, nil end
+      if step == 8 then self.governorLoaded, self.governorFilterLoaded = nil, nil end
       -- Stick travel is measured anew on every visit to the receiver step.
       if step == 2 and self.rx then self.rx.travel, self.rx.travelSig, self.rx.advanced = nil, nil, nil end
     end
@@ -518,6 +523,7 @@ function M.new(runtime, transport, mathModule, labels)
         self.dirty, self.live, self.profileOriginal = {}, {}, nil
         self.pitchFull,self.pitchFullChanged,self.rateProfile,self.rateLoaded=nil,nil,nil,nil
         self.rateStyles,self.rateTunings,self.rateMatched=nil,nil,nil
+        self.governorLoaded,self.governorSpeeds,self.governorChanged,self.governorFilterLoaded=nil,nil,nil,nil
         self.startTail=self.data.mixer_config.tail_rotor_mode
         self.rebootPending, self.transition = self.savedRebootPending, nil
         after()
@@ -534,6 +540,7 @@ function M.new(runtime, transport, mathModule, labels)
     self.ready, self.error, self.progress, self.transition = false, nil, 0, true
     self.checks,self.card,self.bladesOff,self.calibratedEsc={},1,false,nil
     self.preparationDone,self.preparationCard=nil,nil
+    self.governorLoaded,self.governorSpeeds,self.governorChanged,self.governorFilterLoaded=nil,nil,nil,nil
     self.statusQueued, self.statusWaiting, self.beforeStatusWait = nil, nil, nil
     self.recoveryRequired=self:session().helicopterSetupRecovery==self:session().mcu_id
     self.loadingText, self.loadTotal = self.L.loading, #READS + 66

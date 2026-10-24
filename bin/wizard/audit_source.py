@@ -17,6 +17,25 @@ def main():
     mapping=json.loads(Path('bin/wizard/source-map.json').read_text(encoding='utf-8'))
     contracts=set(re.findall(r'case\("([^"\n]+)"',Path('bin/wizard/contracts.lua').read_text(encoding='utf-8')))
     files=mapping['files']
+    additions=mapping.get('additions',[])
+    written=set()
+    for addition in additions:
+        assert addition['beyond_configurator'] is True, 'Suite additions must not claim Configurator parity'
+        assert addition['adaptation'] and addition['targets'] and addition['contracts'], 'Unmapped Suite addition'
+        for target in addition['targets']:
+            assert Path(target).is_file(), f'Missing addition target: {target}'
+        for contract in addition['contracts']:
+            assert contract in contracts, f'Missing addition contract: {contract}'
+        wizard='\n'.join(Path(p).read_text(encoding='utf-8') for p in addition['targets'])
+        for api,fields in addition['writes'].items():
+            source=Path(f'src/rfsuite/tasks/msp/api/{api}.lua').read_text(encoding='utf-8')
+            for field in fields:
+                assert field in source and field in wizard, f'Untraceable added write: {api}.{field}'
+                written.add(f'{api}.{field}')
+    expected={'governor_profile.governor_headspeed','governor_config.gov_spoolup_time',
+              'governor_config.gov_spooldown_time','governor_config.gov_recovery_time'}
+    assert written==expected, f'Added MSP write inventory changed: {written ^ expected}'
+    assert not any(field.startswith(('filter_config.','rpm_filter_v2.')) for field in written), 'Filter check must be read-only'
     assert len({f['source'] for f in files})==len(files),'Duplicate source file'
     for entry in files:
         assert entry['targets'] and entry['contracts'],f'Unmapped source: {entry["source"]}'
@@ -33,6 +52,7 @@ def main():
         covered={f['source'] for f in files if f['source'].startswith('tabs/setup_wizard/')}
         assert actual==covered,f'Unmapped/removed wizard files: {actual ^ covered}'
     print(f'Traceability: {len(files)} files, {sum(len(f["functions"]) for f in files)} named functions, {len(contracts)} scenario groups; no missing targets/contracts')
+    print(f'Suite additions beyond Configurator: {len(additions)}; {len(written)} added MSP fields: '+', '.join(sorted(written)))
     if args.source:
         print(f'Pinned source: all {len(files)} SHA-256 fingerprints match; complete wizard directory accounted for')
 

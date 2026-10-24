@@ -1,6 +1,7 @@
 """Prove the source contracts reject concrete former defects, offline."""
 import argparse
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 
 
 def main():
@@ -18,15 +19,23 @@ def main():
             ('stale-blades','FAIL REVIEW ESC calibration requires its own blade confirmation'),
             ('shared-timeout-probe','FAIL REVIEW servo capability cannot authorize mixer timeouts'),
             ('cleanup-unlock','FAIL REVIEW failed cleanup never re-enables arming'),
-            ('drop-stale-edit','FAIL CORE an edit made while a list was open applies after fresh STATUS')]
-    for mutation,marker in checks:
+            ('drop-stale-edit','FAIL CORE an edit made while a list was open applies after fresh STATUS'),
+            ('governor-headspeed','FAIL S08 headspeed payload preserves every other profile field'),
+            ('rpm-custom-off','FAIL S08 custom/preset filter enablement includes every axis')]
+    def verify(control):
+        mutation,marker=control
         command=[args.lua,'bin/wizard/verify.lua']
         if mutation:command+=['--mutation',mutation]
         result=subprocess.run(command,text=True,capture_output=True,encoding='utf-8')
         expected=1 if mutation else 0
         if result.returncode!=expected or marker not in result.stdout or 'Wizard:' not in result.stdout:
             raise AssertionError(f'{mutation or "positive control"}: exit={result.returncode}\n{result.stdout}\n{result.stderr}')
-        print(f'{mutation or "positive control"}: expected exit {expected}, named assertion observed')
+        return f'{mutation or "positive control"}: expected exit {expected}, named assertion observed'
+
+    # Every Lua process has isolated fixtures and reads the same sources without exports.
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        for result in executor.map(verify,checks):
+            print(result,flush=True)
 
 
 if __name__=='__main__':

@@ -380,6 +380,30 @@ angles to be entered manually; that refusal does not change the current angles.
 
 ## Feedback and detailed settings
 
+Governor headspeed and ramp cards appear only in **Electric** and **Nitro**, where
+the FC governs. All editors start with values read from the FC. One headspeed card
+is offered for each PID profile selected by the Profiles & gain adjustment range,
+bounded by the configured positions (at most three) and the FC profile count.
+Without a known assignment, only PID profile 1 is offered. The existing sequential
+profile transaction reads and writes individual profiles, then restores the active
+profile; only edited targets are saved. The native wizard editor retains exact RPM
+values, including values between the Governor page's 10-RPM increments.
+
+- **Full headspeed (rpm)**: Full-throttle target for the named PID profile, 0–30000 RPM; no recommended target is substituted.
+- **Spoolup time**: Time to reach headspeed, 0–60.0 seconds in 0.1-second increments.
+- **Spooldown time**: Time to reduce headspeed, 0–60.0 seconds in 0.1-second increments.
+- **Recovery time**: Time to recover headspeed, 0–10.0 seconds in 0.1-second increments.
+- **RPM source**: Frequency sensor or bidirectional DShot for the governor and RPM filter. The card also appears with governor Off when RPM filtering is enabled.
+- **RPM filter**: A separate warning card says when filtering has no selected RPM source. Choose a source here or turn RPM filtering off on the Filters page. The wizard never changes filter settings.
+
+The suite's Filters page calls preset zero **CUSTOM**, not Off. Low/Medium/High
+presets enable RPM filtering; CUSTOM needs a signal if any of its 16 notch sources
+on any of the three axes is nonzero. With all custom sources zero it is off. Filter
+configuration and custom notches are read once after entering the governor step;
+they add no MSP work to scene construction or the startup read chain. The warning
+applies in Off, Limit, Direct, Electric and Nitro. Selecting a source still requires
+Save and reboot; existing status feedback remains the FC/configuration verdict.
+
 Test buttons show when a held command is active; pressing a servo/mixer test again
 returns it to neutral. Motor controls are momentary and remain disabled until the
 required preparation and output checks pass. The status line distinguishes staged

@@ -43,7 +43,7 @@ draft discard is also checked with the old curve and choices still present.
 | 5 | Rates | Profiles actually selected by the adjustment range, or the active profile; individual reads on entry; matching preset/custom state; three-position suggestion; only chosen profiles written; collective preserved; original selection restored; chosen state cleared after save. | `S05`, `SOURCE` |
 | 6 | Swashplate | Swash type, rotor direction and tail mode; Direct roles, common layouts, front/rear reference variants and tail servo number; signed yaw reset; TTA on every PID profile only when servo/motor kind changes; compatible BOTH pin state; unsupported pin command and refused switch. | `S06`, `CORE`, `VISUAL` |
 | 7 | Servo type | Relevant PWM groups and bus exclusion; mixed/custom group readback; unplugged requirement; 50/333/560 Hz and 1520/760 µs; centre/travel/scale reset only across pulse bands; restart on frame-rate change; custom cyclic/tail 25–5000 Hz preserves calibration; mixed readback and restart; cached custom pulse reference follows edits with stable native tables and a pulse-limit hint. | `S07`, `CORE`, `VISUAL` |
-| 8 | Governor | Feature bit overrides a latent stored mode; mode/type writes; Switch only with headspeed control and reset when leaving it; restart; fast-RPM warning distinguishes RPM input/bidirectional DShot from serial ESC telemetry. | `S08` |
+| 8 | Governor | Feature bit overrides a latent stored mode; mode/type writes; Switch only with headspeed control and reset when leaving it; restart; fast-RPM warning distinguishes RPM input/bidirectional DShot from serial ESC telemetry. Suite additions: FC headspeed per configured PID profile, exact RPM, edited-profile saves and restoration, three ramp times in seconds, read-only preset/CUSTOM filter check and missing-source warning even with governor Off. | `S08` |
 | 9 | Motor & ESC | Versioned sparse protocol IDs, including API 12.09/12.10 Disabled; motor poles; main and tail gearing; motor-tail variant; Castle protocol/feature consistency. | `S09-S12` |
 | 10 | Connection gate | Batch initial restart; unplugged confirmation before it; same visit/FC after reconnect; arming lock reasserted; actual main/tail outputs and required PWM servos; powered/connected/blades confirmations. | `S10`, lifecycle sweep |
 | 11 | ESC telemetry | Battery connection with main and tail blades removed; versioned protocols; Off frees ESC function; Castle throttle-wire telemetry; free/current port; saved-config trial eligibility; successful combination kept live, cancel restores prior flags, Save & reboot persists it; V/A/temperature/RPM and explicit receiving/missing feedback. | `S11`, `S09-S12`, `CORE` |
@@ -57,6 +57,16 @@ draft discard is also checked with the old curve and choices still present.
 | 19 | Finish | Readable swash/direction/tail, collective and cyclic limits, throttle protocol, Castle/serial telemetry, governor feature/mode/type, RPM and ARM assignment; final confirmation; save/cleanup and arming availability restored on exit. | `S18-S19`, lifecycle sweep |
 
 ## Shared behavior and deliberate adaptations
+
+The governor targets, ramp editors and filter-signal warning are additions beyond
+the pinned Configurator wizard. `source-map.json` explicitly inventories their four
+new writes under `additions`; `audit_source.py` validates each against the Suite API
+and implementation. The [governor write audit](helicopter-wizard-msp.md#governor-write-audit)
+also distinguishes changed fields from preserved full-record payload fields.
+`S08.headspeed-and-ramps`, `S08.headspeed-scope-and-help` and
+`S08.rpm-filter-signal` cover individual readback, profile bounds/fallback,
+selection/restore, exact wire records, discard/failure, shared units/limits,
+translated help, all governor modes and all three CUSTOM notch axes.
 
 - Browser promises/timers become bounded queue jobs. API loading, decoding,
   indexed writes, snapshots and profile transactions resume across calls.
