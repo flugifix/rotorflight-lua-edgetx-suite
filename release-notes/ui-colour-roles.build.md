@@ -1,0 +1,1 @@
+- The tool's colours now come from one role table (ui/palette.lua); nothing looks different.
