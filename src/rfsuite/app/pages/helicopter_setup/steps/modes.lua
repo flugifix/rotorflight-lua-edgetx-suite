@@ -71,7 +71,7 @@ return function(w)
           local i, r = assigned(id); if i then r.range.start, r.range["end"] = 1500, 1500; send(i) end
         end),
         w:value(L.active, function()
-          local v=state();return v==true and L.yes or v==false and L.no or L.unavailable
+          local v=state();return v==true and L.switchOn or v==false and L.switchOff or L.unavailable
         end)
       }, nil, "switch")
       cards[#cards].switchState=state

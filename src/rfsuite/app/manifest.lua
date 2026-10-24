@@ -332,7 +332,6 @@ local manifest = {
     wizards_menu = {
       title = "@i18n(app.modules.wizards.name)@",
       pages = {
-        { id = "setup_wizard", title = "@i18n(app.modules.setup_wizard.name)@", menuId = "setup_wizard_menu", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
         { id = "helicopter_setup", title = "@i18n(app.modules.helicopter_setup.name)@", menuId = "helicopter_setup_menu", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true, minApiVersion = {12, 0, 9} }
       }
     },

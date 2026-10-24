@@ -180,8 +180,8 @@ return function(w)
   cards[4].summary=L.travelQuick
   cards[5].summary=L.throttleQuick
   -- Keep the cards present when the protocol is edited; the rows report applicability live.
-  for _,kind in ipairs({"overview","settings"}) do
-    local card=w:cardDef(kind=="overview" and L.linkTitle or L.linkSettings,L.linkHint,{
+  for _,kind in ipairs({"combined"}) do
+    local card=w:cardDef(L.linkTitle,L.linkHint,{
       w:value(L.linkStatus,function() return L.linkNeedsCrsf end)
     })
     card.link,card.summary=kind,L.linkQuick
