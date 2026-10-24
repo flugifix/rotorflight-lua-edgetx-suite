@@ -476,7 +476,7 @@ return {
         battery = "Akku",
         batteryUnpluggedHint = "Akku noch nicht anschließen. Der nächste Schritt sagt, wann er dran ist.",
         fullThrottleTitle = "Vollgas",
-        fullThrottleHint = "Akku abgesteckt lassen, FC über USB versorgen. Vollgas drücken. Der Ausgang steigt in wenigen Sekunden auf 100 %.",
+        fullThrottleHint = "Blätter ab. Ritzel aus dem Eingriff nehmen oder den Heli festhalten: ein ESC, der nicht in die Kalibrierung geht, kann den Motor mit Vollgas laufen lassen.\nAkku abgesteckt lassen, FC über USB versorgen. Vollgas drücken. Der Ausgang steigt in wenigen Sekunden auf 100 %.",
         fullThrottleShort = "Akku abgesteckt, FC an USB. Vollgas drücken.",
         connectBattery = "Akku anschließen",
         connectBatteryPwmHint = "Akku anschließen. Der Regler bestätigt Vollgas mit Pieptönen; die Töne stehen in seiner Anleitung. Dann Leerlauf drücken.",

@@ -476,7 +476,7 @@ return {
         battery = "Battery",
         batteryUnpluggedHint = "Leave the battery unplugged. The next step tells you when to connect it.",
         fullThrottleTitle = "Full throttle",
-        fullThrottleHint = "With the battery still unplugged and the flight controller on USB, press Full throttle. The output rises to 100 % in a few seconds.",
+        fullThrottleHint = "Blades off. Take the pinion out of mesh or hold the helicopter down: an ESC that does not enter calibration may run the motor at full throttle.\nWith the battery still unplugged and the flight controller on USB, press Full throttle. The output rises to 100 % in a few seconds.",
         fullThrottleShort = "Battery unplugged, FC on USB. Press Full throttle.",
         connectBattery = "Connect the battery",
         connectBatteryPwmHint = "Plug the battery in. The ESC beeps to show it has taken full throttle; your ESC's manual lists the tones. Then press Low throttle.",
