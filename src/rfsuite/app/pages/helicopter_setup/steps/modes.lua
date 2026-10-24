@@ -74,6 +74,7 @@ return function(w)
           local v=state();return v==true and L.switchOn or v==false and L.switchOff or L.unavailable
         end)
       }, nil, "switch")
+      cards[#cards].rows[4].color=function() return state()==true and "accent" or "text" end
       cards[#cards].switchState=state
       cards[#cards].summary=L.modeQuick
     end

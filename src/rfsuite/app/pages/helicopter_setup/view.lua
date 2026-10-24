@@ -175,6 +175,8 @@ function M.new(w, ctx, diagrams)
         if r.kind == "value" then
           all[#all + 1] = label(formX+formW-editW, y+3, editW, function() return tostring(r.get() or "--") end)
           all[#all].h=(card.link=="overview" or card.dense) and math.min(controlH,rowH-3) or controlH
+          -- A value row may name a palette role for its live state, e.g. a switch that is on.
+          if r.color then all[#all].color=function() return palette[r.color()] or palette.text end end
         elseif r.kind == "toggle" then
           local function set(v) w:applyEdit(function() if editable() then r.set(v) end end) end
           all[#all + 1] = { type = "button", x = formX+formW-editW, y = y, w = editW, h = controlH,

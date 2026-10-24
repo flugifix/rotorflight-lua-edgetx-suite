@@ -375,7 +375,9 @@ return function(h)
     local rescue=w.cards[2]
     w.data.mode_ranges.mode_ranges[2]={id=53,auxChannelIndex=1,range={start=1800,["end"]=2100}}
     w.data.status.flight_mode_flags=0;eq(rescue.switchState(),false,"VISUAL Rescue reads the FC mode flag")
+    eq(rescue.rows[4].color(),"text","VISUAL an OFF switch reads in the text colour")
     w.data.status.flight_mode_flags=2;eq(rescue.switchState(),true,"VISUAL Rescue follows an active FC flag")
+    eq(rescue.rows[4].color(),"accent","VISUAL an ON switch is accented")
     w.data.mode_ranges.mode_ranges[2].range["end"]=1800
     eq(rescue.switchState(),nil,"VISUAL unassigned mode stays neutral")
   end)
