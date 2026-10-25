@@ -1327,7 +1327,7 @@ return {
         save_error_title = "Fehler",
         unsaved_changes = "Ungespeicherte Änderungen",
         help_title = "Governor - Allgemein",
-        help_p1 = "Modus: Betriebsmodus des Governors auswählen (OFF, LIMIT, DIRECT, ELECTRIC, NITRO).",
+        help_p1 = "Modus: Betriebsmodus des Governors auswählen (OFF, LIMIT, DIRECT, ELECTRIC, NITRO). Zeigt OFF bei deaktiviertem FC-Governor-Feature; Moduswechsel startet den Flugcontroller neu.",
         help_p2 = "Gaskurventyp: Normal, Schalter oder Funktions-Gaseingang.",
         help_p3 = "Leerlaufgas: Minimale Gas-Ausgabe im geschärften Zustand.",
         help_p4 = "Autorotationsgas: Gas-Ausgabe während des Autorotations-Bailouts.",

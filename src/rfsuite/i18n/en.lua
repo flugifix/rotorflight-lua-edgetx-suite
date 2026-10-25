@@ -1327,7 +1327,7 @@ return {
         save_error_title = "Error",
         unsaved_changes = "Unsaved changes",
         help_title = "Governor - General",
-        help_p1 = "Mode: Select governor operating mode (OFF, LIMIT, DIRECT, ELECTRIC, NITRO).",
+        help_p1 = "Mode: Select governor operating mode (OFF, LIMIT, DIRECT, ELECTRIC, NITRO); shows OFF while the flight controller's governor feature is off; changing mode restarts the flight controller.",
         help_p2 = "Throttle type: Normal, Switch, or Function throttle input.",
         help_p3 = "Idle throttle: Minimum throttle output while armed.",
         help_p4 = "Auto throttle: Throttle output during autorotation bailout.",
