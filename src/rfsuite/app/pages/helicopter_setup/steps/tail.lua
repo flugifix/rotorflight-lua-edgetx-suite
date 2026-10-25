@@ -24,6 +24,10 @@ return function(w)
       })
     }
   end
+  -- Calibrate at 22.5 degrees: the two tail blades, seen end-on from the tip, then open to
+  -- exactly 45 degrees, which a square of paper folded corner to corner checks without a
+  -- gauge. 1000 raw units per 24 degrees: 937.5 rounds to 938.
+  local CAL_HOLD = w.math.round(22.5 * 1000 / 24)
   local function hold(value) w:hold("mixer", 3, value) end
   local function toggle(value) w:toggleHold("mixer", 3, value) end
   -- A held end shows as "Release test" on its own button, as in the blade pitch step.
@@ -45,9 +49,9 @@ return function(w)
       w:button(L.wrongReverse, function() w:invertInput(3); w.checks.tailDirection = nil end),
       w:check("tailDirection", L.directionCorrect)
     }, function() hold(2502) end,"tailMove"),
-    w:cardDef(L.tailCalibration, L.tailCalibrationHint, {
-      holdButton(L.holdPositive22, 917),
-      holdButton(L.holdNegative22, -917),
+    w:cardDef(L.tailCalibration, L.tailCalibrationHelp, {
+      holdButton(L.holdPositive22, CAL_HOLD),
+      holdButton(L.holdNegative22, -CAL_HOLD),
       { kind = "number", label = L.ratePercent, min = 100, max = 5000, divisor = 10,
         get = function() return math.abs(w.data.mixer_input.inputs[3].rate) end,
         set = function(v)
@@ -66,6 +70,8 @@ return function(w)
         set = function(v) w.data.mixer_input.inputs[3].max = w.math.round(v / 0.24); w:touch("mixer_input", false, true) end }
     }, function() hold(0) end)
   }
+  -- The card shows the short instruction; ? adds the paper-fold check.
+  cards[3].summary=L.tailCalibrationHint
   cards[2].meter=function() return w.data.rc_command and (w.data.rc_command.commands[3] or 0)/500 or 0 end
   w.validate=function() return w:ack("tailCentre") and w:ack("tailDirection") end
   return cards

@@ -113,6 +113,8 @@ return function(w)
         get = source,
         set = function(v)
           if (mode()==0 and not w.governorRpmFilter) or (v~=1 and v~=2) then return end
+          -- DShot150 has no bidirectional RPM, and an ESC that ignores the request may not arm.
+          if v==2 and w.data.motor_config.motor_pwm_protocol==5 then w.message=L.dshot150NoRpm; return end
           w:feature(28, v==1)
           if v==2 then w:field("motor_config", "use_dshot_telemetry", 1, true) end
           w.rebootPending = true

@@ -1300,12 +1300,13 @@ return function(h)
       local w=world();settle(w);w.step=9;w.data.mixer_config.tail_rotor_mode=tail
       local c=step(w,"motor")
       cardOrder(c,{L.throttleProtocol,L.motorGearing,L.motorGearingTail},"S09 tail "..tail)
-      c[1].rows[1].set(5);c[1].rows[2].set(2)
+      -- Quick picks lead the protocol list: PWM, DSHOT150, DSHOT300, then Other.
+      c[1].rows[1].set(3);c[1].rows[2].set(2)
       c[2].rows[1].set(14);c[2].rows[2].set(12);c[2].rows[3].set(120)
       eq(c[2].rows[4].get(),"10.000","S09 ratio still follows tooth counts")
       if tail==0 then c[3].rows[1].set(20);c[3].rows[2].set(90)
       else c[3].rows[1].set(8) end
-      eq(w.data.motor_config.motor_pwm_protocol,5,"S09 protocol wire ID")
+      eq(w.data.motor_config.motor_pwm_protocol,6,"S09 protocol wire ID")
       eq(w.data.motor_config.use_dshot_telemetry,1,"S09 DShot field")
       eq(w.data.motor_config.motor_pole_count_0,14,"S09 main pole field")
       eq(w.data.motor_config.main_rotor_gear_ratio_0,12,"S09 pinion field")
@@ -1860,6 +1861,8 @@ return function(h)
     eq(w.data.governor_config.gov_throttle_type,0,"S08 unsupported Switch choice refused")
     w.rebootPending=nil;w.dirty={}
     w.data.motor_config.motor_pole_count_0=14;w.data.motor_config.motor_pwm_protocol=5;w.data.motor_config.use_dshot_telemetry=1
+    check(not w:fastRpm(),"S08 DSHOT150 sends no bidirectional RPM")
+    w.data.motor_config.motor_pwm_protocol=6
     check(w:fastRpm(),"S08 bidirectional DShot is fast RPM")
     w.data.motor_config.use_dshot_telemetry=0;w.data.esc_sensor_config.protocol=1
     check(not w:fastRpm(),"S08 serial ESC telemetry does not prove fast RPM")
@@ -1916,11 +1919,14 @@ return function(h)
     for _,mode in ipairs({1,2}) do
       w:feature(28,false);w.dirty={}
       w.data.governor_config.gov_mode=mode;w.data.status.arming_disable_flags=1<<6
-      for protocol=5,8 do
+      for protocol=6,8 do
         m.motor_pwm_protocol=protocol
         eq(status.get(),L.rpmConfigured,"S08 Limit/Direct only assert configuration for DShot "..protocol)
         check(w:fastRpm(),"S08 configured DShot range includes PROSHOT1000")
       end
+      m.motor_pwm_protocol=5
+      eq(status.get(),L.rpmNeedsDshot,"S08 DSHOT150 is not a bidirectional DShot source")
+      check(not w:fastRpm(),"S08 DSHOT150 never counts as fast RPM")
       m.motor_pwm_protocol=4
       eq(status.get(),L.rpmNeedsDshot,"S08 protocol below DShot range is rejected")
       m.motor_pwm_protocol=9
@@ -1983,8 +1989,13 @@ return function(h)
   end)
   case("S09.new-esc-guidance",function()
     local w=world();settle(w);local card=step(w,"motor")[1]
-    check(type(card.summary)=="string" and card.summary==L.motorQuick,
+    w.data.motor_config.motor_pwm_protocol=6
+    check(type(card.summary)=="function" and card.summary()==L.motorQuick and card.summaryColor()==nil,
       "S09 motor card shows a short new ESC instruction beside full help")
+    w.data.motor_config.motor_pwm_protocol=5
+    eq(card.summary(),L.dshot150NoRpm,"S09 DSHOT150 says it sends no RPM")
+    eq(card.summaryColor(),"warning","S09 DSHOT150 note is a warning")
+    w.data.motor_config.motor_pwm_protocol=6
     eq(#card.rows,3,"S09 protocol card keeps protocol, DShot and blades confirmation")
     local manifest=load("app/manifest.lua")
     for _,locale in ipairs({"en","de"}) do
@@ -1996,7 +2007,7 @@ return function(h)
       for _,entry in ipairs(manifest.menus.esc_tools_menu.pages) do
         check(string.find(s.motorHint,entry.title,1,true)~=nil,"S09 "..locale.." ESC help includes "..entry.title)
       end
-      for _,key in ipairs({"motorQuick"}) do
+      for _,key in ipairs({"motorQuick","dshot150NoRpm","otherProtocol"}) do
         check(type(s[key])=="string","S09 "..locale.." "..key.." is translated")
         eq(load("app/pages/helicopter_setup/labels.lua")[key],"@i18n(app.modules.helicopter_setup."..key..")@",
           "S09 "..key.." is bound through labels")
@@ -2014,7 +2025,7 @@ return function(h)
     while not scene:step() do end
     local shown=false
     for _,item in ipairs(scene.children) do
-      if item.type=="label" and item.text==L.motorQuick then shown=true end
+      if item.type=="label" and type(item.text)=="function" and item.text()==L.motorQuick then shown=true end
       if item.type=="button" and item.text=="?" then item.press() end
     end
     check(shown,"S09 new ESC instruction is rendered on the motor card")
@@ -2025,15 +2036,45 @@ return function(h)
     eq(row.kind,"choice","S09 bidirectional DShot is an on/off choice")
     w.data.motor_config.motor_pwm_protocol=0
     check(not row.enabled(),"S09 bidirectional DShot is inactive for PWM")
-    for protocol=5,8 do
+    for protocol=6,8 do
       w.data.motor_config.motor_pwm_protocol=protocol
       check(row.enabled(),"S09 bidirectional DShot is offered for protocol "..protocol)
     end
+    w.data.motor_config.motor_pwm_protocol=5;w.data.motor_config.use_dshot_telemetry=0
+    check(not row.enabled(),"S09 bidirectional DShot is not offered for DSHOT150")
+    row.set(2);eq(w.data.motor_config.use_dshot_telemetry,0,"S09 DSHOT150 refuses bidirectional DShot")
     w.data.motor_config.motor_pwm_protocol=9
     check(not row.enabled(),"S09 bidirectional DShot is inactive above the DShot range")
     w.data.motor_config.motor_pwm_protocol=6;w.data.motor_config.use_dshot_telemetry=0
     check(row.enabled(),"S09 bidirectional DShot is offered for DShot")
     row.set(2);eq(w.data.motor_config.use_dshot_telemetry,1,"S09 On writes 1")
+    -- Quick picks first, every other protocol under Other with its own wire ID.
+    local protocol=c[1].rows[1]
+    eq(protocol.values[1],"PWM","S09 PWM is the first quick pick")
+    eq(protocol.values[2],"DSHOT150","S09 DSHOT150 is the second quick pick")
+    eq(protocol.values[3],"DSHOT300","S09 DSHOT300 is the third quick pick")
+    eq(#protocol.values,#w:motorProtocols(),"S09 the full protocol list stays available")
+    local others={}
+    for i=4,#protocol.values do others[protocol.values[i]]=i end
+    local dshot600=others[string.format(L.otherProtocol,"DSHOT600")]
+    check(dshot600~=nil,"S09 DSHOT600 is under Other")
+    check(others[string.format(L.otherProtocol,"PROSHOT")]~=nil,"S09 PROSHOT is under Other")
+    protocol.set(dshot600);eq(w.data.motor_config.motor_pwm_protocol,7,"S09 Other DSHOT600 writes wire ID 7")
+    eq(protocol.get(),dshot600,"S09 a current Other protocol is shown")
+    eq(w.data.motor_config.use_dshot_telemetry,1,"S09 Other protocols keep bidirectional DShot")
+    -- Choosing DSHOT150 turns bidirectional DShot off in the same motor_config write.
+    w.dirty={};protocol.set(2)
+    eq(w.data.motor_config.motor_pwm_protocol,5,"S09 DSHOT150 quick pick writes wire ID 5")
+    eq(w.data.motor_config.use_dshot_telemetry,0,"S09 DSHOT150 turns bidirectional DShot off")
+    check(w.dirty.motor_config and w.rebootPending,"S09 DSHOT150 change is one motor_config draft needing restart")
+    protocol.set(1);eq(w.data.motor_config.motor_pwm_protocol,0,"S09 PWM quick pick writes wire ID 0")
+    -- The governor's RPM source refuses bidirectional DShot on DSHOT150.
+    w.data.feature_config.enabledFeatures=1<<26;w.data.governor_config.gov_mode=3
+    w.data.motor_config.motor_pwm_protocol=5;w.data.motor_config.use_dshot_telemetry=0
+    local source=step(w,"governor")[2].rows[1]
+    source.set(2)
+    eq(w.data.motor_config.use_dshot_telemetry,0,"S08 RPM source keeps DShot telemetry off on DSHOT150")
+    eq(w.message,L.dshot150NoRpm,"S08 RPM source explains DSHOT150 sends no RPM")
   end)
   case("S09-S12.versioned-esc-and-ports",function()
     local w=world();local oldVersion=rfsuite.session.apiVersion
@@ -2194,8 +2235,25 @@ return function(h)
     local w=world();w.data.mixer_config.tail_rotor_mode=0
     local c=step(w,"tail");c[1].enter();eq(w.holds.mixer3.value,0,"S17 neutral yaw")
     c[1].rows[1].set(-100);eq(w.data.mixer_config.tail_center_trim,-417,"S17 centre trim conversion")
-    c[3].rows[1].press();eq(w.holds.mixer3.value,917,"S17 +22 degree command")
+    c[3].rows[1].press();eq(w.holds.mixer3.value,938,"S17 +22.5 degree command")
     c[3].rows[1].press();eq(w.holds.mixer3.value,0,"S17 test toggles to neutral")
+    c[3].rows[2].press();eq(w.holds.mixer3.value,-938,"S17 -22.5 degree command")
+    c[3].rows[2].press();eq(w.holds.mixer3.value,0,"S17 -22.5 test toggles to neutral")
+    eq(c[3].summary,L.tailCalibrationHint,"S17 calibration card shows the short instruction")
+    eq(c[3].detail,L.tailCalibrationHelp,"S17 calibration help adds the paper-fold check")
+    for _,locale in ipairs({"en","de"}) do
+      local s=load("i18n/"..locale..".lua").app.modules.helicopter_setup
+      for _,key in ipairs({"tailCalibrationHint","tailCalibrationHelp","holdPositive22","holdNegative22"}) do
+        check(string.find(s[key],"22[.,]5")~=nil,"S17 "..locale.." "..key.." names 22.5 degrees")
+      end
+      check(string.find(s.tailCalibrationHelp,"45°",1,true)~=nil,"S17 "..locale.." help names the 45 degree fold")
+      check(utf8.len(s.tailCalibrationHelp)<=600,"S17 "..locale.." calibration help stays within 600 characters")
+      for line in string.gmatch(s.tailCalibrationHelp,"[^\n]+") do
+        check(utf8.len(line)<=200,"S17 "..locale.." calibration help line stays within 200 characters")
+      end
+      eq(load("app/pages/helicopter_setup/labels.lua").tailCalibrationHelp,
+        "@i18n(app.modules.helicopter_setup.tailCalibrationHelp)@","S17 calibration help is bound through labels")
+    end
     c[4].rows[2].press();eq(w.holds.mixer3.value,-2500,"S17 -60 degree command")
     c[4].rows[3].set(600);eq(w.data.mixer_input.inputs[3].min,-2500,"S17 clockwise stop units")
     w.data.mixer_input.inputs[3].rate=-250;c[3].rows[3].set(500)

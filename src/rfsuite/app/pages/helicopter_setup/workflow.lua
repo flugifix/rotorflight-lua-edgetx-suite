@@ -28,10 +28,15 @@ function M.attach(w)
     local h=self.holds[kind..index]
     self:hold(kind,index,h and h.value==value and 0 or value)
   end
+  -- Bidirectional DShot RPM comes from DSHOT300, DSHOT600 and PROSHOT1000 (6..8). DSHOT150 (5)
+  -- sends no RPM, so it never counts as a fast RPM source.
+  function w:bidirDshot(protocol)
+    return protocol >= 6 and protocol <= 8
+  end
   function w:rpmStatus()
     local m, features = self.data.motor_config, self.data.feature_config.enabledFeatures
     local freq = (features & (1 << 28)) ~= 0
-    local dshot = m.motor_pwm_protocol >= 5 and m.motor_pwm_protocol <= 8
+    local dshot = self:bidirDshot(m.motor_pwm_protocol)
     if m.motor_pole_count_0 == 0 then return self.L.rpmSetPoles end
     if not freq and m.use_dshot_telemetry ~= 0 and not dshot then return self.L.rpmNeedsDshot end
     if self.rebootPending or self.dirty.feature_config or self.dirty.motor_config then return self.L.rpmAfterReboot end
