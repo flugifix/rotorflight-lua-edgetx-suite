@@ -1,2 +1,2 @@
-- **GPS altitude is decoded in decimetres (`lib/rf2tlm_sensors.lua`)**:
-  - The CRSF custom telemetry sensor `GAlt` (0x1126) is read with one decimal, matching firmware that sends it in decimetres so it no longer stops at 327.67 m MSL (rotorflight/rotorflight-firmware#549). On firmware that still sends centimetres the value reads ten times too high.
+- **GPS altitude decoding follows the firmware's MSP API version (`lib/rf2tlm_sensors.lua`)**:
+  - The CRSF custom telemetry sensor `GAlt` (0x1126) is read in decimetres from MSP API 12.10, matching the firmware that sends decimetres so it no longer stops at 327.67 m MSL (rotorflight/rotorflight-firmware#549). Older firmware keeps the centimetre reading; an unknown API version also defaults to centimetres.
