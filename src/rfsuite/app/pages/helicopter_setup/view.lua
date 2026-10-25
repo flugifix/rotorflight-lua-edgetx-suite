@@ -143,7 +143,10 @@ function M.new(w, ctx, diagrams)
     all[#all].h = large and (card.grid and 30 or illustrated and 98 or height-controlH-154) or rowY-52
     all[#all].color = palette.muted
     -- A card may lead with a warning or a live prompt instead of a muted summary.
-    if card.summaryColor then all[#all].color = palette[card.summaryColor] or all[#all].color end
+    if type(card.summaryColor) == "function" then
+      local muted = all[#all].color
+      all[#all].color = function() return palette[card.summaryColor()] or muted end
+    elseif card.summaryColor then all[#all].color = palette[card.summaryColor] or all[#all].color end
     if card.summaryBold and height > 272 then all[#all].font = BOLD end
     end
     if illustrated then

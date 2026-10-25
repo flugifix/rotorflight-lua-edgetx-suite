@@ -212,7 +212,12 @@ function M.append(children, w, card, x, y, width, height)
     line({{16,128},{81,128}},accent,4)
     rect(38,105,20,9,accent);line({{58,110},{74,110},{74,98},{194,98}})
     rect(178,104,26,19);arrow(16,113,16,88)
-    text(5,141,210,"22°")
+    -- Inset: both tail blades seen end-on from the tip at 22.5 degrees each way cross at 45
+    -- degrees, the angle of a square of paper folded corner to corner (the wedge).
+    line({{150,36},{179,24},{179,48},{150,36}},accent,2)
+    line({{121,48},{179,24}},ink,3);line({{121,24},{179,48}},ink,3)
+    text(183,29,36,"45°")
+    text(5,141,210,"22.5°")
   elseif kind == "swashType" or kind == "rotorDir" or kind == "tailKind" or kind == "tailMotor" then
     -- The Configurator's own drawings of the swash step, one picture per value: the servo
     -- layout seen from above (nose up, servo 1 in front or behind, servo 4 when the tail

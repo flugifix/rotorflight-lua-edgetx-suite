@@ -6,7 +6,7 @@
     "bin/wizard/source-map.json": "4535052a15908cfe745900997e5b611294180f374cc23d20b675ec4b42acb579",
     "src/rfsuite/app/pages/helicopter_setup/attitude_view.lua": "d67a1e1cde6b46fc7e33f500e2085fe2e391b021cb96df69dfce03c194744faa",
     "src/rfsuite/app/pages/helicopter_setup/controller.lua": "b43aeb7ca73442bcf44dbb65fa188fee32a975fc0fb1c5eb16d0196b82a41ff7",
-    "src/rfsuite/app/pages/helicopter_setup/diagrams.lua": "266c1e8c86b9d0e0e76f7ca90262dab704774e244e6966de4a2cf87e94a0321e",
+    "src/rfsuite/app/pages/helicopter_setup/diagrams.lua": "d91d11947c1786f19ee884dad8af603448035ee11a93efbc452cbbd03102de08",
     "src/rfsuite/app/pages/helicopter_setup/elrs_link.lua": "d0894117f918e5600d6a10c77df3921be5de162e2082dc400f1419e93084db71",
     "src/rfsuite/app/pages/helicopter_setup/esc_link.lua": "41fbff1b9e4cf5ad9e1e6746ef33ae1d5e50178fcd6840e353a781b1ee54b177",
     "src/rfsuite/app/pages/helicopter_setup/feedback.lua": "4f73ebe86a8b140a8960ec3d0af6d9e29373994545bb48afaf2827ca6a8a661e",
@@ -14,7 +14,7 @@
     "src/rfsuite/app/pages/helicopter_setup/help.lua": "210bc647674c7bdf88e1ac00cf623c53858bb0721623f089caa1f95465ac2c46",
     "src/rfsuite/app/pages/helicopter_setup/history.lua": "d5f7b4799e1a93821b1ebfaecf5e458a054e7cf904bdc5435ae8e985bea3350b",
     "src/rfsuite/app/pages/helicopter_setup/history_store.lua": "e98250cf48a8a360541abd967a4663d09fd33c7f936a94cf13ea67233442cda8",
-    "src/rfsuite/app/pages/helicopter_setup/labels.lua": "4fa30c8e264fdae0f245daa13beebcc11604973c7772cf25061452495709d13d",
+    "src/rfsuite/app/pages/helicopter_setup/labels.lua": "4bd92a1394164876384848afbd41b5f2a52173c0dbaa223ec414a0dec9fbc0e6",
     "src/rfsuite/app/pages/helicopter_setup/math.lua": "5ef5e4d338382635a7841c6328a91877bc8183ab3b068b3e93b5d8a9ea61c8d3",
     "src/rfsuite/app/pages/helicopter_setup/navigation.lua": "4fc2956100ab51fb21bff34935df97480a8fc604a6f438765236ec4d9e18df56",
     "src/rfsuite/app/pages/helicopter_setup/page.lua": "6aab577150897947e463e77df2b83376db8d4d085d1228c63674d2b06cd45e70",
@@ -25,11 +25,11 @@
     "src/rfsuite/app/pages/helicopter_setup/steps/direction.lua": "5375aced67797811c1a76847db7a41d1bd801ad15731ffa4e8c48214695c4699",
     "src/rfsuite/app/pages/helicopter_setup/steps/escTelemetry.lua": "acfe1c31681d54b3310a7073cda625cd03f8433efca6d54a7bd93a5055e4ecf7",
     "src/rfsuite/app/pages/helicopter_setup/steps/finish.lua": "4bb2414076dfcb0bfce29665eae470f504945bf08dd85b16b55c7fb8946f6443",
-    "src/rfsuite/app/pages/helicopter_setup/steps/governor.lua": "c2c3068b122d222dc174716214d6f9f39749a9fb7b71a04e3844db2840490f4f",
+    "src/rfsuite/app/pages/helicopter_setup/steps/governor.lua": "f0ea56bb10f36e3ebdf43b68ddf1a7bdbcfdbe9a1384ebd901b789309d84ad51",
     "src/rfsuite/app/pages/helicopter_setup/steps/gyro.lua": "c9751a300b355d699fc3689c61f379e0f20610dadaf9383573fff229d9a9c402",
     "src/rfsuite/app/pages/helicopter_setup/steps/level.lua": "8433f8d0799153b4c5a9c4dbd8c930e115e7c26486c9fb5cc19c936ebd54f3f5",
     "src/rfsuite/app/pages/helicopter_setup/steps/modes.lua": "d36d05c28ccdff472073ccdaa15a92940565e51d5f8f136e1a18104583ea7632",
-    "src/rfsuite/app/pages/helicopter_setup/steps/motor.lua": "2fd63a1298b870d998bd7dc643cfe297fcafa0383f0a651017ed113f611b8916",
+    "src/rfsuite/app/pages/helicopter_setup/steps/motor.lua": "37876a80117d8232e4c0d9f35c334624c0575c84bc58610a3ecc9743cef72c58",
     "src/rfsuite/app/pages/helicopter_setup/steps/pitch.lua": "687354e0d60624d22e10ccd17e210cf6a6060319d30339cb2abbf0b9aa028fa3",
     "src/rfsuite/app/pages/helicopter_setup/steps/profiles.lua": "10c66593fdaf0447c58d8f54b99e551fef1f762b85f0ea2518b882e2ebd7d8c5",
     "src/rfsuite/app/pages/helicopter_setup/steps/rates.lua": "c8384a0d9f83b0d4b5772f187ddbc595b51098aa14e28c74b937740cb4f1289e",
@@ -38,16 +38,16 @@
     "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua": "2eb43c029275b83a3d294e198aa47081211890e495f8b13d4c46f7082058400e",
     "src/rfsuite/app/pages/helicopter_setup/steps/servos.lua": "bc733b1a6d6bd33af7fd020c2e590e06507f0bb0d8e8daf7b1a43ef0dbd300f3",
     "src/rfsuite/app/pages/helicopter_setup/steps/swash.lua": "a4506ae1ce6b6d81e0f6fa0fa985f8fd424c19250c2950553d7ac0be9f52a094",
-    "src/rfsuite/app/pages/helicopter_setup/steps/tail.lua": "200a7abef9d0fdec1ae7f09868671f3f284be4c90317122ca11a3c8e2fc47179",
+    "src/rfsuite/app/pages/helicopter_setup/steps/tail.lua": "0337d4c53af0bb48a2acc95112383b8a8c40dbc74c68eac38e7ce6f067322101",
     "src/rfsuite/app/pages/helicopter_setup/steps/throttle.lua": "61da24b8bbc248ec5bde0119f99314b4909a57be5d055248111631eff94d4aef",
     "src/rfsuite/app/pages/helicopter_setup/transport.lua": "98a9c93058e5fc6997b30057940898d512f5d189f06f88af1b5523a5d429f385",
-    "src/rfsuite/app/pages/helicopter_setup/view.lua": "53cf635f4a43a04e725e2c91a193f6a2fad9edb870c7a91ec30a0bbae1775469",
-    "src/rfsuite/app/pages/helicopter_setup/workflow.lua": "f2c75985b6d6619f3b60aff9c834914198f271b6777af0cd2065e3511848e478",
+    "src/rfsuite/app/pages/helicopter_setup/view.lua": "34a5a50b080365008597bd60c3fe8ed4d1bb7e7a884064ec60b4ae45ead89681",
+    "src/rfsuite/app/pages/helicopter_setup/workflow.lua": "e1c762a6e4146479c59d826f9d6ef093deb0b55b49bd706d6d1855dbbcbdca80",
     "src/rfsuite/app/pages/setup/esc_motors/throttle/page.lua": "47e9317a87dd139cdfca10619abfa93d01de0f6e25c6874920f42fa3af854031",
     "src/rfsuite/app/pages/setup/power/battery/page.lua": "21c1f2a6c1a19cf30478fa9312a8229ee0234f828d19f35b9ba423307fde3474",
     "src/rfsuite/app/pages/setup/power/smartfuel/page.lua": "74863d65af8394ac42d56081612dd190395ab0a4edb6a8af2a245f507edc3c95",
     "src/rfsuite/app/pages/setup/power/sources/page.lua": "6dde30b05c017650a36d5ae73524aaf4a4c72e92699aba616d43b16304b0b16c",
-    "src/rfsuite/i18n/en.lua": "0297860d89ee03c656c6f7d8a1be8f6cbce24dcbd223318bbb752214dff3bd2a",
+    "src/rfsuite/i18n/en.lua": "ab490b18ec6b3ca83556063c6941b8fa121a70d7878195cd0868030ad1257410",
     "src/rfsuite/lib/esc_params.lua": "2a9f2fb0fd6f762ef396ed20da5a48081a5583687bb2803b870a34ca2635eeaf",
     "src/rfsuite/lib/governor_fields.lua": "728924688c5f89fd1c561504198ba8f70e210129dc503820f9c8f39523ab3731",
     "src/rfsuite/lib/power_fields.lua": "d439bf18ec8a9fde64b4d4a05c251637cdddeea6bb94e969acb66e9d92accbac",
@@ -5296,7 +5296,7 @@
               ],
               "additions": [],
               "source": "src/rfsuite/app/pages/helicopter_setup/steps/governor.lua",
-              "expression": "{ kind = \"choice\" , label = L . rpmSource , values = { L . rpmWire , L . bidirectionalDshot } , get = source , set = function ( v ) if ( mode ( ) == 0 and not w . governorRpmFilter ) or ( v ~= 1 and v ~= 2 ) then return end w : feature ( 28 , v == 1 ) if v == 2 then w : field ( \"motor_config\" , \"use_dshot_telemetry\" , 1 , true ) end w . rebootPending = true w . buildRequested = true ; w : rebuild ( ) end , enabled = function ( ) return mode ( ) > 0 or w . governorRpmFilter end }"
+              "expression": "{ kind = \"choice\" , label = L . rpmSource , values = { L . rpmWire , L . bidirectionalDshot } , get = source , set = function ( v ) if ( mode ( ) == 0 and not w . governorRpmFilter ) or ( v ~= 1 and v ~= 2 ) then return end if v == 2 and w . data . motor_config . motor_pwm_protocol == 5 then w . message = L . dshot150NoRpm ; return end w : feature ( 28 , v == 1 ) if v == 2 then w : field ( \"motor_config\" , \"use_dshot_telemetry\" , 1 , true ) end w . rebootPending = true w . buildRequested = true ; w : rebuild ( ) end , enabled = function ( ) return mode ( ) > 0 or w . governorRpmFilter end }"
             },
             {
               "kind": "gate",
@@ -5783,7 +5783,7 @@
               ],
               "additions": [],
               "source": "src/rfsuite/app/pages/helicopter_setup/steps/motor.lua",
-              "expression": "w : enum ( \"motor_config\" , \"motor_pwm_protocol\" , L . protocol , w : motorProtocols ( ) , true )"
+              "expression": "w : enum ( \"motor_config\" , \"motor_pwm_protocol\" , L . protocol , entries , true )"
             },
             {
               "kind": "MSP write",
@@ -5800,7 +5800,24 @@
               ],
               "additions": [],
               "source": "src/rfsuite/app/pages/helicopter_setup/steps/motor.lua",
-              "expression": "w : enum ( \"motor_config\" , \"motor_pwm_protocol\" , L . protocol , w : motorProtocols ( ) , true )"
+              "expression": "w : enum ( \"motor_config\" , \"motor_pwm_protocol\" , L . protocol , entries , true )"
+            },
+            {
+              "kind": "MSP write",
+              "label": "motor_config.use_dshot_telemetry",
+              "api": "motor_config",
+              "field": "use_dshot_telemetry",
+              "deviation": false,
+              "configurator_status": [
+                "same"
+              ],
+              "configurator_reference": [
+                "tabs/setup_wizard/MotorGearArt.svelte",
+                "tabs/setup_wizard/StepMotor.svelte"
+              ],
+              "additions": [],
+              "source": "src/rfsuite/app/pages/helicopter_setup/steps/motor.lua",
+              "expression": "w : field ( \"motor_config\" , \"use_dshot_telemetry\" , 0 , true )"
             },
             {
               "kind": "pilot confirms",
