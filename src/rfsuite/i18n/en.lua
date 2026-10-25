@@ -1192,7 +1192,7 @@ return {
         help_min_cell_voltage = "The minimum voltage per cell before the low voltage alarm is triggered.",
         help_cell_count = "The number of cells in your battery.",
         help_edit_battery = "The battery profile whose cell count and cell voltages are shown below. Saving does not make it the active profile; each voltage stops at its neighbours.",
-        help_consumption_warning_percentage = "Reserve percentage of battery capacity at which the consumption warning is triggered.",
+        help_consumption_warning_percentage = "Share of the capacity held back: the fuel reading reaches 0 % with this much of the pack left. 0 means no reserve.",
         help_message = "Selected Battery: the active profile; changing it here switches it.\nBattery 1 to 6: the capacity stored in each profile.\nEdit Battery: with per-profile cells, the profile shown below; saving does not activate it, and each voltage stops at its neighbours.\nMax cell voltage: top of a cell's range; used to detect the cell count.\nFull cell voltage: what a full cell reads.\nWarn cell voltage: the low-voltage warning starts here.\nMin cell voltage: the low-voltage alarm level.\nCell count: 0 lets the flight controller detect it.\nConsumption reserve: the share of the capacity held back.",
         loading_title = "Loading",
         loading_message = "Reading battery config",

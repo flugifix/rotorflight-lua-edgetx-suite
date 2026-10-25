@@ -27,7 +27,7 @@ local CAPACITY_MIN = 0
 local CAPACITY_MAX = 40000
 local CELL_COUNT_MIN = 0
 local CELL_COUNT_MAX = 24
-local RESERVE_MIN = 15
+local RESERVE_MIN = 0
 local RESERVE_MAX = 60
 
 -- The cell voltage range the board accepts, in 0.01 V: 1.00 to 5.00 V. A NiMH or LiFe pack sits
