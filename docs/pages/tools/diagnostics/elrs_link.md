@@ -59,6 +59,8 @@ signal's headroom above that floor, so a faster rate gives the same signal less 
 | RF -> ELRS | Sets the module's packet rate and telemetry ratio to the flight controller's link rate and ratio. |
 | ELRS -> RF | Sets the flight controller's telemetry mode to *Custom* with the module's rate and ratio, and saves it to the board. |
 
+For DVDA modes, the telemetry ratio and flight controller use the air rate: 1000 Hz for D250, D500, DK250 and DK500, and 200 Hz for D50Hz.
+
 Both write buttons ask first, and the question quotes the two sides as the rows above show them,
 i.e. as the last probe read them.
 Answering no writes nothing. Where the radio cannot put the question up, nothing is written either
