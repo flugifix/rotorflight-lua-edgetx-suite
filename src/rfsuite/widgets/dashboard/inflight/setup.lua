@@ -84,7 +84,7 @@ M.DEFAULTS = {
   -- reaches, and the model is walked to WARN that one of them is spoken for rather than to choose.
   bank_gvar = 6,
   value_gvar = 5,
-  trims = true,
+  trims = false,
   -- Walk-and-adjust with three trims is the arrangement the pilot flew and asked to keep, and it
   -- is the one that works on every radio: the six-trim layout needs six trims, and the TX15, the
   -- Boxer and the Pocket have four. Rudder walks the rows, elevator steps the bank, aileron
@@ -99,10 +99,6 @@ M.DEFAULTS = {
   row_trim_4 = 3,
   row_trim_5 = 5,
   row_trim_6 = 6,
-  -- The last PID profile, because a helicopter that uses several uses them from the first upwards
-  -- and the undo wants the one nothing is flown on. A default and not a rule: a board with fewer
-  -- profiles has the choice refused by name, and the pilot can move it.
-  backup_profile = 6,
   set_mode = "standard",
   -- What one press of a step control moves a parameter by, in the flight controller's own units.
   -- It is written into every slot the setup action puts on the board except the head speed's, so
@@ -113,7 +109,10 @@ M.DEFAULTS = {
   -- other is bounded above 250: the step that makes a gain move by a feelable amount would take
   -- two thousand presses to cross it. Its rungs start where the general ones stop, and it reaches
   -- no other slot.
-  step_headspeed = 50
+  step_headspeed = 50,
+  -- Empty means every driveable parameter; otherwise a comma-separated list of function ids.
+  -- Stored ids remain present even when the connected FC no longer offers them.
+  flight_list = ""
 }
 
 -- The plateau the flight controller sees is timed by a logical switch, not by the widget.
@@ -222,7 +221,7 @@ M.RADIO_KEYS = {
   "row_trim_1", "row_trim_2", "row_trim_3", "row_trim_4", "row_trim_5", "row_trim_6"
 }
 
-M.MODEL_KEYS = { "enabled", "set_mode", "step", "step_headspeed", "backup_profile" }
+M.MODEL_KEYS = { "enabled", "set_mode", "step", "step_headspeed", "flight_list" }
 
 --- The rung of `choices` a stored value means.
 --
@@ -684,7 +683,7 @@ function M.loadRadioSettings(preferences)
     value_ch = clampNumber(src.value_ch, M.CHANNEL_MIN, M.CHANNEL_MAX, M.DEFAULTS.value_ch),
     bank_gvar = clampNumber(src.bank_gvar, 0, M.GVAR_MAX_INDEX, M.DEFAULTS.bank_gvar),
     value_gvar = clampNumber(src.value_gvar, 0, M.GVAR_MAX_INDEX, M.DEFAULTS.value_gvar),
-    trims = src.trims ~= false,
+    trims = src.trims == true,
     -- Named explicitly in both directions, so that the DEFAULT is what an unset store gets. Read
     -- as "navigate or else rows" this silently pinned every store that had never been saved to
     -- the layout that happened to be the fallback, and moving the default would have moved
@@ -726,7 +725,7 @@ function M.loadModelSettings(modelPreferences)
     -- differing on the step until the flight controller is set up again. That is the verdict
     -- doing its job: the board really does carry the other number.
     step_headspeed = M.nearestHeadspeedStep(src.step_headspeed),
-    backup_profile = clampNumber(src.backup_profile, 0, M.PROFILE_MAX, M.DEFAULTS.backup_profile)
+    flight_list = type(src.flight_list) == "string" and src.flight_list or M.DEFAULTS.flight_list
   }
 end
 
@@ -788,7 +787,7 @@ function M.storeModelSettings(target, settings)
   target.set_mode = settings.set_mode or M.SET_MODE_STANDARD
   target.step = M.nearestStep(settings.step)
   target.step_headspeed = M.nearestHeadspeedStep(settings.step_headspeed)
-  target.backup_profile = settings.backup_profile
+  target.flight_list = settings.flight_list or ""
 end
 
 -- ---------------------------------------------------------------------------
@@ -1222,6 +1221,12 @@ function M.check(drive, settings, trims)
   if trims == nil then trims = drive.trimsResolved == true and drive.trims or nil end
 
   local faults = {}
+  -- The layout owner supplies this list after deriving the FC's safe cells. The settings-only
+  -- caller cannot know the slot table and leaves the verdict to the overlay's ground check.
+  if type(drive.flightListMissing) == "table" and #drive.flightListMissing > 0 then
+    faults[#faults + 1] = "flight_list_missing"
+    faults.missing = drive.flightListMissing
+  end
   if (settings.switch or 0) == 0 then faults[#faults + 1] = "no_switch" end
   if (settings.bank_gvar or 0) <= 0 then faults[#faults + 1] = "no_bank_gvar" end
   if (settings.value_gvar or 0) <= 0 then faults[#faults + 1] = "no_value_gvar" end

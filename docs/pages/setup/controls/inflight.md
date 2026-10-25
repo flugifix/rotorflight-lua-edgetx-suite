@@ -7,7 +7,7 @@ sidebar_position: 70
 # In-Flight Tuning
 
 The flight controller's half of the in-flight tuning overlay: which parameters this machine
-offers, how far one press moves them, and which PID profile is the way back. These settings
+offers and how far one press moves them. These settings
 are stored with the model, so they travel with the helicopter. The switch, the channels, the
 variables and the trims belong to the radio and are on the other page,
 *System* → *Settings* → *Dashboard* → *In-Flight Tuning*.
@@ -31,25 +31,26 @@ Greyed out until the flight controller answers. Read-only while the model is arm
 | Setting | What it does |
 | --- | --- |
 | In-flight tuning on this model | The model's own switch. Off by default, and the radio's master switch has to be on as well. |
-| Set layout | *Standard* (default): six banks of six parameters, the layout the generic radio setup documents. The board's own slot table is read and held against it, so the page can say where the two differ. *Custom*: the set is whatever the board carries, derived from the enable, increment and decrement windows of the slots on this model's channels — nothing is ever written to it. |
 | Step size | What one press moves a parameter by, in the flight controller's own units. 1, 2, 5 or 10; default 5. |
-| Head speed step | The same, for the governor head speed alone. 10, 25, 50 or 100; default 50. It has a step of its own because its range is 0 to 10000 rpm where no other parameter of the set is bounded above 250. |
-| Set up the flight controller | Reads the board in two replies, shows what each slot holds and what it would hold, writes one adjustment range per slot once that is confirmed, follows it with a single EEPROM write, and reads every written slot back field by field against the set it was asked for, both step sizes included. Offered in the *Standard* layout only: in *Custom* the set is what the board carries, and writing it would overwrite the very thing being read. |
+| Head speed step | The same, for the governor head speed alone. 10, 25, 50 or 100; default 50. It has a step of its own because its range is 0 to 10000 rpm where the other parameters of the set stop at 250, or 1000 for the two rescue collectives. |
+| Set up the flight controller | Reads the board in two replies, shows what each slot holds and what it would hold, writes one adjustment range per slot once that is confirmed, follows it with a single EEPROM write, and reads every written slot back field by field against the set it was asked for, both step sizes included. |
+
+What can be tuned is read from the flight controller on the ground; **Set up the flight controller** writes the standard 36-cell layout.
 
 Both steps are written into the slots, so changing one means setting the flight controller up
-again. The board comparison reports that by name.
+again, then reading the board again on the ground.
 
-In **Custom**, plus and minus use the selected slot's own increment and decrement windows.
-The windows need not be mirrored. The overlay reads them on the ground and refuses a step
-whose window is missing, beyond the channel's travel, outside the range the flight controller
-reads at all, or wrapped around the channel's centre; it never substitutes a Standard-layout
-value for an unread Custom slot. A value that would also fall inside another slot's window of
-the same bank is refused as well, because the flight controller would step both parameters.
+Setup writes each parameter's full range as its slot minimum and maximum, for example 0 to
+250 for a PID gain and 0 to 1000 for a rescue collective. A cell whose current value lies
+outside its slot's minimum and maximum refuses its step until the flight controller is set
+up again. This avoids a jump to a slot boundary when the flight controller clamps a step.
 
-A refused custom step shows **Custom layout not read** until the ground read completes, or
-**Row cannot be stepped** when the selected window is unusable. An empty slot read shows
-**No usable Custom rows** and clears the old row names. A trim press for an unusable row puts
-nothing on the channel.
+Plus and minus use the selected slot's own increment and decrement windows, which need not
+be mirrored. Nothing is offered before the ground slot read. A missing, unreachable or
+ambiguous window refuses its step; a value shared with another slot of the same bank would
+otherwise step both parameters. The ground surface says **Not read yet** before the read,
+**No usable slots on the board** when none can be used, and counts skipped slots and values
+beyond the FC limits.
 
 The read-back after a write holds each slot against the record the write was built from, the two
 step sizes among the fields it compares. Where a slot holds the right function on the right
@@ -59,31 +60,32 @@ a slot these settings decide.
 
 ### Undo
 
-The board saves an in-flight change itself, shortly after disarm, so the undo has to exist
-beforehand.
+A complete disarmed ground read backs up all reachable PID/rate profiles and global tuning
+values on the SD card, per MCU-keyed model. No spare profile setting is needed; old stored
+settings are ignored. The board saves in-flight changes itself after disarm, so start values
+must be read before flight; this SD baseline is what the page's Undo section refers to.
 
-| Setting | What it does |
-| --- | --- |
-| Backup PID profile | The profile the flying one is copied into before a flight, and restored from after it. 0 to 6, where 0 is none; default 6. A board with fewer profiles has the choice refused by name. |
+On the dashboard, **Reset start values** asks for confirmation before reading the reachable
+PID/rate profiles and replacing the baseline with current values; **Restore all** then returns
+to those new start values. **Read again** refreshes the
+same session profiles without replacing the baseline. Both return to the original active pair.
+An armed abort defers that return until disarmed; the surface reports the pending return.
+Read profiles switch freely without an interlock cycle. Unread/unknown profiles refuse steps;
+use **Reset start values** on the ground to add a profile. The report-idle fence prevents a held
+AdjF/AdjV from crossing profile ownership.
 
-The backup is taken by itself when the interlock is switched on with the machine on the
-ground, the link up and the values read — once per profile.
-
-![The undo section](../../../images/inflight/settings-fc-undo.png)
+**Restore profile** and **Restore all** name their targets in a confirmation, require a matching
+complete FC-identity baseline, overwrite only tracked fields in freshly read MSP records, commit,
+verify, and return to the original pair. PID, rate and global values are covered. Results are
+reported per target. This is a parameter baseline, not a complete FC configuration backup.
 
 ## Notes
 
-- Nothing on this page is written to the flight controller by saving. The one thing that
-  writes it is *Set up the flight controller*, and it asks first.
-- Saving reports its outcome in the suite's own save overlay. These settings are stored with
-  the model and keyed by the flight controller's MCU id, so a save made without one, or one the
-  card refused, is named rather than passed over: *Save failed* with *Connect the flight
-  controller to save this model's settings*, *the settings file could not be written to the SD
-  card*, or *model settings store not available* where the part of the suite that writes the
-  model's file could not be loaded.
-- The profile switch is the undo in the air: the backup profile holds what the flight started
-  from, so switching to it is instant and speaks no MSP. A restore into a profile other than
-  the one the backup was taken from is refused.
+- Saving this page writes model settings keyed by MCU id; connect the same FC to save them.
+- **Set up the flight controller** writes adjustment slots after a separate confirmation.
+- All MSP reads, selections and restores are ground-only, disarmed, with ARM telemetry and
+  rotor checks. The profile switch is available in flight but SD restore is ground-only.
+- The model flight list is under Settings > Dashboard > In-Flight Tuning.
 
 ## Related
 
@@ -94,4 +96,4 @@ ground, the link up and the values read — once per profile.
 - [Rotorflight documentation](https://doc.rotorflight.org/) — the adjustment functions
   themselves, their ranges and what each one does to the helicopter.
 
-*Documented against RFSuite 0.1.7.*
+*Checked against the RFSuite 0.2.1 development tree; native encoder acceptance is pending.*

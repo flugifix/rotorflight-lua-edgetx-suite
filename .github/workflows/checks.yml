@@ -47,6 +47,17 @@ jobs:
       - name: In-flight trim routing
         run: lua5.3 bin/dashboard/verify_inflight_trims.lua
 
+      - name: Grouped in-flight tuning and session ownership
+        run: lua5.3 bin/dashboard/verify_inflight_groups.lua
+
+      - name: Multi-profile ground transactions and SD baseline
+        run: lua5.3 bin/dashboard/verify_inflight_profiles.lua
+      - name: Silent ground profile selections
+        run: lua5.3 bin/dashboard/verify_inflight_audio.lua
+
+      - name: In-flight list picker and help limits
+        run: lua5.3 bin/dashboard/verify_inflight_flightlist.lua
+
   startup-compile:
     # The configuration tool compiles the installed suite at start (src/rfsuite/lib/precompile.lua).
     # This runs the real module on an in-memory card across consecutive starts: a fresh install

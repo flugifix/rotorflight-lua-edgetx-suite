@@ -68,7 +68,7 @@ local MODEL_SCHEMA = {
   },
   -- The model's half of the in-flight tuning overlay: what describes THIS machine. Whether it is
   -- set up for the overlay at all, which set of parameters its flight controller offers, how far
-  -- one press moves them, and which PID profile the undo restores.
+  -- one press moves them, and which parameters appear in flight.
   --
   -- What is true of the transmitter whatever is plugged into it -- the interlock switch, the two
   -- channels and global variables the mixer devotes to the adjustment pair, and
@@ -76,7 +76,7 @@ local MODEL_SCHEMA = {
   -- [inflight]. Those keys are never read out of a per-model store, so seeding them here only
   -- wrote them into every model file and showed a reader numbers nothing used.
   --
-  -- These five MUST agree with the model half of M.DEFAULTS in
+  -- These keys MUST agree with the model half of M.DEFAULTS in
   -- widgets/dashboard/inflight/setup.lua, which is what the overlay actually reads. They are
   -- duplicated rather than shared because this library is loaded by the whole suite and must not
   -- pull in a widget module to reach them; the same note sits on the other side.
@@ -88,7 +88,7 @@ local MODEL_SCHEMA = {
       set_mode = "standard",
       step = 5,
       step_headspeed = 50,
-      backup_profile = 6,
+        flight_list = "",
     },
   },
   -- Per-widget state, keyed by the widget.

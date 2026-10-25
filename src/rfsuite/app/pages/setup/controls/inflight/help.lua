@@ -17,35 +17,32 @@ return function(ctx)
   local t = Common and Common.pageT("setup_controls_inflight") or function(_, _, fb) return fb end
   local i18n = ctx and ctx.i18n or nil
 
+  -- One intro line, then one line per setting in the order the page shows them, each starting
+  -- with the label as it reads on screen.
   local intro = t(i18n, "help_message",
-    "The flight controller's half: which parameters it offers, how far one press moves them, and where the undo lives.")
+    "Tuning offers what the FC slots hold, read on the ground; unread profiles refuse steps.")
 
   -- Two switches, and the one on this page is the smaller of them. A pilot who turns this on and
-  -- finds nothing happening is looking at the master, which is on the radio.
+  -- finds nothing happening is looking at the radio's, which is on the dashboard settings.
   local enabled = t(i18n, "help_enabled",
-    "The switch at the top is this machine's own. The radio carries the master, and both have to be on.")
-
-  -- The one button here that changes anything on the board, and the one thing about it that is
-  -- not obvious: it overwrites a slot whichever switch that slot belongs to.
-  local setupFc = t(i18n, "help_setup_fc",
-    "Writes the standard set into the adjustment slots, after showing what it overwrites. Standard layout only.")
+    "In-flight tuning on this model: In-flight tuning on this radio (Settings > Dashboard) must be on too.")
 
   -- The steps are written INTO the slots, so changing one on the radio and not on the board leaves
-  -- the two disagreeing -- which the compare then reports, correctly and unhelpfully, unless the
-  -- pilot has been told which button puts it right.
+  -- the two disagreeing, unless the pilot has been told which button puts it right.
   local step = t(i18n, "help_step",
-    "The steps are part of every slot, so a change needs the flight controller set up again. The head speed has its own.")
+    "Step size: written into the FC slots; after a change, set up the flight controller again. Head speed step works the same.")
+
+  -- The one button here that changes anything on the board: it overwrites a slot whichever switch
+  -- that slot belongs to, so it names them first.
+  local setupFc = t(i18n, "help_setup_fc",
+    "Set up the flight controller: writes the standard layout of 36 parameters and lists the slots it overwrites first.")
 
   -- The undo. It exists BEFORE the flight or not at all: the board writes an in-flight change to
   -- its own storage half a second after disarm, and there is nothing left to copy afterwards.
   local undo = t(i18n, "help_undo",
-    "The backup is taken by itself when the interlock is switched on, once per PID profile, and only while disarmed.")
-
-  local pointer = t(i18n, "help_pointer",
-    "The switch, the channels, the variables and the trims are in Settings > Dashboard > In-Flight Tuning.")
+    "Undo: a ground read stores every reachable PID/rate profile on SD; Restore asks first, verifies and returns to the original profiles.")
 
   return {
-    message = intro .. "\n\n" .. enabled .. "\n\n" .. step .. "\n\n" .. undo .. "\n\n"
-      .. setupFc .. "\n\n" .. pointer
+    message = intro .. "\n" .. enabled .. "\n" .. step .. "\n" .. setupFc .. "\n" .. undo
   }
 end

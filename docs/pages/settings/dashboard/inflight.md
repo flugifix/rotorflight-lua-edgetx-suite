@@ -9,7 +9,7 @@ sidebar_position: 30
 The radio's half of the in-flight tuning overlay: which switch brings the surface up, which
 channels and global variables carry it, and which trims move it. These settings belong to the
 radio and apply to every model on it, so no flight controller has to be connected to change
-them. What describes the helicopter — the set layout, the step sizes and the undo profile —
+them. What describes the helicopter — the set layout, the step sizes —
 is on the other page, *Configuration* → *Setup* → *Controls* → *In-Flight Tuning*.
 
 What the overlay itself does in the air is in
@@ -86,9 +86,9 @@ the pilot's business.
 
 | Setting | What it does |
 | --- | --- |
-| Drive rows from the trims | Whether the physical trims move the surface at all. On by default; touch works either way. |
-| Trim layout | *Walk and adjust* (default) claims up to three trims — one steps the bank, one walks the row inside it, one moves the value. *One trim per row* gives each of the six rows its own trim, which is the layout the generic radio setup documents and needs six trims to spare. |
-| Bank trim, Walk trim, Adjust trim | The three trims of *Walk and adjust*. Without a bank trim the walk trim walks the whole set instead of staying inside one bank. Shown in that layout only. |
+| Drive rows from the trims | Whether the physical trims move the surface at all. Off by default; touch works either way. |
+| Trim layout | *Walk and adjust* (default) claims up to three trims — one changes group, one highlights a parameter inside it, one moves the value. *One trim per row* gives each of the six rows its own trim, which is the layout the generic radio setup documents and needs six trims to spare. |
+| Group trim, Walk trim, Adjust trim | The three trims of *Walk and adjust*. The walk trim stays in the current group; touch or PAGE changes group when no group trim is assigned. Shown in that layout only. |
 | Row 1 to Row 6 | The trim belonging to each row. Shown in the *One trim per row* layout only. |
 
 ![The trim layout, with the three trims of walk and adjust](../../../images/inflight/settings-radio-trims.png)
@@ -127,6 +127,36 @@ the pilot's business.
   running when the model is written starts over. The tool started from the radio's tool menu
   reads everything when the page opens, as before.
 
+## Grouped overlay inputs
+
+Touch is the primary input. In browse, rotate to highlight a function (settled announcement)
+and press to select it. In value mode, rotate for one step per row and press to leave.
+PAGE changes group in browse and changes function within the current group in value mode,
+remaining in value mode and announcing its name and current value. Ends do not wrap; busy
+PAGE inputs are refused and spent. RTN leaves value mode; in the air it closes nothing and there is no Close, on the ground it
+closes. Every flight starts at the first function of the first group.
+Optional trims are off by default for everyone. Existing trim users turn them on again in settings.
+Walk and adjust follows groups and their full function names, without wrapping. Slot-row
+trim assignments still address the configured hidden bank/row and obey the flight-list gate.
+Open **Flight list (this model)** to choose a group and toggle its functions, six at a time.
+This closes the radio sections to keep each build bounded. **Previous/Next** pages through longer
+groups. **All parameters** stores an empty list; filtered lists keep at least one selection.
+The list uses the connected FC's completed ground slot read and the same safe derived groups.
+Without slot data it shows all tunable function-table entries, grouped the same way, with a notice.
+Stored IDs the FC no longer offers stay listed, checked and marked **(missing)**; the setup
+check continues to refuse them until removed. Save with the same FC connected: this list alone
+belongs to its MCU-keyed model store; wiring remains radio-wide. Without an MCU identity the
+list is a disabled preview. This editor sends no MSP. Read slots on the ground to check availability.
+Cyclic precedes Roll and Pitch and contains Cyclic Master Gain (83) when its slot is available. See the dashboard guide for sensor focus order, bench acceptance
+and multi-profile session membership. A busy detent is spent, never queued.
+
+Selection plays `inflight/selected.wav` before name and value. Profile changes play
+`evt/profile.wav` plus the number. Unread/unknown profiles play `inflight/paused.wav`; returning
+to a read profile plays `inflight/resumed.wav` without an interlock cycle. A held report still
+waits for AdjF idle. Ground sessions back up every reachable PID/rate profile on SD; see the dashboard guide.
+Rates, Rescue & Level, Acc Trim and Other use the new group clips; the other groups use `adj/`.
+The Adjustments audio setting and critical-alarm suppression apply throughout.
+
 ## Related
 
 - [In-flight tuning overlay](../../../dashboard/inflight-tuning.md) — what the surface does in
@@ -134,4 +164,12 @@ the pilot's business.
 - [Rotorflight documentation](https://doc.rotorflight.org/) — the flight controller's
   adjustment functions, which are what this drives.
 
-*Documented against RFSuite 0.1.7.*
+*Checked against the RFSuite 0.2.1 development tree; native encoder acceptance is pending.*
+
+The flying overlay shows the selected function as a filled, outlined row with neighbouring
+values. Value mode compares the active profile value with its session start; an unknown
+start stays blank. After landing, use **Restore / read values** for the confirmed restore
+actions and Read again. Paging repeats the profile/group identity.
+Ground jobs show their current target and silence temporary profile announcements. Restores
+verify targets in RAM, save once after returning to the original pair, then reread each target
+without another write. The dashboard guide describes the verification stages and recovery.

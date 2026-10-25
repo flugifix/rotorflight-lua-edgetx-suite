@@ -75,6 +75,7 @@ globals = {
   
   -- Alignment
   "CENTER",
+  "VCENTER",
   "LEFT",
   "RIGHT",
   "TOP",

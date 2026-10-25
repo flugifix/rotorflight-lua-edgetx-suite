@@ -738,6 +738,11 @@ local function inflightScreen()
   return loadInflightModule(InflightScreenCache, "widgets/dashboard/inflight/screen.lua")
 end
 
+local InflightInputCache = {}
+local function inflightInput()
+  return loadInflightModule(InflightInputCache, "widgets/dashboard/inflight/input.lua")
+end
+
 --- The clear the widget's entry point can reach when the widget itself has been shut down.
 --
 -- src/widgets/rfsuite/main.lua holds a widget off for 1.2 s after a CPU limit and RETURNS before
@@ -779,6 +784,12 @@ end
 --- One pass of the overlay. Off the overlay this costs one table lookup; with it enabled but the
 -- interlock open, one switch read.
 local function tickInflight(self)
+  if self._inflight and self._inflight.profileJob and
+    (self._foreground ~= true or not inflightEnabled(self)) then
+    self._inflight.profileJob.cancelled = true
+    local prime = inflightPrime()
+    if prime then prime.tick(self, self._inflight) end
+  end
   if self._foreground ~= true or not inflightEnabled(self) then
     cleanupInflight(self)
     return
@@ -1602,6 +1613,7 @@ local function tuningFullscreenJobStep(self)
   releaseInflightHold(self)
   lvgl.clear()
   lvgl.build(children)
+  screen.ready(self)
   self.built = true
   self._lastChildCount = #children
   return true
@@ -4482,6 +4494,9 @@ function Runtime.new(zone, options)
     -- A firmware fullscreen exit may arrive while a build or the connection
     -- splash is still running. Clear the visit before either can return early.
     if event == nil then
+      -- Outside fullscreen there is no touch target that could be holding a step: a hold left by
+      -- a fullscreen exit ends on this pass rather than on the next rebuild.
+      releaseInflightHold(self)
       self.inflightFullscreen = nil
       self._viewStack = nil
       self._cachedFullscreenKey = nil
@@ -4514,6 +4529,19 @@ function Runtime.new(zone, options)
     -- JOB pass returns before the background half and a state pass reaches it only on the logic
     -- tick, and neither cadence is one a surface driving a flight controller can be read at.
     sampleInflight(self)
+
+    -- The overlay owns these keys even while a build is pending. PAGE never reaches theme
+    -- bindings underneath it, and a handled RTN is not forwarded to the focused LVGL control.
+    if event ~= nil and inflightMode(self, true) ~= nil then
+      local Input = inflightInput()
+      if Input and Input.key(self, event) then
+        event = 0
+        if self.state.inflight == nil then
+          self._passEndAt = nowSeconds()
+          return
+        end
+      end
+    end
 
     if event ~= nil and inflightMode(self, true) == nil then
       local modeOf = self._fullscreenModeOf
@@ -4819,12 +4847,10 @@ function Runtime.new(zone, options)
       -- deletes the momentary button under the pilot's finger, and EdgeTX raises that button's
       -- release handler only as LV_EVENT_RELEASED on the object itself -- so a deleted button
       -- never reports its release and the drive would keep writing the row's magnitude. What can
-      -- still rebuild under a finger is what changes the LAYOUT -- a bank or a row the trims moved,
-      -- the trim walk finishing, the flown profile changing -- and no longer the flight
-      -- controller's answer to the step being made: a report moves the drive's report counter
-      -- instead of the epoch below, and the number it carries reaches the screen through a closure
-      -- (widgets/dashboard/inflight/drive.lua, the AdjF block in fastTick). When the hold ends the
-      -- next recompute happens as it always did.
+      -- still rebuild under a finger is what changes the layout: the group, value/browse mode or
+      -- profile refusal. Selection and report epochs are excluded from the live key so a detent
+      -- cannot destroy its own sensor. Ground/post epochs still rebuild completed read/transfer
+      -- controls. When the hold ends the next recompute happens as it always did.
       local snapshot = self.state.inflight
       holding = (type(snapshot) == "table") and snapshot.holding == true
       if not self._lastUIRefresh then self._lastUIRefresh = 0 end
@@ -4837,7 +4863,7 @@ function Runtime.new(zone, options)
       else
         heldFor = now - self._holdSince
       end
-      -- A tap on a bank chip or a row asks for the new selection to be on screen at once rather
+      -- A control asks for a changed mode or group to be on screen at once rather
       -- than up to half a second later; it sets this flag instead of dropping the key itself, so
       -- that it goes through the hold gate like everything else.
       local wanted = (self._tuningKeyDirty == true) or (now - self._lastUIRefresh) >= 0.5
@@ -4848,8 +4874,7 @@ function Runtime.new(zone, options)
         -- not three states of one, so a transition that did not move the key would leave the
         -- ground surface standing through a whole flight.
         self._cachedTuningKey = "tuning|" .. tuningMode .. "|" .. tostring(snapshot.phase)
-          .. "|" .. tostring(snapshot.bank)
-          .. "|" .. tostring(snapshot.row) .. "|" .. tostring(snapshot.epoch)
+          .. "|" .. inflightScreen().renderKey(snapshot)
       end
       nextRenderKey = self._cachedTuningKey
     elseif isInteractive then

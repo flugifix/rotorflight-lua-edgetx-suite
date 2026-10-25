@@ -279,24 +279,11 @@ local function buildBoard(children, x, y, w, i18n)
   cursorY = cursorY + appendNote(children, x, cursorY, w,
     t(i18n, "pointer_radio", "The switch, the channels, the variables and the trims are in Settings > Dashboard."))
 
-  -- Which parameters the overlay offers, and whether it is allowed to put them on the board.
-  local setOptions = {
-    { value = Setup.SET_MODE_STANDARD, label = t(i18n, "set_mode_standard", "Standard") },
-    { value = Setup.SET_MODE_CUSTOM, label = t(i18n, "set_mode_custom", "Custom") }
-  }
-  cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-    t(i18n, "set_mode", "Set layout"), setOptions, ui.config.set_mode,
-    function(value) markValue("set_mode", value) end)
-  if ui.config.set_mode == Setup.SET_MODE_CUSTOM then
-    cursorY = cursorY + appendNote(children, x, cursorY, w,
-      t(i18n, "set_mode_custom_note",
-        "The set is whatever the flight controller carries. Nothing is written to it."))
-    return cursorY
-  end
-
+  -- What the overlay offers is what the board carries, read on the ground; the standard layout is
+  -- only what the button below writes onto a board that has none of its own.
   cursorY = cursorY + appendNote(children, x, cursorY, w,
-    t(i18n, "set_mode_standard_note",
-      "Six banks of six parameters, known in advance. The flight controller is read to compare."))
+    t(i18n, "set_source_note",
+      "What can be tuned is read from the flight controller on the ground. Set up the flight controller writes a standard layout of 36 parameters."))
 
   -- What one press moves a parameter by, on the board. Four rungs rather than a free number: the
   -- firmware keeps the step in one byte per slot, and the four cover the range a pilot asks for.
@@ -310,7 +297,7 @@ local function buildBoard(children, x, y, w, i18n)
     function(value) markValue("step", tonumber(value) or Setup.DEFAULTS.step) end)
 
   -- The head speed apart from the rest, because it is the one cell whose range reaches 10000 where
-  -- no other is bounded above 250, and the step that suits a gain would take thousands of presses
+  -- the others stop at 250 or 1000, and the step that suits a gain would take thousands of presses
   -- to cross it.
   local headspeedOptions = {}
   for i = 1, #Setup.HEADSPEED_STEP_CHOICES do
@@ -358,15 +345,7 @@ end
 local function buildUndo(children, x, y, w, i18n)
   local cursorY = y
   cursorY = cursorY + appendNote(children, x, cursorY, w,
-    t(i18n, "undo_note", "The board saves an in-flight change itself, shortly after disarm, so the undo has to exist beforehand."))
-  cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w,
-    t(i18n, "backup_profile", "Backup PID profile"), {
-      min = 0, max = Setup.PROFILE_MAX, step = 1,
-      get = function() return ui.config.backup_profile end,
-      set = function(value) markValue("backup_profile", value) end
-    })
-  cursorY = cursorY + appendNote(children, x, cursorY, w,
-    t(i18n, "backup_auto_note", "Taken by itself when the interlock is switched on, once per profile."))
+    t(i18n, "undo_note", "A complete ground read backs up reachable PID/rate profiles and global tuning values on the SD card."))
   return cursorY
 end
 

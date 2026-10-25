@@ -31,14 +31,13 @@ Two pages, one for each half:
 
 - [*System* → *Settings* → *Dashboard* → *In-Flight Tuning*](../pages/settings/dashboard/inflight.md)
   — the radio's half: the master switch, the interlock switch, the channels, the variables,
-  and the trims. It carries **Set up the model**, which writes the mixer
+  and the trims, plus the per-model flight-list picker. It carries **Set up the model**, which writes the mixer
   lines, the logical switch that times each press, the variable details and the trim modes
   after showing what it would change. A model set up by an earlier version needs it once more:
   its value line has no logical switch yet, and the setup check refuses the interlock with
   **Mixer line missing or wrong** until it has one.
 - [*Configuration* → *Setup* → *Controls* → *In-Flight Tuning*](../pages/setup/controls/inflight.md)
-  — the flight controller's half: the model's own switch, the set layout, the step sizes and
-  the backup PID profile. It carries **Set up the flight controller**, which writes the
+  — the flight controller's half: the model's own switch and the step sizes. It carries **Set up the flight controller**, which writes the
   adjustment slots after showing what each one holds now.
 
 Both switches have to be on, and the model's setup check has to pass: a fault refuses the
@@ -46,7 +45,7 @@ interlock rather than letting a press move a parameter other than the one on the
 
 With **Drive rows from the trims** on, the check also needs to know which of the radio's
 switch positions are its trims. The first time the interlock is closed after the widget
-starts, or after these settings change, the surface the closing brings up shows **SETUP: Checking
+starts, or after these settings change, the surface the closing brings up shows **Model: Checking
 trims** while the radio's switch list is read, a slice per pass, and the interlock stays refused
 until that is done — about one pass of the widget for every 32 positions the radio lists, plus one.
 Until the check after that first closing is in, the ground surface reached from the quick settings
@@ -57,30 +56,29 @@ another mode's trim (EdgeTX's default for FM1 to FM8, which follow FM0) counts a
 one with a trim of its own, or with an offset of its own on top of another mode's, counts as
 trimming. The fault reads **Trim still active**.
 
-In the **Custom** set layout, the board's adjustment slots determine both the parameter names
-and the channel values used to step them. Plus and minus use the increment and decrement
+The set is always derived from the board's adjustment slots during the ground read; no
+parameters are offered before that read. The slots determine both the parameter names and
+the channel values used to step them. Plus and minus use their increment and decrement
 windows independently, including when they are not mirrored about channel centre. Touch
-buttons and trims use the same values for the selected bank and row. Read the slot table on
-the ground first: until it has been read, custom steps are refused. A step window that is
+buttons and trims use the same values for the selected bank and row. A step window that is
 missing, unreachable, outside the range the flight controller reads, or shared with another
-slot of the same bank is refused rather than replaced by a standard-layout value, so one press
-never steps two parameters.
+slot of the same bank is refused, so one press never steps two parameters.
 
 A bank is offered only when the value that parks the enable channel in it -- the middle of its
 enable window, held inside the channel's reach of 988 to 2012 µs -- lies inside that window and
 inside no enable window of another slot on the same two channels. A window that lies beyond
 988 to 2012 µs, or one whose middle also lies in another slot's window, could otherwise step
 another slot's parameter while the screen names this bank's, and a continuous slot sharing
-the bank's own window could move as well; a window the flight controller never reads would
-step nothing. Such a bank keeps its chip, but all its rows read **Unassigned** and no press,
-trim or hold steps anything in it; the walk and the bank trim step over it, and its slots are
-counted in the **skipped** number beside **Set from the board** (beside **No usable Custom
-rows** when every bank is refused).
+the bank's own window could move as well. Such a bank contributes no entries to the flying
+list and no press, trim or hold steps anything in it; its slots are counted as **skipped** on
+the **FC slots** status line. An empty or wholly unusable read shows **No usable slots on the
+board** and clears the old row names. Before the read the line says **Not read yet**.
 
-A refused custom step shows **Custom layout not read** until the ground read completes, or
-**Row cannot be stepped** when the selected window is unusable. An empty slot read shows
-**No usable Custom rows** and clears the old row names. A trim press for an unusable row puts
-nothing on the channel.
+**Set up the flight controller** writes the standard 36-cell layout, with each parameter's
+full range as its slot minimum and maximum. The overlay still derives its set from the next
+ground read. A cell whose current value lies outside its slot's minimum and maximum refuses
+its step until the flight controller is set up again; the **FC slots** warning counts these
+cells. This prevents the FC's clamp from jumping an out-of-range value to a slot boundary.
 
 ## The three surfaces
 
@@ -89,146 +87,230 @@ switch.
 
 ### On the ground, before the flight
 
-![The ground surface](../images/inflight/overlay-ground.png)
+![Historical ground surface (previous palette)](../images/inflight/overlay-ground.png)
 
-The setup check's verdict, how the board's own slots compare with the set, when the values
-were last read, and where the backup sits. Its three actions are *Read values*, *Back up to
-&lt;profile&gt;* and *Restore from &lt;profile&gt;*.
+Three status lines show **Model** (the setup verdict), **FC slots** (the number of parameters
+read from the board, plus skipped slots), and **Session** (continued or new, with the stored
+start-values date and time, or a not-read/refused status). Each reserves two text lines on
+480x320 and 800x480 displays; 480x272 uses one cut line each. A separate warning counts values
+beyond the FC limits and asks for FC setup again.
 
-In the **Standard** set layout every cell sends its documented value, whatever the board's
-slot for it holds. Where a slot holds a different function on the cell's own channels and
-windows, a step on that cell changes that function and not the parameter the row names, so the
-second line names those cells, each with the function its slot holds — for example **Pitch P
-steps Roll D** — as many as fit, with every other differing slot counted as **+N more**: empty,
-on other channels or windows, or differing in a limit or the step. Where the row's name does not
-fit, the cell is named by its bank letter and row number (**F5** is bank F, fifth row). When no
-cell is named, the line counts the differences (**board differs in N**), or, when the step is
-the only difference, says so (**step differs: set the board up again**). *Set up the flight
-controller* writes the set onto the board.
+**Choose parameters** is the large, full-width primary action. It opens the session parameter
+picker and is visible and active only after the board supplies at least one usable parameter.
+The picker lists everything the board carries, six rows a page; the arrows turn the pages through
+the groups, and a tap chooses or drops a parameter, at least one staying chosen. It starts from
+what is offered now: the session's choice, else the model's flight list, else everything.
+**Apply** keeps the choice for this session only; it lasts until **Reset start values** and is
+never written to the model by itself. **Save default** also stores it as this
+model's flight list on the next pass; the ground surface says if that write failed. **Cancel**
+changes nothing. The picker closes when the model is armed.
+Below it, **Read again** refreshes the same session profiles without changing the stored start
+values. **Reset start values** first asks for confirmation: it replaces the stored start values
+with the current ones, and **Restore all** will then return to those new values. Confirmation
+starts a ground read of the reachable profiles; the baseline is replaced only after the whole
+read and return to the original pair succeed. Cancel leaves the stored start values untouched.
+**Restore all** is set apart at the bottom in the destructive-action colour and opens the
+existing confirmation naming its targets. No spare FC profile is reserved; old stored
+spare-slot settings are ignored.
 
-Values are read here and nowhere else: the receiver map, the board's adjustment slot table,
-and nine reads that between them answer every parameter of the set. It happens by itself once
-per connect and after a profile change, or on demand. A parameter that has never been read
-shows `--` in the air rather than a number nobody measured.
+A read or restore shows a progress surface with a **Reading** or **Restoring** title, a bar,
+**Step x of y**, and the current operation. **Cancel** is offered only during a read, before
+the return to the original profiles; a restore must finish its writes and return.
 
-Arming during a read gives that read up — nothing may be sent to a machine in the air — and
-the line keeps reporting the values it already has, with the time they were read at and a note
-that the attempt to read them again was interrupted. The read is taken again by itself on the
-ground; the values already in the cache are not thrown away by an attempt that did not
-replace them.
+The reachable set is the union of `adjMin..adjMax` from all PID-profile (function 2)
+and rate-profile (function 1) adjustment slots, capped to 1..6 and the FC-reported counts,
+plus the active profiles. With no selector slot, only the active profile of that kind is read.
+The FC implements these switch slots as continuous adjustments; two slots can add disjoint ranges.
 
-The backup is taken by itself when the interlock goes on with the machine on the ground, the
-link up and the values read. It is **one slot and it belongs to the profile it was copied
-from**: change the PID profile on the ground and a fresh copy of the new profile is taken, and
-the line under the buttons names the profile it came from. That replaces the previous
-profile's undo, which is what one slot means. When the backup was copied from a profile other
-than the one being flown the line says so, and the restore refuses until the pilot has
-switched back to it — a copy put back over another profile would overwrite values he never
-flew there. A backup whose source is not known at all — the record is kept in memory, so a
-restart leaves the slot holding a copy of something — is refused for the same reason.
+The ground job selects every reachable PID profile with MSP 210, then reads PID tuning,
+PID profile, governor profile and rescue profile. Rate profiles use the same select command
+with bit 7 (`0x80`) and read RC tuning. Governor configuration and accelerometer trim are
+read once globally. Profile indices on the wire are zero-based. STATUS checks bracket each
+profile's records. Work is sliced per widget pass and a partial read never replaces the cache.
+
+The job always returns to the pair active at its start, including after errors/timeouts.
+Arming aborts the read immediately; no MSP is queued while armed. A disconnected/armed return
+is retained until the same FC is connected and disarmed. The surface says **Original profiles:
+return pending**. If the return itself fails, **Read again** requests another return; no start-value reset
+or restore can replace the pending transaction. A switch held in the same position does
+not undo an MSP selection: firmware applies that switch only when its computed position changes.
+
+Snapshots live beside the suite's MCU-keyed model preferences, under
+`rfsuite.user/<model-id>.inflight.lua`. They contain a version, UID/FC signature, craft name,
+clock timestamp, a profile manifest and tunable values per scope. A complete temporary Lua-data
+file is verified in slices before promotion with the suite's FAT delete/rename convention.
+Only session starts write the baseline; adjustment reports do not write the card. Reconnects
+reuse a matching saved baseline and reread its profiles, preserving the previous start values.
+Missing/incomplete/foreign baselines refuse restoration. The baseline is an undo for tracked
+parameters, not a full FC configuration backup.
 
 ### In the air
 
-![The tuning surface in flight](../images/inflight/overlay-live.png)
+The overlay uses a Rotorflight dark palette with a blue accent. The historical
+[flight screenshot](../images/inflight/overlay-live.png) shows the former bank surface;
+the image is retained as a reference and does not depict this interface.
 
-One parameter at a time, not a grid:
+The current group is the title, for example **Pitch**. Tapping it opens the radio's menu of
+every group, and choosing one jumps straight to its first function; on a radio without that
+menu the tap steps to the next group. The arrows beside the title select the previous/next
+function of the group, in browse and in value mode, and stop at its ends with the end tone.
+There is no permanent bank strip. The
+fixed order is **Cyclic, Roll, Pitch, Yaw, Governor, Rates, Filter, Cross Coupling, Rescue & Level,
+Acc Trim, Other**; groups with no safe cells are absent. Cyclic contains Cyclic Master Gain (83) only when the FC has a safe slot for it. Within an axis, **P, I, D, F, B, O**
+come first, followed by the other functions in the function table's order. Profile selectors
+are excluded. Unknown function ids appear under Other with their number.
 
-- **The bank chips** across the top choose which of the six banks the enable channel sits in.
-  A tap is refused while a step is still on the wire.
-- **The parameter**, large, with the value it had before the last step and the value it was
-  primed with. The value comes from the cache: read on the ground, then kept current by every
-  step the flight controller reports back over its adjustment telemetry. The surface updates
-  those numbers in place -- a step never rebuilds the screen, so the board's answer to a press
-  cannot arrive at the cost of the pass that ends the pulse.
-- **The row list** on the right is the six rows of the bank. A tap selects the row the step
-  controls act on; the trims act on them directly.
-- **The step controls** at the bottom. One tap is one pulse is one step: the logical switch on
-  the value line lets 200 ms of the press through, however slowly the widget runs. Held, the
-  control pulses again after each pulse and a short gap -- about two steps a second, less even
-  than the flight controller's own repeat, and every pulse exactly one step. There is never a
-  value that follows the finger. While a control is held, a bank chip and the walk and bank
-  trims wait for it to be let go, as they wait for a pulse. A hold is
-  not cut short when the dashboard reloads its theme underneath the surface -- the change into
-  flight, a changed setting, a pack with a different cell count: the surface is drawn again once
-  the control has been let go. That wait lasts at most five seconds from the start of the hold
-  -- about ten steps: if a redraw is still waiting then, the surface is drawn and the hold ends, so a
-  release the radio never reports does not keep the redraw waiting. Every hold ends after those
-  same five seconds, with or without a redraw, and the surface says **hold ended after 5 s -
-  press again** (**5 s over - press again** where the line is too narrow); lift the finger and press again to go on. The radio does not report every
-  release -- the backlight going off under the finger (an alarm flash, the backlight timeout) or
-  a *Disable Touch* special function can lose it -- and this limit is what stops the flight controller from stepping on
-  after the finger is gone.
-- **The trims** do the same thing without looking down, in whichever of the two layouts the
-  radio is set to. A trim press that steps the selected parameter comes and goes without
-  rebuilding the screen; a trim that selects another row or bank redraws it for the new
-  selection. A trim press is one step however long the trim is held: a held trim does not
-  repeat, and the next step needs the trim to come up and go down again. That holds when the
-  selection moves under it too: in the navigate layout, a walk or bank trim step, a tap on the
-  row list or a bank chip while the adjust trim is held starts no step of its own, and
-  the new row steps at the trim's next press. A step press that comes before the flight
-  controller can count it as a step of its own -- during the previous press's
-  pulse or the pause after it -- shows **too fast - one step at a time**, as a tap on a step
-  control does, and steps nothing even if the trim is still held when the pause is over.
-  The trims and the step controls share one value, so they wait for each other: a tap during a
-  trim's pulse or the pause after it, and a step press of a trim while a step control is pulsing,
-  held or in its pause, are refused with the same line. Letting go of a held step control starts
-  that pause as well, for the next tap as for the next trim step. A walk or bank trim waits for
-  the value only: pressed while a step is still on the wire it shows that line too instead of
-  moving; held on, it walks at its usual repeat once the step is off the wire, and the line goes.
+The list comes from the board's ground-read adjustment slots. Each full function name retains its
+original bank and row on the channel pair; grouping changes no FC adjustment slot. A cell
+with only one safe direction remains listed, and its other direction refuses. A cell with
+neither safe direction is absent. The current row occupies a one-row scroll sensor; the
+neighbouring rows use non-focusable labels with current values and signed session differences.
+The selected row has a blue outline and fill, is taller than its neighbours and shows its value
+in a larger font; it stays at the second list position and the neighbours scroll around it.
+Counts above and below identify hidden functions. Larger surfaces show more rows and larger
+selected figures. Touching the sensor row selects its value.
 
-A profile change while the surface is live is named on the screen, and every cached value
-belonging to that profile is marked unknown until the reads have been sent again.
+**Touch is primary.** Tap a parameter to enter value mode. The value is large; the large
+minus and plus targets send steps. Tapping the parameter name leaves value mode. A tap
+starts one pulse. A held touch target retains the existing pulse/gap repetition and the
+five-second maximum hold; a lost release is bounded by that maximum. Values are the last
+FC reports, never predicted changes. Under the value, **Start N / +/-difference** compares
+against the SD session baseline of the active PID/rate/global scope. An unknown start value
+leaves that line empty. The value is drawn in the largest font the radio has, on the left.
+Plus and minus are stacked in one column on the right, as large as the surface allows: plus on
+top in the accent blue, minus below in orange, so the two can be told apart without reading the
+glyph. The full-width name remains the
+one-row encoder sensor. The footer gives PAGE, encoder and RTN hints. Reports update snapshot
+text without rebuilding the scene.
 
-In the widget's own zone the same surface is a read-out with the trims live; a long press
-opens it fullscreen, where the touch controls are.
+**PAGE up/down** selects the previous/next group in browse. In value mode it selects the previous/next function within the current group, keeps value mode, and announces the new name and current value. Group ends give an end tone without wrapping. PAGE during a step, pulse or cooldown is refused and spent, never queued. Function navigation and value reports retain the scene.
+**RTN** leaves value mode. In the air it does nothing more, and the surface carries no Close:
+one tap or one key must not end the tuning. Disarming, the interlock and leaving fullscreen
+still end it. On the ground and after landing RTN from browse, and the Close in the header,
+close the overlay. Every flight starts at the first function of the first group. The overlay
+owns these release events ahead of pending builds and theme bindings. Navigation stops at list ends and gives end feedback; a request during a pulse or
+cooldown is refused and never queued. Closing clears the variables and requires the interlock
+to be released before reopening.
+
+**Encoder:** rotate to highlight the previous/next function and request its settled name
+announcement. Press once to select it. In value mode, rotate one row to request one signed
+step and press once to return to browse. No native number editing or number keyboard is used.
+The sensor viewport is exactly one button high: LVGL scrolling a newly focused button into
+view supplies `scrolled(x, y)`. Duplicate positions do nothing. A jump of more than one row
+never becomes steps: browse gives end feedback and keeps the selection; value mode only
+re-baselines. Busy detents are spent and never replayed. The 64-row value ladder starts in
+the middle. Selection/value text stays reactive; function navigation and value reports rebuild
+no sensor.
+
+**The ladder is endless.** The encoder walks the scene's focusable objects in creation order and
+wraps, and moving buttons on screen does not change that order: past the last row of a ladder
+half the walk would continue into the minus/plus targets and the group controls, where a press
+changes the selection. So when the focus comes within four rows of a half's end, or reaches a
+guard row, the live scene is rebuilt: the selection, value mode and the step state are kept, the
+new ladder starts in the middle again, and the first detent after the build lands on a half's
+entry row. In one direction that is one build of the live surface about every 28 steps. In
+browse the same happens at the list ends, after the end feedback. A detent that arrives while
+the build is pending is absorbed by the rows left before the end.
+
+Lua buttons expose no focus-disable property, so the touch controls stay in the focus group;
+the rebuild keeps the encoder from reaching them. The fullscreen widget itself also remains a
+native focus target between the last and first sensor buttons. Rotation onto that target emits
+no sensor callback, so a reversal across it can consume a detent without a step. ENTER there
+still selects or leaves value mode. Touching a sensor row or using PAGE in browse recovers the
+selection, and RTN keeps its level-back role.
+
+The focus/scroll mechanism is supported by the firmware sources; physical delivery, native
+layout and recenter event ordering still need a simulator/radio bench run. Debug tag
+`rfsuite.inflight.input` records every scroll (y, row, delta, decision) and sensor press.
+Lua cannot distinguish an exact-row touch scroll from a focus scroll; fractional drags are
+ignored. No raw rotary event handler is used.
+
+**Trims are optional and off by default for everyone.** Existing users who tuned with trims turn them on again in the settings; their saved assignments remain supported. In
+Walk and adjust, the group trim changes group and the walk trim highlights functions inside
+it; the adjust trim steps the highlighted function. One-trim-per-row keeps its hidden slot-row
+addresses. A trim cannot step a parameter excluded from the flying list. A trim press is one
+step however long it is held; touch, encoder and trims share the same pulse ownership guards.
+
+**Session profiles can switch freely on the ground and in flight.** The header prominently
+shows both active PID and rate numbers. Every profile edge ends pulse/hold ownership and clears
+the value output. Cached values follow their PID profile, rate profile, or global scope.
+An AdjF/AdjV report is attributed to the profile active when sampled. Since these reports carry
+no profile ID and remain held, an edge fences reports and steps until AdjF is explicitly idle.
+**Waiting for fresh adjustment telemetry** explains that refusal. No scene is rebuilt on reports.
+
+Rotorflight remembers the last value written by each stepped adjustment; switching profiles
+does not reset that memory. If a step on the new profile would produce that remembered value
+(for example, after copying profiles), the first step in the same direction does nothing.
+Further steps in that direction can also be ignored until a step in the opposite direction
+changes the value and clears the tie.
+
+An unread PID/rate profile or unknown PID#/RTE# refuses steps with a clear reason and
+`inflight/paused.wav`. Returning to read profiles resumes without an interlock cycle; the held
+report fence still applies. Add another profile with **Reset start values** on the ground.
+
+**Speech uses the existing Adjustments announcer and its audio setting.** A selected group
+or highlighted function waits **700 ms**; every newer selection replaces the pending name.
+Selecting a function for tuning plays `inflight/selected.wav` before its name and current known value. A profile edge plays `evt/profile.wav` plus its number. Unread/unknown profiles play `inflight/paused.wav`; returning to a read profile plays `inflight/resumed.wav`. The retained `cycle.wav` file has no call site. Every function and every group is spoken as one recording of the name the screen shows, `inflight/fn/<id>.wav` and `inflight/group/<id>.wav`. The names are the Rotorflight Configurator's own adjustment-function names in each language (for example *Heck B-Gain* / *Yaw B-gain*), so the pilot hears and reads the same words as in the Configurator. Under the group title a name does not repeat it (*P-Gain* under *Drehzahlregler*, not *Drehzahlregler P-Gain*); a name that does not begin with the title, and every spoken name, stays whole. In the selected row a name too long for one line breaks onto a second line; the neighbouring rows cut it.
+Critical alarms suppress advisory adjustment/navigation speech. Already handed-over firmware
+audio is not cancelled. Encoder browse scrolls use this same settled-name path.
+The end-of-list tone is input feedback and plays with adjustment announcements disabled;
+the existing critical-alarm guard still applies.
+
+A per-model **flight_list** scalar can restrict the list to comma-separated adjustment function
+ids; an empty string means all safe parameters. A stored id no longer driveable on the FC
+is named by the setup check and refuses the interlock. Choose it under **Settings > Dashboard > In-Flight Tuning > Flight list (this model)**. The picker uses the completed ground slot read for this FC and channel pair; without slot data it shows the function table's tunable entries and says so. Choose a group, then toggle parameters; Previous/Next pages through groups longer than six rows. Stored unavailable IDs remain checked and marked **(missing)** until removed. **All parameters** clears the stored list; at least one parameter must remain selected in a filtered list. Save with the same FC connected to store this model's list. The picker sends no MSP; read the slots on the ground before checking availability. Opening it closes the radio sections to bound construction work. Native acceptance of the controls remains pending.
+
+In the widget zone the surface is a read-out; a long press opens the touch controls fullscreen.
 
 ### After landing
 
-![The surface after the flight](../images/inflight/overlay-after.png)
+The complete change list is grouped by **PID profile**, **rate profile**, then **Global**;
+each profile contains the same function groups as the flying list. Rows show SD start value,
+last reported value and signed difference. The count is since the SD session baseline, which
+can span flights. Each page repeats its profile/group heading and stays within one profile.
+Blue Previous/Next controls (or PAGE/the walk trim) page the list. **Restore / read values**
+opens the action menu with **Restore all**, **Read again**, the displayed profile/global restore,
+and **Back to changes**. Opening or leaving this menu sends no MSP. Rate-profile pages state
+that a PID-profile restore does not cover their values; their own restore and Restore all do.
+**Read again** selects and rereads all session profiles while disarmed, returning to the original
+pair, to replace reported values with exact FC records. It preserves the SD baseline.
 
-Every parameter that has left the backup, largest change first, old to new, paged with the
-trim that walks the parameters in the air. There is nothing to save: the flight controller
-writes its own storage shortly after disarm. The one action is the restore.
+**Restore profile PID N**, **Restore profile RTE N**, and **Restore global** refer to the profile
+on the displayed page. **Restore all** covers every baseline profile and the global values.
+A confirmation names the target profiles before any restoration starts. Restoration is refused
+while armed, without a known disarmed/rotor-stopped state, while another transaction is pending,
+or with a foreign/incomplete baseline.
 
-If the backup was copied from another profile than the one now active, there is no comparison
-to make: the board's adjustments only ever moved the active profile, so the two lists would
-differ by everything the two profiles disagree about. The surface says which profile the
-backup is from and which one is active instead of listing that as something the flight
-changed.
+For each target, the job selects it, reads the affected current MSP records, changes only tracked
+fields with the matching set commands, and compares the RAM read-back. Untracked fields retain
+their just-read values. There is no EEPROM write between targets. After all targets, the job
+selects the original pair, writes EEPROM once, and confirms the active pair by STATUS. Continuous
+profile switches can reassert their channel-selected pair at this save; the original pair is
+accepted. The job then selects and rereads each restored target without another write, comparing
+the complete records again, and returns to the original pair.
 
-## Notes
+Per-target results distinguish RAM verification with an unconfirmed save, an acknowledged save
+with read-back pending, and verified read-back after the save. The last case proves a save
+acknowledgement plus immediate rereading, not survival of a power cycle. A failed restore may
+already have written some fields: this is not an atomic FC rollback. An uncertain save is not
+repeated automatically. Return recovery remains deferred while armed or disconnected.
 
-- The way back in the air is the PID profile switch, not the overlay: the backup profile
-  holds what the flight started from, so switching to it is instant and needs no MSP.
-- **Releasing the interlock on the ground ends the tuning session.** The read, the backup line
-  and the comparison go with it, and the next closing of the interlock reads the board again
-  and lays down a fresh backup of whichever profile is active then. Releasing it *in the air*
-  ends nothing: nothing can be sent to a flying machine, and the comparison the landing is
-  about to show is measured against a snapshot that has to survive the switch. What the new
-  read costs is the nine value reads and not the whole slot table — a layout does not change
-  because a switch moved.
-- **The tuning session belongs to the flight controller it was read from.** The link coming
-  back to the same board ends nothing — after a battery change, a short fade on the ground, or
-  a link lost in the air, which comes back after the landing because nothing is asked of an
-  armed board — so the backup taken before the flight is still the one *Restore* puts back.
-  When a *different* flight controller identifies itself on the same model, the session ends:
-  the backup line, the comparison and the read go, the board is read again in full, slot table
-  included, and with the interlock on a fresh backup of its active profile follows. The board
-  is known by the identity the suite reads on every connect (API version and MCU id), which
-  answers a moment after the link is back; until it has, nothing ends, and *Backup* and
-  *Restore* wait with *The board is being read: try again in a moment*.
-- Releasing the interlock, closing the fullscreen, backgrounding the widget or losing the
-  link all take the value variable back to zero, in the flight mode it was written in, and
-  end whichever of the three surfaces was up. The next opening of the interlock is an opening
-  again, with the undo it asks for. Those four take the bank variable back to zero as well;
-  landing does not, because the surface is still up and still showing that bank.
-- The rate and PID profile are two of the parameters the set can carry, and they are counted
-  from 1 wherever they appear — the header, the backup line, and their own rows.
-- On an ExpressLRS link use the *Wide* switch mode or a full-resolution packet rate: in
-  *Hybrid* mode the two channels carry 16 and 6 positions, and several of the windows the
-  flight controller decodes are missed.
-- The spoken confirmation of a step is the suite's existing adjustment announcement, switched
-  under *System* → *Settings* → *Audio* → *Events* → *Adjustments*.
+Read and restore jobs show their current target instead of the change list; restore/read actions
+are unavailable until the job finishes. Temporary profile selections and the final return are
+silent in both the overlay and the general profile announcer, including with the interlock off.
+Ordinary in-flight profile announcements remain enabled.
+
+Closing on the ground ends the in-memory session; the completed SD baseline remains. Releasing
+the interlock in flight preserves it. Closing, backgrounding, link loss and profile edges clear
+pulse/hold ownership and GVAR output in the flight mode where it was written. MSP never runs
+while armed. Existing setup, collision, range, trim, pulse and input ownership refusals remain.
+The encoder has two scroll windows sharing one input owner and the same row set. Their creation
+order brackets the touch controls, so first focus entry in either direction scrolls a window.
+ENTER before native child focus selects the current function. End guards give feedback and keep
+ENTER usable. Duplicate unchanged scroll callbacks do not add input or trace noise. Navigation
+and telemetry reports retain both windows. Native encoder ordering, rendered layout, SD power-loss
+behaviour and FC acceptance still need an isolated simulator/radio/FC retest. Historical screenshots
+show the former UI.
 
 ## Related
 

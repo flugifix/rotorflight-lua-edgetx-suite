@@ -7,13 +7,13 @@
 -- connected; the other cannot be looked at without a flight controller. He kept finding the button
 -- that writes the board on a page he had opened to change a trim.
 --
--- Everything on this page belongs to the RADIO and applies to every model on it: which switch
+-- Wiring on this page belongs to the RADIO and applies to every model on it: which switch
 -- arms the overlay, which channels and global variables the transmitter's mixer devotes to the
 -- adjustment pair, and which trims stand in for the rows. One
 -- transmitter has one set of those, and a pilot who set them up once should not meet them again
 -- on his next machine. So they are in the radio's own preferences file under [inflight], saved
 -- the way every other Settings page saves, and no flight controller has to be connected for any
--- of it -- which is why this page carries no store gate and no note asking for a link.
+-- of the wiring. The separate flight-list section is MCU-keyed and requires that FC for Save.
 --
 -- The MODEL's half is on Setup > Controls > In-Flight Tuning: which parameters its flight
 -- controller offers, how far one press moves them, which PID profile is the undo, and a switch
@@ -23,8 +23,8 @@
 --
 -- Two things this page has learned the hard way, both from a radio and both worth stating here.
 --
--- What it LOADS. The page needs the settings, the setup check and the trim names -- it needs
--- nothing of the live state machine and nothing of the adjustment-function tables behind it.
+-- What it LOADS. Entry needs settings, the setup check and trim names. Opening the flight list
+-- loads the function table separately; slot derivation is sliced from an existing ground read.
 -- Loading widgets/dashboard/inflight/drive.lua to get at them pulled 135 kB of Lua into the tool
 -- on entry, against 0.1 to 3.9 kB for the project's other settings pages, on a radio whose tool
 -- had 134 kB of heap left; the tool stopped answering twelve seconds later. It loads
@@ -48,6 +48,8 @@ local Controls = nil
 local Setup = nil
 local ConfirmDialog = nil
 local Env = nil
+local FlightList = nil
+local Prime = nil
 
 local M = {}
 
@@ -142,6 +144,13 @@ end
 local function ensureLoaded(prefs)
   if ui.loaded then return end
   ui.config = Setup.loadRadioSettings(preferences(prefs))
+  local session = _G.rfsuite and _G.rfsuite.session
+  ui.flightMcu = session and session.mcu_id
+  local model = session and session.modelPreferences
+  ui.flightStored = Setup.loadModelSettings(model).flight_list
+  ui.flightPicker, ui.flightWork, ui.flightSource = nil, nil, nil
+  ui.flightLayout, ui.flightFallback, ui.flightWanted = nil, nil, nil
+  ui.flightGroup, ui.flightOffset, ui.flightDirty = 1, 1, false
   ui.radio = nil
   ui.checkDone = false
   ui.checkResult = nil
@@ -471,6 +480,20 @@ end
 -- same route the theme and the preview switch already travel. Only this page's own keys are
 -- touched: see inflight/setup.lua M.storeRadioSettings.
 local function saveToStore(ctx)
+  if ui.flightDirty then
+    local session = _G.rfsuite and _G.rfsuite.session
+    if not session or not ui.flightMcu or session.mcu_id ~= ui.flightMcu then return false, "missing_mcu_id" end
+    local MP = loadModule("lib/model_preferences.lua")
+    local model, inflight = {}, {}
+    for key, value in pairs(session.modelPreferences or {}) do model[key] = value end
+    for key, value in pairs(model.inflight or {}) do inflight[key] = value end
+    model.inflight = inflight
+    model.inflight.flight_list = ui.flightPicker.stored
+    local ok, err = MP.saveByMcuId(ui.flightMcu, model)
+    if not ok then return false, err end
+    session.modelPreferences = model
+    ui.flightDirty = false
+  end
   local prefs = ctx and ctx.preferences
   if type(prefs) ~= "table" then return false, "preferences" end
   if type(prefs.inflight) ~= "table" then prefs.inflight = {} end
@@ -747,7 +770,7 @@ end
 local function buildGeneral(children, x, y, w, i18n)
   local cursorY = y
   cursorY = cursorY + appendNote(children, x, cursorY, w,
-    t(i18n, "pointer_fc", "The set layout, the step size and the undo profile are in Setup > Controls."))
+    t(i18n, "pointer_fc", "The step size and the undo profile are in Setup > Controls."))
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "enabled", "In-flight tuning on this radio"),
     ui.runtime.getBoolGetter("enabled"),
@@ -907,8 +930,8 @@ end
 
 --- The notes the trims section can draw, in either layout; see sectionHeldBack.
 local function trimsNotes(i18n)
-  return t(i18n, "navigate_note", "One trim steps through the parameters, the other moves the one it selected."),
-    t(i18n, "bank_trim_note", "With a bank trim the walk trim stays inside the bank; without one it walks the whole set."),
+  return t(i18n, "navigate_note", "Optional trims: one highlights a parameter, the other steps it. Touch remains available."),
+    t(i18n, "bank_trim_note", "The group trim changes group; the walk trim highlights a parameter inside it."),
     t(i18n, "trims_unreadable", "This radio did not report its trims; the default order is used.")
 end
 
@@ -955,7 +978,7 @@ local function buildTrims(children, x, y, w, i18n)
   if ui.config.trim_mode == Setup.TRIM_MODE_NAVIGATE then
     cursorY = cursorY + appendNote(children, x, cursorY, w, navigateNote)
     cursorY = cursorY + appendTrimPicker(children, x, cursorY, w,
-      t(i18n, "bank_trim", "Bank trim"), trimField("bank_trim"))
+      t(i18n, "bank_trim", "Group trim"), trimField("bank_trim"))
     cursorY = cursorY + appendNote(children, x, cursorY, w, bankTrimNote)
     cursorY = cursorY + appendTrimPicker(children, x, cursorY, w,
       t(i18n, "nav_trim", "Walk trim"), trimField("nav_trim"))
@@ -981,12 +1004,94 @@ local function buildTrims(children, x, y, w, i18n)
   return cursorY
 end
 
+local function buildFlightList(children, x, y, w, i18n)
+  if not ui.flightPicker then
+    ui.flightWanted = true
+    return y + appendNote(children, x, y, w, t(i18n, "flight_reading", "Preparing flight list..."))
+  end
+  local list = ui.flightPicker
+  local session = _G.rfsuite and _G.rfsuite.session
+  local editable = ui.flightMcu ~= nil and session and session.mcu_id == ui.flightMcu
+  y = y + appendNote(children, x, y, w, t(i18n, "flight_owner", "Flight list: this model only. Save with the flight controller connected."))
+  if ui.flightFallback then
+    y = y + appendNote(children, x, y, w, t(i18n, "flight_fallback", "No slot data: showing tunable functions. Read the slots on the ground to check availability."))
+  end
+  local function changed()
+    ui.flightDirty = true
+    ui.runtime.markDirty()
+  end
+  y = y + Controls.appendRadioSwitch(children, x, y, w, t(i18n, "flight_all", "All parameters"),
+    function() return list.stored == "" end,
+    function(value) if editable and value then FlightList.all(list); changed() end end, editable)
+  if #list.groups == 0 then return y end
+  local names = {}
+  for i, group in ipairs(list.groups) do names[i] = { label = group.name, value = i } end
+  y = y + Controls.appendComboSelect(children, x, y, w, t(i18n, "flight_group", "Group"), names,
+    ui.flightGroup,
+    function(value) ui.flightGroup, ui.flightOffset = value, 1; ui.runtime.requestRebuild() end)
+  local group = list.groups[ui.flightGroup]
+  if #group.entries > 6 then
+    local function page(direction)
+      ui.flightOffset = math.max(1, math.min(1 + 6 * math.floor((#group.entries - 1) / 6), ui.flightOffset + direction * 6))
+      ui.runtime.requestRebuild()
+    end
+    local h = Controls.CTRL_H
+    children[#children + 1] = { type = "button", x = x, y = y, w = w / 2 - 4, h = h,
+      text = t(i18n, "flight_previous", "Previous"), press = function() page(-1) end }
+    children[#children + 1] = { type = "button", x = x + w / 2, y = y, w = w / 2 - 4, h = h,
+      text = t(i18n, "flight_next", "Next"), press = function() page(1) end }
+    y = y + h + 6
+  end
+  for i = ui.flightOffset, math.min(#group.entries, ui.flightOffset + 5) do
+    local entry = group.entries[i]
+    local label = entry.name
+    if entry.missing then label = label .. " " .. t(i18n, "flight_missing", "(missing)") end
+    y = y + Controls.appendRadioSwitch(children, x, y, w, label,
+      function() return FlightList.checked(list, entry) end,
+      function(value)
+        if editable and FlightList.toggle(list, entry.id, value) then changed() end
+      end, editable)
+  end
+  return y
+end
+
+-- Cold loads, slot derivation and list construction each get their own wakeup pass.
+local function stepFlightList()
+  if not FlightList then FlightList = loadModule("widgets/dashboard/inflight/flightlist.lua"); return false end
+  local session = _G.rfsuite and _G.rfsuite.session
+  local slots = session and session.inflightSlots
+  if slots and session.isConnected and session.mcu_id == ui.flightMcu and slots.mcu == ui.flightMcu
+      and slots.bank == ui.config.bank_ch and slots.value == ui.config.value_ch then
+    if not Prime then Prime = loadModule("widgets/dashboard/inflight/prime.lua"); return false end
+    if ui.flightSource ~= slots then
+      ui.flightWork = Prime.newDerivation(slots.records, slots.map, slots.bank, slots.value)
+      ui.flightSource = slots
+      ui.flightLayout = nil
+    end
+    if ui.flightLayout == nil then
+      local done, layout = Prime.deriveStep(ui.flightWork, 8)
+      if not done then return false end
+      -- A read that yielded no safe cells is an empty offer, not the offline fallback.
+      ui.flightLayout = layout or { set = {}, rowValues = {}, bankValues = {} }
+      ui.flightWork = nil
+      return false
+    end
+    ui.flightFallback = false
+  else
+    ui.flightLayout, ui.flightFallback = nil, true
+  end
+  ui.flightPicker = FlightList.new(ui.flightStored, ui.flightLayout)
+  ui.flightWanted = false
+  return true
+end
+
 local SECTIONS = {
   { key = "general", titleKey = "section_general", titleFallback = "In-flight tuning", build = buildGeneral },
   { key = "wiring", titleKey = "section_wiring", titleFallback = "Channels and variables", build = buildWiring,
     notes = wiringNotes },
   { key = "trims", titleKey = "section_trims", titleFallback = "Rows and trims", build = buildTrims,
-    notes = trimsNotes }
+    notes = trimsNotes },
+  { key = "flight", titleKey = "section_flight", titleFallback = "Flight list (this model)", build = buildFlightList }
 }
 
 --- True while an open section's body waits for its notes to be measured (inside the widget's call
@@ -1048,7 +1153,14 @@ function M.build(ctx)
     Controls.appendSectionHeader(children, x, cursorY, w,
       t(i18n, section.titleKey, section.titleFallback),
       ui.sections[section.key],
-      ui.runtime.getSectionToggleHandler(section.key))
+      function()
+        if section.key == "flight" then
+          if not ui.sections.flight then ui.sections.general, ui.sections.wiring, ui.sections.trims = false, false, false end
+        else
+          ui.sections.flight = false
+        end
+        ui.runtime.getSectionToggleHandler(section.key)()
+      end)
     cursorY = cursorY + Controls.SECTION_H
     if ui.sections[section.key] then
       if sectionHeldBack(section, i18n, w) then
@@ -1067,7 +1179,7 @@ end
 -- rebuild, which is when the screen can say what it found -- except a variable job while one of the
 -- two variables' editors may be open (see appendGvarNote).
 function M.wakeup(ctx)
-  if not ui.loaded or Setup == nil or not inWidgetCall() then return end
+  if not ui.loaded or Setup == nil then return end
   -- Never in the pass that built the page: the build is the most expensive thing that pass does,
   -- and a slice beside it is what would take the pass over the limit. One pass later costs nothing.
   -- This relies on builds being event-driven: a page rebuilt on every pass would never take a
@@ -1077,7 +1189,10 @@ function M.wakeup(ctx)
     return
   end
   local finished = false
-  if ui.notesWanted then
+  if ui.flightWanted then
+    finished = stepFlightList()
+  elseif not inWidgetCall() then return
+  elseif ui.notesWanted then
     finished = stepNotes(ctx and ctx.i18n)
   elseif ui.trimNames == nil then
     finished = stepTrimWalk()
@@ -1129,6 +1244,10 @@ function M.onClose()
   ui.buildW = nil
   ui.hosted = nil
   ui.notesWanted = false
+  ui.flightWanted, ui.flightPicker, ui.flightWork = nil, nil, nil
+  ui.flightSource, ui.flightLayout, ui.flightMcu = nil, nil, nil
+  ui.flightStored, ui.flightDirty, ui.flightFallback = nil, nil, nil
+  FlightList, Prime = nil, nil
   Controls = nil
   Common = nil
   Setup = nil

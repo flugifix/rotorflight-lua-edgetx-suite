@@ -864,6 +864,7 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
   -- that is being counted the build is read off that pass's hook; in a pass that is not, the
   -- wrapper hooks the build alone, and both read the same instructions.
   local builds = { worst = 0, count = 0, declared = nil }
+  local pageBuild
   local function measured(hooked, before, ...)
     local spent = tally - before
     if not hooked then debug.sethook() end
@@ -881,6 +882,7 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
       builds.declared = type(module) == "table" and type(module.build) == "function"
       if builds.declared then
         local build = module.build
+        pageBuild = build
         module.build = function(...)
           local hooked = debug.gethook() ~= nil
           if not hooked then debug.sethook(bill, "", 1) end
@@ -926,7 +928,7 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
     holdLinkBacklog()
     if fault ~= "held" then releaseReplies() end
     feedLink(World.sensorIds, 50000 + frame)
-    if counting then return count(widget.refresh, widget, 0, nil) end
+    if counting or pagePath == "settings/dashboard/inflight/page.lua" then return count(widget.refresh, widget, 0, nil) end
     Stubs.tick()
     widget.refresh(widget, 0, nil)
     return 0
@@ -1012,6 +1014,54 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
     if quiet >= PAGE_QUIET and (builds.count > 0 or builds.declared == false) then break end
   end
   local here = state.menu.getCurrentMenuId()
+  if pagePath == "settings/dashboard/inflight/page.lua" then
+    local form = upvalue(pageBuild, "ui")
+    form.sections.general, form.sections.wiring, form.sections.trims = false, false, false
+    form.runtime.getSectionToggleHandler("flight")()
+    for _ = 1, PAGE_PASSES do
+      local n = pass(counted)
+      if n > worst then worst = n end
+      if form.flightPicker and not state.pendingBuildUI then break end
+    end
+    assert(form.flightPicker and form.flightFallback, "accounting: offline flight-list fallback never built")
+    for index, group in ipairs(form.flightPicker.groups) do
+      for offset = 1, #group.entries, 6 do
+        form.flightGroup, form.flightOffset = index, offset
+        form.runtime.requestRebuild()
+        local n = pass(counted)
+        if n > worst then worst = n end
+      end
+    end
+    local Functions = World.require("widgets/dashboard/inflight/functions.lua")
+    local records = {}
+    local bank = Functions.wireToAuxField(form.config.bank_ch, {})
+    local value = Functions.wireToAuxField(form.config.value_ch, {})
+    for _, slot in ipairs(Functions.standardSlots(bank, value)) do records[slot.slot0 + 1] = slot.record end
+    records[Functions.STANDARD_FIRST_SLOT + 1].adjFunction = 83
+    session.inflightSlots = { mcu = session.mcu_id, map = {}, records = records,
+      bank = form.config.bank_ch, value = form.config.value_ch }
+    form.flightPicker, form.flightSource = nil, nil
+    form.flightStored, form.flightWanted = "83,250", true
+    form.runtime.requestRebuild()
+    for _ = 1, PAGE_PASSES do
+      local n = pass(counted)
+      if n > worst then worst = n end
+      if form.flightPicker and not state.pendingBuildUI then break end
+    end
+    assert(form.flightPicker and not form.flightFallback, "accounting: FC-derived flight list never built")
+    local sawMissing = false
+    for index, group in ipairs(form.flightPicker.groups) do
+      for offset = 1, #group.entries, 6 do
+        form.flightGroup, form.flightOffset = index, offset
+        form.runtime.requestRebuild()
+        local n = pass(counted)
+        if n > worst then worst = n end
+      end
+      for _, entry in ipairs(group.entries) do if entry.id == 250 and entry.missing then sawMissing = true end end
+    end
+    assert(sawMissing, "accounting: missing-id control was not listed")
+    print(string.format("  flight-list picker: fallback/FC groups and missing ID; page build %d; hosted pass %d", builds.worst, worst))
+  end
   local link = linkState()
   served = FC.served - served
   local empty = {}
@@ -1627,6 +1677,47 @@ do
   Stubs.sensors["AdjF"] = 14
   Stubs.sensors["AdjV"] = 100
   Stubs.sensors["PID#"] = 1
+  -- STATUS and telemetry must describe the same profiles for a session read. Keep the canned
+  -- payload's width and parser, changing only its rate index to match this scenario's sensor.
+  local savedTuningStatus = FC.replies[101]
+  local tuningStatus = {}
+  for i = 1, #savedTuningStatus do tuningStatus[i] = savedTuningStatus[i] end
+  tuningStatus[24] = Stubs.sensors["PID#"] - 1
+  tuningStatus[26] = Stubs.sensors["RTE#"] - 1
+  tuningStatus[25], tuningStatus[27] = 6, 6
+  FC.replies[101] = tuningStatus
+  local mutationCommands = {[250] = true}
+  for _, name in ipairs({"pid_tuning", "pid_profile", "governor_profile", "rescue_profile", "rc_tuning", "governor_config", "acc_trim"}) do
+    mutationCommands[World.require("tasks/msp/api/" .. name .. ".lua").writeCommand] = true
+  end
+  -- The board carries the two profile selectors and, after them, the standard set on the overlay's
+  -- two channels (11/12): what the live surface can tune is derived from these slots, so a board
+  -- without them would price an empty list.
+  local selectorIds = {2, 1}
+  for index = 3, 42 do selectorIds[index] = 0 end
+  local slotReplies = {}
+  do
+    local Functions = World.require("widgets/dashboard/inflight/functions.lua")
+    local FcSetup = World.require("widgets/dashboard/inflight/fcsetup.lua")
+    local ena, adj = Functions.wireToAuxField(11, {}), Functions.wireToAuxField(12, {})
+    for _, slot in ipairs(Functions.standardSlots(ena, adj, { step = 5, step_headspeed = 50 })) do
+      local bytes = FcSetup.encodeSlot(slot.slot0, slot.record)
+      table.remove(bytes, 1)
+      slotReplies[slot.slot0] = bytes
+      selectorIds[slot.slot0 + 1] = slot.record.adjFunction
+    end
+  end
+  FC.dynamicReply = function(command, payload)
+    if command == 167 then return selectorIds end
+    if command == 156 then
+      return slotReplies[payload[1]] or {payload[1] == 0 and 2 or 1, 255, 0, 0, 1, 236, 246, 10, 20, 1, 0, 6, 0, 0}
+    end
+    if mutationCommands[command] then return {} end
+  end
+  FC.profileSelection = function(value)
+    if (value & 0x80) ~= 0 then tuningStatus[26] = value & 0x7f
+    else tuningStatus[24] = value end
+  end
 
   settle(widget, World.sensorIds, 4000)
 
@@ -1640,17 +1731,10 @@ do
     inflight = {
       -- The model's own switch. The radio's two are staged above; all three have to be on.
       enabled = true,
-      -- The STANDARD set layout, which is the default and, measured, the dearer of the two here.
-      --
-      -- The two layouts differ in what the passes after the slot table does with it: the custom
-      -- one DERIVES a set from the board's own windows, the standard one holds the board against
-      -- a set this build already has. Both are taken in slices and both land inside a window whose
-      -- worst pass is dominated by an MSP reply parse rather than by the slice -- measured on this
-      -- tree, `pass.tuning.prime` reads 15069 in the standard layout over 28 passes and 15063 in
-      -- the custom one over 29, so the row bounds either. It is pinned to the one a pilot gets
-      -- without changing anything, and the other is six instructions below it.
-      set_mode = "standard",
-      step = 5, step_headspeed = 50, backup_profile = 0
+      -- The set is always derived from the board's own slots (the FC stub above carries the standard
+      -- layout), so no layout setting is staged. An earlier comparison of the two former layouts was
+      -- taken on a stub carrying only the two profile selectors, where the derivation applied nothing.
+      step = 5, step_headspeed = 50
     }
   }
   _G.rfsuite.session.modelPreferences = store
@@ -1727,8 +1811,14 @@ do
       error("accounting: the prime failed with " .. tostring(prime.error))
     end
     local doneBefore = (type(prime) == "table" and prime.done) or 0
+    local banksBefore = drive.groupWork and drive.groupWork.bank
     local class = passClass(widget)
     local n = count(widget.refresh, widget, nil, nil)
+    -- The group table is built a bank per pass; more than one in a pass is the bound gone.
+    local banksAfter = drive.groupWork and drive.groupWork.bank
+    if banksBefore and banksAfter and banksAfter - banksBefore > 1 then
+      error("accounting: one pass built more than one bank of the in-flight groups")
+    end
     -- Only the passes the run itself occupies are counted and priced. Before the widget's own
     -- tick starts it there is a settle to wait out, and those passes are the dashboard's.
     if type(prime) == "table" then
@@ -1752,6 +1842,26 @@ do
       "accounting: the prime finished in %d passes, fewer than its %d value reads -- a pass parsed "
       .. "more than one reply", primePasses, #Functions.VALUE_READS))
   end
+
+  local profileReplies = drive.prime.done or 0
+
+  -- Price the same sliced job during a verified restore of all six PID/rate profiles.
+  assert(Prime.restore(widget, drive), "accounting: restore-all control did not start")
+  for i = 1, 6000 do
+    holdLinkBacklog(); releaseReplies(); feedLink(World.sensorIds, 7000 + i)
+    if not drive.profileJob then break end
+    local before = drive.prime.done or 0
+    local class = passClass(widget)
+    local n = count(widget.refresh, widget, nil, nil)
+    primePasses = primePasses + 1
+    if n > (primeWorst[class] or 0) then primeWorst[class] = n end
+    assert((drive.prime.done or 0) - before <= 1, "accounting: restore parsed multiple replies")
+  end
+  assert(not drive.profileJob and drive.transfer.state == "ok", "accounting: restore did not verify")
+  assert(drive.transfer.results.pid6 == "ok" and drive.transfer.results.rate6 == "ok"
+    and drive.transfer.results.global == "ok", "accounting: full-profile restore targets missing")
+  drive.restoreResultOpen = nil
+  profileReplies = drive.prime.done or profileReplies
 
   ----------------------------------------------------------------------------
   -- THE LIVE SURFACE, which since the phase machine is the ARMED one.
@@ -1804,6 +1914,71 @@ do
     if n > (worst[class] or 0) then worst[class] = n end
   end
 
+  -- Retained live scenes must survive a dispatcher navigation and a telemetry publication.
+  -- Exercise the actual Runtime key/build path, then include the 64-row value ladder's build
+  -- and reactive sweep in the same tuning budgets as the other overlay surfaces.
+  local Input = World.require("widgets/dashboard/inflight/input.lua")
+  local tuningBuilds, savedBuild = 0, lvgl.build
+  lvgl.build = function(nodes)
+    tuningBuilds = tuningBuilds + 1
+    return savedBuild(nodes)
+  end
+  local function livePass()
+    holdLinkBacklog()
+    releaseReplies()
+    feedLink(World.sensorIds, 1200)
+    local class = passClass(widget)
+    local n = count(widget.refresh, widget, 0, nil)
+    if n > (worst[class] or 0) then worst[class] = n end
+  end
+  for i = 1, 4 do livePass() end
+  local retainedTrees = tuningBuilds
+  local entryBefore = drive.entry
+  assert(Input.dispatch(widget, "function", 1, "encoder"), "accounting: browse control did not navigate")
+  for i = 1, 8 do livePass() end
+  assert(drive.entry == entryBefore + 1, "accounting: browse selection was lost")
+  assert(tuningBuilds == retainedTrees, "accounting: a function detent rebuilt the live sensor")
+  assert(Input.dispatch(widget, "select", nil, "encoder"), "accounting: value mode control did not select")
+  for i = 1, 8 do livePass() end
+  assert(drive.valueMode, "accounting: value ladder was not reached")
+  assert(tuningBuilds == retainedTrees + 1, "accounting: mode change built "
+    .. tostring(tuningBuilds - retainedTrees) .. " trees, expected exactly one; phase="
+    .. tostring(drive.phase) .. " key=" .. tostring(widget.renderKey))
+  local ladderButtons = 0
+  local valueTree = Stubs.lvgl.trees[#Stubs.lvgl.trees]
+  for _, node in ipairs(valueTree or {}) do
+    if node.type == "box" and node.scrolled then
+      for _, child in ipairs(node.children or {}) do
+        if child.type == "button" then ladderButtons = ladderButtons + 1 end
+      end
+    end
+  end
+  assert(ladderButtons == Input.LADDER_ROWS + 5, "accounting: split value ladder, both resting touch copies and all three guards were not built")
+  retainedTrees = tuningBuilds
+  local pageEntry = drive.entry
+  local savedNext, savedPrevious = _G.EVT_VIRTUAL_NEXT_PAGE, _G.EVT_VIRTUAL_PREV_PAGE
+  _G.EVT_VIRTUAL_NEXT_PAGE, _G.EVT_VIRTUAL_PREV_PAGE = 516, 515
+  assert(Input.key(widget, EVT_VIRTUAL_NEXT_PAGE), "accounting: PAGE was not consumed")
+  for i = 1, 8 do livePass() end
+  assert(drive.valueMode and drive.entry == pageEntry + 1, "accounting: PAGE did not select the next value function")
+  assert(tuningBuilds == retainedTrees, "accounting: value PAGE rebuilt the sensor")
+  assert(Input.key(widget, EVT_VIRTUAL_PREV_PAGE), "accounting: previous PAGE was not consumed")
+  for i = 1, 8 do livePass() end
+  assert(drive.valueMode and drive.entry == pageEntry and tuningBuilds == retainedTrees,
+    "accounting: previous PAGE lost value selection or rebuilt")
+  _G.EVT_VIRTUAL_NEXT_PAGE, _G.EVT_VIRTUAL_PREV_PAGE = savedNext, savedPrevious
+  local reportedId = drive:functionId(drive.bank, drive.row)
+  Stubs.sensors["AdjF"] = 0
+  for i = 1, 8 do livePass() end
+  assert(not drive.reportFence, "accounting: idle report did not release the transaction fence")
+  Stubs.sensors["AdjF"], Stubs.sensors["AdjV"] = reportedId, 123
+  for i = 1, 8 do livePass() end
+  assert(drive.values[reportedId] == 123, "accounting: value report control did not publish")
+  assert(tuningBuilds == retainedTrees, "accounting: a value report rebuilt the sensor")
+  assert(Input.dispatch(widget, "leave", nil, "encoder"), "accounting: value mode control did not leave")
+  for i = 1, 8 do livePass() end
+  lvgl.build = savedBuild
+
   ----------------------------------------------------------------------------
   -- THE OTHER TWO SURFACES, on the same budget row.
   --
@@ -1824,10 +1999,12 @@ do
   }
   local baseline = {}
   for _, id in ipairs(changed) do
-    baseline[id] = 50
+    baseline[tostring(id)] = 50
+    drive.profileValues.pid[drive.profile][id] = 62
+    drive.changes.pid[drive.profile][id] = true
     drive.values[id] = 62
   end
-  drive.backup = { profile = 2, at = 0, values = baseline }
+  drive.baseline["pid" .. drive.profile] = baseline
   drive.primedValues = baseline
   drive.setSource = "board"
   -- A flight that asked for a step, which is what earns the delta screen at all.
@@ -1872,11 +2049,37 @@ do
         if string.find(node.text, "/", 1, true) and #node.text <= 5 then paged = true end
       end
     end
-    -- The close box plus the restore; a list that ran out of screen before it ran out of
-    -- parameters; and the page counter that says so.
-    if buttons ~= 2 then error("accounting: the postflight surface built " .. buttons .. " buttons, not 2") end
+    -- Close, restore and both touch paging controls; a list that runs beyond one screen;
+    -- and the page counter that says so.
+    if buttons ~= 4 then error("accounting: the postflight surface built " .. buttons .. " buttons, not 4") end
     if deltaRows < 4 then error("accounting: the delta list built only " .. deltaRows .. " rows") end
     if not paged then error("accounting: the delta list was not measured over more than one page") end
+    local entry
+    for _, node in ipairs(tree) do
+      if node.type == "button" and not entry then entry = node end
+    end
+    entry.press()
+    if not drive.postActionsOpen then error("accounting: postflight restore entry did not open its actions") end
+    for i = 1, 30 do
+      holdLinkBacklog()
+      releaseReplies()
+      feedLink(World.sensorIds, 3100 + i)
+      invalidate(widget)
+      local class = passClass(widget)
+      local n = count(widget.refresh, widget, 0, nil)
+      if n > (worst[class] or 0) then worst[class] = n end
+    end
+    local actions, labels = {}, {}
+    for _, node in ipairs(Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}) do
+      if node.type == "button" then actions[#actions + 1] = node end
+      if type(node.text) == "string" then labels[node.text] = true end
+    end
+    if #actions ~= 5 or not labels["Restore all"] or not labels["Read again"]
+      or not labels["Restore profile PID " .. drive.profile] or not labels["Back to changes"] then
+      error("accounting: postflight menu did not retain all/read/profile/back and Close")
+    end
+    actions[4].press()
+    if drive.postActionsOpen then error("accounting: postflight Back did not dismiss its actions") end
   end
 
   -- and the GROUND read-out, which is what the same disarmed state shows after a flight that
@@ -1906,19 +2109,52 @@ do
       if node.type == "button" then buttons = buttons + 1 end
       if type(node.text) == "function" then reactive = reactive + 1 end
     end
-    -- The close box plus read, back up and restore; and the three lines that move while a run is
-    -- on without anything rebuilding to move them.
-    if buttons ~= 4 then error("accounting: the ground surface built " .. buttons .. " buttons, not 4") end
+    -- The close box plus choose parameters, read again, reset start values and restore all; and
+    -- the three lines that move while a run is on without anything rebuilding to move them.
+    if buttons ~= 5 then error("accounting: the ground surface built " .. buttons .. " buttons, not 5") end
     if reactive < 3 then error("accounting: the ground surface built " .. reactive .. " reactive lines") end
   end
+
+  -- and the PARAMETER PICKER the ground surface opens: a page of six toggles over the board's
+  -- groups, rebuilt on every toggle and page turn, so its build is priced on the same row.
+  drive.prime = nil
+  drive.sessionPickerOpen, drive.sessionPick = true, nil
+  for i = 1, 60 do
+    holdLinkBacklog()
+    releaseReplies()
+    feedLink(World.sensorIds, 4100 + i)
+    drive.valueEpoch = drive.valueEpoch + 1
+    widget.inflightFullscreen = true
+    invalidate(widget)
+    local class = passClass(widget)
+    local n = count(widget.refresh, widget, 0, nil)
+    if n > (worst[class] or 0) then worst[class] = n end
+  end
+  do
+    local tree = Stubs.lvgl.trees[#Stubs.lvgl.trees]
+    local toggles = 0
+    for _, node in ipairs(tree or {}) do
+      if node.type == "button" and type(node.text) == "string" and string.find(node.text, "^%[") then toggles = toggles + 1 end
+    end
+    if toggles == 0 then error("accounting: the parameter picker built no toggles") end
+    -- Priced over a finished board: no group work pending and the board's groups in place.
+    if drive.groupWork ~= nil or type(drive.allGroups) ~= "table" or #drive.allGroups == 0 then
+      error("accounting: the parameter picker was priced before the board's groups were built")
+    end
+  end
+  drive.sessionPickerOpen, drive.sessionPick = nil, nil
 
   removeDeferredLink()
 
   addRow("pass.tuning.state", worst.state or 0)
   addRow("pass.tuning.prime", primeWorst.state or 0,
-    string.format("%d replies over %d passes, one parse per pass",
-      drive.prime.done or 0, primePasses))
-  addRow("pass.job.tuning", math.max(worst.tuning or 0, primeWorst.tuning or 0))
+    string.format("%d replies over %d passes, six PID/rate profiles + verified restore, one parse per pass",
+      profileReplies, primePasses))
+  addRow("pass.job.tuning", math.max(worst.tuning or 0, primeWorst.tuning or 0),
+    "64-row value ladder + guards included; navigation/report builds 0/0, mode builds 1")
+  FC.dynamicReply = nil
+  FC.profileSelection = nil
+  FC.replies[101] = savedTuningStatus
 end
 
 ------------------------------------------------------------------------------
