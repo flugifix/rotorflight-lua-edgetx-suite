@@ -46,6 +46,7 @@ local CHANNEL_NAMES = {
 local ui = {
   loaded = false,
   dirty = false,
+  channelCount = 18,
   channels = {}, -- index 1..18, each { mode = 0, value = 1500 }
   runtime = {
     readPending = false,
@@ -92,7 +93,8 @@ end
 local function loadFromSession()
   local session = getSession()
   if not session or type(session.setup_controls_failsafe) ~= "table" then return end
-  for i = 1, 18 do
+  ui.channelCount = session.setup_controls_failsafe_count or 18
+  for i = 1, ui.channelCount do
     local ch = session.setup_controls_failsafe[i]
     if ch then
       ui.channels[i] = {
@@ -133,7 +135,10 @@ local function queueFailsafeRead(isAutoReload)
       local parsed = RxfailConfigApi.parse(buf)
       if type(parsed) ~= "table" then return Common.failPageRead(ui) end
       if parsed then
-        for i = 1, 18 do
+        ui.channelCount = parsed.channel_count
+        ui.channels = {}
+        ui.dirtyChannels = {}
+        for i = 1, ui.channelCount do
           ui.channels[i] = {
             mode = parsed["channel_" .. i .. "_mode"] or 0,
             value = parsed["channel_" .. i .. "_value"] or 1500
@@ -142,10 +147,9 @@ local function queueFailsafeRead(isAutoReload)
         -- Sync to session
         local session = getSession()
         if session then
-          if type(session.setup_controls_failsafe) ~= "table" then
-            session.setup_controls_failsafe = {}
-          end
-          for i = 1, 18 do
+          session.setup_controls_failsafe = {}
+          session.setup_controls_failsafe_count = ui.channelCount
+          for i = 1, ui.channelCount do
             session.setup_controls_failsafe[i] = {
               mode = ui.channels[i].mode,
               value = ui.channels[i].value
@@ -186,7 +190,7 @@ local function queueFailsafeWrite(requestRebuild)
   -- opened again starts from other values. Every payload and the session copy come from here.
   local saved = {}
   local steps = {}
-  for i = 1, 18 do
+  for i = 1, ui.channelCount do
     if ui.dirtyChannels[i] then
       local ch = ui.channels[i]
       saved[#saved + 1] = { index = i, mode = ch.mode, value = ch.value }
@@ -263,8 +267,9 @@ local function ensureLoaded()
   ui.saving = false
   ui.runtime.readPending = false
 
+  ui.channelCount = 18
   ui.channels = {}
-  for i = 1, 18 do
+  for i = 1, ui.channelCount do
     ui.channels[i] = { mode = 0, value = 1500 }
   end
   ui.dirtyChannels = {}
@@ -355,7 +360,7 @@ function M.build(ctx)
     { label = pageText(i18n, "mode_set", "Set"), value = 2 }
   }
 
-  for i = 1, 18 do
+  for i = 1, ui.channelCount do
     local channelName = CHANNEL_NAMES[i]
     local chName = pageText(i18n, channelName.labelKey, channelName.labelFallback)
     local ch = ui.channels[i] or { mode = 0, value = 1500 }

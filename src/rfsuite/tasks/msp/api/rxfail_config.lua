@@ -49,9 +49,11 @@ end
 
 function Api.parse(buf)
   if type(buf) ~= "table" then return nil end
-  local parsed = {}
+  local count = math.min(math.floor(#buf / 3), MAX_SUPPORTED_RC_CHANNEL_COUNT)
+  if count == 0 then return nil end
+  local parsed = { channel_count = count }
   local pos = 1
-  for i = 1, MAX_SUPPORTED_RC_CHANNEL_COUNT do
+  for i = 1, count do
     local mode = tonumber(buf[pos]) or 0
     pos = pos + 1
     local val = read_u16_le(buf, pos)
