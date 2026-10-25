@@ -1904,8 +1904,7 @@ return {
       setup_adjustments = {
         title = "Anpassungen",
         help_title = "Anpassungen Hilfe",
-        help_p1 = "Konfigurieren Sie die Bereiche und Kanaele der Anpassungsfunktionen.",
-        help_p2 = "Verwenden Sie Speichern einmal nach allen Bearbeitungen, um jeden geaenderten Bereich und anschliessend das EEPROM zu schreiben.",
+        help_p1 = "Bereiche und Kanaele der Anpassungsfunktionen konfigurieren; Speichern schreibt jeden geaenderten Bereich und danach das EEPROM.",
         active_ranges = "Akt. Bereiche",
         current_output = "Aktueller Wert",
         range = "Bereich",

@@ -1904,8 +1904,7 @@ return {
       setup_adjustments = {
         title = "Adjustments",
         help_title = "Adjustments Help",
-        help_p1 = "Configure Adjustment Function ranges and channels.",
-        help_p2 = "Use Save once after all edits to write every changed range and then EEPROM.",
+        help_p1 = "Configure adjustment function ranges and channels; Save writes every changed range and then the EEPROM.",
         active_ranges = "Active ranges",
         current_output = "Current Output",
         range = "Range",

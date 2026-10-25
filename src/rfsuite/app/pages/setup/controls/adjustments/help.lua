@@ -12,13 +12,10 @@ return function(ctx)
   local t = Common and Common.pageT("setup_adjustments") or function(_, _, fb) return fb end
   local i18n = ctx.i18n
 
-  local help_p1 = t(i18n, "help_p1", "Configure Adjustment Function ranges and channels.")
-  local help_p2 = t(i18n, "help_p2", "Use Save once after all edits to write every range and then EEPROM.")
-
-  local parts = { help_p1, help_p2 }
+  local help_p1 = t(i18n, "help_p1", "Configure adjustment function ranges and channels; Save writes every changed range and then the EEPROM.")
 
   return {
     title = t(i18n, "help_title", "Adjustments Help"),
-    message = table.concat(parts, "\n\n")
+    message = help_p1
   }
 end
