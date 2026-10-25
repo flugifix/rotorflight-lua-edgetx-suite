@@ -250,7 +250,7 @@ report fence still applies. Add another profile with **Reset start values** on t
 
 **Speech uses the existing Adjustments announcer and its audio setting.** A selected group
 or highlighted function waits **700 ms**; every newer selection replaces the pending name.
-Selecting a function for tuning plays `inflight/selected.wav` before its name and current known value. A profile edge plays `evt/profile.wav` plus its number. Unread/unknown profiles play `inflight/paused.wav`; returning to a read profile plays `inflight/resumed.wav`. The retained `cycle.wav` file has no call site. Every function and every group is spoken as one recording of the name the screen shows, `inflight/fn/<id>.wav` and `inflight/group/<id>.wav`. The names are the Rotorflight Configurator's own adjustment-function names in each language (for example *Heck B-Gain* / *Yaw B-gain*), so the pilot hears and reads the same words as in the Configurator. Under the group title a name does not repeat it (*P-Gain* under *Drehzahlregler*, not *Drehzahlregler P-Gain*); a name that does not begin with the title, and every spoken name, stays whole. In the selected row a name too long for one line breaks onto a second line; the neighbouring rows cut it.
+Selecting a function for tuning plays `inflight/selected.wav` before its name and current known value. Profile edges belong to the general *PID Profile* and *Rate Profile* announcements when those events are enabled; the overlay supplies `evt/profile.wav` plus the number only when the corresponding general event is disabled. In flight, unread/unknown profiles play `inflight/paused.wav`; returning to a read profile plays `inflight/resumed.wav`. Neither session cue plays on the ground. Every function and every group is spoken as one recording of the name the screen shows, `inflight/fn/<id>.wav` and `inflight/group/<id>.wav`. The names are the Rotorflight Configurator's own adjustment-function names in each language (for example *Heck B-Gain* / *Yaw B-gain*), so the pilot hears and reads the same words as in the Configurator. Under the group title a name does not repeat it (*P-Gain* under *Drehzahlregler*, not *Drehzahlregler P-Gain*); a name that does not begin with the title, and every spoken name, stays whole. In the selected row a name too long for one line breaks onto a second line; the neighbouring rows cut it.
 Critical alarms suppress advisory adjustment/navigation speech. Already handed-over firmware
 audio is not cancelled. Encoder browse scrolls use this same settled-name path.
 The end-of-list tone is input feedback and plays with adjustment announcements disabled;
@@ -311,6 +311,14 @@ ENTER usable. Duplicate unchanged scroll callbacks do not add input or trace noi
 and telemetry reports retain both windows. Native encoder ordering, rendered layout, SD power-loss
 behaviour and FC acceptance still need an isolated simulator/radio/FC retest. Historical screenshots
 show the former UI.
+
+An always-active adjustment slot on the tuning value channel can fire in every bank. A step direction whose pulse would also trigger that slot is unavailable; other safe directions remain available. The slot is included in the skipped count.
+
+Ground reads accept the firmware range of PID gains and rescue altitude P/I/D gains (0 to 1000) and of the governor head speed (0 to 50000), even when a value exceeds the Configurator's standard-slot range. Values outside the firmware range refuse the read with the function name and value. The standard-layout writer retains its Configurator limits.
+
+After a link interruption, tuning waits for the flight controller's UID to answer. The paused surface says *Waiting for FC identity*; a matching identity permits tuning again. Another identified controller ends the previous session. If a read or restore was suspended, its original-profile return is still owed to the disconnected controller and is logged; it does not block a new read on the connected controller.
+
+Opening the interlock or backgrounding the widget in flight retains the flight's steps for the post-flight list, including when the widget returns after landing. The ground model-status sentence updates as setup faults are repaired. Session timestamps are displayed as `YYYY-MM-DD HH:MM`; existing SD snapshots remain compatible.
 
 ## Related
 

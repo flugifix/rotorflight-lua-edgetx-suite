@@ -60,11 +60,11 @@ local function readBoard(d, mutate)
   d:rebuildGroups(true)
   return d
 end
-local function drive()
+local function drive(mutate)
   local d = Drive.newDrive(radio, Drive.settings({ inflight = { enabled = true, switch = 1 } },
     { inflight = { enabled = true } }))
   check(#d.groups == 0 and d.setSource == "unread", "nothing is tunable before the board has been read")
-  readBoard(d)
+  readBoard(d, mutate)
   d.sessionProfiles = {pid = {[1] = true}, rate = {[2] = true}}
   d.profileValues = {pid = {[1] = {}}, rate = {[2] = {}}, global = {}}
   d.profilePrevious = {pid = {}, rate = {}, global = {}}
@@ -415,7 +415,7 @@ do
   for _, size in ipairs({ { 480, 272 }, { 480, 320 }, { 800, 480 } }) do
     local instance = drive()
     instance.phase, instance._checkedAt, instance._checkResult = "ground", ticks, "ok"
-    local snap = {phase = "ground", setSource = "board", cellCount = 36, boundsCount = 2,
+    local snap = {phase = "ground", setupVerdict = "ok", setSource = "board", cellCount = 36, boundsCount = 2,
       prime = {skipped = 3}, sessionMode = "resume", baseline = {timestamp = "2026-10-25 12:34"}}
     local translations = 0
     local view = {_inflight = instance, state = {armed = false, inflight = snap},
@@ -1401,4 +1401,151 @@ for _, direction in ipairs({ 1, -1 }) do
   check(not left and instance.group == group and instance.entry == last and instance.valueMode == false,
     "browse past the list end stays on the last entry and never leaves the list (" .. direction .. ")")
 end
+
+-- Always-active adjustment slots share the value channel in every bank.
+do
+  for _, enable in ipairs({255, Functions.AUX_FIELD_COUNT}) do
+    local instance = drive(function(records)
+      records[42] = {adjFunction = 5, enaChannel = enable,
+        adjChannel = Functions.wireToAuxField(12), adjStep = 1,
+        adjRange1 = {start = 0, ["end"] = 0}, adjRange2 = records[5].adjRange2}
+    end)
+    for bank, rows in pairs(instance.rowValues) do
+      for row = 1, Functions.ROW_COUNT do
+        check((rows[row].up ~= nil) == (row ~= 3), "always-active window refuses only row three up in every bank")
+      end
+    end
+    instance.bank, instance.row = 1, 3
+    check(not instance:dispatch("step", 1, "touch", 3), "always-active row three refuses an up pulse")
+    local derived, skipped = BoardPrime.deriveSet({[1] = {adjFunction = 5, enaChannel = enable,
+      adjChannel = Functions.wireToAuxField(12), adjStep = 1}}, nil, 11, 12)
+    check(derived == nil and skipped[1] == 1, "always-active slot is skipped rather than named as a bank")
+    check(Functions.auxToWireChannel(enable) == nil, "out-of-range AUX field never names a channel")
+  end
+  local control = drive()
+  control.bank, control.row = 1, 3
+  check(control.rowValues[1][3].up ~= nil and control:dispatch("step", 1, "touch", 3),
+    "control: row three steps without the always-active slot")
+  control:cleanup(false)
+end
+
+-- Full slot tables with always-active windows retain a bounded derivation slice.
+do
+  local peak = 0
+  for _, crowded in ipairs({false, true}) do
+    local records = {}
+    for _, slot in ipairs(Functions.standardSlots(5, 6, {step=5, step_headspeed=50})) do records[slot.slot0 + 1] = slot.record end
+    local own = records[3]
+    if crowded then records = {[3]=own, [4]=records[4], [5]=records[5], [6]=records[6], [7]=records[7], [8]=records[8]} end
+    for slot = 1, 42 do
+      if not records[slot] then records[slot] = {adjFunction=5, enaChannel=255, adjChannel=6, adjStep=1,
+        adjRange1={start=1499, ["end"]=1500}, adjRange2={start=1500, ["end"]=1501}} end
+    end
+    local work = BoardPrime.newDerivation(records, nil, 11, 12)
+    local done, result
+    repeat
+      local count = 0
+      debug.sethook(function() count = count + 1 end, "", 1)
+      done, result = BoardPrime.deriveStep(work, 8)
+      debug.sethook()
+      peak = math.max(peak, count)
+      check(count <= 3500, "full-table always-active derivation stays below 3500 instructions per slice")
+    until done
+    check(result ~= nil and #work.skipped == (crowded and 36 or 6), "full table retains its usable cells and counts always-active slots")
+  end
+  print("always-active derivation peak: " .. peak .. " VM instructions per slice")
+end
+
+-- A widget interruption in the air must retain the flight's step count, even through landing.
+do
+  for _, background in ipairs({false, true}) do
+    for _, stepped in ipairs({true, false}) do
+      local instance = drive()
+      instance.seeded, instance.rawSwitch, instance._checkedAt, instance._checkResult = true, true, ticks, "ok"
+      switch = true
+      if stepped then check(instance:dispatch("step", 1, "touch"), "interrupted-flight positive step") end
+      if background then
+        Drive.cleanup({_inflight = instance})
+      else
+        switch = false; instance:tick(true)
+        ticks = ticks + 31; instance:tick(true)
+        check(not instance.live, "interlock opens while armed")
+      end
+      switch = true; instance:tick(true)
+      ticks = ticks + 31; instance:tick(true)
+      check(instance.live and instance.phase == "live", "interrupted flight resumes in the air")
+      instance:tick(false)
+      check(instance.phase == (stepped and "post" or "ground"), "landing retains only a flight that stepped")
+      instance:cleanup(false)
+    end
+  end
+  local instance = drive()
+  instance:dispatch("step", 1, "touch")
+  Drive.cleanup({_inflight = instance})
+  switch = true; instance:tick(false); ticks = ticks + 31; instance:tick(false)
+  check(instance.phase == "post", "landing while backgrounded retains the post-flight list on reopening")
+  instance:cleanup(false)
+end
+
+-- Ground status reads the latest published verdict without rebuilding the scene.
+do
+  local instance = drive()
+  instance.phase, instance._checkedAt = "ground", ticks
+  instance._checkResult, instance._checkFault = {"mix_missing", "gvar_range"}, true
+  local view = {_inflight = instance, state = {}, zone = {w = 800, h = 480}}
+  Drive.sample(view)
+  local nodes = {}; Screen.buildFullscreen(nodes, view)
+  local line
+  for _, node in ipairs(nodes) do
+    local text = type(node.text) == "function" and node.text() or node.text
+    if type(text) == "string" and string.find(text, "Model:", 1, true) == 1 then line = node end
+  end
+  check(line ~= nil, "two-fault scene has a model status line")
+  local function text() return type(line.text) == "function" and line.text() or line.text end
+  check(string.find(text(), "Mixer", 1, true) and string.find(text(), "Variable", 1, true), "both setup faults are named")
+  local epoch = instance.valueEpoch
+  instance:forgetVerdict(); instance._checkResult, instance._checkedAt = {"gvar_range"}, ticks
+  Drive.sample(view)
+  check(not string.find(text(), "Mixer", 1, true) and string.find(text(), "Variable", 1, true),
+    "repairing one fault updates the standing model sentence")
+  check(instance.valueEpoch == epoch, "verdict-only publication does not rebuild the scene")
+  instance:forgetVerdict(); instance._checkResult, instance._checkedAt, instance._checkFault = "ok", ticks, false
+  Drive.sample(view)
+  check(text() == "Model: Setup OK", "control: all repaired produces setup OK")
+  instance.phase, instance.live, instance.seeded, instance.rawSwitch = nil, false, true, true
+  instance.rawSince = ticks - 31; switch = true; instance:tick(true)
+  check(instance.phase == "live", "all repaired permits the live phase")
+end
+
+-- Existing compact SD stamps are made readable only for display.
+do
+  local instance = drive()
+  instance.phase = "ground"
+  local snap = {phase="ground", setupVerdict="ok", sessionMode="resume", baseline={timestamp="20261025123456"}}
+  local view = {_inflight=instance, state={inflight=snap}, zone={w=800,h=480}}
+  local nodes = {}; Screen.buildFullscreen(nodes,view)
+  local session
+  for _, node in ipairs(nodes) do
+    local text = type(node.text) == "function" and node.text() or node.text
+    if type(text) == "string" and string.find(text, "Session:", 1, true) == 1 then session=node end
+  end
+  check(session and string.find(session.text(), "2026-10-25 12:34", 1, true), "compact timestamp displays readable date and minutes")
+  check(snap.baseline.timestamp == "20261025123456", "stored compact timestamp stays compatible")
+  snap.baseline.timestamp = "2026-10-25 12:34:56"
+  check(string.find(session.text(), "2026-10-25 12:34", 1, true) and not string.find(session.text(), "12:34:56", 1, true),
+    "control: existing separated timestamp displays the same minute precision")
+  snap.baseline.timestamp = "clock unavailable"
+  check(string.find(string.gsub(session.text(), "\n", " "), "clock unavailable", 1, true), "non-date timestamp text is retained in full")
+end
+
+-- The channel reader accepts raw EdgeTX units, including the overlap with microseconds.
+do
+  for _, raw in ipairs({-1200, -1024, 0, 700, 998, 1024, 1200}) do
+    check(Functions.channelRawToUs(raw) == math.floor(1500 + raw * 0.5 + 0.5), "raw channel conversion across its complete range")
+  end
+  for _, raw in ipairs({-1201, 1201, 1500, 2300, 2301, "unknown"}) do
+    check(Functions.channelRawToUs(raw) == nil, "values outside the raw range are refused")
+  end
+end
+
 print(checked .. " grouped tuning checks passed; positive pulse, sound and exit controls included")

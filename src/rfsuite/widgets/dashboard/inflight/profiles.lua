@@ -148,20 +148,20 @@ function M.begin(widget, drive, env, mode, target)
   if not widget.state.fblConnected or not env.queue() then return false, "no_link" end
   local board, uid = identity(env)
   if not board then return false, "reading" end
-  local baseline
+  local baseline, recovery
   if mode == "auto" then
     local reason
-    baseline, reason = Store.load(uid, board)
-    if baseline then mode = "resume"
+    baseline, reason, recovery = Store.load(uid, board, true)
+    if baseline or recovery then mode = "resume"
     elseif reason == "baseline_missing" then mode = "new"
     else return false, reason end
   end
   if mode == "restore" or mode == "resume" then
     local reason
-    baseline, reason = Store.load(uid, board)
-    if not baseline then return false, reason end
+    if not baseline and not recovery then baseline, reason, recovery = Store.load(uid, board, true) end
+    if not baseline and not recovery then return false, reason end
     -- A complete schema, not just the requested profile, must be present before any write.
-    if target and type(baseline[section(target.kind, target.index)]) ~= "table" then
+    if baseline and target and type(baseline[section(target.kind, target.index)]) ~= "table" then
       return false, "profile_unread"
     end
   end
@@ -170,7 +170,7 @@ function M.begin(widget, drive, env, mode, target)
     at = 1, plan = {{op = "initial", command = 101}}, serial = 0, results = {}, records = {}, targets = {}, targetRecords = {},
     values = { global = {}, pid = {}, rate = {} }, changes = {global = {}, pid = {}, rate = {}},
     env = env, prime = drive.prime,
-    validation = baseline and M.newValidation(baseline), validationPurpose = "input" }
+    validation = baseline and M.newValidation(baseline), validationPurpose = "input", recovery = recovery }
   drive.profileJob = job
   drive.profileBusy = true
   _G.rfsuite.inflightProfileJob = job
@@ -183,6 +183,10 @@ end
 
 function M.newValidation(data)
   return {data = data, last = nil, field = 1, pidCount = 0, rateCount = 0, pidMask = 0, rateMask = 0}
+end
+
+local function rangeError(fn, value)
+  return {kind = "firmware_range", name = fn.name, value = value}
 end
 
 function M.validateStep(work)
@@ -218,7 +222,8 @@ function M.validateStep(work)
     else
       if tracked(fn) and (fn.id < 83 or data.meta.masterGains) and (Functions.scopeOf(fn.id) or "global") == work.kind then
         local value = work.values[tostring(fn.id)]
-        if type(value) ~= "number" or value ~= value or value ~= math.floor(value) or value < fn.min or value > fn.max then return true, false end
+        if type(value) ~= "number" or value ~= value or value ~= math.floor(value) then return true, false end
+        if value < (fn.fwMin or fn.min) or value > (fn.fwMax or fn.max) then return true, false, rangeError(fn, value) end
       end
       work.field = work.field + 1
     end
@@ -296,7 +301,8 @@ local function fieldsInto(job, op, parsed)
       if fn.id >= 83 and value == nil and not (job.baseline and job.baseline.meta.masterGains) then
         -- Master gains were added without an API-version change; reply length declares them.
       else
-        if not value or value ~= value or value < fn.min or value > fn.max then return "baseline_incomplete" end
+        if not value or value ~= value then return "baseline_incomplete" end
+        if value < (fn.fwMin or fn.min) or value > (fn.fwMax or fn.max) then return rangeError(fn, value) end
         values[fn.id] = value
         changes[fn.id] = base and base[tostring(fn.id)] ~= value or nil
         if fn.id >= 83 then job.masterGains = true end
@@ -378,7 +384,7 @@ local function send(widget, drive, job, op)
     -- MSP selections precede telemetry updates. A telemetry-keyed response cache can still
     -- name the previous profile, so transaction reads must reach the FC.
     local cache = requireModule("tasks/msp/cache.lua")
-    if cache then cache.clear() end
+    if cache and cache.keyFor(command) then cache.clear(command) end
   end
   job.serial = job.serial + 1
   local serial = job.serial
@@ -492,6 +498,15 @@ function M.retryReturn(drive)
   return false
 end
 
+function M.drop(drive)
+  local job = drive.profileJob
+  if not job then return end
+  if job.store then Store.cancel(job.store) end
+  cancelRequest(job)
+  if _G.rfsuite.inflightProfileJob == job then _G.rfsuite.inflightProfileJob = nil end
+  drive.profileJob, drive.profileBusy, drive.restorePending = nil, nil, nil
+end
+
 function M.tick(widget, drive, hasRoom)
   local job = drive.profileJob
   if not job then return false end
@@ -508,11 +523,22 @@ function M.tick(widget, drive, hasRoom)
   if job.cancelled and not job.error then abort(drive, job, "cancelled"); return true end
   if job.returnBlocked then return true end
   if hasRoom == false then return true end
+  if job.recovery then
+    local done, data, reason = Store.loadStep(job.recovery, job.uid, job.identity)
+    if done then
+      job.recovery = nil
+      if data and job.target and type(data[section(job.target.kind, job.target.index)]) ~= "table" then
+        reason, data = "profile_unread", nil
+      end
+      if data then job.baseline = data else job.error, job.finished = reason, true end
+    end
+    return true
+  end
   if job.validation then
-    local done, valid = M.validateStep(job.validation)
+    local done, valid, reason = M.validateStep(job.validation)
     if done then
       job.validation = nil
-      if not valid then job.error, job.finished = "baseline_incomplete", true
+      if not valid then job.error, job.finished = reason or "baseline_incomplete", true
       elseif job.validationPurpose == "output" then
         local reason
         job.store, reason = Store.begin(job.uid, job.data)
@@ -524,7 +550,10 @@ function M.tick(widget, drive, hasRoom)
   if job.finished then finish(drive, job); return true end
   if job.store then
     local done, reason = Store.step(job.store)
-    if done then job.store = nil; job.error = reason; job.finished = true end
+    if done then
+      if reason then Store.cancel(job.store) end
+      job.store = nil; job.error = reason; job.finished = true
+    end
     return true
   end
   if job.reply then

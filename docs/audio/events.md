@@ -185,10 +185,10 @@ The new value, preceded by the name of the adjustment function whenever the pilo
 The flight controller reports an adjustment for three seconds after it was made, and nothing tells how long ago that was. So an adjustment still being reported when the announcements start is not announced: this happens when the configuration tool is opened, when the background decoder starts or the dashboard takes over from it -- where the part that stood before has usually announced it already -- and for an adjustment made while the suite is still connecting.
 
 The grouped tuning overlay shares this switch and the critical-alarm quiet period. It uses
-`inflight/selected.wav` before the selected function name and known value. Profile changes
-announce `evt/profile.wav` plus the active number. Unread/unknown profiles use
+`inflight/selected.wav` before the selected function name and known value. Profile changes use the general PID/rate announcement when enabled; otherwise the in-flight overlay
+announces `evt/profile.wav` plus the active number. In flight, unread/unknown profiles use
 `inflight/paused.wav`; returning to read profiles uses `inflight/resumed.wav` without an
-interlock cycle. `inflight/cycle.wav` is retained without a caller. Group selection
+interlock cycle. Both cues are silent on the ground. Group selection
 speaks the group title from `inflight/group/<group>.wav`, and a function its name from
 `inflight/fn/<id>.wav`, the same recording the adjustment announcement uses. Browse names settle for 700 ms, with newer requests
 replacing earlier ones. Files resolve below `SOUNDS/rf/<locale>/` in both EN and DE packages.

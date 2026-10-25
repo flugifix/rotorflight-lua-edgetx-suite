@@ -172,6 +172,7 @@ local function boardOnLink()
   local signature = (type(session) == "table") and session.signature or nil
   return signature
 end
+M.boardOnLink = boardOnLink
 
 local function queueOf()
   local state = mspState()
@@ -429,7 +430,7 @@ function M.newDerivation(records, map, bankChannel, valueChannel)
     records = records, map = map,
     bankCh = bankChannel, valueCh = valueChannel,
     phase = "scan", at = 0,
-    usable = {}, usableSlot = {}, skipped = {},
+    usable = {}, usableSlot = {}, skipped = {}, alwaysWindows = {},
     bands = {}, bandSeen = {}, rows = {}, rowSeen = {},
     enableWindows = {}, enableSeen = {}, refusedBank = {},
     set = {}, rowValues = {}, cellRecord = {}, bankWindows = {}, cells = {}, placed = 0
@@ -456,7 +457,14 @@ function M.deriveStep(work, budget)
       if type(record) == "table" and (tonumber(record.adjFunction) or 0) ~= 0 then
         local enableCh = M.auxToWireChannel(record.enaChannel, work.map)
         local valueCh = M.auxToWireChannel(record.adjChannel, work.map)
-        if enableCh == work.bankCh and valueCh == work.valueCh then
+        if (tonumber(record.enaChannel) or 0) >= Functions.AUX_FIELD_COUNT and valueCh == work.valueCh then
+          -- An out-of-range enable field is always active (fc/rc_adjustments.c).
+          work.skipped[#work.skipped + 1] = slot
+          for _, range in ipairs({record.adjRange1, record.adjRange2}) do
+            local low, high = Functions.windowBounds(range)
+            if low ~= nil then work.alwaysWindows[#work.alwaysWindows + 1] = {low = low, high = high, slot = record} end
+          end
+        elseif enableCh == work.bankCh and valueCh == work.valueCh then
           -- Every enable window of the pair, stepped or continuous: the board runs each slot
           -- whose window holds the bank channel (fc/rc_adjustments.c), and a continuous one then
           -- sets its parameter from the value channel, so a parked bank value inside its window
@@ -619,8 +627,19 @@ function M.deriveStep(work, budget)
       end
     end
     if work.placed == 0 then return true, nil, work.skipped end
-    work.phase = "cross"
+    work.phase = #work.alwaysWindows > 0 and "always" or "cross"
     work.at = 0
+    return false, nil, nil
+  end
+
+  if work.phase == "always" then
+    -- Copy one window to each bank per unit, separately from placement and cross-checking.
+    while work.at < #work.alwaysWindows do
+      if budget ~= nil and taken >= budget then return false, nil, nil end
+      work.at, taken = work.at + 1, taken + 1
+      for _, windows in pairs(work.bankWindows) do windows[#windows + 1] = work.alwaysWindows[work.at] end
+    end
+    work.phase, work.at = "cross", 0
     return false, nil, nil
   end
 
@@ -631,15 +650,16 @@ function M.deriveStep(work, budget)
     -- one window that also sits inside another would step two parameters at once -- the very
     -- thing this map exists to rule out. The row says it cannot be stepped instead.
     while work.at < #work.cells do
-      if budget ~= nil and taken >= budget then return false, nil, nil end
-      work.at = work.at + 1
-      taken = taken + 1
-      local cell = work.cells[work.at]
+      local cell = work.cells[work.at + 1]
+      local windows = work.bankWindows[cell.bank]
+      -- Charge extra windows against the slice: always-active slots can enlarge every bank.
+      local cost = math.ceil(#windows / (Functions.ROW_COUNT * 2))
+      if budget ~= nil and (taken >= budget or (taken > 0 and taken + cost > budget)) then return false, nil, nil end
+      work.at, taken = work.at + 1, taken + cost
       local values = work.rowValues[cell.bank][cell.row]
       local own = work.cellRecord[cell.bank][cell.row]
       local usUp = values.up ~= nil and Functions.gvarToUs(values.up) or nil
       local usDown = values.down ~= nil and Functions.gvarToUs(values.down) or nil
-      local windows = work.bankWindows[cell.bank]
       for i = 1, #windows do
         local window = windows[i]
         local foreign = window.slot ~= own
@@ -1331,6 +1351,14 @@ function M.tick(widget, drive)
   if type(widget.state) ~= "table" then return end
 
   if drive.profileJob ~= nil then
+    local job = drive.profileJob
+    local board = job.suspended and boardOnLink()
+    if board and board ~= job.identity then
+      profileModule().drop(drive)
+      if job.original then logPrime("original profile return is still owed to flight controller %s", job.identity) end
+      boardChanged(drive, board)
+      return
+    end
     profileModule().tick(widget, drive, M.passHasRoom(widget, drive))
     return
   end

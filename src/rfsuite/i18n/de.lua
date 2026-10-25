@@ -3427,6 +3427,8 @@ return {
       inflight_pid_mismatch = "PID-Profil weicht ab",
       inflight_rate_mismatch = "Ratenprofil weicht ab",
       inflight_profile_unknown = "PID# oder RTE# unbekannt",
+      inflight_board_identity_pending = "FC-Identität abwarten",
+      inflight_firmware_range = "%s: Wert %s außerhalb des Firmwarebereichs",
       inflight_profile_cycle = "Freigabe aus- und einschalten",
       inflight_report_sync = "Frische Verstell-Telemetrie abwarten",
       inflight_active_profiles = "Aktiv PID / Rate",

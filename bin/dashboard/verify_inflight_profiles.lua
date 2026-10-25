@@ -41,14 +41,14 @@ rename = function(a, b) if files[b] or not files[a] then return 1 end; files[b],
 mkdir = function() return 0 end
 
 _G.rfsuite = {session = {apiVersion = {12,0,10}, signature = fc.identity, mcu_id = fc.uid},
-  preferences = {audio_events = {adjustment_events = true}}}
+  preferences = {audio_events = {adjustment_events = true, pid_profile = false, rate_profile = false}}}
 rfsuite.require = function(path)
   if path == "lib/log.lua" then return {wanted = function() return false end} end
   if path == "lib/audio.lua" then return {adjustmentAllowed = function() return true end,
     playEventFile = function(f) sounds[#sounds+1] = f end,
     playNumber = function(n) numbers[#numbers+1] = n end} end
   if path == "tasks/msp/runtime.lua" then return {getState = function() return msp end} end
-  if path == "tasks/msp/cache.lua" then return {clear = function() end} end
+  if path == "lib/sensors.lua" then return {getValue = function(name) return name == "pid_profile" and fc.pid or fc.rate end} end
   if string.find(path, "tasks/msp/api/", 1, true) and apis[path] then return apis[path] end
   if not cache[path] then cache[path] = assert(loadfile("src/rfsuite/" .. path))() end
   return cache[path]
@@ -171,6 +171,7 @@ check(only.pid[2] and not only.pid[1] and only.rate[3] and not only.rate[2], "no
 check(Profiles.selection("pid",3)==2 and Profiles.selection("rate",4)==0x83, "firmware bit-7 encoding")
 check(not Profiles.reachable({}, {pid_profile_count=0}), "unknown counts fail closed")
 
+fc.data.pid1[112].pid_1_P = 300
 local d=makeDrive(slots)
 check(Prime.refreshValues(widget,d), "full profile read starts")
 local old=d.values
@@ -181,19 +182,79 @@ check(d.sessionProfiles.pid[6] and d.profileValues.pid[6][14] and d.profileValue
 local globalReads=0
 for _,r in ipairs(sent) do if r.command==142 then globalReads=globalReads+1 end end
 check(globalReads==1, "global values read exactly once")
+check(d.profileValues.pid[1][14] == 300, "firmware-valid PID gain above the Configurator range is read and listed")
 local data=assert(Store.load(fc.uid,fc.identity))
 check(Profiles.complete(data) and data.meta.timestamp=="2026-10-24 17:30:00", "SD round trip and timestamp")
 local _,why=Store.load(fc.uid,"FC-B"); check(why=="baseline_identity", "FC identity refuses wrong baseline")
 local savedFile=files[Store.path(fc.uid)]
+
+-- Out-of-range board values name the function and value, and leave the original pair restored.
+do
+  fc.data.pid1[112].pid_1_P = 1001
+  local instance = makeDrive(slots)
+  check(Prime.refreshValues(widget, instance), "invalid firmware value read starts")
+  finish(instance)
+  local reason = instance.prime.error
+  check(type(reason) == "table" and reason.name == Functions.nameOf(14) and reason.value == 1001,
+    "firmware range refusal names the PID function and invalid value")
+  check(not instance.sessionProfiles and fc.pid == 2 and fc.rate == 3, "invalid firmware range never publishes a session")
+  fc.data.pid1[112].pid_1_P = 300
+  local invalid = copy(data); invalid.pid1["14"] = 1001
+  local work = Profiles.newValidation(invalid)
+  local done, valid, why
+  repeat done, valid, why = Profiles.validateStep(work) until done
+  check(not valid and why.name == Functions.nameOf(14) and why.value == 1001, "SD validation uses the same named firmware refusal")
+  check(Profiles.complete(data) and Functions.standardLimits(14).max == 250,
+    "control: firmware-valid baseline is complete while standard-slot bounds remain unchanged")
+end
+
 files[Store.path(fc.uid)]=nil
 local tempPath=string.gsub(Store.path(fc.uid), "%.lua$", ".tmp.lua")
 files[tempPath]=savedFile
-check(Store.load(fc.uid,fc.identity)~=nil, "interrupted promotion loads the Lua-suffixed temporary file")
+do
+  local cost = 0
+  debug.sethook(function() cost = cost + 1 end, "", 1)
+  local recovered = Store.load(fc.uid, fc.identity)
+  debug.sethook()
+  check(recovered ~= nil, "interrupted promotion loads the Lua-suffixed temporary file")
+  print("temporary recovery validation: " .. cost .. " VM instructions")
+end
 files[tempPath]=nil
 files[Store.path(fc.uid)..".tmp"]=savedFile
 check(loadScript(Store.path(fc.uid)..".tmp")==nil, "EdgeTX stem rule rejects the old lua.tmp name")
 files[Store.path(fc.uid)..".tmp"]=nil
 files[Store.path(fc.uid)]=savedFile
+
+-- Only a fully validated orphan can recover an absent main file; cancellation removes it.
+do
+  local path = Store.path(fc.uid)
+  local bytecode = string.gsub(tempPath, "%.lua$", ".luac")
+  files[path], files[tempPath] = nil, "return {meta={identity='FC-A',uid='UID-A'}}"
+  local _, reason = Store.load(fc.uid, fc.identity)
+  check(reason == "baseline_missing", "incomplete temporary baseline cannot become session start values")
+  files[path], files[tempPath] = "invalid Lua", savedFile
+  local _, why = Store.load(fc.uid, fc.identity)
+  check(why == "baseline_missing", "present but corrupt main file never falls back to a temporary baseline")
+  files[path], files[tempPath], files[bytecode] = savedFile, savedFile, "stale compiled temporary"
+  local work = assert(Store.begin(fc.uid, data))
+  check(files[bytecode] == nil and files[tempPath] ~= savedFile, "begin removes stale source and compiled temporary files")
+  while work.phase ~= "promote" do local done = Store.step(work); check(not done, "temporary write reaches pre-promotion boundary") end
+  files[path] = nil
+  Store.cancel(work)
+  local loaded, reason = Store.load(fc.uid, fc.identity)
+  check(not loaded and reason == "baseline_missing" and files[tempPath] == nil,
+    "aborting after write before promotion leaves no recoverable start values")
+  files[path] = savedFile
+  work = assert(Store.begin(fc.uid, data))
+  while work.phase ~= "promote" do Store.step(work) end
+  files[bytecode] = "stale compiled temporary"
+  local done, why
+  repeat done, why = Store.step(work) until done
+  check(not why and files[bytecode] == nil and Store.load(fc.uid, fc.identity) ~= nil,
+    "control: promoted baseline loads and leaves no compiled temporary")
+  files[path] = savedFile
+end
+
 local function aborted(reason, armed)
   local instance=makeDrive(slots)
   check(Prime.refreshValues(widget,instance), "interrupted read starts")
@@ -406,14 +467,98 @@ do
   end
 end
 local reconnected=makeDrive()
+local loads, oldLoad = 0, Store.load
+Store.load = function(...) loads = loads + 1; return oldLoad(...) end
+local ResponseCache = rfsuite.require("tasks/msp/cache.lua")
+ResponseCache.put(10, {42}, ResponseCache.keyFor(10))
 check(Prime.start(widget,reconnected,true), "automatic full prime starts after restart")
 for _=1,3000 do
   pass(reconnected)
   if not Prime.isRunning(reconnected) then break end
 end
+Store.load = oldLoad
+check(loads == 1, "automatic resume loads the SD baseline exactly once")
+local craftCache = ResponseCache.get(10)
+check(craftCache and craftCache[1] == 42, "profile reads retain unrelated connection cache entries")
+ResponseCache.put(112, {99}, ResponseCache.keyFor(112))
+ResponseCache.clear(112)
+check(ResponseCache.get(112) == nil and ResponseCache.get(10)[1] == 42, "targeted invalidation clears only the read command")
 check(reconnected.prime.phase=="done" and reconnected.sessionProfiles.pid[6]
   and files[Store.path(fc.uid)]==savedFile, "full prime resumes persisted membership without replacing start values")
 check(fc.pid==2 and fc.rate==3, "reconnect prime returns initial pair")
+
+-- Recovery validation is also sliced when an automatic job finds only a complete orphan.
+do
+  local path = Store.path(fc.uid)
+  files[path], files[tempPath] = nil, savedFile
+  local data, reason, work = Store.load(fc.uid, fc.identity, true)
+  check(data == nil and reason == "baseline_recovering" and work ~= nil, "orphan recovery defers full validation")
+  local peak, done, recovered, why = 0
+  repeat
+    local count = 0
+    debug.sethook(function() count = count + 1 end, "", 1)
+    done, recovered, why = Store.loadStep(work, fc.uid, fc.identity)
+    debug.sethook()
+    peak = math.max(peak, count)
+  until done
+  check(recovered and not why and Profiles.complete(recovered), "sliced orphan recovery accepts only the complete baseline")
+  print("sliced temporary recovery peak: " .. peak .. " VM instructions")
+  local instance = makeDrive(slots)
+  check(Prime.start(widget, instance, true), "automatic read starts with an orphan baseline")
+  for _ = 1, 3000 do pass(instance); if not Prime.isRunning(instance) then break end end
+  check(instance.sessionMode == "resume" and instance.baseline.pid1["14"] == 300,
+    "automatic job completes sliced recovery without replacing start values")
+  files[path], files[tempPath] = savedFile, nil
+end
+
+-- A suspended return belongs to its identified board, never the next one on the link.
+do
+  local instance = makeDrive(slots)
+  check(Prime.refreshValues(widget, instance), "board-switch read starts on A")
+  while not instance.profileJob.original do pass(instance) end
+  widget.state.fblConnected = false; msp.values.mcuId = nil; Prime.tick(widget, instance)
+  check(instance.profileJob.suspended and instance.restorePending, "lost link suspends A's initial return pair")
+  widget.state.fblConnected = true
+  fc.identity, fc.uid = "FC-B", "UID-B"
+  rfsuite.session.signature, rfsuite.session.mcu_id = fc.identity, fc.uid
+  msp.values.mcuId, msp.signatureMcuId = fc.uid, fc.uid
+  Prime.tick(widget, instance)
+  check(instance:profileRefusal() == "session_unread" and not instance.restorePending and not instance.profileJob,
+    "B drops A's suspended job and pending-return refusal")
+  check(Prime.refreshValues(widget, instance), "a fresh read can start immediately on B")
+  for _ = 1, 3000 do
+    pass(instance)
+    if not Prime.isRunning(instance) then break end
+  end
+  check(instance.sessionProfiles ~= nil, "B publishes its own session")
+  fc.identity, fc.uid = "FC-A", "UID-A"
+  rfsuite.session.signature, rfsuite.session.mcu_id = fc.identity, fc.uid
+  msp.values.mcuId, msp.signatureMcuId = fc.uid, fc.uid
+end
+
+-- A returning link must identify itself before the session is allowed to emit a pulse.
+do
+  local instance = makeDrive(slots)
+  instance.sessionProfiles, instance.profileValues = d.sessionProfiles, d.profileValues
+  instance.profilePrevious = {pid = {}, rate = {}, global = {}}
+  instance.live, instance.phase, instance.reportFence = true, "live", nil
+  check(instance:dispatch("step", 1, "touch"), "identified A permits a session step")
+  instance:cleanup(false); tick = tick + 50
+  widget.state.fblConnected = false; msp.values.mcuId = nil; Prime.tick(widget, instance)
+  widget.state.fblConnected = true
+  local accepted, reason = instance:dispatch("step", 1, "touch")
+  check(not accepted and reason == "board_unknown", "reconnected link without UID refuses steps")
+  msp.values.mcuId = fc.uid
+  check(instance:dispatch("step", 1, "touch"), "control: A's matching UID permits steps again")
+  instance:cleanup(false); tick = tick + 50
+  msp.values.mcuId, msp.signatureMcuId, rfsuite.session.signature = "UID-B", "UID-B", "FC-B"
+  accepted, reason = instance:dispatch("step", 1, "touch")
+  check(not accepted and reason == "session_unread", "another identified board refuses A's session even while armed")
+  widget.state.armed = false; Prime.tick(widget, instance)
+  check(not instance.sessionProfiles, "identified board change ends the old session")
+  msp.values.mcuId, msp.signatureMcuId, rfsuite.session.signature = fc.uid, fc.uid, fc.identity
+end
+
 
 -- Disk-write failure is detected by read-back; the previous complete baseline is untouched.
 local realWrite=io.write
@@ -460,6 +605,8 @@ BLACK,WHITE,BLUE,RED,GREEN,YELLOW=0,1,2,3,4,5
 LEFT,RIGHT,CENTER=0,1,2
 lvgl={}
 local Screen=rfsuite.require("widgets/dashboard/inflight/screen.lua")
+check(Screen.restoreReason({kind="firmware_range",name=Functions.nameOf(14),value=1001}, function(_, fallback) return fallback end)
+  == "Pitch P-gain: value 1001 outside firmware range", "firmware refusal renders its function and invalid value")
 for _,size in ipairs({{480,272},{480,320},{800,480}}) do
   local view={_inflight=reconnected,zone={w=size[1],h=size[2]},state=widget.state}
   local nodes={}

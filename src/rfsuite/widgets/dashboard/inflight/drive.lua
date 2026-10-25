@@ -97,6 +97,7 @@ M.migrateTrims = Setup.migrateTrims
 M.check = Setup.check
 
 local logDrive = Setup.log
+local boardIdentity
 local SWITCH_SLICE = Setup.SWITCH_SLICE
 local SWITCH_WALK_LIMIT = Setup.SWITCH_WALK_LIMIT
 
@@ -381,10 +382,10 @@ function Drive:setPhase(phase)
     end
 
   if phase == M.PHASE_LIVE then
-    -- A new flight. What the last one changed is no longer the question, and the counter that
-    -- decides whether there will be a delta to show starts again.
+    -- A ground-to-air transition starts a new count. A nil phase can also mean the widget
+    -- was backgrounded or the interlock opened in flight, so it keeps that flight's steps.
     self.post = false
-    self.fired = 0
+    if was == M.PHASE_GROUND or was == M.PHASE_POST then self.fired = 0 end
     self.deltaPage = 1
     self.valueMode = false
     -- Every flight starts at the top of the list, not at whatever cell the enable channel or an
@@ -421,6 +422,8 @@ end
 function Drive:endPost(why)
   if not self.post then return end
   self.post = false
+  -- Dismissed: a later pass with no phase (the widget left and came back) must not bring it back.
+  self.fired = 0
   self.valueEpoch = self.valueEpoch + 1
   logDrive("postflight ended: %s", tostring(why))
 end
@@ -589,19 +592,6 @@ function Drive:ensureBankArmed()
   if self.bankWritten == want then return false, "armed" end
   if self:valueBusy() then return false, "busy" end
   return self:armBank(self.bank)
-end
-
---- A bank chosen by hand, from a chip on the fullscreen screen.
---
--- Refused while the value variable is not 0: moving the enable channel under a value that is
--- inside a step window is how one tap ends up counted against another parameter.
-function Drive:setBank(bank)
-  bank = tonumber(bank)
-  if bank == nil or bank < 1 or bank > Functions.BANK_COUNT then return false, "range" end
-  if self:valueBusy() then return false, "busy" end
-  self.bank = bank
-  self.row = 1
-  return self:armBank(bank)
 end
 
 -- Compatibility entry points use the same dispatcher as touch and keys. The bank/row are still
@@ -1152,6 +1142,12 @@ end
 function Drive:profileRefusal()
   if self.profileBusy or self.restorePending then return "profile_reading" end
   if self.sessionProfiles == nil then return "session_unread" end
+  if self.board then
+    if not boardIdentity then boardIdentity = requireModule("widgets/dashboard/inflight/prime.lua").boardOnLink end
+    local board = boardIdentity()
+    if board == nil then return "board_unknown" end
+    if board ~= self.board then return "session_unread" end
+  end
   if self.profile == nil or self.rateProfile == nil then return "profile_unknown" end
   if not self.sessionProfiles.pid[self.profile] then return "pid_unread" end
   if not self.sessionProfiles.rate[self.rateProfile] then return "rate_unread" end
@@ -1399,7 +1395,8 @@ end
 function Drive:fastTick(now)
   if self.fastAt == now then return end
   self.fastAt = now
-  self:watchProfiles()
+  local _, refusal = self:watchProfiles()
+  local tuning = self.live == true and self.phase == M.PHASE_LIVE and refusal == nil
   if self.stepRefusedUntil ~= nil and now >= self.stepRefusedUntil then
     self.stepRefusedUntil, self.stepRefusedReason = nil, nil
   end
@@ -1407,8 +1404,8 @@ function Drive:fastTick(now)
   -- The last adjustment the board reports having made. AdjF reads 0 between adjustments, so a
   -- non-zero reading is a fresh one and its value belongs to that function.
   local adjF = self.radio.sensor("AdjF")
-  if self.reportFence and self:profileRefusal() == nil and adjF == 0 then self.reportFence = nil end
-  if adjF and adjF > 0 and not self.reportFence and self:profileRefusal() == nil then
+  if self.reportFence and refusal == nil and adjF == 0 then self.reportFence = nil end
+  if adjF and adjF > 0 and not self.reportFence and refusal == nil then
     local adjV = self.radio.sensor("AdjV")
     if adjV ~= nil and self.values[adjF] ~= adjV then
       -- Where this parameter stood BEFORE the step the board has just reported. It is what the
@@ -1451,11 +1448,6 @@ function Drive:fastTick(now)
       -- numbers follow the board on the next frame, and the tree is left standing.
       self.reportEpoch = self.reportEpoch + 1
     end
-    -- Which function the board last reported, kept even when its value did not move: the one
-    -- witness the radio has that the adjustment teller had something to say about THIS parameter.
-    -- No epoch either: which function was reported is a field on the snapshot, and the guard in
-    -- `publish` watches it, so it travels on the next published snapshot without a rebuild.
-    self.spokenId = adjF
   end
 
   -- The postflight list is paged with the walk trim, and it is the ONLY thing a trim does out
@@ -1474,7 +1466,7 @@ function Drive:fastTick(now)
   -- be read at all, and the walk that resolves it is kept off while a touch pulse or hold owns the
   -- variable, as it always was.
   local touching = (self.pulseUntil ~= nil) or (self.holdRow ~= nil)
-  if self:tuning() and (self.trimsResolved or not touching) then
+  if tuning and (self.trimsResolved or not touching) then
     self:pollNavigate(now)
     self:pollTrimStep(now)
   end
@@ -1499,7 +1491,7 @@ function Drive:fastTick(now)
   -- would step once and never again; it goes back to 0 for the gap, and the next pulse is a new
   -- plateau the board counts once. The repeat is the pulse plus the gap plus however late the
   -- passes run, slower and less even than the board's own 200 ms, and every step is exactly one.
-  if self:tuning() and self.holdRow ~= nil and self.pulseUntil == nil and now >= (self.coolUntil or 0) then
+  if tuning and self.holdRow ~= nil and self.pulseUntil == nil and now >= (self.coolUntil or 0) then
     local code = Functions.rowCode(self.holdRow, self.holdUp, self.rowValues, self.bank)
     if code ~= nil then
       self.pulseCode = code
@@ -1538,12 +1530,13 @@ function Drive:watchProfiles()
     self:activateProfiles()
     self.reportEpoch = self.reportEpoch + 1
     local teller = announcer()
-    if not self.profileBusy and teller and type(teller.profile) == "function" then
-      if pid and pid ~= oldPid then teller.profile(self, pid) end
-      if rate and rate ~= oldRate then teller.profile(self, rate) end
+    if self.phase == M.PHASE_LIVE and not self.profileBusy and teller and type(teller.profile) == "function" then
+      local events = (self._radioSource or _G.rfsuite.preferences or {}).audio_events or {}
+      if pid and pid ~= oldPid and events.pid_profile == false then teller.profile(self, pid) end
+      if rate and rate ~= oldRate and events.rate_profile == false then teller.profile(self, rate) end
     end
   end
-  if not self.profileBusy and self.sessionProfiles then
+  if self.phase == M.PHASE_LIVE and not self.profileBusy and self.sessionProfiles then
     local teller = announcer()
     if refusal and (changed or not wasPaused) then
       if teller and type(teller.pause) == "function" then teller.pause(self) end
@@ -1551,7 +1544,7 @@ function Drive:watchProfiles()
       if teller and type(teller.resumed) == "function" then teller.resumed(self) end
     end
   end
-  return changed
+  return changed, refusal
 end
 
 --- One pass of the drive. Everything with a cost is behind `live`; a widget whose pilot has the
@@ -1579,7 +1572,7 @@ function Drive:tick(armed)
       self.valueEpoch = self.valueEpoch + 1
     end
     self:setPhase(M.PHASE_LIVE)
-  elseif self.phase == M.PHASE_LIVE then
+  elseif self.phase == M.PHASE_LIVE or (self.phase == nil and self.fired > 0) then
     -- The disarm. The delta is worth a screen only if this drive actually asked for a step: a
     -- flight nobody tuned lands back on the ground read-out and not on an empty list.
     self:setPhase((self.fired > 0) and M.PHASE_POST or M.PHASE_GROUND)
@@ -1684,8 +1677,8 @@ local function storeStamp(path)
   local time = info.time
   local parts = tostring(info.size)
   if type(time) == "table" then
-    parts = parts .. ":" .. tostring(time.year) .. tostring(time.mon) .. tostring(time.day)
-      .. tostring(time.hour) .. tostring(time.min) .. tostring(time.sec)
+    parts = parts .. ":" .. string.format("%04d-%02d-%02d %02d:%02d:%02d", time.year, time.mon, time.day,
+      time.hour, time.min, time.sec)
   end
   return parts
 end
@@ -1878,11 +1871,11 @@ local function publish(widget, drive)
   -- taken moves an epoch -- the first verdict after the walk is taken on a pass after the snapshot
   -- was built -- so the guard below watches the answer itself.
   local setupFault = drive._checkFault == true or trimsChecking
+  local setupVerdict = trimsChecking and M.TRIMS_PENDING or drive._checkResult
   if type(snapshot) == "table" and snapshot.epoch == epoch
     and snapshot.reportEpoch == reportEpoch
     and snapshot.setupFault == setupFault
-    and snapshot.trimsChecking == trimsChecking
-    and snapshot.spokenId == drive.spokenId
+    and snapshot.setupVerdict == setupVerdict
     and snapshot.live == drive.live
     and snapshot.bank == drive.bank and snapshot.row == drive.row
     and snapshot.holding == holding
@@ -1890,46 +1883,8 @@ local function publish(widget, drive)
     and snapshot.group == drive.group and snapshot.entry == drive.entry
     and snapshot.valueMode == drive.valueMode and snapshot.profilePaused == drive.profilePaused
     and snapshot.primePhase == primePhase and snapshot.primeDone == primeDone
-    and snapshot.stepRefusedUntil == drive.stepRefusedUntil
-    and snapshot.stepRefusedReason == drive.stepRefusedReason
-    and snapshot.profileBannerUntil == drive.profileBannerUntil then
+    and snapshot.stepRefusedReason == drive.stepRefusedReason then
     return
-  end
-
-  -- The names of the trims the rows are driven from. Read here rather than in the screen because
-  -- the resolved block is the drive's -- the screen is forbidden to probe the radio at all -- and
-  -- because the labels are the LOCALISED, renameable stick short names, so no stem can be guessed
-  -- from the row number. In navigate mode a row carries no trim of its own and the field stays
-  -- nil: one trim adjusts whichever row is selected, and naming it on all six would be a lie.
-  local rows = {}
-  local mask = drive:trimRowsPresent()
-  local trims = (drive.trimsResolved == true) and drive.trims or nil
-  local rowTrim = drive.settings.rowTrim
-  local navigate = drive:navigateMode()
-  for row = 1, Functions.ROW_COUNT do
-    local id = drive:functionId(drive.bank, row)
-    local trimName = nil
-    if not navigate and type(trims) == "table" and type(rowTrim) == "table" then
-      local entry = Setup.trimEntry(trims, rowTrim[row])
-      trimName = entry and entry.name or nil
-    end
-    rows[row] = {
-      id = id,
-      name = id and Functions.nameOf(id) or nil,
-      value = id and drive.values[id] or nil,
-      trim = mask[row] == true,
-      trimName = trimName
-    }
-  end
-
-  -- Which trim moves the parameter that is selected. In navigate mode that is the adjust trim,
-  -- whatever the row; in rows mode it is the selected row's own.
-  local activeTrim = nil
-  if type(trims) == "table" then
-    local stored = navigate and drive.settings.adj_trim
-      or (type(rowTrim) == "table" and rowTrim[drive.row] or 0)
-    local entry = Setup.trimEntry(trims, stored)
-    activeTrim = entry and entry.name or nil
   end
 
   -- The ground half's progress, summarised rather than handed over. Its own table is mutated in
@@ -1957,25 +1912,8 @@ local function publish(widget, drive)
     transferState = { kind = transfer.kind, state = transfer.state, reason = transfer.reason, results = transfer.results }
   end
 
-  -- What the board's own slot table said when it was held against the standard set. The verdict,
-  -- the count and the cells named below travel; the full list of slots behind them stays the ground
-  -- half's own, and the screen has room for a sentence rather than for a list.
-  local compare = drive.compare
-  local compareState = nil
-  if type(compare) == "table" then
-    compareState = { verdict = compare.verdict, count = compare.count,
-      -- Whether the step is the whole of the difference. It travels because the pilot can fix
-      -- that one on the radio, in one field, and the sentence on screen is a different sentence.
-      stepOnly = compare.stepOnly,
-      -- The cells whose slot holds another function, and which one: a step there moves that
-      -- function rather than the parameter the row names, so the sentence names them. It is the
-      -- finished comparison's own list, complete when the verdict is, and read and never written.
-      named = compare.named }
-  end
-
   local activeId = drive:functionId(drive.bank, drive.row)
   local activeValue = activeId and drive.values[activeId]
-  local activePrevious = activeId and drive.previous[activeId]
   local function profileNumber(value) return value ~= nil and tostring(value) or "?" end
   local group = drive.groups[drive.group]
   local groupRows = {}
@@ -2021,18 +1959,12 @@ local function publish(widget, drive)
     -- The report counter travels beside the layout epoch so that the guard above reads one flat
     -- table. Nothing in the widget's render key may ever be derived from it.
     reportEpoch = reportEpoch,
-    -- Both switches, and the conjunction the drive actually runs on. The two flags travel beside
-    -- it because a surface that says nothing is happening should be able to say which of them is
-    -- the one that is off.
-    active = drive.settings.active == true,
-    -- and the third reason nothing is happening: the model's own setup check refused. It is on
+    -- The model's setup check can refuse the interlock. Its answer is on
     -- the snapshot because the widget decides from the snapshot alone which surface a pass
     -- belongs to, and a refusal has to reach a surface that can say so. A closing refused while
     -- the trims are being walked is that refusal too: its surface says the trims are being checked.
     setupFault = setupFault,
-    trimsChecking = trimsChecking,
-    radioEnabled = drive.settings.radio_enabled == true,
-    modelEnabled = drive.settings.model_enabled == true,
+    setupVerdict = setupVerdict,
     live = drive.live,
     -- Which of the three surfaces this is. It is on the snapshot AND in the widget's render key,
     -- because a phase change is a different screen and not a different number on the same one.
@@ -2058,45 +1990,16 @@ local function publish(widget, drive)
       and (t("widgets.dashboard.inflight_start", "Start") .. " " .. tostring(drive.primedValues[activeId])
         .. " / " .. string.format("%+d", activeValue - drive.primedValues[activeId])) or "",
     activeValueText = activeValue ~= nil and tostring(math.floor(activeValue + 0.5)) or "--",
-    activePreviousText = activePrevious ~= nil and tostring(math.floor(activePrevious + 0.5)) or "--",
-    flightListMissing = drive.flightListMissing,
-    -- How many pages the postflight list has and which one is showing. The screen writes the
-    -- first back onto the drive when it lays the list out; the trim reads it to page.
-    deltaPage = drive.deltaPage,
     -- True exactly while a step control is held down. The widget reads it and leaves the render
     -- key alone while it is true; see M.release above for what a rebuild would cost here.
     holding = holding,
     bank = drive.bank,
-    bankShown = drive.bankShown,
     row = drive.row,
-    rows = rows,
     activeId = activeId,
     activeName = activeId and Functions.shortName(activeId) or nil,
-    activeValue = activeId and drive.values[activeId] or nil,
-    -- What the ground half read off the board before the flight, so the screen can show where a
-    -- parameter started as well as where it is.
-    activePrimed = activeId and type(drive.primedValues) == "table" and drive.primedValues[activeId] or nil,
-    -- Where this parameter stood before the last step the board reported. It is what the live
-    -- surface puts beside the value now that the caption line is gone.
-    activePrevious = activeId and drive.previous[activeId] or nil,
-    -- When a refused press stops being said on screen. Read through a closure against the clock,
-    -- the way the profile banner is, so nothing rebuilds to put it up or to take it down.
-    stepRefusedUntil = drive.stepRefusedUntil,
     stepRefusedReason = drive.stepRefusedReason,
-    -- When the ground half last finished reading the board, as the radio's own wall clock.
-    readAt = drive.readAt,
-    activeTrim = activeTrim,
-    -- The last function the board reported having stepped, for a surface to hold against the
-    -- selected one. It moves no epoch: the guard above watches it, so it reaches the snapshot on
-    -- the next publish and no tree is rebuilt to carry it.
-    spokenId = drive.spokenId,
-    navigate = drive:navigateMode(),
     profile = drive.profile,
     rateProfile = drive.rateProfile,
-    -- When the banner naming a just-changed PID profile runs out, as a radio tick. The surface
-    -- reads it in a closure and holds it against the clock, so the banner goes away on its own
-    -- without any pass having to rebuild anything to take it off.
-    profileBannerUntil = drive.profileBannerUntil,
     prime = primeState,
     -- The two scalars the guard above compares. They are the same numbers primeState carries; a
     -- copy of them sits here so that the guard reads one flat table rather than reaching into a
@@ -2113,9 +2016,6 @@ local function publish(widget, drive)
     cellCount = drive.cellCount,
     boundsCount = drive.boundsCount,
     sessionMode = drive.sessionMode,
-    -- and, in the standard layout, whether the board carries it: the set is known without the
-    -- board in that mode, so its table is read to be compared rather than to be believed.
-    compare = compareState,
     transfer = transferState
   }
 end

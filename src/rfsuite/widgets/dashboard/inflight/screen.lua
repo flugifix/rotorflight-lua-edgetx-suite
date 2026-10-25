@@ -491,6 +491,7 @@ local function appendFlight(children, widget, m, w, h, t, p, interactive)
       pid_unread = t("widgets.dashboard.inflight_pid_unread", "PID profile not read"),
       rate_unread = t("widgets.dashboard.inflight_rate_unread", "Rate profile not read"),
       profile_unknown = t("widgets.dashboard.inflight_profile_unknown", "PID# or RTE# unknown"),
+      board_unknown = t("widgets.dashboard.inflight_board_identity_pending", "Waiting for FC identity"),
       profile_reading = t("widgets.dashboard.inflight_profile_reading", "Profile read/return pending")
     }
     appendLabel(children, m.pad * 2, y, lineW - m.pad * 2, reasons[snapshot.profileRefusal] or "", p.warn, m.listFont, LEFT)
@@ -503,6 +504,8 @@ local function appendFlight(children, widget, m, w, h, t, p, interactive)
     local instruction
     if snapshot.restorePending then
       instruction = t("widgets.dashboard.inflight_return_disarm", "Disarm to return to original profiles")
+    elseif snapshot.profileRefusal == "board_unknown" then
+      instruction = ""
     elseif snapshot.profileRefusal == "session_unread" or snapshot.profileRefusal == "profile_reading" then
       instruction = t("widgets.dashboard.inflight_read_ground", "Read values on the ground before tuning")
     else
@@ -851,6 +854,13 @@ local function describeSet(snapshot, t)
   return text
 end
 
+local function displayTimestamp(stamp)
+  local year, month, day, hour, minute = string.match(stamp or "", "^(%d%d%d%d)(%d%d)(%d%d)(%d%d)(%d%d)")
+  if year then return year .. "-" .. month .. "-" .. day .. " " .. hour .. ":" .. minute end
+  if string.match(stamp or "", "^%d%d%d%d%-%d%d%-%d%d %d%d:%d%d") then return string.sub(stamp, 1, 16) end
+  return stamp or ""
+end
+
 local function describeBackup(snapshot, t)
   -- While the slot table is read the session line is the read's progress.
   local status = snapshot.prime
@@ -870,12 +880,13 @@ local function describeBackup(snapshot, t)
       .. M.restoreReason(transfer.reason, t) .. " " .. (snapshot.restoreSummary or "")
   end
   if snapshot.baseline then
+    local stamp = displayTimestamp(snapshot.baseline.timestamp)
     if snapshot.sessionMode == "resume" then
-      return string.format(t("widgets.dashboard.inflight_session_continued", "Continued, start values from %s"), snapshot.baseline.timestamp)
+      return string.format(t("widgets.dashboard.inflight_session_continued", "Continued, start values from %s"), stamp)
     elseif snapshot.sessionMode == "new" then
-      return string.format(t("widgets.dashboard.inflight_session_new", "New, start values from %s"), snapshot.baseline.timestamp)
+      return string.format(t("widgets.dashboard.inflight_session_new", "New, start values from %s"), stamp)
     end
-    return t("widgets.dashboard.inflight_baseline_sd", "SD baseline") .. " " .. snapshot.baseline.timestamp
+    return t("widgets.dashboard.inflight_baseline_sd", "SD baseline") .. " " .. stamp
   end
   local state = snapshot.prime
   if state and state.phase == "error" then
@@ -885,6 +896,9 @@ local function describeBackup(snapshot, t)
 end
 
 function M.restoreReason(reason, t)
+  if type(reason) == "table" and reason.kind == "firmware_range" then
+    return string.format(t("widgets.dashboard.inflight_firmware_range", "%s: value %s outside firmware range"), reason.name, tostring(reason.value))
+  end
   if reason == "baseline_identity" then return t("widgets.dashboard.inflight_baseline_identity", "Baseline belongs to another FC") end
   if reason == "baseline_incomplete" or reason == "baseline_missing" then return t("widgets.dashboard.inflight_baseline_incomplete", "Baseline missing or incomplete") end
   if reason == "baseline_io" then return t("widgets.dashboard.inflight_baseline_io", "SD baseline write/read failed") end
@@ -916,8 +930,15 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
   local statusH = (fontHeight(lineFont) + 2) * (wrap and 2 or 1)
   local fit = wrap and fitTwoLines or fitText
 
-  appendLabel(children, m.pad, y, lineW, fit(t("widgets.dashboard.inflight_model_status", "Model") .. ": "
-    .. M.describeCheck(M.checkVerdict(widget), t), lineW, lineFont), p.text, lineFont, LEFT)
+  local lastVerdict, modelText
+  appendLabel(children, m.pad, y, lineW, function()
+    local verdict = state.inflight and state.inflight.setupVerdict
+    if modelText == nil or verdict ~= lastVerdict then
+      lastVerdict = verdict
+      modelText = fit(t("widgets.dashboard.inflight_model_status", "Model") .. ": " .. M.describeCheck(verdict, t), lineW, lineFont)
+    end
+    return modelText
+  end, p.text, lineFont, LEFT)
   y = y + statusH
 
   -- Snapshots are replaced on publication; cache the scalar inputs rather than their tables.

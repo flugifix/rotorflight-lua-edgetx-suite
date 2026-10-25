@@ -30,9 +30,29 @@ local function move(from, to)
   return type(rename) == "function" and rename(from, to) == 0
 end
 
-function M.load(uid, identity)
+local function exists(path)
+  local f = io.open(path, "r")
+  if not f then return false end
+  io.close(f)
+  return true
+end
+
+local function removeTemporary(path)
+  remove(temporary(path))
+  remove(string.gsub(temporary(path), "%.lua$", ".luac"))
+end
+
+function M.load(uid, identity, sliced)
   local path = M.path(uid)
-  local data = path and (read(path) or read(temporary(path)))
+  local data = path and read(path)
+  if not data and path and not exists(path) then
+    local candidate = read(temporary(path))
+    if candidate then
+      local profiles = requireModule("widgets/dashboard/inflight/profiles.lua")
+      if sliced then return nil, "baseline_recovering", profiles.newValidation(candidate) end
+      if profiles.complete(candidate) then data = candidate end
+    end
+  end
   if not data then return nil, "baseline_missing" end
   if type(data.meta) ~= "table" or data.meta.identity ~= identity or data.meta.uid ~= uid then
     return nil, "baseline_identity"
@@ -40,9 +60,20 @@ function M.load(uid, identity)
   return data
 end
 
+-- Ground jobs validate an orphan in slices; synchronous load is for offline inspection.
+function M.loadStep(work, uid, identity)
+  local done, valid = requireModule("widgets/dashboard/inflight/profiles.lua").validateStep(work)
+  if not done then return false end
+  if not valid then return true, nil, "baseline_missing" end
+  local data = work.data
+  if data.meta.identity ~= identity or data.meta.uid ~= uid then return true, nil, "baseline_identity" end
+  return true, data
+end
+
 function M.begin(uid, data)
   local path = M.path(uid)
   if not path or type(rename) ~= "function" or type(del) ~= "function" then return nil, "baseline_io" end
+  removeTemporary(path)
   local f = io.open(temporary(path), "w")
   if not f then return nil, "baseline_io" end
   io.write(f, "return {\n")
@@ -51,6 +82,7 @@ end
 
 function M.cancel(work)
   if work and work.file then io.close(work.file); work.file = nil end
+  if work then removeTemporary(work.path) end
 end
 
 -- At most eight scalar values per pass, including the independent read-back comparison.
@@ -109,6 +141,7 @@ function M.step(work)
       if not remove(work.path) then return true, "baseline_io" end
     end
     if not move(temporary(work.path), work.path) then return true, "baseline_io" end
+    removeTemporary(work.path)
     work.phase, work.promoted = "load", true
     return false
   end

@@ -492,12 +492,6 @@
     "needs_translation": false
   },
   {
-    "file": "inflight/cycle.wav",
-    "english": "Switch tuning off and on",
-    "translation": "Tuning-Schalter aus und wieder ein",
-    "needs_translation": false
-  },
-  {
     "file": "inflight/paused.wav",
     "english": "Tuning paused, wrong profile",
     "translation": "Tuning pausiert, falsches Profil",

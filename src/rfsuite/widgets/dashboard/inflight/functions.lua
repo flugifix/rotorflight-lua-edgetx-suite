@@ -19,8 +19,11 @@ local function t(_key, fallback)
 end
 
 -- Every adjustment function the firmware exposes, with the value range their own adjustments
--- page uses. The names are the ones that page shows, so a parameter reads the same wherever the
--- pilot meets it (app/pages/setup/controls/adjustments/page.lua, ADJUST_FUNCTIONS).
+-- page uses. Where the firmware's own adjustment table (fc/rc_adjustments.c, ADJ_ENTRY) allows
+-- a wider range, fwMin/fwMax carry it: a board value is only refused outside the firmware's range,
+-- while the narrower pair stays the one the standard slots are written with. The names are the
+-- ones that page shows, so a parameter reads the same wherever the pilot meets it
+-- (app/pages/setup/controls/adjustments/page.lua, ADJUST_FUNCTIONS).
 --
 -- `cmd`, `api` and `field` say where the CURRENT value of that parameter lives: the MSP command
 -- that answers it, the module under tasks/msp/api that decodes the reply, and the name that
@@ -60,29 +63,29 @@ M.FUNCTIONS = {
     cmd = 111, api = "rc_tuning", field = "rcExpo_1" },
   { id = 13, name = t("widgets.dashboard.fn_yaw_rc_expo", "Yaw RC Expo"), min = 0, max = 100,
     cmd = 111, api = "rc_tuning", field = "rcExpo_3" },
-  { id = 14, name = t("widgets.dashboard.fn_pitch_p", "Pitch P-gain"), min = 0, max = 250,
+  { id = 14, name = t("widgets.dashboard.fn_pitch_p", "Pitch P-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_1_P" },
-  { id = 15, name = t("widgets.dashboard.fn_pitch_i", "Pitch I-gain"), min = 0, max = 250,
+  { id = 15, name = t("widgets.dashboard.fn_pitch_i", "Pitch I-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_1_I" },
-  { id = 16, name = t("widgets.dashboard.fn_pitch_d", "Pitch D-gain"), min = 0, max = 250,
+  { id = 16, name = t("widgets.dashboard.fn_pitch_d", "Pitch D-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_1_D" },
-  { id = 17, name = t("widgets.dashboard.fn_pitch_f", "Pitch F-gain"), min = 0, max = 250,
+  { id = 17, name = t("widgets.dashboard.fn_pitch_f", "Pitch F-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_1_F" },
-  { id = 18, name = t("widgets.dashboard.fn_roll_p", "Roll P-gain"), min = 0, max = 250,
+  { id = 18, name = t("widgets.dashboard.fn_roll_p", "Roll P-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_0_P" },
-  { id = 19, name = t("widgets.dashboard.fn_roll_i", "Roll I-gain"), min = 0, max = 250,
+  { id = 19, name = t("widgets.dashboard.fn_roll_i", "Roll I-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_0_I" },
-  { id = 20, name = t("widgets.dashboard.fn_roll_d", "Roll D-gain"), min = 0, max = 250,
+  { id = 20, name = t("widgets.dashboard.fn_roll_d", "Roll D-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_0_D" },
-  { id = 21, name = t("widgets.dashboard.fn_roll_f", "Roll F-gain"), min = 0, max = 250,
+  { id = 21, name = t("widgets.dashboard.fn_roll_f", "Roll F-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_0_F" },
-  { id = 22, name = t("widgets.dashboard.fn_yaw_p", "Yaw P-gain"), min = 0, max = 250,
+  { id = 22, name = t("widgets.dashboard.fn_yaw_p", "Yaw P-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_2_P" },
-  { id = 23, name = t("widgets.dashboard.fn_yaw_i", "Yaw I-gain"), min = 0, max = 250,
+  { id = 23, name = t("widgets.dashboard.fn_yaw_i", "Yaw I-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_2_I" },
-  { id = 24, name = t("widgets.dashboard.fn_yaw_d", "Yaw D-gain"), min = 0, max = 250,
+  { id = 24, name = t("widgets.dashboard.fn_yaw_d", "Yaw D-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_2_D" },
-  { id = 25, name = t("widgets.dashboard.fn_yaw_f", "Yaw F-gain"), min = 0, max = 250,
+  { id = 25, name = t("widgets.dashboard.fn_yaw_f", "Yaw F-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_2_F" },
   { id = 26, name = t("widgets.dashboard.fn_yaw_cw_stop_gain", "Yaw CW Stop Gain"), min = 25, max = 250,
     cmd = 94, api = "pid_profile", field = "yaw_cw_stop_gain" },
@@ -112,11 +115,11 @@ M.FUNCTIONS = {
     cmd = 146, api = "rescue_profile", field = "rescue_hover_collective" },
   { id = 41, name = t("widgets.dashboard.fn_rescue_hover_altitude", "Rescue Hover Altitude"), min = 0, max = 2500,
     cmd = 146, api = "rescue_profile", field = "rescue_hover_altitude" },
-  { id = 42, name = t("widgets.dashboard.fn_rescue_alt_p", "Rescue Altitude P-gain"), min = 0, max = 250,
+  { id = 42, name = t("widgets.dashboard.fn_rescue_alt_p", "Rescue Altitude P-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 146, api = "rescue_profile", field = "rescue_alt_p_gain" },
-  { id = 43, name = t("widgets.dashboard.fn_rescue_alt_i", "Rescue Altitude I-gain"), min = 0, max = 250,
+  { id = 43, name = t("widgets.dashboard.fn_rescue_alt_i", "Rescue Altitude I-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 146, api = "rescue_profile", field = "rescue_alt_i_gain" },
-  { id = 44, name = t("widgets.dashboard.fn_rescue_alt_d", "Rescue Altitude D-gain"), min = 0, max = 250,
+  { id = 44, name = t("widgets.dashboard.fn_rescue_alt_d", "Rescue Altitude D-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 146, api = "rescue_profile", field = "rescue_alt_d_gain" },
   { id = 45, name = t("widgets.dashboard.fn_angle_level_gain", "Angle Level Gain"), min = 0, max = 200,
     cmd = 94, api = "pid_profile", field = "angle_level_strength" },
@@ -140,15 +143,15 @@ M.FUNCTIONS = {
     cmd = 148, api = "governor_profile", field = "governor_cyclic_weight" },
   { id = 55, name = t("widgets.dashboard.fn_governor_collective_ff", "Governor Collective Precomp"), min = 0, max = 250,
     cmd = 148, api = "governor_profile", field = "governor_collective_weight" },
-  { id = 56, name = t("widgets.dashboard.fn_pitch_b", "Pitch B-gain"), min = 0, max = 250,
+  { id = 56, name = t("widgets.dashboard.fn_pitch_b", "Pitch B-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_1_B" },
-  { id = 57, name = t("widgets.dashboard.fn_roll_b", "Roll B-gain"), min = 0, max = 250,
+  { id = 57, name = t("widgets.dashboard.fn_roll_b", "Roll B-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_0_B" },
-  { id = 58, name = t("widgets.dashboard.fn_yaw_b", "Yaw B-gain"), min = 0, max = 250,
+  { id = 58, name = t("widgets.dashboard.fn_yaw_b", "Yaw B-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_2_B" },
-  { id = 59, name = t("widgets.dashboard.fn_pitch_o", "Pitch O-gain"), min = 0, max = 250,
+  { id = 59, name = t("widgets.dashboard.fn_pitch_o", "Pitch O-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_1_O" },
-  { id = 60, name = t("widgets.dashboard.fn_roll_o", "Roll O-gain"), min = 0, max = 250,
+  { id = 60, name = t("widgets.dashboard.fn_roll_o", "Roll O-gain"), min = 0, max = 250, fwMin = 0, fwMax = 1000,
     cmd = 112, api = "pid_tuning", field = "pid_0_O" },
   { id = 61, name = t("widgets.dashboard.fn_cross_coupling_gain", "Cross Coupling Gain"), min = 0, max = 250,
     cmd = 94, api = "pid_profile", field = "cyclic_cross_coupling_gain" },
@@ -189,7 +192,7 @@ M.FUNCTIONS = {
   { id = 79, name = t("widgets.dashboard.fn_gov_min_throttle", "Governor Min Throttle"), min = 0, max = 100,
     cmd = 148, api = "governor_profile", field = "governor_min_throttle" },
   { id = 80, name = t("widgets.dashboard.fn_gov_headspeed", "Governor Headspeed"), min = 0, max = 10000,
-    cmd = 148, api = "governor_profile", field = "governor_headspeed" },
+    fwMin = 0, fwMax = 50000, cmd = 148, api = "governor_profile", field = "governor_headspeed" },
   { id = 81, name = t("widgets.dashboard.fn_gov_yaw_ff", "Governor Yaw F-gain"), min = 0, max = 250,
     cmd = 148, api = "governor_profile", field = "governor_yaw_weight" },
   { id = 82, name = t("widgets.dashboard.fn_battery_profile", "Battery Profile"), min = 1, max = 6,
@@ -606,8 +609,8 @@ function M.windowCode(window)
 end
 
 --- A raw channel reading, as microseconds. EdgeTX answers getValue("chN") on -1024..1024 around
--- centre; the flight controller and every window above speak microseconds. A reading already in
--- the microsecond band is passed through, because the same helper meets numbers from both sides.
+-- centre; the flight controller and every window above speak microseconds. The input is always
+-- raw: positive raw values overlap the microsecond band and cannot be distinguished by magnitude.
 --
 -- The factor is a HALF, not 500/1024. A channel at its mechanical limit is 1024 raw and 2012 us
 -- on the wire -- 512 us either side of centre, which is what the radio sends and what the flight
@@ -620,9 +623,6 @@ function M.channelRawToUs(raw)
   if raw == nil then return nil end
   if raw >= -1200 and raw <= 1200 then
     return roundToInt(CENTRE_US + (raw * 0.5))
-  end
-  if raw >= 700 and raw <= 2300 then
-    return roundToInt(raw)
   end
   return nil
 end
@@ -679,8 +679,7 @@ M.MAPPED_AUX_COUNT = MAPPED_AUX_COUNT
 -- The return is 1-based, the way "ch11" is spelled.
 function M.auxToWireChannel(auxField, map)
   local index = math.floor(tonumber(auxField) or 0)
-  if index < 0 then index = 0 end
-  if index > (AUX_FIELD_COUNT - 1) then index = AUX_FIELD_COUNT - 1 end
+  if index < 0 or index >= AUX_FIELD_COUNT then return nil end
 
   local member = nil
   if type(map) == "table" and index < MAPPED_AUX_COUNT then

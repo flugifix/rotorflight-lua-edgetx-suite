@@ -3432,6 +3432,8 @@ return {
       inflight_pid_mismatch = "PID profile differs",
       inflight_rate_mismatch = "Rate profile differs",
       inflight_profile_unknown = "PID# or RTE# unknown",
+      inflight_board_identity_pending = "Waiting for FC identity",
+      inflight_firmware_range = "%s: value %s outside firmware range",
       inflight_profile_cycle = "Interlock cycle required",
       inflight_report_sync = "Waiting for fresh adjustment telemetry",
       inflight_active_profiles = "Active PID / Rate",

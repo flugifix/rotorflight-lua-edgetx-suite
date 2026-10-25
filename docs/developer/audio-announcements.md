@@ -231,6 +231,5 @@ paths, or it will report two thirds of the pack as dead.
 7. `release-notes/<short-name>.feature.md` — the release note, filed under its release when it is cut (see `release-notes/README.md`).
 
 The inflight overlay announces profile edges through `evt/profile.wav` and the existing number
-teller. Unread/unknown profiles use `inflight/paused.wav`; returning to read profiles uses
-`inflight/resumed.wav` without an interlock cycle. The `inflight/cycle.wav` asset is retained
-without a call site. These hooks share the Adjustments setting and critical-alarm gate.
+teller only when the corresponding general PID/rate event is disabled. In flight, unread/unknown profiles use `inflight/paused.wav`; returning to read profiles uses
+`inflight/resumed.wav` without an interlock cycle. Both cues are silent on the ground. These hooks share the Adjustments setting and critical-alarm gate.
