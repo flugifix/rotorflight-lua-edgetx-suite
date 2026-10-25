@@ -235,6 +235,15 @@ function M.groundRefusal(widget)
   return nil
 end
 
+-- The setup writer shares the ground read's rotor and arming gates.
+function M.setupRefusal(widget)
+  local state = widget and widget.state
+  if type(state) ~= "table" or state.armedSeen ~= true then return "arm_unknown" end
+  if state.armed == true then return "armed" end
+  if isArmed(widget) then return "rotor_running" end
+  return nil
+end
+
 local function apiModule(name)
   if type(name) ~= "string" or name == "" then return nil end
   return requireModule("tasks/msp/api/" .. name .. ".lua")
@@ -1349,6 +1358,22 @@ end
 function M.tick(widget, drive)
   if type(widget) ~= "table" or type(drive) ~= "table" then return end
   if type(widget.state) ~= "table" then return end
+
+  if drive.fcSetupOpen then
+    if drive.fcSurface == nil then
+      if widget.state.armed == true then
+        drive.fcSetupOpen = nil
+        drive.valueEpoch = drive.valueEpoch + 1
+        return
+      end
+      drive.fcWorked = true
+      drive.fcSurface = requireModule("widgets/dashboard/inflight/fcsurface.lua")
+      collectgarbage("collect")
+      return
+    end
+    drive.fcWorked = drive.fcSurface.tick(widget, drive, M)
+    return
+  end
 
   if drive.profileJob ~= nil then
     local job = drive.profileJob

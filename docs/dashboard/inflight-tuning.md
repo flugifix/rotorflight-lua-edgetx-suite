@@ -27,21 +27,16 @@ turning, and while the arm state has not been read at all.
 
 ## Setting it up
 
-Two pages, one for each half:
+The radio wiring stays in
+[*System* → *Settings* → *Dashboard* → *In-Flight Tuning*](../pages/settings/dashboard/inflight.md):
+the master switch, interlock switch, channels, variables and optional trims.
+**Set up the model** shows its proposed mixer, pulse-timer, variable and trim changes before writing.
+A model set up by an earlier version needs this once more if its value line has no logical
+switch and the check reports **Mixer line missing or wrong**.
 
-- [*System* → *Settings* → *Dashboard* → *In-Flight Tuning*](../pages/settings/dashboard/inflight.md)
-  — the radio's half: the master switch, the interlock switch, the channels, the variables,
-  and the trims, plus the per-model flight-list picker. It carries **Set up the model**, which writes the mixer
-  lines, the logical switch that times each press, the variable details and the trim modes
-  after showing what it would change. A model set up by an earlier version needs it once more:
-  its value line has no logical switch yet, and the setup check refuses the interlock with
-  **Mixer line missing or wrong** until it has one.
-- [*Configuration* → *Setup* → *Controls* → *In-Flight Tuning*](../pages/setup/controls/inflight.md)
-  — the flight controller's half: the model's own switch and the step sizes. It carries **Set up the flight controller**, which writes the
-  adjustment slots after showing what each one holds now.
-
-Both switches have to be on, and the model's setup check has to pass: a fault refuses the
-interlock rather than letting a press move a parameter other than the one on the screen.
+A model whose board carries tuning slots is now tunable whenever the radio's master switch is on.
+The per-model tuning switch has been removed; old stored switch and set-layout values are ignored.
+The model setup check must still pass before the interlock can drive the channels.
 
 With **Drive rows from the trims** on, the check also needs to know which of the radio's
 switch positions are its trims. The first time the interlock is closed after the widget
@@ -74,7 +69,7 @@ list and no press, trim or hold steps anything in it; its slots are counted as *
 the **FC slots** status line. An empty or wholly unusable read shows **No usable slots on the
 board** and clears the old row names. Before the read the line says **Not read yet**.
 
-**Set up the flight controller** writes the standard 36-cell layout, with each parameter's
+**Set up suggested functions** on the ground screen writes the suggested 36-cell layout, with each parameter's
 full range as its slot minimum and maximum. The overlay still derives its set from the next
 ground read. A cell whose current value lies outside its slot's minimum and maximum refuses
 its step until the flight controller is set up again; the **FC slots** warning counts these
@@ -82,8 +77,8 @@ cells. This prevents the FC's clamp from jumping an out-of-range value to a slot
 
 ## The three surfaces
 
-The interlock switch is the only way in, and what it shows follows the flight rather than the
-switch.
+Open the tuning screen with the interlock switch or the dashboard quick menu. What it shows
+follows the flight.
 
 ### On the ground, before the flight
 
@@ -104,6 +99,35 @@ what is offered now: the session's choice, else the model's flight list, else ev
 never written to the model by itself. **Save default** also stores it as this
 model's flight list on the next pass; the ground surface says if that write failed. **Cancel**
 changes nothing. The picker closes when the model is armed.
+The flight list is edited only here, on the ground screen; the radio settings have no second editor.
+
+**Set up suggested functions** is a small secondary action when the board offers parameters.
+After a completed read with no tunable slots on the configured channel pair, a line explains
+that the FC has no adjustment functions for in-flight tuning and this becomes the large primary
+action in place of **Choose parameters**. It is absent while armed or during a read or restore.
+
+The setup surface explains what it writes and starts with **Step size** (1, 2, 5 or 10) and
+**Head speed step** (10, 25, 50 or 100), prefilled from this model's saved choices; the defaults
+are 5 and 50. Touch and the hardware encoder select them. **Next** reads the receiver map and
+slot function IDs and shows how many slots will be written and how many hold another function. It names
+up to six slots holding other functions and counts the rest: those functions are overwritten,
+regardless of which switches use them. Slots 0 and 1 are kept. Channels and windows are checked
+by the read-back, since the plan reads function IDs only. Pages break between complete sentences
+and slot entries; **Confirm** follows the last plan entry.
+
+Only the function of each slot was read. Which channel it watches is checked after the write.
+The values only come back to the radio with telemetry sensor 99 selected and CRSF custom telemetry on.
+
+**Confirm** writes each suggested slot, saves once on the FC, then reads back and compares every
+written record. One progress screen shows **Step x of y**, a bar and the current operation.
+Only a matching read-back saves the selected step sizes to this model, on a separate idle pass.
+It then drops the old board set and starts a fresh ground read continuing the session.
+An error is shown in words with **Back**. **Cancel** is available until the write is verified;
+the success result then closes itself into the fresh read. Cancelling after
+some writes requires another ground read; it does not undo slots already written. Arming, link
+loss or a different board cancel the job without another request. Setup is ground-only and
+never sends MSP while armed.
+
 Below it, **Read again** refreshes the same session profiles without changing the stored start
 values. **Reset start values** first asks for confirmation: it replaces the stored start values
 with the current ones, and **Restore all** will then return to those new values. Confirmation

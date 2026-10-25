@@ -9,8 +9,8 @@ sidebar_position: 30
 The radio's half of the in-flight tuning overlay: which switch brings the surface up, which
 channels and global variables carry it, and which trims move it. These settings belong to the
 radio and apply to every model on it, so no flight controller has to be connected to change
-them. What describes the helicopter — the set layout, the step sizes —
-is on the other page, *Configuration* → *Setup* → *Controls* → *In-Flight Tuning*.
+them. Suggested FC functions and their step sizes are set up from the tuning screen on the ground.
+A model whose board carries tuning slots is now tunable whenever the radio's master switch is on.
 
 What the overlay itself does in the air is in
 [the dashboard guide](../../../dashboard/inflight-tuning.md).
@@ -29,7 +29,7 @@ Hidden until *System* → *Settings* → *General* → *Preview* → *In-flight 
 
 | Setting | What it does |
 | --- | --- |
-| In-flight tuning on this radio | The master switch. With it off nothing drives on any model. Each model has one of its own on the flight controller page, and both have to be on. Off by default. |
+| In-flight tuning on this radio | The master switch. With it off nothing drives on any model. Off by default. |
 | Interlock switch | The switch that brings the surface up and makes it live. *None* by default, which leaves the overlay unreachable. |
 | *(the line under it)* | What the setup check found when it last walked the model: *Setup OK*, *Setup not checked*, or the faults it names — or *Reading the radio...* while the page opened from the dashboard is still reading (see Notes). A fault refuses the interlock, so the surface does not go live while one stands. |
 | Set up the model | Writes the two mixer lines, the logical switch that times each press, the global variable details and the trim modes this model needs — and only the ones that differ from what the model already carries. It shows what it would remove and what it would add first, and writes nothing until that is confirmed. Where the model already carries all of it, it says so instead of asking. It writes the values as they stand on the page, saved or not. |
@@ -138,15 +138,9 @@ closes. Every flight starts at the first function of the first group.
 Optional trims are off by default for everyone. Existing trim users turn them on again in settings.
 Walk and adjust follows groups and their full function names, without wrapping. Slot-row
 trim assignments still address the configured hidden bank/row and obey the flight-list gate.
-Open **Flight list (this model)** to choose a group and toggle its functions, six at a time.
-This closes the radio sections to keep each build bounded. **Previous/Next** pages through longer
-groups. **All parameters** stores an empty list; filtered lists keep at least one selection.
-The list uses the connected FC's completed ground slot read and the same safe derived groups.
-Without slot data it shows all tunable function-table entries, grouped the same way, with a notice.
-Stored IDs the FC no longer offers stay listed, checked and marked **(missing)**; the setup
-check continues to refuse them until removed. Save with the same FC connected: this list alone
-belongs to its MCU-keyed model store; wiring remains radio-wide. Without an MCU identity the
-list is a disabled preview. This editor sends no MSP. Read slots on the ground to check availability.
+Choose the flight list only on the tuning screen on the ground: **Choose parameters** selects
+this session's list, and **Save default** stores it as the model's default. The settings page
+has no per-model list section and writes only radio preferences.
 Cyclic precedes Roll and Pitch and contains Cyclic Master Gain (83) when its slot is available. See the dashboard guide for sensor focus order, bench acceptance
 and multi-profile session membership. A busy detent is spent, never queued.
 

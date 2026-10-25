@@ -258,10 +258,9 @@ function Drive:countOutOfBounds()
   return count
 end
 
---- Store a list as this model's flight list (the ground picker's "Save as model default"), the
--- way the settings page does it: the published model preferences, written by the suite's own
--- writer. Ground only; the caller refuses while armed.
-function M.saveFlightList(stored)
+--- Store the model flight list or suggested step defaults through the suite's preference writer.
+-- Ground only; the caller refuses while armed and gives each store write its own idle pass.
+function M.saveFlightList(stored, steps)
   local session = _G.rfsuite and _G.rfsuite.session
   local mcu = session and session.mcu_id
   if not mcu then return false, "missing_mcu_id" end
@@ -270,7 +269,9 @@ function M.saveFlightList(stored)
   local model, inflight = {}, {}
   for key, value in pairs(session.modelPreferences or {}) do model[key] = value end
   for key, value in pairs(model.inflight or {}) do inflight[key] = value end
-  inflight.flight_list = stored or ""
+  if steps then
+    inflight.step, inflight.step_headspeed = steps.step, steps.step_headspeed
+  else inflight.flight_list = stored or "" end
   model.inflight = inflight
   local ok, err = MP.saveByMcuId(mcu, model)
   if not ok then return false, err end
@@ -1403,7 +1404,7 @@ function Drive:fastTick(now)
 
   -- The last adjustment the board reports having made. AdjF reads 0 between adjustments, so a
   -- non-zero reading is a fresh one and its value belongs to that function.
-  local adjF = self.radio.sensor("AdjF")
+  local adjF = refusal == nil and self.radio.sensor("AdjF")
   if self.reportFence and refusal == nil and adjF == 0 then self.reportFence = nil end
   if adjF and adjF > 0 and not self.reportFence and refusal == nil then
     local adjV = self.radio.sensor("AdjV")
@@ -1643,13 +1644,12 @@ local function settingsSignature(settings)
   if type(settings) ~= "table" then return "" end
   local rows = settings.rowTrim or {}
   return table.concat({
-    tostring(settings.radio_enabled), tostring(settings.model_enabled), tostring(settings.switch),
+    tostring(settings.radio_enabled), tostring(settings.switch),
     tostring(settings.bank_ch),
     tostring(settings.value_ch), tostring(settings.bank_gvar), tostring(settings.value_gvar),
     tostring(settings.trims), tostring(settings.flight_list),
     tostring(settings.trim_mode), tostring(settings.nav_trim), tostring(settings.bank_trim),
     tostring(settings.adj_trim),
-    tostring(settings.set_mode), tostring(settings.step),
     tostring(rows[1]), tostring(rows[2]), tostring(rows[3]),
     tostring(rows[4]), tostring(rows[5]), tostring(rows[6])
   }, "|")
@@ -1706,10 +1706,6 @@ end
 -- file, and the runtime already watches that one and hands the new table down; opening a second
 -- watcher on it would be the very duplication the paragraph above refuses. Only the per-model
 -- store is stat'ed here.
---
--- And what it is gated on is the RADIO's switch, not the combined answer. The model's switch is
--- IN the file being stat'ed, so gating the stat on it would mean a model switched on from the
--- tool is never noticed by a widget that has already read the store once.
 --
 -- Answers the table to settle from, or nil for "use what the widget was given".
 local function freshPreferences(widget)
@@ -1916,15 +1912,23 @@ local function publish(widget, drive)
   local activeValue = activeId and drive.values[activeId]
   local function profileNumber(value) return value ~= nil and tostring(value) or "?" end
   local group = drive.groups[drive.group]
-  local groupRows = {}
-  if group then
-    for i = 1, #group.entries do
-      local cell = group.entries[i]
-      local value = drive.values[cell.id]
-      local start = drive.primedValues and drive.primedValues[cell.id]
-      groupRows[i] = { differenceText = start ~= nil and value ~= nil and value ~= start and string.format("%+d", value - start) or "", id = cell.id, name = cell.name, bank = cell.bank, row = cell.row,
-        value = value, valueText = value ~= nil and tostring(math.floor(value + 0.5)) or "--" }
+  local groupRows = drive._groupRows
+  -- Ground progress changes counters, not row values. Reuse their snapshot until a report,
+  -- profile activation or group change actually changes what those rows display.
+  if groupRows == nil or drive._rowsGroup ~= group or drive._rowsValues ~= drive.values
+    or drive._rowsStart ~= drive.primedValues or drive._rowsReport ~= reportEpoch then
+    groupRows = {}
+    if group then
+      for i = 1, #group.entries do
+        local cell = group.entries[i]
+        local value = drive.values[cell.id]
+        local start = drive.primedValues and drive.primedValues[cell.id]
+        groupRows[i] = { differenceText = start ~= nil and value ~= nil and value ~= start and string.format("%+d", value - start) or "", id = cell.id, name = cell.name, bank = cell.bank, row = cell.row,
+          value = value, valueText = value ~= nil and tostring(math.floor(value + 0.5)) or "--" }
+      end
     end
+    drive._groupRows, drive._rowsGroup, drive._rowsValues = groupRows, group, drive.values
+    drive._rowsStart, drive._rowsReport = drive.primedValues, reportEpoch
   end
   if drive._profileListSource ~= drive.sessionProfiles then
     drive._profileListSource = drive.sessionProfiles
@@ -2027,14 +2031,19 @@ local function primeBusy(drive)
   return phase ~= nil and phase ~= "idle" and phase ~= "done" and phase ~= "error"
 end
 
-function M.tick(widget)
-  local drive = M.get(widget)
+function M.tick(widget, drive)
+  drive = drive or M.get(widget)
   if drive == nil then return false end
   if drive.settings.active ~= true then
     if widget.state and widget.state.inflight ~= nil then widget.state.inflight = nil end
     return false
   end
-  local grouped = drive:stepGroups()
+  if drive.fcWorked then
+    drive.fcWorked = nil
+    publish(widget, drive)
+    return false
+  end
+  local grouped = not drive.fcSetupOpen and drive:stepGroups()
   if widget.state and widget.state.armed == true
       and (drive.restoreConfirm or drive.resetConfirm or drive.sessionPickerOpen) then
     -- Ground dialogs close on arming, with the interlock on or off: nothing they offer may run
@@ -2048,16 +2057,21 @@ function M.tick(widget)
   if pending ~= nil and session and session.mcu_id ~= pending.mcu then
     -- Asked on another board: never written into this one's store.
     drive.pendingSave = nil
+    if pending.steps and drive.fcSurface then drive.fcSurface.saved(widget, drive, false, "board_changed") end
   elseif pending ~= nil and not grouped and not primeBusy(drive)
       and drive.profileJob == nil and type(state) == "table" and state.armedSeen == true
       and state.armed ~= true then
     -- The model-default save on a pass that does nothing else (no group step, no profile job),
     -- with the model known to be disarmed: the store writer serialises the whole store.
     drive.pendingSave = nil
-    local ok, err = M.saveFlightList(pending.list)
+    local ok, err = M.saveFlightList(pending.list, pending.steps)
     drive.saveResult = ok and "ok" or tostring(err or "failed")
     drive.valueEpoch = drive.valueEpoch + 1
+    if pending.steps and drive.fcSurface then drive.fcSurface.saved(widget, drive, ok, err) end
+    publish(widget, drive)
+    return false
   end
+  if drive.fcSetupOpen then publish(widget, drive); return false end
   -- The setup check as a gate, the second of the two places it stands. evaluateInterlock refuses
   -- to close on a fault; this refuses the rest of the pass, so that a model the check has just
   -- turned down is not primed over MSP and its profiles are not watched either. The call below is
@@ -2137,6 +2151,7 @@ function M.cleanup(widget)
   if type(widget) ~= "table" then return end
   local drive = widget._inflight
   if drive == nil then return end
+  if drive.fcSurface then drive.fcSurface.close(widget, drive) end
   local wasLive, wasPhase = drive.live, drive.phase
   drive.live = false
   drive.seeded = false

@@ -1005,13 +1005,14 @@ end
 -- `idsOnly`, and every caller that shows it says what was not looked at.
 --
 -- `ids` is 1-based by slot, the way the reply's own parse hands it over.
-function M.compareFunctionIds(ids, map, bankChannel, valueChannel)
+function M.compareFunctionIds(ids, map, bankChannel, valueChannel, expectedSlots)
   if type(ids) ~= "table" then return nil end
   local enaField = M.wireToAuxField(bankChannel, map)
   local adjField = M.wireToAuxField(valueChannel, map)
   if enaField == nil or adjField == nil then return nil end
 
-  local slots = M.standardSlots(enaField, adjField)
+  -- A setup plan already holds these cells; reuse them instead of constructing the set twice.
+  local slots = expectedSlots or M.standardSlots(enaField, adjField)
   local empty, differ, list = 0, 0, {}
   for i = 1, #slots do
     local cell = slots[i]

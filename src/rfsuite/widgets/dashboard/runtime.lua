@@ -708,9 +708,7 @@ local function inflightEnabled(self)
   if not isTruthy(general and general.preview_inflight_tuning) then return false end
   local radio = (type(prefs) == "table") and prefs.inflight or nil
   if type(radio) ~= "table" or radio.enabled ~= true then return false end
-  local model = self.modelPreferences
-  local section = (type(model) == "table") and model.inflight or nil
-  return type(section) == "table" and section.enabled == true
+  return true
 end
 
 --- Everything the overlay wrote goes back to 0. Called on every way out -- the widget going to
@@ -784,13 +782,14 @@ end
 --- One pass of the overlay. Off the overlay this costs one table lookup; with it enabled but the
 -- interlock open, one switch read.
 local function tickInflight(self)
+  local enabled = inflightEnabled(self)
   if self._inflight and self._inflight.profileJob and
-    (self._foreground ~= true or not inflightEnabled(self)) then
+    (self._foreground ~= true or not enabled) then
     self._inflight.profileJob.cancelled = true
     local prime = inflightPrime()
     if prime then prime.tick(self, self._inflight) end
   end
-  if self._foreground ~= true or not inflightEnabled(self) then
+  if self._foreground ~= true or not enabled then
     cleanupInflight(self)
     return
   end
@@ -803,7 +802,7 @@ local function tickInflight(self)
   -- publishes.
   local prime = inflightPrime()
   if prime and instance then prime.tick(self, instance) end
-  drive.tick(self)
+  drive.tick(self, instance)
 end
 
 --- The overlay's fast half, on EVERY foreground pass rather than on the logic tick.

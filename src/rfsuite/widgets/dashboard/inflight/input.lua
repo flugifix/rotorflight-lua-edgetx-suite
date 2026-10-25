@@ -21,6 +21,14 @@ function M.dispatch(widget, action, direction, source, index)
   -- first sensor return even when that control's action is refused by the pulse owner.
   local sensor = widget._inflightSensor
   if sensor and (source == "touch" or source == "touch_hold") then sensor.index = nil end
+  if drive.fcSetupOpen and drive.fcSurface then
+    if action == "back" then
+      local phase = drive.fcSetup and drive.fcSetup.phase
+      if phase ~= "saving" and phase ~= "reread" then drive.fcSurface.close(widget, drive) end
+      return true
+    end
+    return false, "setup"
+  end
   local now = drive.radio.now()
   if action == "back" and drive.backHandledAt == now then return true end
   if action == "back" or action == "leave" then drive.backHandledAt = now end

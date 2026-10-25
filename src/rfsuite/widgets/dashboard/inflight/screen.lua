@@ -917,6 +917,22 @@ local function appendAction(children, m, x, y, width, label, p, press)
   appendCentredLabel(children, x, y, width, m.actionH, fitText(label, width, m.small), p.text, m.small, CENTER, m)
 end
 
+-- Preserve every word on setup surfaces; the plan paginates these measured lines.
+local function wrapSetup(text, width, font)
+  local lines = {}
+  for paragraph in string.gmatch(text .. "\n", "([^\n]*)\n") do
+    local line = ""
+    for word in string.gmatch(paragraph, "%S+") do
+      local candidate = line == "" and word or line .. " " .. word
+      if line ~= "" and not textFits(candidate, width, font) then
+        lines[#lines + 1], line = line, word
+      else line = candidate end
+    end
+    lines[#lines + 1] = line
+  end
+  return lines
+end
+
 --- The ground surface shows model readiness, board slots and the stored session.
 function M.buildGround(children, widget, m, w, h, t, p, interactive)
   local drive = widget._inflight
@@ -1036,27 +1052,54 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
 
   local gap = m.large and 8 or 4
   local action = {actionH = m.large and 56 or 40, small = m.large and m.font or m.small, textOff = m.textOff}
+  local available = not Prime.isRunning(drive) and not drive.profileJob and not drive.restorePending
+  local snapshot = state.inflight or {}
+  local completed = snapshot.prime and snapshot.prime.phase == "done"
+  local emptyBoard = completed and (snapshot.setSource ~= "board" or (snapshot.cellCount or 0) == 0)
+  local function openSetup()
+    if drive.fcSetupOpen or widget.state.armed == true or Prime.isRunning(drive) or drive.profileJob or drive.restorePending then return end
+    drive.fcSetupOpen = true
+    drive.valueEpoch = drive.valueEpoch + 1
+    widget._tuningKeyDirty = true
+  end
+  if emptyBoard and available then
+    appendLabel(children, m.pad, y, lineW,
+      t("widgets.dashboard.inflight_fc_no_functions", "The FC has no adjustment functions for in-flight tuning."),
+      p.text, m.small, LEFT)
+    y = y + m.lineH
+  end
   local chooseActive = function()
     local snap = state.inflight
     return snap ~= nil and snap.setSource == "board" and (snap.cellCount or 0) > 0
   end
   appendAction(children, action, m.pad, y, lineW,
-    t("widgets.dashboard.inflight_choose_parameters", "Choose parameters"), p, function()
+    emptyBoard and t("widgets.dashboard.inflight_fc_setup_action", "Set up suggested functions")
+      or t("widgets.dashboard.inflight_choose_parameters", "Choose parameters"), p, function()
+      if not available or drive.fcSetupOpen or widget.state.armed == true then return end
+      if emptyBoard then openSetup(); return end
       drive.sessionPickerOpen = true
       drive.valueEpoch = drive.valueEpoch + 1
       widget._tuningKeyDirty = true
     end)
-  children[#children - 1].active = chooseActive
-  children[#children - 1].visible = chooseActive
+  local primaryActive = function() return available and (emptyBoard or chooseActive()) end
+  children[#children - 1].active = primaryActive
+  children[#children - 1].visible = primaryActive
   children[#children - 1].color = p.accent
   children[#children].color = p.onAccent
-  children[#children].visible = chooseActive
+  children[#children].visible = primaryActive
   y = y + action.actionH + gap
 
-  action.actionH, action.small = m.large and 40 or 32, m.small
+  action.actionH, action.small = m.large and 32 or (h >= 320 and 24 or 32), m.small
+  if not emptyBoard and available then
+    appendAction(children, action, m.pad, y, lineW,
+      t("widgets.dashboard.inflight_fc_setup_action", "Set up suggested functions"), p, openSetup)
+    y = y + action.actionH + gap
+  end
+  action.actionH = m.large and 24 or 26
   local buttonW = math.floor((lineW - m.pad) / 2)
   appendAction(children, action, m.pad, y, buttonW,
     t("widgets.dashboard.inflight_read_again", "Read again"), p, function()
+      if drive.fcSetupOpen then return end
       if drive.restorePending then Prime.retryReturn(drive)
       elseif drive.setSource ~= "board" then
         -- No set from the board (never read, or the channels changed since): read the slot table
@@ -1067,12 +1110,14 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
     end)
   appendAction(children, action, m.pad * 2 + buttonW, y, buttonW,
     t("widgets.dashboard.inflight_reset_start", "Reset start values"), p, function()
+      if drive.fcSetupOpen then return end
       drive.resetConfirm = true
       drive.valueEpoch = drive.valueEpoch + 1
       widget._tuningKeyDirty = true
     end)
   appendAction(children, action, m.pad, h - m.pad - action.actionH, lineW,
     t("widgets.dashboard.inflight_restore_all", "Restore all"), p, function()
+      if drive.fcSetupOpen then return end
       if Prime.isRunning(drive) then return end
       drive.restoreConfirm = {all = true}
       drive.valueEpoch = drive.valueEpoch + 1
@@ -1585,6 +1630,11 @@ function M.buildFullscreen(children, widget)
   -- phase is nil, and what stands is the ground surface -- which is exactly right, because the
   -- ground actions are the only ones that could do anything without an interlock.
   local snapshot = widget.state.inflight or {}
+  if widget._inflight and widget._inflight.fcSetupOpen and widget.state.armed ~= true then
+    local surface = widget._inflight.fcSurface
+    if surface then surface.build(children, widget, m, w, h, t, p, appendLabel, appendAction, wrapSetup) end
+    return
+  end
   if widget._inflight and widget._inflight.profileJob and snapshot.phase ~= "live" then
     appendBusy(children, widget, m, w, h, t, p)
     appendClose(children, widget, m, w, p)

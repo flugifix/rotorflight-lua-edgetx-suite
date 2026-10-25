@@ -27,7 +27,6 @@ SMLSIZE, MIDSIZE, CENTER = 1, 2, 0
 COLOR_THEME_PRIMARY1, COLOR_THEME_SECONDARY1, COLOR_THEME_SECONDARY2 = 1, 2, 3
 lvgl = { UI_ELEMENT_HEIGHT = 32 }
 local F = rfsuite.require("widgets/dashboard/inflight/functions.lua")
-local L = rfsuite.require("widgets/dashboard/inflight/flightlist.lua")
 local Setup = rfsuite.require("widgets/dashboard/inflight/setup.lua")
 -- Every standard cell carries its function's full range: the firmware clamps each step into the
 -- slot's adjMin..adjMax, so a narrower band turns a first press into a jump to its edge.
@@ -50,31 +49,16 @@ check(clampStep(assert(F.standardRecord(3, 3, 5, 6)), 0, 5) == 5, "a D gain of 0
 check(F.shortName(49) == "P-gain" and F.nameOf(49) == "Governor P-gain", "the group title is not repeated")
 check(F.shortName(58) == "B-gain", "Yaw B-gain under Yaw")
 check(F.shortName(39) == F.nameOf(39), "control: a name without the title as prefix is unchanged")
-local layout = { set = { { 83, 18, 19 } }, bankValues = { 10 } }
-local list = L.new("83,18,250", layout)
-check(list.groups[1].entries[1].id == 83 and #list.groups == 3, "Cyclic precedes Roll; missing unknown in Other")
-check(list.groups[3].entries[1].missing and L.checked(list, list.groups[3].entries[1]), "missing id stays listed and checked")
-check(not list.groups[1].entries[1].missing, "available id is not missing")
-check(L.toggle(list, 250, false) and list.stored == "18,83", "remove missing id without losing selected ids")
+-- The overlay is the only flight-list editor; the radio page must not load its old editor.
 local target = {}
-Setup.storeModelSettings(target, { flight_list = list.stored })
-check(Setup.loadModelSettings({ inflight = target }).flight_list == "18,83", "parse/store round trip")
-check(F.flightList(L.serialize(F.flightList("83,18,83,garbage")))[83], "normalised unique id round trip")
-L.all(list); check(list.stored == "" and L.checked(list, list.groups[2].entries[2]), "all sentinel selects available rows")
-check(not L.checked(list, list.groups[3].entries[1]), "all sentinel does not reselect missing ids")
-check(L.toggle(list, 19, false) and list.stored == "18,83", "deselecting from all materialises the subset")
-check(L.toggle(list, 19, true) and list.stored == "", "selecting all canonicalises to empty")
-list = L.new("18", layout)
-check(not L.toggle(list, 18, false) and list.stored == "18", "last selection cannot become all accidentally")
-local fallback = L.new("", nil)
-local present = {}
-for _, group in ipairs(fallback.groups) do for _, entry in ipairs(group.entries) do
-  check(not F.SELECTORS[entry.id] and not entry.missing, "offline fallback contains tunable functions only")
-  present[entry.id] = true
-end end
-check(present[83] and present[84], "offline fallback includes master gains")
-check(#L.new("", { set = {}, bankValues = {} }).groups == 0, "known empty FC is not the offline fallback")
-
+Setup.storeModelSettings(target, {flight_list = "18,83"})
+check(Setup.loadModelSettings({inflight = target}).flight_list == "18,83", "model flight-list store round trip")
+local legacy = Setup.loadModelSettings({inflight = {enabled = false, set_mode = "custom"}})
+check(legacy.enabled == nil and legacy.set_mode == nil, "old model switches are ignored")
+check(Setup.settings({inflight = {enabled = true}}, {inflight = {enabled = false}}).active,
+  "radio master alone enables a model with its old switch off")
+check(not Setup.settings({inflight = {enabled = false}}, {inflight = {enabled = true}}).active,
+  "control: a model switch cannot enable the radio master")
 local Page = rfsuite.require("app/pages/settings/dashboard/inflight/page.lua")
 local function upvalue(fn, key)
   for i = 1, 100 do local name, value = debug.getupvalue(fn, i); if name == key then return value end end
@@ -82,65 +66,19 @@ local function upvalue(fn, key)
 end
 Page.getHeaderActions()
 local ui = upvalue(Page.build, "ui")
-local rebuilds, reports = 0, {}
-local ctx = { preferences = {}, x = 0, y = 0, w = 456,
-  requestRebuild = function() rebuilds = rebuilds + 1 end,
-  savePreferences = function() return true end,
-  reportSave = function(report) reports[#reports + 1] = report end }
+local ctx = {preferences = {}, children = {}, x = 0, y = 0, w = 456,
+  requestRebuild = function() end, savePreferences = function() return true end}
 Page.onReload(ctx)
-ui.sections.general, ui.sections.flight = false, true
-local function build()
-  ctx.children = {}; Page.build(ctx)
-  return ctx.children
-end
-build()
-for _ = 1, 8 do Page.wakeup(ctx) end
-local nodes = build()
-check(ui.flightPicker and ui.flightFallback, "page prepares fallback lazily")
-local missing
-for index, group in ipairs(ui.flightPicker.groups) do
-  for _, entry in ipairs(group.entries) do if entry.id == 250 then missing = index end end
-end
-check(missing ~= nil, "page retains stored unknown id")
-ui.flightGroup = missing
-nodes = build()
-local marked, toggle = false, nil
-for _, node in ipairs(nodes) do
-  if node.type == "label" and type(node.text) == "string" and string.find(node.text, "(missing)", 1, true) then marked = true end
-  if node.type == "toggle" then toggle = node end
-end
-check(marked, "real page labels missing id")
-check(toggle and toggle.get(), "real page missing checkbox is checked")
-toggle.set(false)
-check(ui.flightDirty and ui.flightPicker.stored == "18", "real toggle edits only model working copy")
-check(rfsuite.session.modelPreferences.inflight.flight_list == "18,250", "edit does not save early")
-Page.onSave(ctx)
-check(#saved == 1 and saved[1].id == "board" and saved[1].stored == "18" and not ui.dirty, "Save uses MCU model store")
-ui.flightDirty = true; rfsuite.session.mcu_id = "another"
-Page.onSave(ctx)
-check(#saved == 1 and reports[#reports].ok ~= true, "MCU change refuses save")
-Page.onClose()
-check(ui.flightPicker == nil and ui.flightWork == nil, "close releases picker state")
-
--- Reuse a complete slot snapshot with real derivation, including a newer cyclic slot.
-rfsuite.session.mcu_id = "board"
-local records = { F.standardRecord(1, 1, 5, 6), F.standardRecord(1, 2, 5, 6) }
-records[1].adjFunction = 83
-rfsuite.session.inflightSlots = { mcu = "board", records = records, map = {}, bank = 11, value = 12 }
-Page.getHeaderActions(); Page.onReload(ctx)
-ui.sections.general, ui.sections.flight = false, true
-build()
-for _ = 1, 100 do Page.wakeup(ctx); if ui.flightPicker then break end end
-check(ui.flightPicker and not ui.flightFallback, "page derives the connected FC snapshot without MSP")
-check(#ui.flightPicker.groups == 2 and ui.flightPicker.groups[1].entries[1].id == 83,
-  "connected offer uses actual slots and Cyclic order")
+Page.build(ctx)
+check(ui.flightPicker == nil and ui.flightWanted == nil, "radio page contains no model list editor")
+for key in pairs(cache) do check(not string.find(key, "flightlist", 1, true), "no old editor loaded") end
 Page.onClose()
 
 -- The sheet builds wrapped labels inside the actual scrollable help page at 480x320.
 LCD_W, LCD_H = 480, 320
 local HelpView = rfsuite.require("ui/help_view.lua")
 
--- Both actual help sheets obey the same character limits in both locales.
+-- The remaining radio help sheet obeys the same character limits in both locales.
 for _, lang in ipairs({ "en", "de" }) do
   local locale = assert(loadfile("src/rfsuite/i18n/" .. lang .. ".lua"))()
   local function translate(key)
@@ -148,9 +86,12 @@ for _, lang in ipairs({ "en", "de" }) do
     for part in string.gmatch(key, "[^.]+") do value = value[part] end
     return value
   end
-  for _, path in ipairs({ "setup/controls/inflight", "settings/dashboard/inflight" }) do
+  for _, path in ipairs({ "settings/dashboard/inflight" }) do
     local help = loadScript("/SCRIPTS/TOOLS/rfsuite-core/app/pages/" .. path .. "/help.lua")()({ i18n = { t = translate } }).message
     local length = utf8.len(help)
+    local preview = lang == "de" and "Sichtbar, sobald Einstellungen > Allgemein > Vorschau an ist."
+      or "Shown once Settings > General > Preview is on."
+    check(string.find(help, preview, 1, true), "existing preview help context is retained")
     check(length <= 600, lang .. " " .. path .. " sheet length " .. length)
     for line in string.gmatch(help, "[^\n]+") do check(utf8.len(line) <= 200, "help line <= 200") end
     local scene = HelpView.build({ contentW = 480, message = help, title = "Help" })

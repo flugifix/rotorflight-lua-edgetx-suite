@@ -1014,54 +1014,6 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
     if quiet >= PAGE_QUIET and (builds.count > 0 or builds.declared == false) then break end
   end
   local here = state.menu.getCurrentMenuId()
-  if pagePath == "settings/dashboard/inflight/page.lua" then
-    local form = upvalue(pageBuild, "ui")
-    form.sections.general, form.sections.wiring, form.sections.trims = false, false, false
-    form.runtime.getSectionToggleHandler("flight")()
-    for _ = 1, PAGE_PASSES do
-      local n = pass(counted)
-      if n > worst then worst = n end
-      if form.flightPicker and not state.pendingBuildUI then break end
-    end
-    assert(form.flightPicker and form.flightFallback, "accounting: offline flight-list fallback never built")
-    for index, group in ipairs(form.flightPicker.groups) do
-      for offset = 1, #group.entries, 6 do
-        form.flightGroup, form.flightOffset = index, offset
-        form.runtime.requestRebuild()
-        local n = pass(counted)
-        if n > worst then worst = n end
-      end
-    end
-    local Functions = World.require("widgets/dashboard/inflight/functions.lua")
-    local records = {}
-    local bank = Functions.wireToAuxField(form.config.bank_ch, {})
-    local value = Functions.wireToAuxField(form.config.value_ch, {})
-    for _, slot in ipairs(Functions.standardSlots(bank, value)) do records[slot.slot0 + 1] = slot.record end
-    records[Functions.STANDARD_FIRST_SLOT + 1].adjFunction = 83
-    session.inflightSlots = { mcu = session.mcu_id, map = {}, records = records,
-      bank = form.config.bank_ch, value = form.config.value_ch }
-    form.flightPicker, form.flightSource = nil, nil
-    form.flightStored, form.flightWanted = "83,250", true
-    form.runtime.requestRebuild()
-    for _ = 1, PAGE_PASSES do
-      local n = pass(counted)
-      if n > worst then worst = n end
-      if form.flightPicker and not state.pendingBuildUI then break end
-    end
-    assert(form.flightPicker and not form.flightFallback, "accounting: FC-derived flight list never built")
-    local sawMissing = false
-    for index, group in ipairs(form.flightPicker.groups) do
-      for offset = 1, #group.entries, 6 do
-        form.flightGroup, form.flightOffset = index, offset
-        form.runtime.requestRebuild()
-        local n = pass(counted)
-        if n > worst then worst = n end
-      end
-      for _, entry in ipairs(group.entries) do if entry.id == 250 and entry.missing then sawMissing = true end end
-    end
-    assert(sawMissing, "accounting: missing-id control was not listed")
-    print(string.format("  flight-list picker: fallback/FC groups and missing ID; page build %d; hosted pass %d", builds.worst, worst))
-  end
   local link = linkState()
   served = FC.served - served
   local empty = {}
@@ -1645,9 +1597,7 @@ do
   local widget = Runtime.new(ZONE, {})
   widget.preferences = widget.preferences or {}
   widget.preferences.dashboard = { theme_preflight = reference }
-  -- THREE switches decide whether there is an overlay at all, and the rows below measure a plain
-  -- dashboard if any of them is off. Two of them are the radio's and are staged here; the third
-  -- is the model's and is staged with the per-model store further down.
+  -- The preview gate and radio master switch must both be on to measure the overlay.
   --
   -- The preview switch is the pilot saying he wants an unfinished feature on the radio; the
   -- [inflight] section's own `enabled` is the overlay's master switch, and the rest of that
@@ -1708,6 +1658,12 @@ do
     end
   end
   FC.dynamicReply = function(command, payload)
+    if command == 53 then
+      local bytes = {}
+      for index = 2, #payload do bytes[index - 1] = payload[index] end
+      slotReplies[payload[1]], selectorIds[payload[1] + 1] = bytes, bytes[1]
+      return {}
+    end
     if command == 167 then return selectorIds end
     if command == 156 then
       return slotReplies[payload[1]] or {payload[1] == 0 and 2 or 1, 255, 0, 0, 1, 236, 246, 10, 20, 1, 0, 6, 0, 0}
@@ -1729,8 +1685,6 @@ do
   -- off -- which is what a first run of this driver did, silently, with a zero in the row.
   local store = {
     inflight = {
-      -- The model's own switch. The radio's two are staged above; all three have to be on.
-      enabled = true,
       -- The set is always derived from the board's own slots (the FC stub above carries the standard
       -- layout), so no layout setting is staged. An earlier comparison of the two former layouts was
       -- taken on a stub carrying only the two profile selectors, where the derivation applied nothing.
@@ -1772,10 +1726,10 @@ do
   -- Both halves reached the drive. The radio's settings are re-read from the card by the widget's
   -- own preference reload, so a stage that the settle above quietly replaced would leave the rows
   -- pricing an overlay that is switched off -- which is a zero in the row rather than an error.
-  if drive.settings.radio_enabled ~= true or drive.settings.model_enabled ~= true then
+  if drive.settings.radio_enabled ~= true or drive.settings.active ~= true then
     error("accounting: the tuning overlay settled with radio_enabled="
       .. tostring(drive.settings.radio_enabled)
-      .. " model_enabled=" .. tostring(drive.settings.model_enabled))
+      .. " active=" .. tostring(drive.settings.active))
   end
 
   ----------------------------------------------------------------------------
@@ -1794,6 +1748,7 @@ do
   ----------------------------------------------------------------------------
   local primeWorst = {}
   local primePasses = 0
+  local primePeak = ""
   local Prime = World.require("widgets/dashboard/inflight/prime.lua")
   local Functions = World.require("widgets/dashboard/inflight/functions.lua")
   if type(Prime) ~= "table" or type(Functions) ~= "table" then
@@ -1823,7 +1778,10 @@ do
     -- tick starts it there is a settle to wait out, and those passes are the dashboard's.
     if type(prime) == "table" then
       primePasses = primePasses + 1
-      if n > (primeWorst[class] or 0) then primeWorst[class] = n end
+      if n > (primeWorst[class] or 0) then
+        primeWorst[class] = n
+        if class == "state" then primePeak = "read pass " .. i .. " " .. tostring(phase) end
+      end
     end
     local after = drive.prime
     if type(after) == "table" and type(prime) == "table" and after == prime then
@@ -1854,7 +1812,14 @@ do
     local class = passClass(widget)
     local n = count(widget.refresh, widget, nil, nil)
     primePasses = primePasses + 1
-    if n > (primeWorst[class] or 0) then primeWorst[class] = n end
+    if n > (primeWorst[class] or 0) then
+      primeWorst[class] = n
+      if class == "state" then
+        local job = drive.profileJob
+        local op = job and job.plan[job.at]
+        primePeak = "restore pass " .. i .. " " .. tostring(op and op.op)
+      end
+    end
     assert((drive.prime.done or 0) - before <= 1, "accounting: restore parsed multiple replies")
   end
   assert(not drive.profileJob and drive.transfer.state == "ok", "accounting: restore did not verify")
@@ -2144,12 +2109,65 @@ do
   end
   drive.sessionPickerOpen, drive.sessionPick = nil, nil
 
+  -- Suggested-functions setup is driven through the same widget dispatcher and deferred wire.
+  -- Every plan page is built, then the confirmed write and full read-back run to the idle save.
+  -- Use the narrow display so the essential plan still exercises its whole-entry page break.
+  widget.zone = {x = 0, y = 0, w = 480, h = 272}
+  drive.prime = {phase = "done"}
+  for index = 3, 38 do selectorIds[index] = 83 end
+  drive.fcSetupOpen = true
+  drive.valueEpoch = drive.valueEpoch + 1
+  local setupWorst, setupBuild, setupPasses, planPages = 0, 0, 0, 0
+  local setupPeak = ""
+  local sawWrite, sawVerify, sawSave = false, false, false
+  for i = 1, 1800 do
+    holdLinkBacklog()
+    releaseReplies()
+    feedLink(World.sensorIds, 4200 + i)
+    local state = drive.fcSetup
+    if state then
+      if state.phase == "choices" then state.request = "read"
+      elseif state.phase == "plan" and state.pages then
+        if state.page < #state.pages then
+          state.page = state.page + 1
+          drive.valueEpoch = drive.valueEpoch + 1
+          planPages = planPages + 1
+        else state.request = "write" end
+      elseif state.phase == "error" then error("accounting: setup failed: " .. tostring(state.error)) end
+      local run = state.run
+      if run then
+        sawWrite = sawWrite or run.phase == "writing"
+        sawVerify = sawVerify or run.phase == "verify"
+      end
+      sawSave = sawSave or state.phase == "saving"
+    end
+    local class = passClass(widget)
+    local n = count(widget.refresh, widget, 0, nil)
+    setupPasses = i
+    if class == "tuning" then setupBuild = math.max(setupBuild, n)
+    elseif n > setupWorst then
+      setupWorst = n
+      setupPeak = "pass " .. i .. " " .. tostring(state and state.phase)
+        .. "/" .. tostring(state and state.run and state.run.phase)
+    end
+    if not drive.fcSetupOpen then break end
+  end
+  assert(not drive.fcSetupOpen and sawWrite and sawVerify and sawSave and planPages > 0,
+    "accounting: setup incomplete: phase=" .. tostring(drive.fcSetup and drive.fcSetup.phase)
+      .. " write=" .. tostring(sawWrite) .. " verify=" .. tostring(sawVerify)
+      .. " save=" .. tostring(sawSave) .. " pages=" .. planPages .. " passes=" .. setupPasses)
+  assert(_G.rfsuite.modules["/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/inflight/fcsetup.lua"] == nil,
+    "accounting: closed setup retained its writer")
+  widget.zone = ZONE
+  addRow("pass.job.tuning_setup", setupBuild, "all suggested-functions surfaces through widget build dispatcher")
+  addRow("pass.tuning.setup", setupWorst, setupPasses .. " passes, peak " .. setupPeak)
+
   removeDeferredLink()
 
   addRow("pass.tuning.state", worst.state or 0)
   addRow("pass.tuning.prime", primeWorst.state or 0,
     string.format("%d replies over %d passes, six PID/rate profiles + verified restore, one parse per pass",
-      profileReplies, primePasses))
+      profileReplies, primePasses) .. "; peak " .. primePeak)
   addRow("pass.job.tuning", math.max(worst.tuning or 0, primeWorst.tuning or 0),
     "64-row value ladder + guards included; navigation/report builds 0/0, mode builds 1")
   FC.dynamicReply = nil

@@ -20,10 +20,10 @@ return function(ctx)
   -- One intro line, then one line per setting in the order the page shows them, each starting
   -- with the label as it reads on screen. How the overlay itself is flown is the docs page's.
   local intro = t(i18n, "help_message",
-    "Wiring applies to all models; the flight list belongs to this model. Shown once Settings > General > Preview is on.")
+    "Radio wiring applies to all models. Shown once Settings > General > Preview is on.")
 
   -- The one button on this page that changes anything but the settings, so the help says that it
-  -- asks first. Its counterpart for the flight controller's own slots is on Setup > Controls.
+  -- asks first. Its counterpart for the flight controller's own slots is on the tuning ground screen.
   local setup = t(i18n, "help_setup",
     "Set up the model: shows what it will change on the radio before it writes.")
 
@@ -36,11 +36,7 @@ return function(ctx)
   local trims = t(i18n, "help_trims",
     "Drive rows from the trims: optional and off by default; touch, PAGE and the encoder work without them.")
 
-  -- The flight list is stored by the model's MCU identity, so saving it needs the board.
-  local owner = t(i18n, "help_owner",
-    "All parameters: offers everything the board carries; when off, keep at least one group. Saving needs the FC connected.")
-
   return {
-    message = intro .. "\n" .. setup .. "\n" .. link .. "\n" .. trims .. "\n" .. owner
+    message = intro .. "\n" .. setup .. "\n" .. link .. "\n" .. trims
   }
 end

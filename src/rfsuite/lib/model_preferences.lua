@@ -66,9 +66,8 @@ local MODEL_SCHEMA = {
     -- from the theme's path (app/pages/settings/dashboard/lib.lua).
     open = true,
   },
-  -- The model's half of the in-flight tuning overlay: what describes THIS machine. Whether it is
-  -- set up for the overlay at all, which set of parameters its flight controller offers, how far
-  -- one press moves them, and which parameters appear in flight.
+  -- The model's half of the in-flight tuning overlay: how far suggested functions move per
+  -- press, and which parameters appear in flight.
   --
   -- What is true of the transmitter whatever is plugged into it -- the interlock switch, the two
   -- channels and global variables the mixer devotes to the adjustment pair, and
@@ -82,13 +81,9 @@ local MODEL_SCHEMA = {
   -- pull in a widget module to reach them; the same note sits on the other side.
   inflight = {
     keys = {
-      -- Off until a pilot says this machine is set up for it. The radio carries a switch of its
-      -- own and both have to be on before anything drives.
-      enabled = false,
-      set_mode = "standard",
       step = 5,
       step_headspeed = 50,
-        flight_list = "",
+      flight_list = "",
     },
   },
   -- Per-widget state, keyed by the widget.
