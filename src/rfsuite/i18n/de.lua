@@ -248,7 +248,8 @@ return {
         arming_disable_flag_22 = "DSHOT-Bitbang",
         arming_disable_flag_23 = "ACC-Kalibrierung",
         arming_disable_flag_24 = "Motor-Protokoll",
-        arming_disable_flag_25 = "Arming-Schalter"
+        arming_disable_flag_25 = "Direktansteuerung",
+        arming_disable_flag_26 = "Arming-Schalter"
       },
       rfstatus = { name = "Rotorflight-Status" },
       elrs_link = { name = "ELRS Link" },

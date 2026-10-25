@@ -49,7 +49,8 @@ local ARMING_DISABLE_FLAG_LABELS = {
   [22] = "DSHOT Bitbang",
   [23] = "Acc Calibration",
   [24] = "Motor Protocol",
-  [25] = "Arm Switch"
+  [25] = "Override",
+  [26] = "Arm Switch"
 }
 
 local function translate(state, key, fallback)
@@ -83,7 +84,7 @@ local function armingDisableFlagsToText(state)
   end
 
   local labels = {}
-  for bitIndex = 0, 25 do
+  for bitIndex = 0, 26 do
     local isSet = false
     if bit32 then
       isSet = bit32.band(flags, bit32.lshift(1, bitIndex)) ~= 0
