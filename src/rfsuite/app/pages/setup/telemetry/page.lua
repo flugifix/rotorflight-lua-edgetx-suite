@@ -15,6 +15,7 @@ local Controls = nil
 local Common = nil
 local MspRuntime = nil
 local TelemetryApi = nil
+local RxConfigApi = nil
 local ConfirmDialog = nil
 local LoadingOverlay = nil
 local ApiVersion = nil
@@ -44,6 +45,8 @@ local SENSOR_GROUPS = {
 
 -- The flight controller's sensor list holds 40 entries (buffer positions 13..52).
 local MAX_SLOTS = 40
+
+local SERIALRX_CRSF = 9 -- Firmware SERIALRX_CRSF enum in src/main/rx/rx.h.
 
 local SENSOR_CATALOG = {
   { id = 1, name = "Heartbeat", group = "system" },
@@ -201,6 +204,7 @@ local ui = {
   config = {},
   telemetryBuffer = nil,
   crsfTelemetryMode = nil,
+  serialrxProvider = nil,
   nativeLockedIds = {},
   runtime = newRuntime(),
   loading = false,
@@ -225,6 +229,7 @@ local function ensureDeps()
   if not Controls then Controls = loadModule("ui/controls.lua") end
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not TelemetryApi then TelemetryApi = loadModule("tasks/msp/api/telemetry_config.lua") end
+  if not RxConfigApi then RxConfigApi = loadModule("tasks/msp/api/rx_config.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
@@ -274,12 +279,12 @@ local function countSelected()
 end
 
 local function isNativeLocked(sensorId)
-  return ui.crsfTelemetryMode == 0 and ui.nativeLockedIds and ui.nativeLockedIds[sensorId] == true
+  return ui.serialrxProvider == SERIALRX_CRSF and ui.crsfTelemetryMode == 0 and ui.nativeLockedIds and ui.nativeLockedIds[sensorId] == true
 end
 
 local function extractNativeLockedIds(cfg, buffer)
   local locked = {}
-  if ui.crsfTelemetryMode ~= 0 then
+  if ui.serialrxProvider ~= SERIALRX_CRSF or ui.crsfTelemetryMode ~= 0 then
     return locked
   end
   if cfg then
@@ -331,6 +336,8 @@ end
 local function loadFromSession()
   local session = getSession()
   local cfg = (type(session) == "table" and type(session.telemetry_config) == "table") and session.telemetry_config or nil
+  local rxConfig = type(session) == "table" and session.rx_config or nil
+  ui.serialrxProvider = type(rxConfig) == "table" and tonumber(rxConfig.serialrx_provider) or nil
 
   if cfg and type(cfg.buffer) == "table" then
     ui.telemetryBuffer = copyBuffer(cfg.buffer)
@@ -385,7 +392,7 @@ local function queueTelemetryRead()
     return false, "read_pending"
   end
   ui.runtime.readComplete = false
-  if not TelemetryApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+  if not TelemetryApi or not RxConfigApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
 
@@ -393,60 +400,89 @@ local function queueTelemetryRead()
   local mspState = MspRuntime.getState()
   local queue = mspState and mspState.queue
   local telemetryApi = TelemetryApi
+  local rxConfigApi = RxConfigApi
   if not queue or type(queue.add) ~= "function" then
     return false, "msp_queue_unavailable"
   end
 
   local readValid = type(session) == "table"
+  local readFailed = false
+  local repliesPending = 2
+  local telemetryConfig = nil
+  local rxConfig = nil
   ui.runtime.readPending = true
+  ui.runtime.readFailed = false
   ui.loading = true
   ui.progress = 0
+
+  local function failRead()
+    if readFailed then return end
+    readFailed = true
+    ui.runtime.readComplete = false
+    ui.runtime.readPending = false
+    ui.loading = false
+    ui.progress = 1
+    if Common and Common.failPageRead then
+      Common.failPageRead(ui)
+    end
+  end
+
+  -- Both reads are queued together; only their combined result rebuilds the page.
+  local function finishRead()
+    if readFailed then return end
+    repliesPending = repliesPending - 1
+    ui.progress = (2 - repliesPending) / 2
+    if repliesPending > 0 then return end
+    ui.runtime.readPending = false
+    ui.loading = false
+    if type(session) == "table" then
+      session.telemetry_config = telemetryConfig
+      session.rx_config = rxConfig
+    end
+    ui.serialrxProvider = tonumber(rxConfig.serialrx_provider)
+    if telemetryConfig.crsf_telemetry_mode ~= nil then
+      ui.crsfTelemetryMode = tonumber(telemetryConfig.crsf_telemetry_mode)
+    end
+    if not ui.dirty then
+      loadFromSession()
+    elseif telemetryConfig.buffer then
+      ui.telemetryBuffer = copyBuffer(telemetryConfig.buffer)
+      ui.nativeLockedIds = extractNativeLockedIds(telemetryConfig, ui.telemetryBuffer)
+      if ui.crsfTelemetryMode == 0 and ui.nativeLockedIds then
+        for id in pairs(ui.nativeLockedIds) do
+          ui.config[id] = true
+        end
+      end
+    end
+    ui.runtime.readComplete = readValid
+    if type(ui.runtime.requestRebuild) == "function" then
+      ui.runtime.requestRebuild()
+    end
+  end
+
   queue:add({
     command = telemetryApi.command,
     simulatorResponse = telemetryApi.simulatorResponse,
     timeout = 5.0,
     processReply = function(_, buf)
-      ui.runtime.readPending = false
-      ui.loading = false
-      ui.progress = 1
-      local parsed = telemetryApi.parse and telemetryApi.parse(buf) or nil
-      if type(parsed) ~= "table" then
-        if Common and Common.failPageRead then
-          return Common.failPageRead(ui)
-        end
-        return
-      end
-      if type(session) == "table" then
-        session.telemetry_config = parsed
-      end
-      if parsed and parsed.crsf_telemetry_mode ~= nil then
-        ui.crsfTelemetryMode = tonumber(parsed.crsf_telemetry_mode)
-      end
-      if not ui.dirty then
-        loadFromSession()
-      elseif parsed and parsed.buffer then
-        ui.telemetryBuffer = copyBuffer(parsed.buffer)
-        ui.nativeLockedIds = extractNativeLockedIds(parsed, ui.telemetryBuffer)
-        if ui.crsfTelemetryMode == 0 and ui.nativeLockedIds then
-          for id in pairs(ui.nativeLockedIds) do
-            ui.config[id] = true
-          end
-        end
-      end
-      ui.runtime.readComplete = readValid
-      if type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
+      if readFailed then return end
+      telemetryConfig = telemetryApi.parse and telemetryApi.parse(buf) or nil
+      if type(telemetryConfig) ~= "table" then return failRead() end
+      finishRead()
     end,
-    errorHandler = function()
-      readValid = false
-      ui.runtime.readPending = false
-      ui.loading = false
-      ui.progress = 1
-      if Common and Common.failPageRead then
-        Common.failPageRead(ui)
-      end
-    end
+    errorHandler = failRead
+  })
+  queue:add({
+    command = rxConfigApi.command,
+    simulatorResponse = rxConfigApi.simulatorResponse,
+    timeout = 5.0,
+    processReply = function(_, buf)
+      if readFailed then return end
+      rxConfig = type(buf) == "table" and #buf >= 1 and rxConfigApi.parse and rxConfigApi.parse(buf) or nil
+      if type(rxConfig) ~= "table" then return failRead() end
+      finishRead()
+    end,
+    errorHandler = failRead
   })
 
   return true, nil
@@ -849,7 +885,7 @@ function M.build(ctx)
     end
   end
 
-  if not groupItems and ui.crsfTelemetryMode ~= nil then
+  if not groupItems and ui.serialrxProvider == SERIALRX_CRSF and ui.crsfTelemetryMode ~= nil then
     local modeTitle = ui.crsfTelemetryMode == 0
       and pageText(i18n, "mode_native", "CRSF Telemetry: Native")
       or pageText(i18n, "mode_custom", "CRSF Telemetry: Custom")
@@ -940,12 +976,14 @@ function M.onClose()
   ui.loading = false
   ui.progress = 0
   ui.crsfTelemetryMode = nil
+  ui.serialrxProvider = nil
   ui.telemetryBuffer = nil
   ui.nativeLockedIds = {}
   Controls = nil
   Common = nil
   MspRuntime = nil
   TelemetryApi = nil
+  RxConfigApi = nil
   ConfirmDialog = nil
   LoadingOverlay = nil
   t = nil

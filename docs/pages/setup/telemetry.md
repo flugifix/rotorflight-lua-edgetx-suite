@@ -16,7 +16,7 @@ Read-only while the model is armed.
 
 ## Mode Awareness
 
-The header of the page indicates the active telemetry mode configured on the flight controller:
+With a CRSF receiver, the header of the page indicates the active telemetry mode configured on the flight controller:
 
 - **CRSF Telemetry: Native**: The flight controller sends standard CRSF frames for the native sensors whose IDs occupy telemetry slots (e.g. Attitude, Flight Mode, Altitude). These sensors are locked on in the page because removing them from the slots would stop the flight controller from sending them. Additional custom sensors require Custom mode. Unmanaged sensor slots on the flight controller are preserved in place, and conflicting individual sub-axes (e.g. pitch/roll/yaw attitude) are disabled when their parent is native-locked.
 - **CRSF Telemetry: Custom**: The flight controller transmits individual custom telemetry sensors selected from the catalog.
@@ -32,7 +32,7 @@ returns to the list, and Back on the list leaves the page.
 Switches changed in one group are kept while another group is opened, and Save writes all of
 them at once from either level. Leaving the page without saving discards them.
 
-The mode header and the native-mode note are shown on the list only.
+The mode header and the native-mode note are shown on the list only, with a CRSF receiver. With any other receiver, no CRSF header or warning is shown and the native sensors are ordinary switches.
 
 ## System Status and System Config
 
