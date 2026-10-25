@@ -146,7 +146,7 @@ BEC voltage, the link quality, the head speed, the PID and rate profile, the ESC
 current and the timer. In flight the craft name gives way to the governor state, with the rest
 in the same places. After the flight: flight time, highest current, capacity used, fuel left,
 highest ESC temperature, voltage at the end of the flight, flight count, lowest link quality and
-voltage.
+voltage per cell at the end of the flight (V/CELL).
 
 ![@SRB-RC before, during and after the flight](../images/dashboard/themes/srb-rc.png)
 
