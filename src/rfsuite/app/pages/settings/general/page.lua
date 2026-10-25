@@ -26,7 +26,6 @@ local CONFIG_SCHEMA = {
   { key = "save_armed_warning",           type = "bool",   default = true   },
   { key = "reload_confirm",               type = "bool",   default = true   },
   { key = "preview_setup_wizard",         type = "bool",   default = false  },
-  { key = "preview_flight_log",           type = "bool",   default = false  },
   { key = "preview_inflight_tuning",      type = "bool",   default = false  },
   { key = "developer_tools",              type = "bool",   default = false  },
 }
@@ -172,15 +171,6 @@ local PREVIEW_ITEMS = {
     }
   },
   {
-    key             = "preview_flight_log",
-    labelKey        = "preview_flight_log",
-    labelFallback   = "Flight Log",
-    confirm         = {
-      labelKey = "preview_confirm_flight_log",
-      labelFallback = "The flight log is not finished. What it records, and how the page presents it, can still change, and it keeps a file of its own on the card. Show it anyway?"
-    }
-  },
-  {
     key             = "preview_inflight_tuning",
     labelKey        = "preview_inflight_tuning",
     labelFallback   = "In-flight tuning",
@@ -308,7 +298,6 @@ function M.onSave(ctx)
     if ctx.menu and ctx.menu.setCondition then
       ctx.menu.setCondition("developerTools", ui.config.developer_tools == true)
       ctx.menu.setCondition("previewSetupWizard", ui.config.preview_setup_wizard == true)
-      ctx.menu.setCondition("previewFlightLog", ui.config.preview_flight_log == true)
       ctx.menu.setCondition("previewInflightTuning", ui.config.preview_inflight_tuning == true)
     end
     if ctx and type(ctx.reportSave) == "function" then

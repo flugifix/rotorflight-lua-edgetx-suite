@@ -14,8 +14,9 @@ shows each shipped theme on them, and says how to choose one.
 *System* → *Settings* → *Dashboard* → *Theme*. The theme chosen there is the one every model
 shows. A different theme for the inflight or the postflight screen alone, and a theme of a
 model's own, are switched on on the same page; [Theme](../pages/settings/dashboard/theme.md)
-describes every row of it. A model's own theme stays on its post-flight screen after the battery
-is unplugged, until the next flight controller connects.
+describes every row of it. A model's own theme and its model-specific settings stay on the
+post-flight screen after the battery is unplugged, until the next flight controller connects.
+The retained settings also apply when the model customizes the radio's selected theme.
 
 A theme's own settings, such as the voltage range its gauges span, are under
 *System* → *Settings* → *Dashboard* → *Settings*, one tile per theme
@@ -69,7 +70,12 @@ cell and the lowest link quality.
 In fullscreen, Default shows the dashboard at the full screen size with the same layouts.
 The controls at the top right open the suite tool (while disarmed), open the quick menu,
 and leave fullscreen with **X**. A long press on the return key also leaves fullscreen.
-The page keys open the quick menu over the dashboard; closing that menu returns to the
+With the global [Keys](../pages/settings/dashboard/keys.md) choices as they come, SYS opens
+the suite tool, and TELE and the page keys open the quick menu, also before the FC connects;
+Default binds no key itself, so MDL, and any key put on **Theme**, does nothing while the
+dashboard itself is showing.
+With a view open, PAGE as it comes, or on **Theme**, closes the quick menu or opens it over
+another view; PAGE set there to another action does that action, and on **Nothing** nothing. Closing the menu returns to the
 dashboard.
 
 ![Default before, during and after the flight](../images/dashboard/themes/default.png)

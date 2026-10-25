@@ -9,6 +9,8 @@ local function loadModule(path)
   return mod
 end
 
+local Palette = _G.rfsuite and _G.rfsuite.palette or (_G.rfsuite and _G.rfsuite.require or loadModule)("ui/palette.lua")
+
 local Common = nil
 local Controls = nil
 local LoadingOverlay = nil
@@ -349,9 +351,9 @@ local function readListing(listing, budget)
   return spent
 end
 
-local function formatDateText(date, time, isNarrow)
-  if not date or date == "" or date == "Unknown" then
-    return "Unknown"
+local function formatDateText(date, time, isNarrow, unknownText)
+  if not date or date == "" then
+    return unknownText
   end
   local d = date
   if isNarrow then
@@ -389,7 +391,7 @@ local function extractFileInfo(filename, fullPath, parentFolder)
 
   local model = string.match(filename, "^(.-)%-%d%d%d%d")
   if not model or model == "" then
-    model = (parentFolder and parentFolder ~= "" and parentFolder ~= "telemetry" and parentFolder ~= "rfsuite" and parentFolder ~= "LOGS") and parentFolder or "Default"
+    model = (parentFolder and parentFolder ~= "" and parentFolder ~= "telemetry" and parentFolder ~= "rfsuite" and parentFolder ~= "LOGS") and parentFolder or nil
   end
 
   -- Fallback: peek first lines if date/time not in filename.
@@ -439,7 +441,7 @@ local function extractFileInfo(filename, fullPath, parentFolder)
     file = filename,
     path = fullPath,
     model = model,
-    date = date or "Unknown",
+    date = date,
     time = time or "",
     sortKey = sortKey
   }
@@ -638,7 +640,7 @@ function M.onHelp(ctx)
   if type(help) == "function" then
     return help(ctx)
   end
-  return { title = "Logs", message = "" }
+  return { title = pageText(ctx and ctx.i18n, "title"), message = "" }
 end
 
 function M.wakeup(ctx)
@@ -894,7 +896,7 @@ local function appendWindowNav(children, x, y, w, buttonText, onPress, buttonRig
     y = y + 13,
     w = w - navW - 30,
     text = rangeText,
-    color = COLOR_THEME_PRIMARY1,
+    color = Palette.text,
     font = SMLSIZE
   }
 
@@ -904,7 +906,7 @@ local function appendWindowNav(children, x, y, w, buttonText, onPress, buttonRig
     y = y + LIST_NAV_H - 1,
     w = w,
     h = 1,
-    color = COLOR_THEME_SECONDARY2,
+    color = Palette.border,
     filled = true
   }
 
@@ -925,7 +927,7 @@ local function buildCurvePicker(children, x, y, w, i18n)
       type = "label",
       x = x + 10, y = y + 20, w = w - 20,
       text = pageText(i18n, "graph_no_columns"),
-      color = COLOR_THEME_WARNING,
+      color = Palette.warning,
       align = CENTER
     }
     return
@@ -986,7 +988,7 @@ local function buildCurvePicker(children, x, y, w, i18n)
       type = "label",
       x = x + 10, y = cursorY + 20, w = w - 20,
       text = pageText(i18n, "graph_no_columns"),
-      color = COLOR_THEME_WARNING,
+      color = Palette.warning,
       align = CENTER
     }
     return
@@ -1060,14 +1062,14 @@ local function buildChart(children, x, y, w, availH, i18n)
     type = "label",
     x = x, y = y, w = math.floor(w * 0.55),
     text = tostring(state.selectedFile or ""),
-    color = COLOR_THEME_PRIMARY1,
+    color = Palette.text,
     font = SMLSIZE
   }
   children[#children + 1] = {
     type = "label",
     x = x + math.floor(w * 0.55), y = y, w = w - math.floor(w * 0.55),
     text = windowText,
-    color = COLOR_THEME_PRIMARY1,
+    color = Palette.text,
     font = SMLSIZE,
     align = RIGHT
   }
@@ -1077,7 +1079,7 @@ local function buildChart(children, x, y, w, availH, i18n)
   children[#children + 1] = {
     type = "rectangle",
     x = chartX, y = chartY + chartH, w = chartW, h = 1,
-    color = COLOR_THEME_DISABLED,
+    color = Palette.grid,
     filled = true
   }
 
@@ -1089,14 +1091,14 @@ local function buildChart(children, x, y, w, availH, i18n)
     children[#children + 1] = {
       type = "rectangle",
       x = g.x, y = chartY + 1, w = 1, h = chartH - 2,
-      color = COLOR_THEME_DISABLED,
+      color = Palette.grid,
       filled = true
     }
     children[#children + 1] = {
       type = "label",
       x = math.max(x, g.x - 18), y = chartY + chartH + 2, w = 40,
       text = g.label,
-      color = COLOR_THEME_DISABLED,
+      color = Palette.muted,
       font = SMLSIZE
     }
   end
@@ -1119,7 +1121,7 @@ local function buildChart(children, x, y, w, availH, i18n)
     children[#children + 1] = {
       type = "rectangle",
       x = cursorX, y = chartY + 1, w = 1, h = chartH - 2,
-      color = COLOR_THEME_FOCUS,
+      color = Palette.cursor,
       filled = true
     }
   end
@@ -1153,7 +1155,7 @@ local function buildChart(children, x, y, w, availH, i18n)
     type = "label",
     x = readX, y = readY + 3, w = timeW,
     text = Graph.getCursorTimeText() or "-",
-    color = COLOR_THEME_PRIMARY1,
+    color = Palette.text,
     font = SMLSIZE
   }
 
@@ -1239,7 +1241,7 @@ local function buildGraphView(children, x, y, w, availH, i18n)
       type = "label",
       x = x + 10, y = y + headH + 20, w = w - 20,
       text = graphErrorText(i18n, err),
-      color = COLOR_THEME_WARNING,
+      color = Palette.warning,
       align = CENTER
     }
     return
@@ -1310,7 +1312,7 @@ function M.build(ctx)
   if state.selectedFile and state.selectedFilePath then
     local summary = state.summary
 
-    local titleText = summaryTitle(state.selectedModel or "Log", state.selectedFile, w)
+    local titleText = summaryTitle(state.selectedModel or pageText(i18n, "model_default"), state.selectedFile, w)
     if Controls and type(Controls.appendStaticSectionHeader) == "function" then
       Controls.appendStaticSectionHeader(children, x, cursorY, w, titleText)
       cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
@@ -1322,8 +1324,8 @@ function M.build(ctx)
         x = x + 10,
         y = cursorY + 20,
         w = w - 20,
-        text = "Failed to parse log file",
-        color = COLOR_THEME_WARNING,
+        text = pageText(i18n, "parse_failed"),
+        color = Palette.warning,
         align = CENTER
       }
       return
@@ -1341,7 +1343,7 @@ function M.build(ctx)
       y = cursorY + 10,
       w = labelColW,
       text = pageText(i18n, "flight_duration"),
-      color = COLOR_THEME_PRIMARY1,
+      color = Palette.text,
       font = SMLSIZE
     }
     children[#children + 1] = {
@@ -1351,7 +1353,7 @@ function M.build(ctx)
       w = valColW,
       text = string.format("%s   (%d %s)", summary.durationStr, summary.sampleCount, pageText(i18n, "samples")),
       -- The default label colour these values were always drawn in (COLOR_WHITE is undefined); white is unreadable on the light page.
-      color = COLOR_THEME_SECONDARY1,
+      color = Palette.accent,
       font = SMLSIZE
     }
     cursorY = cursorY + rowH
@@ -1361,7 +1363,7 @@ function M.build(ctx)
       y = cursorY - 1,
       w = w,
       h = 1,
-      color = COLOR_THEME_SECONDARY2,
+      color = Palette.border,
       filled = true
     }
 
@@ -1372,7 +1374,7 @@ function M.build(ctx)
       y = cursorY + 10,
       w = labelColW,
       text = pageText(i18n, "voltage_title"),
-      color = COLOR_THEME_PRIMARY1,
+      color = Palette.text,
       font = SMLSIZE
     }
     children[#children + 1] = {
@@ -1384,7 +1386,7 @@ function M.build(ctx)
         pageText(i18n, "start"), statText("%.2fV", summary.vStart),
         pageText(i18n, "min"), statText("%.2fV (-%.2fV)", summary.vMin, summary.vSag),
         pageText(i18n, "end_val"), statText("%.2fV", summary.vEnd)),
-      color = COLOR_THEME_SECONDARY1,
+      color = Palette.accent,
       font = SMLSIZE
     }
     cursorY = cursorY + rowH
@@ -1394,7 +1396,7 @@ function M.build(ctx)
       y = cursorY - 1,
       w = w,
       h = 1,
-      color = COLOR_THEME_SECONDARY2,
+      color = Palette.border,
       filled = true
     }
 
@@ -1405,7 +1407,7 @@ function M.build(ctx)
       y = cursorY + 10,
       w = labelColW,
       text = pageText(i18n, "current_title"),
-      color = COLOR_THEME_PRIMARY1,
+      color = Palette.text,
       font = SMLSIZE
     }
     children[#children + 1] = {
@@ -1417,7 +1419,7 @@ function M.build(ctx)
         pageText(i18n, "peak"), statText("%.1f A", summary.cPeak),
         pageText(i18n, "avg"), statText("%.1f A", summary.cAvg),
         pageText(i18n, "consumption_title"), statText("~%d mAh", summary.mah and math.floor(summary.mah))),
-      color = COLOR_THEME_SECONDARY1,
+      color = Palette.accent,
       font = SMLSIZE
     }
     cursorY = cursorY + rowH
@@ -1427,7 +1429,7 @@ function M.build(ctx)
       y = cursorY - 1,
       w = w,
       h = 1,
-      color = COLOR_THEME_SECONDARY2,
+      color = Palette.border,
       filled = true
     }
 
@@ -1438,7 +1440,7 @@ function M.build(ctx)
       y = cursorY + 10,
       w = labelColW,
       text = pageText(i18n, "rpm_title"),
-      color = COLOR_THEME_PRIMARY1,
+      color = Palette.text,
       font = SMLSIZE
     }
     children[#children + 1] = {
@@ -1450,7 +1452,7 @@ function M.build(ctx)
         pageText(i18n, "max"), statText("%d rpm", summary.rMax and math.floor(summary.rMax)),
         pageText(i18n, "min"), statText("%d rpm", summary.rMin and math.floor(summary.rMin)),
         pageText(i18n, "in_flight")),
-      color = COLOR_THEME_SECONDARY1,
+      color = Palette.accent,
       font = SMLSIZE
     }
     cursorY = cursorY + rowH
@@ -1460,7 +1462,7 @@ function M.build(ctx)
       y = cursorY - 1,
       w = w,
       h = 1,
-      color = COLOR_THEME_SECONDARY2,
+      color = Palette.border,
       filled = true
     }
 
@@ -1482,7 +1484,7 @@ function M.build(ctx)
       y = cursorY + 10,
       w = labelColW,
       text = pageText(i18n, "temp_title"),
-      color = COLOR_THEME_PRIMARY1,
+      color = Palette.text,
       font = SMLSIZE
     }
     children[#children + 1] = {
@@ -1495,7 +1497,7 @@ function M.build(ctx)
         pageText(i18n, "start"), statText("%d %s", tStartVal and math.floor(tStartVal), tempUnit),
         pageText(i18n, "max"), pageText(i18n, "throttle_title"),
         statText("%d %%", summary.thrMax and math.floor(summary.thrMax))),
-      color = COLOR_THEME_SECONDARY1,
+      color = Palette.accent,
       font = SMLSIZE
     }
     cursorY = cursorY + rowH
@@ -1505,7 +1507,7 @@ function M.build(ctx)
       y = cursorY - 1,
       w = w,
       h = 1,
-      color = COLOR_THEME_SECONDARY2,
+      color = Palette.border,
       filled = true
     }
 
@@ -1578,7 +1580,7 @@ function M.build(ctx)
       y = cursorY + 25,
       w = w - 20,
       text = pageText(i18n, "no_logs_found"),
-      color = COLOR_THEME_DISABLED,
+      color = Palette.muted,
       align = CENTER
     }
     cursorY = cursorY + 60
@@ -1645,11 +1647,14 @@ function M.build(ctx)
                                         onPrev, false, rangeText)
   end
 
+  local dateUnknown = pageText(i18n, "date_unknown")
+  local modelDefault = pageText(i18n, "model_default")
+
   for i = first, last do
     local item = state.logsList[i]
     local itemY = cursorY
 
-    local labelLines = wrapToWidth(string.format("[%s] %s", item.model, item.file),
+    local labelLines = wrapToWidth(string.format("[%s] %s", item.model or modelDefault, item.file),
                                    SMLSIZE, labelW, ROW_MAX_LINES)
     local labelText = table.concat(labelLines, "\n")
     local rowH = math.max(ROW_MIN_H, 22 + #labelLines * labelLineH)
@@ -1660,8 +1665,8 @@ function M.build(ctx)
       x = x + 10,
       y = itemY + 11,
       w = dateColW,
-      text = formatDateText(item.date, item.time, isNarrow),
-      color = COLOR_THEME_PRIMARY1,
+      text = formatDateText(item.date, item.time, isNarrow, dateUnknown),
+      color = Palette.text,
       font = SMLSIZE
     }
 
@@ -1672,7 +1677,7 @@ function M.build(ctx)
       y = itemY + 11,
       w = labelW,
       text = labelText,
-      color = COLOR_THEME_DISABLED,
+      color = Palette.muted,
       font = SMLSIZE
     }
 
@@ -1703,7 +1708,7 @@ function M.build(ctx)
       y = itemY + rowH - 1,
       w = w,
       h = 1,
-      color = COLOR_THEME_SECONDARY2,
+      color = Palette.border,
       filled = true
     }
 
@@ -1723,14 +1728,15 @@ function M.build(ctx)
 end
 
 -- The list of logs and the window of it on screen are kept when the page closes, so coming back
--- neither walks the card again nor builds more than one window of it. Each log is one table of
--- six short strings from extractFileInfo, about half a kilobyte of Lua memory on the 64-bit
--- EdgeTX simulator (a radio's 32-bit build has smaller table and string headers; not measured
--- there): 2.3 MB on the simulator for 5000 logs, which counts against the limit EdgeTX sets for
--- all Lua scripts and widgets together (6 MB on colour radios). The LVGL tree is not kept; the
--- host drops it with the page. The list is read again when the pilot asks for it with Reload,
--- or when the host drops this module from its page cache (app/pages/init.lua) and loads it
--- afresh. A log written since the list was read is not on it until then.
+-- neither walks the card again nor builds more than one window of it. Each log is one table of up
+-- to six short strings from extractFileInfo (date and model may be absent), about half a kilobyte
+-- of Lua memory on the 64-bit EdgeTX simulator (a radio's 32-bit build has smaller table and
+-- string headers; not measured there): 2.3 MB on the simulator for 5000 logs, which counts
+-- against the limit EdgeTX sets for all Lua scripts and widgets together (6 MB on colour radios).
+-- The LVGL tree is not kept; the host drops it with the page. The list is read again when the
+-- pilot asks for it with Reload, or when the host drops this module from its page cache
+-- (app/pages/init.lua) and loads it afresh. A log written since the list was read is not on it
+-- until then.
 --
 -- A walk still in progress is dropped rather than kept, and with it any directory it held open;
 -- the next visit starts it again.

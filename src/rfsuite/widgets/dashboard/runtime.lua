@@ -57,6 +57,98 @@ local PreferencesModule = requireModule("lib/preferences.lua")
 local ModelPreferences = requireModule("lib/model_preferences.lua")
 local DashboardAudio = requireModule("lib/audio.lua")
 local DashboardSplash = requireModule("widgets/dashboard/splash.lua")
+-- Set while the ELRS provider is due to be unloaded but is not idle yet; see releaseElrsProvider.
+local elrsReleasePending = false
+local function standbyModule(self)
+  if self._standbyModule then return self._standbyModule end
+  elrsReleasePending = false
+  local module = requireModule("widgets/dashboard/standby.lua")
+  if module and type(module.acquire) == "function" then module.acquire(self._standbyModuleOwner) end
+  self._standbyModule = module
+  return module
+end
+local function elrsModules(self)
+  self._standbyElrsConfig = self._standbyElrsConfig or requireModule("lib/elrs_config.lua")
+  self._standbyCrsf = self._standbyCrsf or requireModule("lib/crsf.lua")
+  return self._standbyElrsConfig, self._standbyCrsf
+end
+local function cancelStandbyElrs(self, reason)
+  local config = self._standbyElrsConfig
+  if self._standbyElrsActive and config and type(config.cancel) == "function" then
+    config.cancel(self._standbyElrsOwner, reason)
+    if self._standbyCache and self._standbyElrsIdentity and type(config.snapshot) == "function" then
+      local Standby = standbyModule(self)
+      local now = type(getTime) == "function" and getTime() / 100 or 0
+      Standby.setElrsSnapshot(self._standbyCache, config.snapshot(self._standbyElrsIdentity), now)
+    end
+  end
+  self._standbyElrsActive = false
+end
+-- The ELRS provider is loaded for standby and for the TX power alert. When the last standby screen
+-- closes and the alert is off, it is unloaded with its power decoder; lib/crsf.lua stays, since the
+-- MSP transport and the telemetry drain share that one frame multiplexer. Only an idle provider is
+-- unloaded: a lease means another consumer still talks to the module through it, and a pending
+-- drain means late replies of a cut-short conversation may still be queued, which a fresh instance
+-- would take for its own. Until then the release is retried on later passes, draining as it goes.
+-- Every dashboard widget runs its own copy of this file, so a standby screen another widget opened
+-- since is seen by its display module in the shared registry, and leaves the release to that one.
+local function releaseElrsProvider(self)
+  local rf = _G.rfsuite
+  local modules = type(rf) == "table" and rf.modules or nil
+  if type(modules) == "table" and modules["/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/standby.lua"] ~= nil then
+    elrsReleasePending = false
+    return
+  end
+  local config = type(rf) == "table" and rf.elrs_config or nil
+  if type(config) == "table" and type(config.idle) == "function" then
+    local idle, held = config.idle()
+    if not idle then
+      elrsReleasePending = true
+      if not held and type(config.drain) == "function" then
+        config.drain({ crsf = rf.crsf_manager, now = type(getTime) == "function" and getTime() / 100 or 0 })
+      end
+      return
+    end
+  end
+  elrsReleasePending = false
+  if type(rf) == "table" and type(rf.clearModule) == "function" and DashboardAudio
+      and type(DashboardAudio.releaseElrsConfig) == "function"
+      and DashboardAudio.releaseElrsConfig(self.preferences and self.preferences.audio_events) then
+    rf.clearModule("lib/elrs_config.lua")
+    rf.clearModule("lib/elrs_power.lua")
+    rf.elrs_config = nil
+  end
+end
+local function releaseStandby(self, reason)
+  cancelStandbyElrs(self, reason)
+  if self._job and self._job.kind == "standby" then self._job = nil end
+  if self._treeKind == "standby" then
+    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
+    self.built = false
+    self.renderKey = nil
+    self._treeKind = nil
+    self._treeKey = nil
+  end
+  local module = self._standbyModule
+  self._standbyModule = nil
+  self._standbyCache = nil
+  self._standbyItems = nil
+  self._standbyLayout = nil
+  self._standbyTexts = nil
+  self._standbySnapshotTexts = nil
+  self._standbyTextI18n = nil
+  self._standbyFullscreen = nil
+  self._standbyElrsIdentity = nil
+  self._standbyElrsIdentityAt = nil
+  self._standbyElrsConfig = nil
+  self._standbyCrsf = nil
+  if module and type(module.release) == "function" then
+    module.release(self._standbyModuleOwner)
+    if type(module.consumerCount) == "function" and module.consumerCount() == 0 then releaseElrsProvider(self) end
+  elseif elrsReleasePending then
+    releaseElrsProvider(self)
+  end
+end
 local MspRuntime = requireModule("tasks/msp/runtime.lua")
 local I18nModule = requireModule("i18n/init.lua")
 local Sensors = requireModule("lib/sensors.lua")
@@ -800,6 +892,229 @@ local function splashJobStep(self)
   -- tree that has already been cleared.
   self._lastChildCount = #splash
   return true
+end
+
+local function standbyTexts(self, items, infoKind)
+  if self._standbyTexts then return self._standbyTexts end
+  local t = (self.i18n and self.i18n.t) or function(_, fallback) return fallback end
+  local selected = {}
+  for i = 1, #(items or {}) do selected[items[i].type] = true end
+  local timerDetail = t("widgets.dashboard.standby.timer_detail", "EdgeTX model timer")
+  self._standbyTexts = {
+    screen_title = t("widgets.dashboard.standby.screen_title", "Standby"),
+    layout_invalid = t("widgets.dashboard.standby.layout_invalid", "Standby layout does not fit"),
+    module_clock = t("widgets.dashboard.standby.module_clock", "Clock"),
+    module_date = t("widgets.dashboard.standby.module_date", "Date"),
+    module_tx_battery = t("widgets.dashboard.standby.module_tx_battery", "TX battery"),
+    module_model = t("widgets.dashboard.standby.module_model", "Selected model"),
+    module_timer1 = t("widgets.dashboard.standby.module_timer1", "Timer 1"),
+    module_timer2 = t("widgets.dashboard.standby.module_timer2", "Timer 2"),
+    module_timer3 = t("widgets.dashboard.standby.module_timer3", "Timer 3"),
+    module_elrs = t("widgets.dashboard.standby.module_elrs", "ELRS TX configuration"),
+    elrs_reading = t("widgets.dashboard.standby.elrs_reading", "Reading"),
+    elrs_unavailable = t("widgets.dashboard.standby.elrs_unavailable", "Unavailable"),
+    elrs_no_module = t("widgets.dashboard.standby.elrs_no_module", "No ELRS module"),
+    elrs_last_read = t("widgets.dashboard.standby.elrs_last_read", "Last read %d s ago"),
+    elrs_packet_rate = t("widgets.dashboard.standby.elrs_packet_rate", "Packet Rate"),
+    elrs_telemetry_ratio = t("widgets.dashboard.standby.elrs_telemetry_ratio", "Telemetry Ratio"),
+    elrs_max_power = t("widgets.dashboard.standby.elrs_max_power", "Max Power"),
+    elrs_dynamic = t("widgets.dashboard.standby.elrs_dynamic", "Dynamic"),
+    elrs_rate_short = t("widgets.dashboard.standby.elrs_rate_short", "Rate"),
+    elrs_ratio_short = t("widgets.dashboard.standby.elrs_ratio_short", "TLM"),
+    elrs_power_short = t("widgets.dashboard.standby.elrs_power_short", "Max"),
+    elrs_dynamic_short = t("widgets.dashboard.standby.elrs_dynamic_short", "Dyn"),
+    tx_battery_detail = t("widgets.dashboard.standby.tx_battery_detail", "Radio battery"),
+    model_detail = t("widgets.dashboard.standby.model_detail", "EdgeTX model"),
+    timer1_detail = timerDetail,
+    timer2_detail = timerDetail,
+    timer3_detail = timerDetail,
+    date_detail = t("widgets.dashboard.standby.date_detail", "Radio date"),
+  }
+  if selected.tx_gps then
+    self._standbyTexts.module_tx_gps = t("widgets.dashboard.standby.module_tx_gps", "TX GPS")
+    self._standbyTexts.gps_fix = t("widgets.dashboard.standby.gps_fix", "Fix")
+    self._standbyTexts.gps_no_fix = t("widgets.dashboard.standby.gps_no_fix", "No fix")
+    self._standbyTexts.gps_satellites = t("widgets.dashboard.standby.gps_satellites", "Sat")
+    self._standbyTexts.gps_time_unavailable = t("widgets.dashboard.standby.gps_time_unavailable", "Time status unknown")
+    self._standbyTexts.gps_latitude = t("widgets.dashboard.standby.gps_latitude", "Latitude")
+    self._standbyTexts.gps_longitude = t("widgets.dashboard.standby.gps_longitude", "Longitude")
+    self._standbyTexts.gps_course = t("widgets.dashboard.standby.gps_course", "Course")
+    self._standbyTexts.gps_hdop = t("widgets.dashboard.standby.gps_hdop", "HDOP")
+    self._standbyTexts.tx_gps_detail = t("widgets.dashboard.standby.tx_gps_detail", "Internal transmitter GPS")
+  end
+  if selected.uptime then
+    self._standbyTexts.module_uptime = t("widgets.dashboard.standby.module_uptime", "Radio uptime")
+    self._standbyTexts.uptime_detail = t("widgets.dashboard.standby.uptime_detail", "Since radio power-on")
+  end
+  if selected.firmware then
+    self._standbyTexts.module_firmware = t("widgets.dashboard.standby.module_firmware", "Firmware")
+    self._standbyTexts.firmware_detail = t("widgets.dashboard.standby.firmware_detail", "Radio firmware")
+  end
+  if infoKind == "controller_missing" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_controller_missing", "Flight controller not detected")
+  elseif infoKind == "api_unsupported" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_api_unsupported", "Compatibility check failed")
+  elseif infoKind == "suite_loading" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_suite_loading", "Suite is preparing this model")
+  elseif infoKind == "receiver_telemetry_missing" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_receiver_telemetry_missing", "Receiver telemetry is missing")
+  elseif infoKind == "battery_telemetry_missing" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_battery_telemetry_missing", "Battery telemetry is missing")
+  elseif infoKind == "starting" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_starting", "Dashboard startup is pending")
+  elseif infoKind == "partial_telemetry" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_partial_telemetry", "Some telemetry is unavailable")
+  end
+  return self._standbyTexts
+end
+
+local function invalidateStandbyTextState(self)
+  self._standbyTexts, self._standbySnapshotTexts, self._standbyTextI18n = nil, nil, nil
+  local cache = self._standbyCache
+  if cache then
+    cache.text, cache.gpsDetailItems = nil, nil
+    cache.snapshotValues, cache.snapshotAt, cache.snapshotGpsDetails = nil, nil, nil
+    cache.elrsCompact = nil
+  end
+end
+
+local function prepareStandbyTextCache(self, items)
+  self._standbyCache = self._standbyCache or {}
+  if self._standbyTextI18n ~= self.i18n then
+    invalidateStandbyTextState(self)
+    self._standbyTextI18n = self.i18n
+  end
+  if self._standbySnapshotTexts == nil then
+    local t = (self.i18n and self.i18n.t) or function(_, fallback) return fallback end
+    local selected, texts = {}, {}
+    for i = 1, #(items or {}) do
+      local item = items[i]
+      selected[item.type] = true
+    end
+    if selected.tx_gps then
+      texts.gps_fix = t("widgets.dashboard.standby.gps_fix", "Fix")
+      texts.gps_no_fix = t("widgets.dashboard.standby.gps_no_fix", "No fix")
+      texts.gps_satellites = t("widgets.dashboard.standby.gps_satellites", "Sat")
+      texts.gps_time_unavailable = t("widgets.dashboard.standby.gps_time_unavailable", "Time status unknown")
+      texts.gps_latitude = t("widgets.dashboard.standby.gps_latitude", "Latitude")
+      texts.gps_longitude = t("widgets.dashboard.standby.gps_longitude", "Longitude")
+      texts.gps_course = t("widgets.dashboard.standby.gps_course", "Course")
+      texts.gps_hdop = t("widgets.dashboard.standby.gps_hdop", "HDOP")
+    end
+    if selected.elrs then
+      texts.elrs_reading = t("widgets.dashboard.standby.elrs_reading", "Reading")
+      texts.elrs_unavailable = t("widgets.dashboard.standby.elrs_unavailable", "Unavailable")
+      texts.elrs_no_module = t("widgets.dashboard.standby.elrs_no_module", "No ELRS module")
+      texts.elrs_last_read = t("widgets.dashboard.standby.elrs_last_read", "Last read %d s ago")
+      texts.elrs_packet_rate = t("widgets.dashboard.standby.elrs_packet_rate", "Packet Rate")
+      texts.elrs_telemetry_ratio = t("widgets.dashboard.standby.elrs_telemetry_ratio", "Telemetry Ratio")
+      texts.elrs_max_power = t("widgets.dashboard.standby.elrs_max_power", "Max Power")
+      texts.elrs_dynamic = t("widgets.dashboard.standby.elrs_dynamic", "Dynamic")
+      texts.elrs_rate_short = t("widgets.dashboard.standby.elrs_rate_short", "Rate")
+      texts.elrs_ratio_short = t("widgets.dashboard.standby.elrs_ratio_short", "TLM")
+      texts.elrs_power_short = t("widgets.dashboard.standby.elrs_power_short", "Max")
+      texts.elrs_dynamic_short = t("widgets.dashboard.standby.elrs_dynamic_short", "Dyn")
+    end
+    self._standbySnapshotTexts = texts
+  end
+  local texts = self._standbySnapshotTexts
+  if self._standbyCache.text == nil then
+    self._standbyCache.text = function(key, fallback) return texts[key] or fallback end
+  end
+  return self._standbyCache
+end
+
+local function standbyJobStep(self)
+  local job = self._job
+  local dashboard = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
+  if dashboard.standby_enabled ~= true or self._toolHost ~= nil or self.connectionReady == true
+      or self.flightMode == "postflight" or self.flightMode == "offline"
+      or (self.state and (self.state.armed == true or self.state.hadInflightFlight == true)) then
+    if self._standbyCache and job.previousElrsWidths then
+      self._standbyCache.elrsWidths = job.previousElrsWidths
+    end
+    self.built, self.renderKey = false, nil
+    return true
+  end
+  local moduleWasLoaded = self._standbyModule ~= nil
+  local DashboardStandby = standbyModule(self)
+  self._standbyCache = self._standbyCache or {}
+  if job.children then
+    if job.zoneW ~= self.zone.w or job.zoneH ~= self.zone.h
+        or job.layout ~= dashboard.standby_layout or job.i18n ~= self.i18n
+        or job.statusLine ~= self.statusLine
+        or job.infoKind ~= (self.state and self.state.standbyInfoKind or nil)
+        or dashboard.standby_enabled ~= true or self._toolHost ~= nil
+        or job.flightMode ~= self.flightMode or job.connectionReady ~= self.connectionReady
+        or job.armed ~= (self.state and self.state.armed == true)
+        or job.hadInflight ~= (self.state and self.state.hadInflightFlight == true)
+        or job.fblConnected ~= (self.state and self.state.fblConnected == true) then
+      self._standbyCache.elrsWidths = job.previousElrsWidths or {}
+      self.built, self.renderKey = false, nil
+      return true
+    end
+    local children = job.children
+    if self._standbyFullscreen == true then
+      local Controls = requireModule("widgets/dashboard/fullscreen_controls.lua")
+      if type(Controls) == "table" and type(Controls.appendTool) == "function" then
+        Controls.appendTool(children, self)
+      end
+    end
+    self._treeKind, self._treeKey = nil, nil
+    lvgl.clear()
+    lvgl.build(children)
+    self._standbyCache.elrsWidths = job.elrsWidths
+    self._standbyCache.elrsActiveWidths = job.elrsWidths
+    self.built = true
+    self._lastChildCount = #children
+    return true
+  end
+  -- With nothing saved, the default is the one for this zone's width: a widget zone on a wide
+  -- radio keeps the two-field first row it can show.
+  local encodedLayout = dashboard[DashboardStandby.KEY_LAYOUT] or DashboardStandby.defaultLayout(self.zone.w)
+  local items, itemsChanged = self._standbyItems, false
+  if items == nil or self._standbyLayout ~= encodedLayout then
+    items = DashboardStandby.decode(encodedLayout)
+    self._standbyItems, self._standbyLayout = items, encodedLayout
+    invalidateStandbyTextState(self)
+    self._standbyCache.elrsWidths = self._standbyCache.elrsActiveWidths
+    -- The visible tree's battery getter still reads its fill until the new tree swaps in.
+    self._standbyCache.batteryWidths = nil
+    itemsChanged = true
+  end
+  prepareStandbyTextCache(self, items)
+  local snapshotInputsChanged = job.snapshotZoneW ~= nil
+    and (job.snapshotZoneW ~= self.zone.w or job.snapshotZoneH ~= self.zone.h
+      or job.snapshotLayout ~= encodedLayout or job.snapshotI18n ~= self.i18n)
+  if itemsChanged or not moduleWasLoaded or snapshotInputsChanged
+      or self._standbyCache.snapshotValues == nil then
+    DashboardStandby.snapshot(items, self._standbyCache, self.zone)
+    job.snapshotZoneW, job.snapshotZoneH = self.zone.w, self.zone.h
+    job.snapshotLayout, job.snapshotI18n = encodedLayout, self.i18n
+    return false
+  end
+  local values = self._standbyCache.snapshotValues or {}
+  local infoKind = self.state and self.state.standbyInfoKind or nil
+  local texts = standbyTexts(self, items, infoKind)
+  local function text(key, fallback)
+    return texts[key] or fallback
+  end
+  local info = { text = texts.info_text or "", level = infoKind == "api_unsupported" and "warning" or "info" }
+  job.previousElrsWidths = self._standbyCache.elrsActiveWidths or self._standbyCache.elrsWidths
+  local preparingWidths = {}
+  for width in pairs(job.previousElrsWidths or {}) do preparingWidths[width] = true end
+  self._standbyCache.elrsWidths = preparingWidths
+  job.elrsWidths = {}
+  self._standbyCache.elrsBuildWidths = job.elrsWidths
+  job.children = DashboardStandby.build(self.zone, self.statusLine, text, items, values, self._standbyCache, info)
+  self._standbyCache.elrsBuildWidths = nil
+  job.zoneW, job.zoneH, job.layout = self.zone.w, self.zone.h, dashboard.standby_layout
+  job.i18n, job.statusLine, job.infoKind = self.i18n, self.statusLine, infoKind
+  job.flightMode, job.connectionReady = self.flightMode, self.connectionReady
+  job.armed = self.state and self.state.armed == true
+  job.hadInflight = self.state and self.state.hadInflightFlight == true
+  job.fblConnected = self.state and self.state.fblConnected == true
+  return false
 end
 
 -- The zone view a free-form theme's scene build draws instead of the theme, or nil; defined with
@@ -1671,6 +1986,8 @@ local function reloadPreferencesIfNeeded(self, force, isBackground)
       if type(self.state) ~= "table" then self.state = {} end
       self.state.i18n = self.i18n
     end
+    invalidateStandbyTextState(self)
+    self.renderKey = nil
   end
 
   -- The per-model half, no longer nested inside the global one: it never read `prefs`, and with
@@ -1870,15 +2187,18 @@ local function updateConnectionState(self)
   local ready = (rawReady and self.readySince ~= nil and (now - self.readySince) >= holdSeconds) or softTimeoutReady
   local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
 
-  local statusLine = nil
+  local statusLine, standbyInfoKind = nil, nil
   if not connected then
+    standbyInfoKind = "controller_missing"
     statusLine = (t and t("widgets.dashboard.waiting_for_msp_link")) or "Waiting for MSP link"
     self.batteryDialogState = "pending"
   elseif refused then
+    standbyInfoKind = "api_unsupported"
     local fmt = (t and t("widgets.dashboard.api_unsupported"))
       or "MSP API %s not supported, needs Rotorflight 4.6+"
     statusLine = string.format(fmt, tostring(runtimeState.refusedApiVersion or "?"))
   elseif not tasksDone then
+    standbyInfoKind = "suite_loading"
     local pDone = 0
     local pTotal = 0
     local showNumbers = false
@@ -1898,13 +2218,28 @@ local function updateConnectionState(self)
       statusLine = headline
     end
   elseif not rfReady then
+    standbyInfoKind = "receiver_telemetry_missing"
     statusLine = (t and t("widgets.dashboard.waiting_for_receiver_telemetry")) or "Waiting for receiver telemetry (1RSS/2RSS)"
   elseif not batteryReady then
+    standbyInfoKind = "battery_telemetry_missing"
     statusLine = (t and t("widgets.dashboard.waiting_for_battery_telemetry")) or "Waiting for battery telemetry"
   elseif not ready then
+    standbyInfoKind = "starting"
     statusLine = (t and t("widgets.dashboard.connected_starting")) or "Connected, starting dashboard..."
   elseif softTimeoutReady then
+    standbyInfoKind = "partial_telemetry"
     statusLine = (t and t("widgets.dashboard.connected_partial_telemetry")) or "Connected with partial telemetry"
+  end
+
+  if self.state.standbyInfoKind ~= standbyInfoKind then
+    self.state.standbyInfoKind = standbyInfoKind
+    -- The prerequisite caption belongs only to a loaded standby surface. Connection-state
+    -- transitions continue to invalidate their own surfaces below; changing this standby-only
+    -- value must not rebuild the normal dashboard when the feature is disabled or absent.
+    if self._standbyModule ~= nil then
+      self._standbyTexts = nil
+      self.renderKey = nil
+    end
   end
 
   if self.connectionReady ~= ready then
@@ -2369,12 +2704,16 @@ local function takeFullscreenMode(self)
   local initTable, base, folder = loadThemeInit(self.themePath)
   local themeMode = type(initTable) == "table" and initTable.fullscreen == "theme"
   self._viewBase = themeMode and "theme" or nil
+  self._declaredKeys = type(initTable) == "table" and initTable.keys or nil
+  local ready = self.connectionReady == true or self.flightMode == "postflight" or self.flightMode == "offline"
+  holder.ready = ready
   self._viewCtx = nil
   self._cachedFullscreenKey = nil
   local Views = viewsModule()
   if Views then
+    Views.invalidate(self)
     local themeViews = nil
-    if type(self.theme.build) == "function" then
+    if ready and type(self.theme) == "table" and type(self.theme.build) == "function" then
       themeViews = themeViewList(initTable, base, folder, "fullscreen")
     end
     Views.register(self, themeViews)
@@ -2415,25 +2754,14 @@ local function fullscreenThemeKey(self)
   return key
 end
 
---- `widget.refresh` while a theme-mode fullscreen is up: the keys, then the pass itself.
----
---- EdgeTX hands a widget one event per call, and a pass that runs a job returns before the state
---- half, so a key read there would be lost whenever it arrived during a build. This reads it
---- ahead of that split instead, and the widget's own refresh is left as it is. It is put in place
---- by the fullscreen pass of a theme-mode widget, and it puts the widget's own refresh back on the
---- first pass without an event -- fullscreen has been left -- or once the theme no longer asks for
---- fullscreen, so no zone pass and no widget without a base layer ever runs it.
+--- Restore the refresh wrapper chain when theme fullscreen is left.
+-- Keys are routed by the widget's own refresh before jobs and connection splashes;
+-- the wrapper still preserves the existing zone-view lifecycle underneath it.
 local function themeModeRefresh(self, event, touchState)
   local ownRefresh = self._ownRefresh
   if event == nil or self._viewBase == nil then
     self.refresh = ownRefresh
     self._cachedFullscreenKey = nil
-  elseif event ~= 0 and self.theme ~= nil and inflightMode(self, true) == nil and self._toolHost == nil
-    and (self.connectionReady == true or self.flightMode == "postflight" or self.flightMode == "offline") then
-    -- Not while the tuning surface is up, the tool is open, before a theme is loaded, or on the
-    -- connect splash: none of them is a view or the base layer.
-    local Views = viewsModule()
-    if Views then Views.key(self, event) end
   end
   return ownRefresh(self, event, touchState)
 end
@@ -2684,10 +3012,10 @@ end
 -- them from the session together with the board's id, and a preferences reload in the
 -- disconnected stretch has no id to load them by. So the theme the model's own preferences
 -- resolve for the post-flight screen is kept on the widget while they are there, and answers for
--- the post-flight screens while they are not. Only that one path is kept, nothing else of the
--- preferences, and only where the model's own theme chose it: a model drawing the radio's theme
--- keeps following the radio's settings. The connect edge drops it, and the next model's
--- preferences set it again.
+-- the post-flight screens while they are not. The memo already holds the last model preferences:
+-- reloadActiveTheme uses them for configuration as well, including a model that customizes the
+-- radio's theme without choosing another one. Radio values still supply every setting the model
+-- does not override. The connect edge drops both the path and the memo before the next model.
 --
 -- Preferences without a `dashboard` table cannot name a theme, and the disconnected stretch
 -- produces exactly those: the Setup > Power pages create an empty table in the session when
@@ -3435,6 +3763,9 @@ function Runtime.new(zone, options)
     mspAttached = false,
     mspLastTick = 0
   }
+  _G.rfsuite.dashboardStandbyOwnerSeq = (_G.rfsuite.dashboardStandbyOwnerSeq or 0) + 1
+  widget._standbyElrsOwner = "standby:" .. tostring(_G.rfsuite.dashboardStandbyOwnerSeq)
+  widget._standbyModuleOwner = "standby-module:" .. tostring(_G.rfsuite.dashboardStandbyOwnerSeq)
 
   -- Initialize i18n context for the widget using system locale. buildI18nContext is the same
   -- call the preferences reload makes after a language changed, so the widget's context is built
@@ -3638,6 +3969,11 @@ function Runtime.new(zone, options)
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
     local dashboardPrefs = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
     local selectedTheme = themePathFor(self, dashboardPrefs, modelPrefs, self.flightMode)
+    -- The same model that supplies the offline theme supplies its settings. The memo is already
+    -- retained by noteModelTheme and is cleared on reconnect; it never enters the new session.
+    if themePrefs(modelPrefs) == nil and (self.flightMode == "postflight" or self.flightMode == "offline") then
+      modelPrefs = self._modelThemePrefs
+    end
     local nextConfig = {}
     if self.dashboardLib and self.dashboardLib.getThemeConfig then
       nextConfig = self.dashboardLib.getThemeConfig(self.preferences, selectedTheme, {}, modelPrefs)
@@ -4143,11 +4479,26 @@ function Runtime.new(zone, options)
     -- every other one, so this is where "on screen" is known. The overlay drives only from here.
     self._foreground = true
 
+    -- A firmware fullscreen exit may arrive while a build or the connection
+    -- splash is still running. Clear the visit before either can return early.
+    if event == nil then
+      self.inflightFullscreen = nil
+      self._viewStack = nil
+      self._cachedFullscreenKey = nil
+      local job = self._job
+      if job and (job.fullscreen or job.fullscreenSplash) then
+        self._job = nil
+        self.built = false
+        self.renderKey = nil
+      end
+    end
+
     -- The suite's tool, opened from a fullscreen control, runs in place of the whole pass until
     -- it is closed (widgets/dashboard/tool_host.lua). It drives the MSP runtime and the event
     -- runner itself, so nothing below may run beside it; once it is closed the next pass finds
     -- the scene dropped and builds it again.
     if self._toolHost ~= nil then
+      releaseStandby(self, "tool_open")
       self._passWork = "tool"
       local ToolHost = toolHostModule()
       if type(ToolHost) == "table" then
@@ -4164,12 +4515,39 @@ function Runtime.new(zone, options)
     -- tick, and neither cadence is one a surface driving a flight controller can be read at.
     sampleInflight(self)
 
+    if event ~= nil and inflightMode(self, true) == nil then
+      local modeOf = self._fullscreenModeOf
+      local ready = self.connectionReady == true or self.flightMode == "postflight" or self.flightMode == "offline"
+      -- Not while a reload has the theme unloaded: the registry made then would lack the theme's
+      -- views and take an open one off the stack. The mode is taken once the theme is back.
+      if self.theme ~= nil and (modeOf == nil or modeOf[1] ~= self.theme or modeOf.ready ~= ready) then
+        takeFullscreenMode(self)
+      end
+      local Views = viewsModule()
+      local handled, exited
+      if event ~= 0 and Views then handled, exited = Views.key(self, event) end
+      if handled then
+        -- Zero is an idle fullscreen event. Nil would instead leave fullscreen;
+        -- forwarding the handled key would also activate LVGL's focused control.
+        event = 0
+        if exited or self._toolHost ~= nil then
+          self._passEndAt = nowSeconds()
+          return
+        end
+      end
+    end
+
     -- Route touch/key events to LVGL engine when active (e.g. fullscreen)
     if lvgl and type(lvgl.onEvent) == "function" and event ~= nil then
        -- On some EdgeTX versions, touchState coordinates are global.
        -- We need to ensure LVGL knows the widget's offset if it doesn't handle it.
        -- However, in Fullscreen, offset is usually 0,0.
        lvgl.onEvent(event, touchState)
+    end
+    if self._toolHost ~= nil then
+      releaseStandby(self, "tool_open")
+      self._passEndAt = nowSeconds()
+      return
     end
 
     if self.zone then
@@ -4193,6 +4571,16 @@ function Runtime.new(zone, options)
     -- widget-state bounds -- counts per pass, never wall clock -- by reading it, and
     -- without the bracket a JOB pass would silently run them under the tool rules.
     if self._job then
+      -- A standby build is queued one pass before it draws. Fullscreen may be closed between
+      -- those passes without sending an event, so discard the stale job before it can put the
+      -- fullscreen-only Suite control into a widget zone (or omit it after entering fullscreen).
+      if self._job.kind == "standby" and self._job.fullscreen ~= (event ~= nil) then
+        self._job = nil
+        self.built = false
+        self.renderKey = nil
+        self._passEndAt = nowSeconds()
+        return
+      end
       -- A step line naming the work class this pass is about to do, so the card says what the
       -- widget was doing when it stopped rather than what the connect sequence last did.
       --
@@ -4240,7 +4628,7 @@ function Runtime.new(zone, options)
       -- Which surface the tree on screen is, for the hold gate in the state pass: forgotten before
       -- any build step runs, since a step may clear the tree and then raise, and recorded only
       -- once a build has completed. A one-shot job builds nothing and leaves the record alone.
-      if counted then self._treeKind, self._treeKey = nil, nil end
+      if counted and jobKind ~= "standby" then self._treeKind, self._treeKey = nil, nil end
       local stepOk, stepDone = pcall(self._job.step, self)
       if not stepOk then
         self._job   = nil
@@ -4290,16 +4678,97 @@ function Runtime.new(zone, options)
     end
 
     -- STATE pass: the background half, then invalidation checks that only enqueue.
+    -- The flight controller's raw link is asked only where a standby reader runs or standby is on,
+    -- so a dashboard with standby off pays nothing for it on its every pass.
+    local standbyFcDetected = false
+    if self._standbyElrsActive and self._standbyElrsConfig
+        and MspRuntime and type(MspRuntime.getState) == "function" then
+      local runtimeState = MspRuntime.getState()
+      if type(runtimeState) == "table" and runtimeState.lastConnected == true then
+        cancelStandbyElrs(self, "fc_startup")
+      end
+    end
     local ready = performBackgroundWork(self, false)
+
+    local dashboardPrefs = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
+    local standbyEnabled = dashboardPrefs.standby_enabled == true
+    if standbyEnabled and MspRuntime and type(MspRuntime.getState) == "function" then
+      local runtimeState = MspRuntime.getState()
+      standbyFcDetected = type(runtimeState) == "table" and runtimeState.lastConnected == true
+    end
+    local standbyRenderActive = self._toolHost == nil and not ready
+      and self.flightMode ~= "postflight" and self.flightMode ~= "offline"
+      and standbyEnabled and self.state.armed ~= true
+      and self.state.hadInflightFlight ~= true
+    local standbyProbeActive = standbyRenderActive and self.state.fblConnected ~= true and not standbyFcDetected
+    if standbyRenderActive then
+      self._standbyFullscreen = event ~= nil
+      if self._standbyModule then
+        local Standby = self._standbyModule
+        local encodedLayout = dashboardPrefs.standby_layout or Standby.defaultLayout(self.zone.w)
+        local standbyItems = self._standbyItems
+        if standbyItems == nil or self._standbyLayout ~= encodedLayout then
+          standbyItems = Standby.decode(encodedLayout)
+          self._standbyItems, self._standbyLayout = standbyItems, encodedLayout
+          invalidateStandbyTextState(self)
+          if self._standbyCache then
+            self._standbyCache.elrsWidths = self._standbyCache.elrsActiveWidths
+            -- The visible tree's battery getter still reads its fill until the new tree swaps in.
+            self._standbyCache.batteryWidths = nil
+          end
+        end
+        prepareStandbyTextCache(self, standbyItems)
+        local wantsElrs = false
+        for i = 1, #standbyItems do if standbyItems[i].type == "elrs" then wantsElrs = true; break end end
+        if wantsElrs and standbyProbeActive then
+        local Config, CrsfModule = elrsModules(self)
+        if Config then
+          local identityNow = type(getTime) == "function" and getTime() or 0
+          if self._standbyElrsIdentity == nil or identityNow >= (self._standbyElrsIdentityAt or 0) + 100 then
+            local identity = Config.currentIdentity()
+            self._standbyElrsIdentityAt = identityNow
+            if self._standbyElrsIdentity ~= identity then Config.invalidate(identity); self._standbyElrsIdentity = identity end
+          end
+          local identity = self._standbyElrsIdentity
+          Config.request(identity, { owner = self._standbyElrsOwner, force = self._standbyElrsActive ~= true })
+          self._standbyElrsActive = true
+          local snapshot = Config.step({ owner = self._standbyElrsOwner, identity = identity, crsf = CrsfModule,
+            push = crossfireTelemetryPush, now = nowSeconds(), allow = true })
+          self._standbyCache = self._standbyCache or {}
+          Standby.setElrsSnapshot(self._standbyCache, snapshot, nowSeconds())
+        end
+        elseif self._standbyElrsActive and self._standbyElrsConfig then
+          cancelStandbyElrs(self, "fc_startup")
+        end
+        Standby.snapshot(standbyItems, self._standbyCache, self.zone)
+      end
+    elseif self._standbyModule then
+      releaseStandby(self, "standby_left")
+    elseif elrsReleasePending then
+      releaseElrsProvider(self)
+    end
 
     -- `offline` is the post-flight phase with the link already gone, which is exactly the case
     -- this splash must not cover: the summary is what the pilot walked back to the bench for.
-    if not ready and self.flightMode ~= "postflight" and self.flightMode ~= "offline" then
+    local explicitView = false
+    if event ~= nil and self._viewStack ~= nil then
+      local Views = viewsModule()
+      explicitView = Views ~= nil and Views.top(self) ~= nil
+    end
+    if not ready and self.flightMode ~= "postflight" and self.flightMode ~= "offline" and not explicitView then
       local statusLine = self.statusLine or "Please wait..."
       -- Full screen and the zone are two splashes, because only the first carries the tool control.
       local fullscreenSplash = event ~= nil
-      local splashKey = "splash|" .. tostring(statusLine) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
-        .. (fullscreenSplash and "|fs" or "")
+      local useStandby = standbyRenderActive
+      if useStandby then
+        self._standbyCache = self._standbyCache or {}
+      end
+      local splashKey = (useStandby and "standby|" or "splash|") .. tostring(statusLine) .. "|info="
+        .. tostring(self.state.standbyInfoKind) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
+        .. (fullscreenSplash and "|fs" or "") .. (useStandby
+          and ("|" .. tostring(dashboardPrefs.standby_layout)
+            .. "|overflow=" .. tostring(self._standbyCache and self._standbyCache.valueOverflow == true))
+          or "")
       if self.renderKey ~= splashKey then
         self.renderKey = splashKey
         self.built = false
@@ -4307,7 +4776,9 @@ function Runtime.new(zone, options)
       -- A splash that keeps raising falls back to the bare label, not to the failure surface,
       -- which is drawn by the same builder.
       if not self.built then
-        if not jobCapped(self, "splash") then
+        if useStandby and not jobCapped(self, "standby") then
+          self._job = { kind = "standby", step = standbyJobStep, fullscreen = fullscreenSplash }
+        elseif not useStandby and not jobCapped(self, "splash") then
           self._job = { kind = "splash", step = splashJobStep, fullscreenSplash = fullscreenSplash }
         elseif not jobCapped(self, "failed_label") then
           self._job = { kind = "failed_label", step = failedLabelJobStep }
@@ -4318,17 +4789,6 @@ function Runtime.new(zone, options)
 
     -- In EdgeTX, `event` is nil in normal widget mode, and an integer (including 0 for idle) in fullscreen.
     local isInteractive = (event ~= nil)
-    if not isInteractive then
-      -- Leaving fullscreen is the one exit the firmware does not always report -- a long press on
-      -- RTN closes it and Lua may never see the key -- so the ground surface is dropped whenever a
-      -- pass arrives without an event rather than when a close is observed. Ahead of the two
-      -- early returns below, so a pass that returns there drops it as well.
-      self.inflightFullscreen = nil
-      -- The fullscreen views that are open are a fullscreen state and are dropped on the way
-      -- out for the same reason the tuning surface is: a long press on RTN closes fullscreen
-      -- without Lua ever seeing the key. The whole stack is this one field.
-      self._viewStack = nil
-    end
 
     -- A theme reload that fell on a read pass waits for the next logic tick; the deferral itself
     -- is in performBackgroundWork. Queuing a scene job here would build against the theme that
@@ -4494,7 +4954,7 @@ function Runtime.new(zone, options)
     if not self.built and jobKind ~= nil then
       -- The failure surface at full screen carries what the connect splash carries there, since
       -- it is drawn by the same builder: see failedJobStep.
-      self._job = { kind = jobKind, step = jobStep, fullscreen = jobFullscreen,
+      self._job = { kind = jobKind, step = jobStep, fullscreen = jobFullscreen or (isInteractive and self._viewId ~= nil),
         fullscreenSplash = jobKind == "failed" and isInteractive or nil }
     end
 
@@ -4518,6 +4978,7 @@ function Runtime.new(zone, options)
     -- Off screen. The overlay's own tick refuses to drive from here and cleans up instead, which
     -- is what makes a widget scrolled away stop writing the two variables.
     self._foreground = false
+    releaseStandby(self, "widget_background")
 
     -- Still running, so still passing: the heartbeat, as traceInstructionUsage publishes it at
     -- the top of refresh. A dashboard on a screen page the radio does not start on is called

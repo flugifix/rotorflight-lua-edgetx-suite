@@ -9,6 +9,8 @@ local function loadModule(path)
   return mod
 end
 
+local Palette = _G.rfsuite and _G.rfsuite.palette or (_G.rfsuite and _G.rfsuite.require or loadModule)("ui/palette.lua")
+
 local Controls = nil
 local Common = nil
 local MspRuntime = nil
@@ -347,7 +349,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
     type = "label",
     x = x + 10, y = labelY1,
     text = pageText(i18n, "range", "Range") .. " " .. tostring(rangeIndex),
-    color = COLOR_THEME_PRIMARY1,
+    color = Palette.text,
     font = MIDSIZE
   }
 
@@ -370,7 +372,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
     x = xLive, y = labelY1,
     w = wLive,
     text = liveText,
-    color = COLOR_THEME_SECONDARY1,
+    color = Palette.accent,
     align = RIGHT,
     font = SMLSIZE
   }
@@ -515,7 +517,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
     type = "rectangle",
     x = x, y = line2Y + singleRowH,
     w = w, h = 1,
-    color = COLOR_THEME_SECONDARY2, filled = true
+    color = Palette.border, filled = true
   }
 
   return (singleRowH * 2) + 1
@@ -555,6 +557,7 @@ end
 
 local function startLoad(requestRebuild)
   if ui.runtime.readPending then return false end
+  ui.runtime.readFailed = false
   ui.runtime.readComplete = false
   local readValid = type(getSession()) == "table"
   ui.runtime.readPending = true
@@ -574,12 +577,15 @@ local function startLoad(requestRebuild)
   local queue = mspState and mspState.queue
   if not queue or type(queue.add) ~= "function" then
     ui.runtime.readPending = false
+    ui.runtime.readFailed = true
     ui.loading = false
     return false
   end
 
   local function failed(reason)
     readValid = false
+    ui.runtime.readFailed = true
+    ui.runtime.readComplete = false
     ui.runtime.readPending = false
     ui.loading = false
     ui.progress = 0
@@ -661,6 +667,7 @@ local function startLoad(requestRebuild)
                       ui.dirtySlots = {}
                       ui.progress = 100
                       ui.runtime.readComplete = readValid
+                      ui.runtime.readFailed = false
                       triggerRebuild()
                     end,
                     errorHandler = failed
@@ -1005,6 +1012,13 @@ function M.build(ctx)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
+  -- After a failed read, these ranges are not the flight controller's: they may include edits
+  -- Reload just discarded. Show the failure instead; Reload reads again.
+  if ui.runtime.readFailed then
+    Common.appendReadFailedNotice(children, x, cursorY + 10, w)
+    return
+  end
+
   cursorY = cursorY + 10
 
   -- Mode select
@@ -1044,7 +1058,7 @@ function M.build(ctx)
     type = "label",
     x = x + 10, y = labelY,
     text = activeStr,
-    color = COLOR_THEME_PRIMARY1,
+    color = Palette.text,
     font = SMLSIZE
   }
 
@@ -1053,7 +1067,7 @@ function M.build(ctx)
       type = "label",
       x = x + 200, y = labelY,
       text = pageText(i18n, "unsaved_changes", "Unsaved changes"),
-      color = COLOR_THEME_SECONDARY1,
+      color = Palette.accent,
       font = SMLSIZE
     }
   end
@@ -1072,7 +1086,7 @@ function M.build(ctx)
     type = "rectangle",
     x = x, y = cursorY + rowH,
     w = w, h = 1,
-    color = COLOR_THEME_SECONDARY2, filled = true
+    color = Palette.border, filled = true
   }
   cursorY = cursorY + rowH + 1
 
@@ -1081,7 +1095,7 @@ function M.build(ctx)
       type = "label",
       x = x + 10, y = (Controls and Controls.labelY and Controls.labelY(cursorY, rowH)) or (cursorY + math.floor((rowH - 21) / 2)),
       text = pageText(i18n, "no_ranges", "No ranges configured for this mode."),
-      color = COLOR_THEME_PRIMARY1,
+      color = Palette.text,
       font = SMLSIZE
     }
     return

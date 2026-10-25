@@ -9,6 +9,8 @@ local function loadModule(path)
   return mod
 end
 
+local Palette = _G.rfsuite and _G.rfsuite.palette or (_G.rfsuite and _G.rfsuite.require or loadModule)("ui/palette.lua")
+
 local Controls = nil
 local Common = nil
 local MspRuntime = nil
@@ -19,6 +21,7 @@ local DebugConfigApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local ApiVersion = nil
+local SavePipeline = nil
 local t = nil
 
 local DEBUG_MODES = {
@@ -207,6 +210,17 @@ local function queueBlackboxRead(isAutoReload)
 
   local step2, step3, step4, finalizeRead
 
+  -- The queue drops this read (reason "cleared") when the page is left or the link goes, and the
+  -- chain ends there. Queuing the next step from that handler would file it under whatever owns
+  -- the queue then, and its reply would run this chain against a later visit of the page.
+  local function endRead()
+    ui.runtime.readPending = false
+    ui.loading = false
+    if type(ui.runtime.requestRebuild) == "function" then
+      ui.runtime.requestRebuild()
+    end
+  end
+
   -- Step 1: Read STATUS
   local function step1()
     if not ui.runtime or not ui.runtime.readPending then return end
@@ -223,9 +237,10 @@ local function queueBlackboxRead(isAutoReload)
           end
           step2()
         end,
-        errorHandler = function()
+        errorHandler = function(_, reason)
           readValid = false
           if not ui.runtime or not ui.runtime.readPending then return end
+          if reason == "cleared" then return endRead() end
           step2()
         end
       })
@@ -247,9 +262,10 @@ local function queueBlackboxRead(isAutoReload)
         ui.featureBitmap = (reply and reply.enabledFeatures) or 0
         step3()
       end,
-      errorHandler = function()
+      errorHandler = function(_, reason)
         readValid = false
         if not ui.runtime or not ui.runtime.readPending then return end
+        if reason == "cleared" then return endRead() end
         step3()
       end
     })
@@ -277,9 +293,10 @@ local function queueBlackboxRead(isAutoReload)
         end
         step4()
       end,
-      errorHandler = function()
+      errorHandler = function(_, reason)
         readValid = false
         if not ui.runtime or not ui.runtime.readPending then return end
+        if reason == "cleared" then return endRead() end
         step4()
       end
     })
@@ -304,9 +321,10 @@ local function queueBlackboxRead(isAutoReload)
           end
           finalizeRead()
         end,
-        errorHandler = function()
+        errorHandler = function(_, reason)
           readValid = false
           if not ui.runtime or not ui.runtime.readPending then return end
+          if reason == "cleared" then return endRead() end
           finalizeRead()
         end
       })
@@ -363,17 +381,15 @@ local function queueBlackboxRead(isAutoReload)
 end
 
 local function queueBlackboxWrite(requestRebuild)
-  if not MspRuntime or not BlackboxConfigApi or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not BlackboxConfigApi then
     return false, "msp_runtime_unavailable"
   end
 
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
-  end
-
-  local payload = BlackboxConfigApi.buildWritePayload({
+  -- What is saved, taken now: the page can be left while the writes are on the wire, and a page
+  -- opened again starts from other values. Both payloads and the session copy come from here.
+  local cfg = {
+    blackbox_supported = ui.cfg.blackbox_supported,
     device = ui.cfg.device,
     mode = ui.cfg.mode,
     denom = ui.cfg.denom,
@@ -381,109 +397,68 @@ local function queueBlackboxWrite(requestRebuild)
     initialEraseFreeSpaceKiB = ui.cfg.initialEraseFreeSpaceKiB,
     rollingErase = ui.cfg.rollingErase,
     gracePeriod = ui.cfg.gracePeriod
+  }
+  local dbg = {
+    debug_count = ui.debug.debug_count,
+    debug_value_count = ui.debug.debug_value_count,
+    debug_mode = ui.debug.debug_mode,
+    debug_axis = ui.debug.debug_axis
+  }
+  local media = {
+    dataflashSupported = ui.media.dataflashSupported,
+    sdcardSupported = ui.media.sdcardSupported
+  }
+
+  local steps = {
+    {
+      label = "MSP_SET_BLACKBOX_CONFIG",
+      command = BlackboxConfigApi.writeCommand,
+      payload = BlackboxConfigApi.buildWritePayload(cfg)
+    }
+  }
+  if DebugConfigApi then
+    steps[#steps + 1] = {
+      label = "MSP_SET_DEBUG_CONFIG",
+      command = DebugConfigApi.writeCommand,
+      payload = DebugConfigApi.buildWritePayload(dbg)
+    }
+  end
+
+  -- The writes and the EEPROM commit belong to the pipeline, not to this page: the page can be
+  -- left while they are on the wire, and its close releases ui.runtime and the module handles
+  -- above. So nothing below may assume the page is still open.
+  local ok, err = SavePipeline.start({
+    pageId = "setup_controls_blackbox_configuration",
+    steps = steps,
+    reboot = false,
+    onSaved = function()
+      local session = getSession()
+      if session then
+        if type(session.blackbox) ~= "table" then
+          session.blackbox = {}
+        end
+        session.blackbox.config = cfg
+        session.blackbox.debug = dbg
+        session.blackbox.media = media
+      end
+      ui.dirty = false
+    end,
+    onDone = function(result)
+      ui.saving = false
+      if not ui.runtime then return end
+      if result.saved then queueBlackboxRead(true) end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
   })
+  if not ok then return false, err end
 
   ui.saving = true
   ui.progress = 0
   if type(requestRebuild) == "function" then
     requestRebuild()
   end
-
-  local writeEEPROM
-
-  -- Step 1: Write BLACKBOX_CONFIG
-  queue:add({
-    command = BlackboxConfigApi.writeCommand,
-    payload = payload,
-    isWrite = true,
-    simulatorResponse = {},
-    processReply = function()
-      -- Step 2: Write DEBUG_CONFIG (if available)
-      if DebugConfigApi then
-        queue:add({
-          command = DebugConfigApi.writeCommand,
-          payload = DebugConfigApi.buildWritePayload({
-            debug_mode = ui.debug.debug_mode,
-            debug_axis = ui.debug.debug_axis
-          }),
-          isWrite = true,
-          simulatorResponse = {},
-          processReply = function()
-            writeEEPROM()
-          end,
-          errorHandler = function()
-            writeEEPROM()
-          end
-        })
-      else
-        writeEEPROM()
-      end
-    end,
-    errorHandler = function()
-      ui.saving = false
-      if type(requestRebuild) == "function" then
-        requestRebuild()
-      end
-    end
-  })
-
-  -- Write EEPROM
-  function writeEEPROM()
-    local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-    if eepromApi then
-      queue:add({
-        command = eepromApi.writeCommand,
-        payload = {},
-        isWrite = true,
-        simulatorResponse = {},
-        processReply = function()
-          -- Success! Update local session
-          local session = getSession()
-          if session then
-            if type(session.blackbox) ~= "table" then
-              session.blackbox = {}
-            end
-            session.blackbox.config = {
-              blackbox_supported = ui.cfg.blackbox_supported,
-              device = ui.cfg.device,
-              mode = ui.cfg.mode,
-              denom = ui.cfg.denom,
-              fields = ui.cfg.fields,
-              initialEraseFreeSpaceKiB = ui.cfg.initialEraseFreeSpaceKiB,
-              rollingErase = ui.cfg.rollingErase,
-              gracePeriod = ui.cfg.gracePeriod
-            }
-            session.blackbox.debug = {
-              debug_count = ui.debug.debug_count,
-              debug_value_count = ui.debug.debug_value_count,
-              debug_mode = ui.debug.debug_mode,
-              debug_axis = ui.debug.debug_axis
-            }
-            session.blackbox.media = {
-              dataflashSupported = ui.media.dataflashSupported,
-              sdcardSupported = ui.media.sdcardSupported
-            }
-          end
-          ui.dirty = false
-          ui.saving = false
-          queueBlackboxRead(true)
-        end,
-        errorHandler = function()
-          ui.saving = false
-          if type(requestRebuild) == "function" then
-            requestRebuild()
-          end
-        end
-      })
-    else
-      ui.dirty = false
-      ui.saving = false
-      if type(requestRebuild) == "function" then
-        requestRebuild()
-      end
-    end
-  end
-
   return true, nil
 end
 
@@ -803,7 +778,7 @@ function M.build(ctx)
       type = "label",
       x = x + 16, y = cursorY + 10,
       text = pageText(i18n, "unsaved_changes", "Unsaved changes"),
-      color = COLOR_THEME_SECONDARY1,
+      color = Palette.accent,
       font = SMLSIZE
     }
   end
@@ -832,8 +807,7 @@ function M.onSave(ctx)
 end
 
 function M.onReload(ctx)
-  -- The debug settings are sent only once the configuration write is answered, from what the
-  -- page holds then; a Reload under the save would put the board's old values there.
+  -- Nothing is read under a running save; Reload works again once the save has finished.
   if ui.saving then return true end
   local session = getSession()
   if session then
@@ -870,6 +844,7 @@ function M.onClose()
   LoadingOverlay = nil
   ConfirmDialog = nil
   ApiVersion = nil
+  SavePipeline = nil
   t = nil
 end
 

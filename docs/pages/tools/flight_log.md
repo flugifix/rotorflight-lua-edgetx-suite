@@ -14,15 +14,15 @@ lines, newest first, and opens one to show the flight in full.
 
 *Tools* → *Flight Log*
 
-Hidden until *System* → *Settings* → *General* → *Preview* → *Flight Log* is on
-(`visibleWhen = "previewFlightLog"`). The tile is locked while the model is armed
-(`lockedWhileArmed = true`), so the page cannot be opened in flight.
+The tile is locked while the model is armed (`lockedWhileArmed = true`), so the page cannot be
+opened in flight. The page is always there, but nothing is written to the log until *Write a
+flight log* is switched on in its own [*Settings*](#settings) tab.
 
 From the dashboard widget at full screen the page can be opened directly: put *FLIGHT LOG* into
 the [quick menu](../../dashboard/quick-menu.md) on *System* → *Settings* → *Dashboard* →
 [*Quick Settings*](../settings/dashboard/quick_menu.md), or, on the Urban theme, set a key to
-*Suite: Flight log*. Either opens the suite's tool inside the widget on this page, under the same two
-conditions, and the back key on the page closes the tool again rather than stepping up to
+*Suite: Flight log*. Either opens the suite's tool inside the widget on this page, under the same
+condition, and the back key on the page closes the tool again rather than stepping up to
 *Tools*.
 
 ## Getting around the page
@@ -35,27 +35,54 @@ naming what they show, the flight's date and time and the pack's name.
 Back steps out of whatever was opened before it leaves the page: an open pack editor, then a
 flight or a pack detail, then a filtered flight list, then the page itself.
 
+## Flights
+
+![The Flights tab](../../images/tools/flight_log/flights.png)
+
+The flights in the log, newest first, under a line with their number and their total armed time.
+Each row shows the date and time the craft armed, the model and the pack, and how long it was
+armed. A log longer than the screen is paged with *Prev* and *Next*.
+
+The `>` button opens the flight. Its heading is the flight's date and time; below it are the
+model, the pack, the duration and, where the line carries them, the flight's statistics (see
+[What a line holds](#what-a-line-holds)). A flight recorded without statistics says so instead.
+
+![One flight opened](../../images/tools/flight_log/flight-detail.png)
+
+## Models
+
+![The Models tab](../../images/tools/flight_log/models.png)
+
+One row per model name the log holds, with its number of flights and their total armed time. The
+`>` button opens the *Flights* list with only that model's flights, headed by the model's name,
+its number of flights and its total time.
+
 ## Settings
 
-The log itself is switched on under *Settings*, not here. This page only reads what has been
+*Write a flight log* is what switches the log on. The other tabs only read what has been
 written.
 
 | Setting | What it does |
 | --- | --- |
-| Write a flight log | Off by default. While it is off nothing is written, and this page stays empty. |
+| Write a flight log | Off by default. While it is off nothing is written, and this page stays empty. While it is on, the dashboard widget also asks which pack is on the craft after connecting (see *The prompt on connect* below). |
 | Minimum flight length | An arm shorter than this is a spool-up check rather than a flight, and is not logged. 30 s by default; 0 logs every arm. |
-| Ask which pack after connecting | Off by default. The dashboard widget offers this model's packs once per connection, in fullscreen. See *The prompt on connect* below. |
-| Set the pack's battery profile | Off by default. A pick in the dashboard's prompt also moves the flight controller onto that pack's battery profile. *Battery for the next flight* on this page records the pack and leaves the profile alone. Never writes while the model is armed. |
+| Set the pack's battery profile | Off by default. A pack picked on the dashboard — in the prompt after connecting or under *BATTERY* in its quick menu — also moves the flight controller onto that pack's battery profile. Never writes while the model is armed. |
+
+![The Settings tab](../../images/tools/flight_log/settings.png)
 
 ## Batteries
 
-The registry of packs, the editor for it, and the pack the next flight is logged against.
+![The Batteries tab](../../images/tools/flight_log/batteries.png)
 
-*Battery for the next flight* offers the packs that name this craft in their model list, plus
-*None*. The choice is kept for this model, so the same pack is offered again the next time the
-craft is connected; the flight's line records it, and a pack's first flight of a session counts
-one cycle against it. Where a pack was also picked in the dashboard's prompt on connect, the
-later of the two picks is the one the flight is logged against.
+The registry of packs and the editor for it.
+
+Which pack is on the craft is not chosen on this page but on the dashboard widget: in the
+[prompt after connecting](#the-prompt-on-connect), or under *BATTERY* in its
+[quick menu](../../dashboard/quick-menu.md). The choice is kept for this model, so the same pack
+is marked again the next time the craft is connected; the flight's line records it, and a pack's
+first flight of a session counts one cycle against it. Without the dashboard widget there is no
+way to pick a pack: the model's flights are then logged against the pack last chosen for it, or
+with the battery column empty where none ever was.
 
 *New battery* opens the editor, which takes the whole screen until *Save* or *Cancel* — the tabs
 are not drawn while it is open, because one press on a tab would discard what has been typed.
@@ -63,25 +90,28 @@ Back cancels it. A pack already in the list is opened with the `>` button, which
 holds together with how many logged flights name it and when it was last used, and offers *Edit*
 and *Delete*. Deleting asks first.
 
+![The pack editor, scrolled to its models](../../images/tools/flight_log/pack-editor.png)
+
 | Field | What it holds |
 | --- | --- |
 | Id | The name the flight's line and the model's own choice refer to the pack by. Letters, digits, `_` and `-`; anything else is dropped. It has to be unique, and a new pack is offered the lowest number the registry has free. |
 | Name | What the pack is called on the page and in the flight list. Up to 24 characters. |
 | Capacity | The pack's capacity in whole mAh, as on the Battery page. `0` means it is not recorded and the field is left out of the file. |
 | Cells | The pack's cell count, 1 to 24. Only used to find the pack's battery profile on a flight controller that keeps a cell count per profile (see *The battery profile* below). `0` means it is not recorded and the field is left out of the file. |
-| Models | The craft this pack is offered for, as a comma-separated list of model names. Empty means every model. |
 | Battery profile | The flight controller's battery profile this pack belongs to, 1 to 6. `0` means none is recorded and the field is left out of the file. |
 | Cycles | How many charges the pack has seen. It is counted up by flying, and is editable here for a pack that was already in use before it was entered. |
+| Models | The craft this pack is offered for. The models are listed at the end of the form, below *Cycles*. *All models* (the default) offers it for every model; otherwise only for the models switched on. The list holds every model the radio knows of: those with logged flights, the connected craft, and every flight controller [whose name is recorded on the card](../../reference/configuration-files.md). A model never connected or flown here is not listed yet. A name containing a comma or a semicolon is not listed because the file uses both as separators. An older entry naming a model the radio does not know is kept and shown switched on. |
 
-Renaming a pack's id, or deleting it, takes the *battery for the next flight* with it: the choice
-follows the new id, or goes back to *None*.
+Renaming a pack's id, or deleting it, takes the pack chosen for the connected model with it: the
+choice follows the new id, or is cleared.
 
 ## The prompt on connect
 
-With *Ask which pack after connecting* on, the dashboard widget asks which pack is on the craft
-once the connect sequence has finished. The packs offered are this model's entries in the
-registry under *Batteries* — an entry with no model list is offered for every craft — and the
-answer is recorded exactly as *Battery for the next flight* records it.
+While *Write a flight log* is on, the dashboard widget asks which pack is on the craft once the
+connect sequence has finished. The packs offered are this model's entries in the registry under
+*Batteries* — an entry with no model list is offered for every craft. Where the registry has no
+pack for this model, nothing is asked. With the log off, the prompt does not appear; *BATTERY*
+in the quick menu still lists this model's packs.
 
 It appears **in fullscreen only**. A widget on the main screen receives no touch, so there is no
 way for it to take an answer there; the prompt is what fullscreen shows instead of the quick
@@ -98,10 +128,9 @@ connection, so the question is asked again. The quick menu itself is described o
 [its own page](../../dashboard/quick-menu.md).
 
 *NO BATTERY* is an answer like any other. It clears the choice, and the flight's line is written
-with its battery column empty. It always has the bottom row of the picker to itself; where this
-model has more packs than fit above it, the rest are not offered there. This page can still
-record one of them under *Battery for the next flight*, but a pick made there does not switch
-the flight controller's battery profile.
+with its battery column empty. It always has the bottom row of the picker to itself. The picker
+the widget draws for a theme without one of its own shows as many packs as fit above it and no
+more; the Urban, Grid and Deck themes draw their own picker, which scrolls.
 
 ### The battery profile
 
@@ -156,6 +185,8 @@ Everything after them is the flight's own statistics, taken from the record the 
 the craft is armed. A field that was never recorded is left empty, so a line may carry all of them,
 some of them or none.
 
+A column whose sensor the model does not have, such as ESC temperature, is left empty rather than 0.
+
 | Column | What it is |
 | --- | --- |
 | `mah` | Capacity used, as the flight controller reported it, rounded down to whole mAh |
@@ -195,6 +226,16 @@ leaves the rest of the file alone.
 The battery registry beside it is the same kind of file, one pack per line, and it is meant to be
 kept by hand as readily as from the editor: an edit made here rewrites the one line it changes and
 leaves comments, unknown fields and the rest of the file exactly as they were.
+
+A pack can leave the registry without this page knowing which models had it chosen: deleted or
+given a new id in the file itself, or on this page while another model is connected. So the pack a
+flight is about to be logged against is looked up in the registry at the disarm first. Where no
+pack carries that id any more, the flight's line is written with its battery column empty, no
+cycle is counted, the log names the id at warning level, and the model's choice of that pack is
+cleared, so its later flights are not logged against an id that names nothing. Where the link was
+lost during the flight, the choice is cleared on the card at the next logged flight that ends with
+the link up. A registry the card does not read whole is not judged: the flight is logged against
+the chosen id as before.
 
 A flight counts as logged only once the file on the card has grown by exactly the bytes its line
 takes. Where the card will not say how large a file on it is, the flight is not written at all and

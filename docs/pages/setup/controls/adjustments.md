@@ -45,8 +45,14 @@ stand now (`-` while its enable channel is outside its range; a `*` marks an out
   firmware without them would skip a slot set to either one without a word. On MSP API 12.10,
   unless a PID profile has already been read on this connection, the page reads the PID
   profile once to find out. They are announced as "cyclic gain" and "yaw gain".
-- Save writes each changed slot, then one EEPROM write. While it does, the page is covered by the
-  save's progress, and Save or Reload pressed in the header has no effect until the save has finished.
+- Save writes each changed slot, then one EEPROM write, through the tool's shared save; every
+  changed slot is copied when Save is pressed, and each slot's write is built from its copy when
+  its turn comes, so a Save of every slot works in the tool opened from the dashboard too. While it
+  runs, the page is covered by the save's
+  progress, and Save or Reload pressed in the header has no effect until the save has finished.
+  A save that worked reads *Settings saved.*; one that failed reads *Not saved*. A save the page
+  is left during, or the tool opened from the dashboard closes during, still finishes with the
+  values Save was pressed with.
 - Reload discards every unsaved change, on every slot: a slot changed before Reload is not
   written by the next Save, and is read from the flight controller again when it is selected.
 - The function names are shown in the radio's language.

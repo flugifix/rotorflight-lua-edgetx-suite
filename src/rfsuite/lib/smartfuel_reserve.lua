@@ -2,11 +2,12 @@
 -- value becomes, and how a raw fuel reading is rescaled above it.
 --
 -- The reserve is the percentage of the pack that SmartFuel treats as unavailable, so a fuel
--- reading of `reserve` means zero usable fuel and 100 stays 100. Producer and diagnostic must
--- resolve it identically or the page that exists to explain the sensor disagrees with it.
+-- reading of `reserve` means zero usable fuel and 100 stays 100. A reserve of 0 means no reserve:
+-- the fuel figure follows the raw reading one-to-one. Producer and diagnostic must resolve it
+-- identically or the page that exists to explain the sensor disagrees with it.
 local M = {}
 
-M.RESERVE_MIN = 15
+M.RESERVE_MIN = 0
 M.RESERVE_MAX = 60
 M.RESERVE_DEFAULT = 35
 

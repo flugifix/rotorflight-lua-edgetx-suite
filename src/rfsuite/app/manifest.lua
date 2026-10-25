@@ -43,7 +43,7 @@ local manifest = {
       pages = {
         { id = "copy_profiles", title = "@i18n(app.modules.copyprofiles.name)@", menuId = "tools_copy_profiles_page", icon = "@pages/tools/copy.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
         { id = "select_profile", title = "@i18n(app.modules.profile_select.name)@", menuId = "tools_select_profile_page", icon = "@pages/tools/select_profile.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
-        { id = "flight_log", title = "@i18n(app.modules.flight_log.name)@", menuId = "tools_flight_log_page", icon = "@pages/tools/flight_log/icon.png", visibleWhen = "previewFlightLog", lockedWhileArmed = true },
+        { id = "flight_log", title = "@i18n(app.modules.flight_log.name)@", menuId = "tools_flight_log_page", icon = "@pages/tools/flight_log/icon.png", lockedWhileArmed = true },
         { id = "diagnostics", title = "@i18n(app.modules.diagnostics.name)@", menuId = "diagnostics_menu", icon = "@pages/tools/diagnostics.png" }
       }
     },
@@ -387,6 +387,10 @@ local manifest = {
         { id = "dashboard_settings", title = "@i18n(app.modules.dashboard_settings.name)@", menuId = "settings_dashboard_settings_menu", icon = "@pages/settings/dashboard/settings/icon.png" },
         { id = "dashboard_quick_menu", title = "@i18n(app.modules.dashboard_quick_menu.name)@",
           menuId = "settings_dashboard_quick_menu_page", icon = "@pages/settings/shortcuts/icon.png" },
+        { id = "dashboard_keys", title = "@i18n(app.modules.dashboard_keys.name)@",
+          menuId = "settings_dashboard_keys_page", icon = "@pages/settings/shortcuts/icon.png" },
+        { id = "dashboard_standby", title = "@i18n(app.modules.dashboard_standby.name)@",
+          menuId = "settings_dashboard_standby_page", icon = "@pages/settings/dashboard/icon.png" },
         -- The other half of the same preview feature, and it carries the same condition:
         -- one preference key decides whether in-flight tuning is on the radio at all.
         { id = "dashboard_inflight", title = "@i18n(app.modules.dashboard_inflight.name)@",
@@ -411,8 +415,16 @@ local manifest = {
       title = "@i18n(app.modules.dashboard_inflight.name)@",
       pages = {}
     },
+    settings_dashboard_keys_page = {
+      title = "@i18n(app.modules.dashboard_keys.name)@",
+      pages = {}
+    },
     settings_dashboard_quick_menu_page = {
       title = "@i18n(app.modules.dashboard_quick_menu.name)@",
+      pages = {}
+    },
+    settings_dashboard_standby_page = {
+      title = "@i18n(app.modules.dashboard_standby.name)@",
       pages = {}
     },
     settings_dashboard_settings_page = {

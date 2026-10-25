@@ -22,7 +22,9 @@ rfsuite.session.flight = {
 ```
 
 A key of `current` or `last` is **absent until that statistic has taken a value**, so a reader asks
-`current[key]` first and falls back to `last[key]`. The keys are:
+`current[key]` first and falls back to `last[key]`. Statistic text boxes and gauges' maxima use
+`Utils.statFromRecord`: while armed, an absent statistic shows no value. Urban, Grid and Deck's
+own telemetry, link and battery views still fall back to the previous flight. The keys are:
 
 | key | from | recorded |
 |---|---|---|
@@ -215,9 +217,10 @@ shows a finished flight with the link gone, and its read clock then stands still
 the record sample on every pass. Without a counting reader the record keeps its own clock.
 
 The first sample of a flight is therefore taken on the first read after the arm rather than on
-the arm itself: normally within about half a second. Until then a box showing a statistic of the
-flight in progress falls back to the previous flight's value, and a flight shorter than that
-records nothing. No background work runs while the dashboard builds a scene, so on a theme that
+the arm itself: normally within about half a second. Until then the statistic boxes and gauges'
+maxima show no value through `Utils.statFromRecord`; Urban, Grid and Deck's own views still fall
+back to the previous flight. A flight shorter than that records nothing. No background work runs
+while the dashboard builds a scene, so on a theme that
 draws the armed phase with a module of its own, the first sample follows that scene's build.
 
 ## When a flight starts and ends
@@ -246,7 +249,10 @@ reading arrives within 5 s; the arm edge then opens a fresh record if the craft 
 The readings the statistics are taken from are dropped at the same moment. Within a session a
 sensor that answers nothing in a pass leaves its previous reading standing; across a new connection
 it does not, so a model connected without a sensor the session before it had records nothing for
-that sensor rather than the previous session's last value. Until this was changed, a reconnect
+that sensor rather than the previous session's last value. A sensor that has not answered since
+the connection came up leaves its statistics absent: a model without an ESC temperature or altitude
+sensor records nothing for it rather than 0, and the first sample does not take a 0 for a sensor
+not found yet. Until this was changed, a reconnect
 cleared the statistics but kept those readings, and a missing sensor's last value from the session
 before went into the new flight's maxima and minima. The powered gate above reads the same values,
 so an inherited throttle-hold state would have kept it shut for the whole session. The voltage-sag

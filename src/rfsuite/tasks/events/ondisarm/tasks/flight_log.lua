@@ -68,35 +68,56 @@ end
 -- Which pack this flight belongs to.
 --
 -- The model's own store answers first, re-read here rather than taken from the copy the session
--- is carrying. A pick is recorded in two places (lib/battery_pick.lua, select): the session of the
--- Lua state it was made in, and the store. The dashboard's prompt runs in this state and the
--- standalone tool's page in another, so a pick made on the page after one made in the prompt
--- reaches the store and never this session -- the store is the one place that holds the later of
--- the two. Reading it at the disarm edge costs nothing that the line about to be appended does
--- not cost anyway, and it is the same answer the arm edge would have given: the page is locked
--- while the craft is armed, so the choice cannot have moved since take-off.
+-- is carrying. The dashboard's pack picker (lib/battery_pick.lua, select) records the pick in
+-- this session and the store. The standalone tool runs in another Lua state: its Flight Log
+-- page moves the stored choice when a pack is renamed or deleted, and that reaches the store
+-- and never this session. Reading it at the disarm edge costs nothing that the line about to be
+-- appended does not cost anyway, and it is the same answer the arm edge would have given: the
+-- page is locked while the craft is armed, so the choice cannot have moved since take-off.
 --
 -- A store that has recorded a choice answers for it, "no battery" included. The session's pick
 -- is the answer only where the store has none: no board id to name it by, or no choice recorded
 -- in it. A pick whose store write the card refused (select logs it) loses to the older choice the
 -- store still holds.
 local function resolveBattery(FlightLog, session, record)
+  local ModelPreferences, store
   if session.mcu_id ~= nil then
-    local ModelPreferences = loadModule("lib/model_preferences.lua")
+    ModelPreferences = loadModule("lib/model_preferences.lua")
     if type(ModelPreferences) == "table" and type(ModelPreferences.loadByMcuId) == "function" then
-      local ok, store = pcall(ModelPreferences.loadByMcuId, session.mcu_id, true)
-      local section = ok and type(store) == "table" and store.flightlog or nil
+      local ok, loaded = pcall(ModelPreferences.loadByMcuId, session.mcu_id, true)
+      if ok and type(loaded) == "table" then store = loaded end
+      local section = store and store.flightlog or nil
       if type(section) == "table" and section.battery ~= nil then
-        return FlightLog.storedBatteryId(store)
+        return FlightLog.storedBatteryId(store), store, ModelPreferences
       end
     end
   end
 
   if type(record.batteryId) == "string" and record.batteryId ~= "" then
-    return record.batteryId
+    return record.batteryId, store, ModelPreferences
   end
 
-  return FlightLog.storedBatteryId(session.modelPreferences)
+  return FlightLog.storedBatteryId(session.modelPreferences), store, ModelPreferences
+end
+
+local function clearBattery(FlightLog, session, record, staleId, store, ModelPreferences)
+  if record.batteryId == staleId then record.batteryId = nil end
+  if FlightLog.storedBatteryId(session.modelPreferences) == staleId then
+    session.modelPreferences.flightlog.battery = ""
+  end
+  -- Without a link, the store is re-read and cleared at this board's next disarm with a link.
+  if session.mcu_id == nil or FlightLog.storedBatteryId(store) ~= staleId then return end
+  store.flightlog.battery = ""
+  -- Follows the dashboard pack picker and model_name_sync's legacyClear store writes.
+  if type(ModelPreferences) ~= "table" or type(ModelPreferences.saveByMcuId) ~= "function" then
+    logLine("stale battery choice not cleared on card: model preferences unavailable", "warn")
+    return
+  end
+  local ok, saved, reason = pcall(ModelPreferences.saveByMcuId, session.mcu_id, store)
+  if not ok or saved ~= true then
+    logLine("stale battery choice not cleared on card: "
+      .. tostring((not ok) and saved or reason or "the card refused the write"), "warn")
+  end
 end
 
 -- The flight record onto the log's statistics columns.
@@ -171,7 +192,10 @@ local REFUSAL = {
   open = "the card did not open the log file",
   unmeasurable = "the card did not say how large the log file is",
   unverified = "the card did not confirm the line",
-  toobig = "the registry is at or above the size that can be rewritten safely"
+  unreadable = "the registry could not be read whole",
+  toobig = "the registry is at or above the size that can be rewritten safely",
+  noregistry = "the registry file is missing or empty",
+  notfound = "the id is not in the registry"
 }
 
 local function refusal(reason, fallback)
@@ -216,13 +240,38 @@ function M.wakeup()
     return
   end
 
-  local batteryId = resolveBattery(FlightLog, session, record)
+  local batteryId, store, ModelPreferences = resolveBattery(FlightLog, session, record)
   -- A link that dropped in flight -- for a second, long before the runtime holds it to be lost --
   -- leaves no board identity until the MSP runtime reads it again after this disarm, and so no
   -- store and no in-memory copy of it to ask. The pack the store held at the arm edge is then the
   -- answer: the choice cannot move while the craft is armed.
   if batteryId == nil and session.mcu_id == nil and type(record.batteryAtArm) == "string" then
     batteryId = record.batteryAtArm
+  end
+
+  local registryData
+  if batteryId ~= nil then
+    local data, readErr
+    local okCheck, found = pcall(function()
+      data, readErr = FlightLog.readRegistry()
+      if readErr ~= nil then return nil end
+      return FlightLog.hasBattery(data, batteryId)
+    end)
+    registryData = data
+    if not okCheck then
+      logLine("battery registry not checked: " .. tostring(found), "warn")
+    else
+      if readErr == nil and not found then
+        local staleId = batteryId
+        batteryId = nil
+        logLine("battery " .. tostring(staleId) .. " left out of the flight's line: "
+          .. (data == nil and "no registry file, or an empty one" or "no pack with this id in the registry"), "warn")
+        local okClear, clearErr = pcall(clearBattery, FlightLog, session, record, staleId, store, ModelPreferences)
+        if not okClear then
+          logLine("stale battery choice not cleared: " .. tostring(clearErr), "warn")
+        end
+      end
+    end
   end
 
   local ok, written, reason = pcall(FlightLog.appendFlight, record.startDate, record.model or "",
@@ -241,7 +290,7 @@ function M.wakeup()
   -- cycle. The id is remembered rather than a flag, so swapping to another pack counts again.
   if batteryId ~= nil and record.countedFor ~= batteryId then
     record.countedFor = batteryId
-    local okMark, marked, markReason = pcall(FlightLog.markUsed, batteryId, record.startDate)
+    local okMark, marked, markReason = pcall(FlightLog.markUsed, batteryId, record.startDate, registryData)
     if not okMark or marked ~= true then
       logLine("battery cycle not counted for " .. tostring(batteryId) .. ": "
         .. ((not okMark) and tostring(marked) or refusal(markReason, "registry unchanged or the replace failed")), "warn")

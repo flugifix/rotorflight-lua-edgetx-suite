@@ -46,7 +46,7 @@ end
 -- What is checked is the row itself: an action, or the button that opens a view. The options of a
 -- `choice` that names a `view` are pressed in that view, which keeps its own rules -- the runtime
 -- refuses a battery pick made while armed, and a battery profile's press queues nothing while
--- armed -- and its close has to work whatever the state.
+-- armed or before the connection is ready -- and its close has to work whatever the state.
 local function refused(widget, entry, option)
   if option ~= nil and entry.view ~= nil then return false end
   if isEntryVisible(entry, widget) then return false end
@@ -253,7 +253,7 @@ function BUILD.erase_blackbox(widget, t)
     id = "erase_blackbox",
     kind = "action",
     title = t("widgets.dashboard.erase_blackbox", "ERASE BLACKBOX"),
-    visibleWhen = "modelDisarmed",
+    visibleWhen = "connectionReadyDisarmed",
     confirm = confirm,
     press = function(report)
          local mspModule = requireModule("tasks/msp/runtime.lua")
@@ -351,8 +351,8 @@ function BUILD.tool(widget, t)
 end
 
 -- The suite's tool, opened on its Flight Log page rather than on its menu, and closed again by
--- the back key there. Offered only while that page is in the tool -- its preview switch is on --
--- and the model is disarmed; not in the default list, so it is in the menu only where the pilot puts it.
+-- the back key there. Offered only while the model is disarmed; not in the default list, so it is
+-- in the menu only where the pilot puts it.
 function BUILD.flight_log(widget, t)
   return {
     id = "flight_log",
@@ -393,7 +393,7 @@ local function warnText(warnWord, warn) return string.format("%s %.2fV", warnWor
 -- BATTERY PROFILE: a choice whose options are pressed on a page of their own (the view
 -- `battery_profile`, battery_profile_menu.lua), so in a menu it is the one row that opens that
 -- page. It is not one of the pilot's entries: the menu draws it under them, always in the same
--- place (M.build). Offered while the model is disarmed and the board has reported a profile
+-- place (M.build). Offered while the connection is ready, the model is disarmed and the board has reported a profile
 -- (`batteryProfileOffered`).
 --
 -- A profile write pressed in the air is dropped with the rest of the MSP queue, and the options of
@@ -417,6 +417,8 @@ function BUILD.battery_profile(widget, t)
     after = "openView:battery_profile",
     -- What a page of profiles says while the model is armed and nothing on it can be pressed.
     armedNote = t("widgets.dashboard.battery_profile_armed", "CHANGEABLE ONLY WHEN DISARMED"),
+    -- And what it says before the connection is ready, when a press queues nothing either.
+    notReadyNote = t("widgets.dashboard.battery_profile_not_ready", "CHANGEABLE ONLY WHEN CONNECTED"),
     -- One option per capacity the flight controller carries, resolved when the row is drawn
     -- rather than when the list is made, so an entry stays a description of what it offers. The
     -- widget is the one this list was made for where the caller passes none.
@@ -441,7 +443,9 @@ function BUILD.battery_profile(widget, t)
               -- The profile in force: the battery_profile sensor (BatP) is 1-based.
               current = (state.batteryProfile == (i + 1)),
               press = function(report)
-                if w.state and w.state.armed == true then return end
+                -- The page can stay up when the link drops, and a key can open it on the
+                -- connection screen: queue nothing until the connection is ready, as while armed.
+                if w.connectionReady ~= true or (w.state and w.state.armed == true) then return end
                 local mspModule = requireModule("tasks/msp/runtime.lua")
                 if mspModule and mspModule.getState then
                   local mState = mspModule.getState()

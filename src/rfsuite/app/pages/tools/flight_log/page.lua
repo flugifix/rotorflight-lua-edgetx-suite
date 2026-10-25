@@ -21,9 +21,12 @@ local function loadModule(path)
   return mod
 end
 
+local Palette = _G.rfsuite and _G.rfsuite.palette or (_G.rfsuite and _G.rfsuite.require or loadModule)("ui/palette.lua")
+
 local Common = nil
 local Controls = nil
 local FlightLog = nil
+local ModelPreferences = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local t = nil
@@ -55,13 +58,14 @@ local ui = {
   registry = {},
   ordered = nil,
   page = 0,
+  builtThisPass = false,
   filterModel = nil,
   flight = nil,
   batteryId = nil,
   edit = nil,
   editMode = nil,
   editError = nil,
-  config = { enabled = false, min_seconds = 30, ask_on_connect = false, set_fc_profile = false },
+  config = { enabled = false, min_seconds = 30, set_fc_profile = false },
   requestRebuild = nil
 }
 
@@ -200,12 +204,10 @@ local function loadConfig(preferences)
   if type(section) == "table" then
     ui.config.enabled = section.enabled == true
     ui.config.min_seconds = tonumber(section.min_seconds) or 30
-    ui.config.ask_on_connect = section.ask_on_connect == true
     ui.config.set_fc_profile = section.set_fc_profile == true
   else
     ui.config.enabled = false
     ui.config.min_seconds = 30
-    ui.config.ask_on_connect = false
     ui.config.set_fc_profile = false
   end
 end
@@ -219,7 +221,7 @@ local function ensureLoaded(preferences)
 end
 
 -- ---------------------------------------------------------------------------
--- The battery for the next flight
+-- The dashboard's battery choice for this model
 -- ---------------------------------------------------------------------------
 
 local function selectedBatteryId()
@@ -231,18 +233,69 @@ local function selectedBatteryId()
   return FlightLog.storedBatteryId(session and session.modelPreferences)
 end
 
--- The choice is kept twice on purpose: in the session, where the arm edge reads it, and in the
--- model's own store, so that the same pack is offered again next time this craft is connected.
---
--- The recording itself is lib/battery_pick.lua's, and there is one implementation of it: the
--- dashboard's picker writes the same two places from the same code, so a pack picked here and a
--- pack picked there cannot end up recorded differently.
+-- The dashboard records this model's choice in the session and the model's store through
+-- lib/battery_pick.lua. This page only re-points that choice on a rename and clears it on a
+-- delete, using the same recording code to keep both places in agreement.
 local function selectBattery(id)
   local session = getSession()
   if type(session) ~= "table" then return end
   local BatteryPick = loadModule("lib/battery_pick.lua")
   if type(BatteryPick) ~= "table" or type(BatteryPick.select) ~= "function" then return end
   BatteryPick.select(session, id)
+end
+
+local function addModelRow(edit, name, priority)
+  if type(name) ~= "string" then return nil end
+  local label = FlightLog.trim(name)
+  if label == "" or label == "*" or string.find(label, "[,;%c]") ~= nil then return nil end
+  local key = string.lower(label)
+  local row = edit.byKey[key]
+  if row ~= nil then
+    if priority < row.priority then
+      local changed = row.label ~= label
+      row.label = label
+      row.priority = priority
+      return key, changed
+    end
+    return key, false
+  end
+  row = { key = key, label = label, priority = priority }
+  edit.byKey[key] = row
+  edit.rows[#edit.rows + 1] = row
+  return key, true
+end
+
+local function sortModelRows(edit)
+  table.sort(edit.rows, function(a, b) return a.key < b.key end)
+end
+
+-- The press callback has no instruction budget of its own, and reading every store costs more
+-- with every board the card holds. List once, then read one store per wakeup without a build.
+local function modelWalkStep(edit)
+  if edit.records == nil then
+    local ok, records = pcall(function()
+      if not ModelPreferences then ModelPreferences = loadModule("lib/model_preferences.lua") end
+      return ModelPreferences and ModelPreferences.listKnownModelIds()
+    end)
+    edit.records = (ok and type(records) == "table") and records or {}
+    edit.nextRecord = 1
+  else
+    local record = edit.records[edit.nextRecord]
+    edit.nextRecord = edit.nextRecord + 1
+    local ok, result = pcall(function() return ModelPreferences.readKnownModel(record) end)
+    if ok and type(result) == "table" then
+      local _, changed = addModelRow(edit, result.name, 1)
+      if changed then edit.addedRows = true end
+    end
+  end
+
+  if edit.nextRecord > #edit.records then
+    edit.walkDone = true
+    if edit.addedRows then
+      sortModelRows(edit)
+      requestRebuild()
+    end
+  end
 end
 
 -- ---------------------------------------------------------------------------
@@ -259,6 +312,8 @@ function M.getHeaderActions()
 end
 
 function M.wakeup(ctx)
+  local builtThisPass = ui.builtThisPass
+  ui.builtThisPass = false
   ensureDeps()
   if type(ctx) == "table" then
     if type(ctx.requestRebuild) == "function" then ui.requestRebuild = ctx.requestRebuild end
@@ -281,6 +336,10 @@ function M.wakeup(ctx)
       if type(collectgarbage) == "function" then collectgarbage("collect") end
       requestRebuild()
     end
+  end
+
+  if not builtThisPass and ui.edit ~= nil and not ui.edit.walkDone then
+    modelWalkStep(ui.edit)
   end
 end
 
@@ -350,7 +409,6 @@ function M.onSave(ctx)
   if type(ctx.preferences.flightlog) ~= "table" then ctx.preferences.flightlog = {} end
   ctx.preferences.flightlog.enabled = ui.config.enabled == true
   ctx.preferences.flightlog.min_seconds = math.floor(tonumber(ui.config.min_seconds) or 30)
-  ctx.preferences.flightlog.ask_on_connect = ui.config.ask_on_connect == true
   ctx.preferences.flightlog.set_fc_profile = ui.config.set_fc_profile == true
 
   if type(ctx.savePreferences) ~= "function" then return false end
@@ -390,11 +448,13 @@ function M.onClose()
   ui.editMode = nil
   ui.editError = nil
   ui.requestRebuild = nil
+  ui.builtThisPass = false
   resetAggregates()
   ui.registry = {}
   Common = nil
   Controls = nil
   FlightLog = nil
+  ModelPreferences = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
   t = nil
@@ -412,7 +472,7 @@ local function appendLabel(children, x, y, w, text, color, align)
     y = y,
     w = w,
     text = text,
-    color = color or COLOR_THEME_PRIMARY1,
+    color = color or Palette.text,
     font = SMLSIZE,
     align = align
   }
@@ -425,7 +485,7 @@ local function appendDivider(children, x, y, w)
     y = y,
     w = w,
     h = 1,
-    color = COLOR_THEME_SECONDARY2,
+    color = Palette.border,
     filled = true
   }
 end
@@ -529,14 +589,14 @@ local function buildFlights(children, x, y, w, h, i18n)
   end
   -- PRIMARY1 rather than PRIMARY2: the summary line sits on the page background rather than on a
   -- header, and PRIMARY2 is the colour the themes reserve for text that already has one behind it.
-  appendLabel(children, x + 6, cursorY + 4, w - 12, heading, COLOR_THEME_PRIMARY1)
+  appendLabel(children, x + 6, cursorY + 4, w - 12, heading, Palette.text)
   cursorY = cursorY + 26
   appendDivider(children, x, cursorY, w)
   cursorY = cursorY + 4
 
   if #rows == 0 then
     appendLabel(children, x + 10, cursorY + 20, w - 20,
-      pageText(i18n, "no_flights", "No flights recorded yet"), COLOR_THEME_DISABLED, CENTER)
+      pageText(i18n, "no_flights", "No flights recorded yet"), Palette.muted, CENTER)
     return
   end
 
@@ -563,9 +623,9 @@ local function buildFlights(children, x, y, w, h, i18n)
       string.format("%s %s", row.date, string.sub(row.time, 1, 5)))
     appendLabel(children, modelX, cursorY + 8, modelW,
       string.format("%s  %s", row.model ~= "" and row.model or "-", batteryLabel(row.battery)),
-      COLOR_THEME_DISABLED)
+      Palette.muted)
     appendLabel(children, btnX - durW - 8, cursorY + 8, durW, formatDuration(row.seconds),
-      COLOR_THEME_PRIMARY1, RIGHT)
+      Palette.text, RIGHT)
     appendButton(children, btnX, cursorY + 3, btnW, 28, ">", function()
       ui.flight = row
       ui.view = "flight"
@@ -584,7 +644,7 @@ local function buildFlights(children, x, y, w, h, i18n)
       end
     end)
     appendLabel(children, x + 74, pagerY + 6, w - 150,
-      string.format("%d / %d", ui.page + 1, pages), COLOR_THEME_DISABLED, CENTER)
+      string.format("%d / %d", ui.page + 1, pages), Palette.muted, CENTER)
     appendButton(children, x + w - 66, pagerY, 60, 28, pageText(i18n, "next", "Next"), function()
       if ui.page < pages - 1 then
         ui.page = ui.page + 1
@@ -623,7 +683,7 @@ end
 local function appendField(children, x, y, w, label, value)
   local labelW = math.max(90, math.min(190, math.floor(w * 0.40)))
   appendLabel(children, x + 6, y + 6, labelW, label)
-  appendLabel(children, x + labelW + 12, y + 6, w - labelW - 20, value, COLOR_THEME_DISABLED)
+  appendLabel(children, x + labelW + 12, y + 6, w - labelW - 20, value, Palette.muted)
   appendDivider(children, x, y + 28, w)
   return 29
 end
@@ -633,7 +693,7 @@ local function buildFlight(children, x, y, w, h, i18n)
   local cursorY = y
   if row == nil then
     appendLabel(children, x + 10, cursorY + 20, w - 20,
-      pageText(i18n, "no_flights", "No flights recorded yet"), COLOR_THEME_DISABLED, CENTER)
+      pageText(i18n, "no_flights", "No flights recorded yet"), Palette.muted, CENTER)
     return
   end
 
@@ -641,7 +701,7 @@ local function buildFlight(children, x, y, w, h, i18n)
   -- its heading has to. The date and the time are what identify it, and they are here rather than
   -- repeated as two rows of their own below.
   appendLabel(children, x + 6, cursorY, w - 12,
-    string.format("%s %s", row.date, row.time), COLOR_THEME_PRIMARY1)
+    string.format("%s %s", row.date, row.time), Palette.text)
   cursorY = cursorY + 22
 
   cursorY = cursorY + appendField(children, x, cursorY, w, pageText(i18n, "field_model", "Model"),
@@ -654,12 +714,12 @@ local function buildFlight(children, x, y, w, h, i18n)
   local stats = row.stats and FlightLog.parseStats(row.stats) or nil
   if stats == nil then
     appendLabel(children, x + 6, cursorY + 10, w - 12,
-      pageText(i18n, "no_stats", "This flight was recorded without statistics."), COLOR_THEME_DISABLED)
+      pageText(i18n, "no_stats", "This flight was recorded without statistics."), Palette.muted)
     return
   end
 
   cursorY = cursorY + 6
-  appendLabel(children, x + 6, cursorY, w - 12, pageText(i18n, "stats_title", "Statistics"), COLOR_THEME_PRIMARY1)
+  appendLabel(children, x + 6, cursorY, w - 12, pageText(i18n, "stats_title", "Statistics"), Palette.text)
   cursorY = cursorY + 22
   local labels = statLabels(i18n)
   for i = 1, #FlightLog.STAT_KEYS do
@@ -675,7 +735,7 @@ local function buildModels(children, x, y, w, h, i18n)
   local cursorY = y
   if #ui.modelOrder == 0 then
     appendLabel(children, x + 10, cursorY + 20, w - 20,
-      pageText(i18n, "no_flights", "No flights recorded yet"), COLOR_THEME_DISABLED, CENTER)
+      pageText(i18n, "no_flights", "No flights recorded yet"), Palette.muted, CENTER)
     return
   end
 
@@ -689,9 +749,9 @@ local function buildModels(children, x, y, w, h, i18n)
     local entry = ui.models[name]
     appendLabel(children, x + 6, cursorY + 8, btnX - timeW - countW - 24, name)
     appendLabel(children, btnX - timeW - countW - 12, cursorY + 8, countW, tostring(entry.count),
-      COLOR_THEME_DISABLED, RIGHT)
+      Palette.muted, RIGHT)
     appendLabel(children, btnX - timeW - 8, cursorY + 8, timeW, formatTotal(entry.seconds),
-      COLOR_THEME_DISABLED, RIGHT)
+      Palette.muted, RIGHT)
     appendButton(children, btnX, cursorY + 3, btnW, 28, ">", function()
       ui.filterModel = name
       ui.view = "flights"
@@ -703,36 +763,36 @@ local function buildModels(children, x, y, w, h, i18n)
   end
 end
 
-local function batteryOptions(i18n)
-  local session = getSession()
-  local modelName = session and session.modelName or nil
-  local list = FlightLog.forModel(ui.registry, modelName or "")
-  local options = { { value = "", label = pageText(i18n, "battery_none", "None") } }
-  for i = 1, #list do
-    local entry = list[i]
-    options[#options + 1] = {
-      value = entry.id,
-      label = (type(entry.name) == "string" and entry.name ~= "") and entry.name or entry.id
-    }
-  end
-  return options
-end
-
 local function startEdit(entry)
-  local models = ""
-  if type(entry) == "table" and type(entry.models) == "table" then
-    models = table.concat(entry.models, ",")
-  end
   ui.edit = {
     originalId = entry and entry.id or nil,
     id = entry and entry.id or FlightLog.freeId(ui.registry),
     name = entry and entry.name or "",
     cap = tonumber(entry and entry.cap) or 0,
     cells = tonumber(entry and entry.cells) or 0,
-    models = models,
+    rows = {},
+    byKey = {},
+    on = {},
     profile = tonumber(entry and entry.profile) or 0,
     cycles = tonumber(entry and entry.cycles) or 0
   }
+  local edit = ui.edit
+  local session = getSession()
+  addModelRow(edit, session and session.modelName, 2)
+  for i = 1, #ui.modelOrder do
+    addModelRow(edit, ui.modelOrder[i], 3)
+  end
+  if type(entry) == "table" and type(entry.models) == "table" then
+    local allModels = false
+    for i = 1, #entry.models do
+      local name = entry.models[i]
+      if FlightLog.trim(name) == "*" then allModels = true end
+      local key = addModelRow(edit, name, 4)
+      if key ~= nil then edit.on[key] = true end
+    end
+    if allModels then edit.on = {} end
+  end
+  sortModelRows(edit)
   ui.editMode = entry and "edit" or "create"
   ui.editError = nil
 end
@@ -761,7 +821,12 @@ local function saveEdit(i18n)
     return
   end
 
-  local models = edit.models
+  local names = {}
+  for i = 1, #edit.rows do
+    local row = edit.rows[i]
+    if edit.on[row.key] then names[#names + 1] = row.label end
+  end
+  local models = FlightLog.sanitizeModelList(table.concat(names, ","))
   if FlightLog.trim(models) == "" then models = false end
 
   local result
@@ -795,9 +860,8 @@ local function saveEdit(i18n)
 
   loadRegistry()
 
-  -- The pack for the next flight is remembered by id, so a rename has to take the choice with it.
-  -- Left behind, the old id names no pack: the list offers it as unknown and refuses to re-select
-  -- it, and the flight is logged against an id the registry no longer has.
+  -- Re-point the dashboard's choice for this model when its pack id changes. selectBattery
+  -- updates both the session and the model's store through lib/battery_pick.lua.
   if edit.originalId ~= nil and edit.originalId ~= id and selectedBatteryId() == edit.originalId then
     selectBattery(id)
   end
@@ -816,11 +880,11 @@ local function buildBatteryForm(children, x, y, w, h, i18n)
 
   appendLabel(children, x + 6, cursorY, w - 12,
     ui.editMode == "create" and pageText(i18n, "new_battery", "New battery")
-      or pageText(i18n, "edit_battery", "Edit battery"), COLOR_THEME_PRIMARY1)
+      or pageText(i18n, "edit_battery", "Edit battery"), Palette.text)
   cursorY = cursorY + 22
 
   if ui.editError ~= nil then
-    appendLabel(children, x + 6, cursorY, w - 12, ui.editError, COLOR_THEME_WARNING)
+    appendLabel(children, x + 6, cursorY, w - 12, ui.editError, Palette.warning)
     cursorY = cursorY + 22
   end
 
@@ -859,13 +923,6 @@ local function buildBatteryForm(children, x, y, w, h, i18n)
       set = function(value) edit.cells = math.floor(tonumber(value) or 0) end
     })
 
-  cursorY = cursorY + Controls.appendTextField(children, x, cursorY, w,
-    pageText(i18n, "battery_models", "Models"), {
-      length = 32,
-      get = function() return edit.models end,
-      set = function(value) edit.models = FlightLog.sanitizeModelList(value) end
-    })
-
   cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w,
     pageText(i18n, "battery_profile", "Battery profile"), {
       min = 0,
@@ -881,6 +938,25 @@ local function buildBatteryForm(children, x, y, w, h, i18n)
       get = function() return math.floor(tonumber(edit.cycles) or 0) end,
       set = function(value) edit.cycles = math.floor(tonumber(value) or 0) end
     })
+
+  -- All models is derived: on exactly when no row is on, and stored as an empty list.
+  appendLabel(children, x + 6, cursorY, w - 12, pageText(i18n, "battery_models", "Models"), Palette.text)
+  cursorY = cursorY + 22
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+    pageText(i18n, "models_all", "All models"),
+    function() return next(edit.on) == nil end,
+    function(value)
+      if value == true then edit.on = {} end
+    end)
+  for i = 1, #edit.rows do
+    local row = edit.rows[i]
+    cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+      row.label,
+      function() return edit.on[row.key] == true end,
+      function(value)
+        edit.on[row.key] = value == true or nil
+      end)
+  end
 
   -- The date of last use is not offered: it is a record of what happened, not a setting.
   cursorY = cursorY + 8
@@ -908,8 +984,8 @@ local function confirmDelete(entry, i18n)
       ui.editError = errorText(i18n, result)
     else
       loadRegistry()
-      -- Same reason as a rename: the pack for the next flight cannot be one that has just been
-      -- removed from the registry.
+      -- Clear the dashboard's choice for this model if its pack is deleted. selectBattery
+      -- clears both the session and the model's store through lib/battery_pick.lua.
       if selectedBatteryId() == entry.id then selectBattery(nil) end
       ui.batteryId = nil
       ui.view = "batteries"
@@ -933,7 +1009,7 @@ local function buildBattery(children, x, y, w, h, i18n)
   local cursorY = y
   if entry == nil then
     appendLabel(children, x + 10, cursorY + 20, w - 20,
-      pageText(i18n, "error_notfound", "That pack is no longer in the file"), COLOR_THEME_DISABLED, CENTER)
+      pageText(i18n, "error_notfound", "That pack is no longer in the file"), Palette.muted, CENTER)
     return
   end
 
@@ -942,11 +1018,11 @@ local function buildBattery(children, x, y, w, h, i18n)
   -- id, which is what the rest of the suite calls it by anyway.
   appendLabel(children, x + 6, cursorY, w - 12,
     (type(entry.name) == "string" and entry.name ~= "") and entry.name or entry.id,
-    COLOR_THEME_PRIMARY1)
+    Palette.text)
   cursorY = cursorY + 22
 
   if ui.editError ~= nil then
-    appendLabel(children, x + 6, cursorY, w - 12, ui.editError, COLOR_THEME_WARNING)
+    appendLabel(children, x + 6, cursorY, w - 12, ui.editError, Palette.warning)
     cursorY = cursorY + 22
   end
 
@@ -981,15 +1057,6 @@ end
 local function buildBatteries(children, x, y, w, h, i18n)
   local cursorY = y
 
-  cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-    pageText(i18n, "battery_for_next", "Battery for the next flight"),
-    batteryOptions(i18n),
-    selectedBatteryId() or "",
-    function(value)
-      selectBattery((type(value) == "string" and value ~= "") and value or nil)
-      requestRebuild()
-    end)
-
   cursorY = cursorY + 6
   appendButton(children, x + 6, cursorY, 120, 30, pageText(i18n, "new_battery", "New battery"), function()
     startEdit(nil)
@@ -999,7 +1066,7 @@ local function buildBatteries(children, x, y, w, h, i18n)
 
   if #ui.registry == 0 then
     appendLabel(children, x + 10, cursorY + 10, w - 20,
-      pageText(i18n, "no_batteries", "No batteries in the registry"), COLOR_THEME_DISABLED, CENTER)
+      pageText(i18n, "no_batteries", "No batteries in the registry"), Palette.muted, CENTER)
     return
   end
 
@@ -1013,12 +1080,12 @@ local function buildBatteries(children, x, y, w, h, i18n)
     appendLabel(children, x + 6, cursorY + 8, btnX - lastW - numW * 2 - 24,
       (type(entry.name) == "string" and entry.name ~= "") and entry.name or entry.id)
     appendLabel(children, btnX - lastW - numW * 2 - 12, cursorY + 8, numW,
-      tostring(math.floor(entry.cycles or 0)), COLOR_THEME_DISABLED, RIGHT)
+      tostring(math.floor(entry.cycles or 0)), Palette.muted, RIGHT)
     appendLabel(children, btnX - lastW - numW - 8, cursorY + 8, numW,
-      tostring(ui.flightsByBattery[entry.id] or 0), COLOR_THEME_DISABLED, RIGHT)
+      tostring(ui.flightsByBattery[entry.id] or 0), Palette.muted, RIGHT)
     appendLabel(children, btnX - lastW - 4, cursorY + 8, lastW,
       (type(entry.last) == "string" and entry.last ~= "") and entry.last or "-",
-      COLOR_THEME_DISABLED, RIGHT)
+      Palette.muted, RIGHT)
     appendButton(children, btnX, cursorY + 3, btnW, 28, ">", function()
       ui.batteryId = entry.id
       ui.editError = nil
@@ -1053,13 +1120,6 @@ local function buildSettings(children, x, y, w, h, i18n)
     })
 
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    pageText(i18n, "setting_ask_on_connect", "Ask which pack after connecting"),
-    function() return ui.config.ask_on_connect == true end,
-    function(value)
-      ui.config.ask_on_connect = value == true
-    end)
-
-  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     pageText(i18n, "setting_set_fc_profile", "Set the pack's battery profile"),
     function() return ui.config.set_fc_profile == true end,
     function(value)
@@ -1067,10 +1127,11 @@ local function buildSettings(children, x, y, w, h, i18n)
     end)
 
   cursorY = cursorY + 8
-  appendLabel(children, x + 6, cursorY, w - 12, FlightLog.dataPath(), COLOR_THEME_DISABLED)
+  appendLabel(children, x + 6, cursorY, w - 12, FlightLog.dataPath(), Palette.muted)
 end
 
 function M.build(ctx)
+  ui.builtThisPass = true
   ensureDeps()
   ui.requestRebuild = ctx and ctx.requestRebuild or nil
   ensureLoaded(ctx and ctx.preferences)

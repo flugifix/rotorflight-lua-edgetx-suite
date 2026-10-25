@@ -20,6 +20,8 @@ local function loadModule(path)
   return mod
 end
 
+local Palette = _G.rfsuite and _G.rfsuite.palette or (_G.rfsuite and _G.rfsuite.require or loadModule)("ui/palette.lua")
+
 local Controls = nil
 local Common = nil
 local MspRuntime = nil
@@ -112,7 +114,7 @@ local function appendRadioWideNote(children, x, cursorY, w, i18n)
   children[#children + 1] = {
     type = "label", x = x + 10, y = cursorY, w = w - 10,
     text = pageText(i18n, "radio_wide", "Stored on this radio, for every model"),
-    color = COLOR_THEME_SECONDARY1,
+    color = Palette.accent,
     font = SMLSIZE,
   }
   return cursorY + 20
@@ -375,7 +377,18 @@ function M.onSave(ctx)
   -- The board is written only when something of the board's changed. A save that moved nothing
   -- but a radio preference has nothing to send; sending anyway costs an EEPROM commit, and on a
   -- craft that has gone away it fails over a setting that was stored fine.
-  if ui.dirty then queueWrite() end
+  if ui.dirty then
+    local ok, err = queueWrite()
+    if not ok then
+      if ctx and type(ctx.reportSave) == "function" then
+        ctx.reportSave({
+          title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
+          message = tostring(err or "MSP write failed")
+        })
+      end
+      return false
+    end
+  end
 end
 
 function M.build(ctx)

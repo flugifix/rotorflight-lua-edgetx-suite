@@ -17,13 +17,17 @@
 --   response.
 -- - Full stick (roll and pitch): cyclic saturated and the rate reached well below the rate
 --   asked, so the rate is suggested at what the heli reaches.
+-- - Polar cyclic (roll and pitch): the rate lines and the full-stick rule use the Pitch rates
+--   and name the Rates page's Cyclic row, as the flight controller does.
 -- - |Collective| spread is shown as a fact, last, when there is room.
 -- - Stick releases: the rebound after a stop. I-term pushing back points at a lower I-term
 --   relax cut-off; with F still off, F comes first; otherwise the controller is barely braking,
 --   so more P (or B).
 --
+-- RC tuning is read after the first advisor reply, when the active rate profile changes and
+-- on Reload. It is never sent on a pass that polls and is deferred after a build like the poll.
 -- Clear (the header's star button) resets the statistics on the flight controller; they also
--- reset on their own when the tune changes.
+-- reset at the next arming when the tune changed since the last arming.
 
 local M = {}
 
@@ -36,11 +40,22 @@ local function loadModule(path)
   return mod
 end
 
+local Palette = _G.rfsuite and _G.rfsuite.palette or (_G.rfsuite and _G.rfsuite.require or loadModule)("ui/palette.lua")
+
 local Common = nil
 local Controls = nil
 local MspRuntime = nil
 local TuneAdvisorApi = nil
+local RcTuningApi = nil
+local Profile = nil
 local ConfirmDialog = nil
+local PidTuningApi = nil
+local PidProfileApi = nil
+local StatusApi = nil
+local SavePipeline = nil
+local Cache = nil
+local Armed = nil
+local ChangeJournal = nil
 local t = nil
 
 local AXIS_ROLL, AXIS_PITCH, AXIS_YAW = 1, 2, 3
@@ -80,10 +95,10 @@ local RATE_DISPLAY = {
 -- Max rate asked at full stick (deg/s) from the raw bytes, where the type makes it direct: the
 -- firmware's rate curves (fc/rc_rates.c) at full stick. Actual and Quick reach the larger of
 -- their two terms.
-local function maxRateAsked(a)
-  if a.ratesType == RATE_TYPE_ACTUAL then return math.max(a.rcRate, a.sRate) * 10 end
-  if a.ratesType == RATE_TYPE_QUICK then return math.max(a.sRate * 10, a.rcRate * 2) end
-  if a.ratesType == RATE_TYPE_ROTORFLIGHT then return a.rcRate * 5 end
+local function maxRateAsked(rates)
+  if rates.ratesType == RATE_TYPE_ACTUAL then return math.max(rates.rcRate, rates.sRate) * 10 end
+  if rates.ratesType == RATE_TYPE_QUICK then return math.max(rates.sRate * 10, rates.rcRate * 2) end
+  if rates.ratesType == RATE_TYPE_ROTORFLIGHT then return rates.rcRate * 5 end
   return nil
 end
 
@@ -106,6 +121,7 @@ local CUTOFF_MIN = 1
 
 local MAX_ACTIONS = 3
 local MAX_WHYS = 3
+local PAGE_ID = "flight_tuning_tune_advisor"
 
 -- A change is written as the path a pilot follows to it: page > row > column, or with the
 -- menu in front for a page under Advanced. The names are the ones those pages show.
@@ -117,12 +133,22 @@ local ui = {
   generation = 0,
   selected = AXIS_ROLL,
   pending = false,
+  rcTuning = nil,
+  rcTuningPending = false,
+  rcTuningSignature = nil,
+  rcTuningProfile = nil,
+  drawnProfile = nil,
   unsupported = false,      -- the flight controller refused the command: no polling until Reload
   lastPoll = 0,
   lastData = nil,
   lastSignature = nil,
   text = nil,
   view = nil,
+  snapshot = nil,
+  applying = false,
+  applyGeneration = 0,
+  status = nil,
+  reportSave = nil,
   runtime = {
     requestRebuild = nil,
     builtThisPass = false,
@@ -145,8 +171,18 @@ local function ensureDeps()
   if not Controls then Controls = loadModule("ui/controls.lua") end
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not TuneAdvisorApi then TuneAdvisorApi = loadModule("tasks/msp/api/tune_advisor.lua") end
+  if not RcTuningApi then RcTuningApi = loadModule("tasks/msp/api/rc_tuning.lua") end
+  if not Profile then Profile = loadModule("lib/profile.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not t then t = Common and Common.pageT("flight_tuning_tune_advisor") or nil end
+end
+
+local function getLiveProfile()
+  return Profile and Profile.getActiveRateProfile(1) or 1
+end
+
+local function buildSessionSignature()
+  return tostring(getLiveProfile())
 end
 
 local function pageText(i18n, key, fallback)
@@ -236,6 +272,28 @@ local function loadTexts(i18n)
     whyFixFFmt = pageText(i18n, "why_fix_f_fmt", "Stops bounce back %d%%. Fix FF first, then check again."),
     whyBrakeFmt = pageText(i18n, "why_brake_fmt", "Stops bounce back %d%%. More P brakes them (or add B)."),
     whyOk = pageText(i18n, "why_ok", "The heli answers the stick as asked."),
+    saveQuestion = pageText(i18n, "save_question", "Write these changes?"),
+    reading = pageText(i18n, "reading", "Reading current settings..."),
+    readFailed = pageText(i18n, "read_failed", "Could not read the current settings"),
+    armed = "@i18n(app.model_armed_save_blocked)@",
+    disconnected = pageText(i18n, "save_disconnected", "Connect the flight controller first."),
+    noBoard = pageText(i18n, "save_no_board", "The flight controller ID is not known."),
+    busy = pageText(i18n, "save_busy", "An apply is already running."),
+    noChanges = pageText(i18n, "save_no_changes", "There are no writable changes for this axis."),
+    noSnapshot = pageText(i18n, "save_no_snapshot", "Confirm the changes before saving."),
+    changed = pageText(i18n, "save_changed", "The settings changed since the advice was worked out. Nothing was written."),
+    range = pageText(i18n, "save_range", "A suggested value is out of range. Nothing was written."),
+    startFailed = pageText(i18n, "save_start_failed", "Could not start the save: %s"),
+    saved = pageText(i18n, "save_done", "Saved: %d change(s) written and read back."),
+    differs = pageText(i18n, "save_differs", "Saved, but the read-back differs: %s"),
+    notStored = pageText(i18n, "save_not_stored",
+      "Saving failed. The changes are active until the flight controller restarts, then undone."),
+    writeFailed = pageText(i18n, "save_write_failed",
+      "Writing failed. Nothing was saved: restart the flight controller to undo any part already sent."),
+    profileMoved = pageText(i18n, "save_profile_moved", "The profile changed during the save. Check both profiles."),
+    unverified = pageText(i18n, "save_unverified", "Saved, but the settings could not be read back."),
+    journalFailed = pageText(i18n, "journal_failed", "The change journal could not be written."),
+    applied = pageText(i18n, "applied", "Applied. Fly again to check the new settings."),
 
     -- Where each change is made
     pidsPage = "@i18n(app.modules.pids.name)@",
@@ -244,6 +302,7 @@ local function loadTexts(i18n)
     controllerPage = "@i18n(app.modules.pid_controller.name)@",
     pidsAxis = pidsAxis,
     ratesAxis = ratesAxis,
+    ratesCyclic = "@i18n(app.pages.flight_tuning_rates.cyclic)@",
     controllerAxis = controllerAxis,
     pidsP = "@i18n(app.pages.flight_tuning_pids.p)@",
     pidsF = "@i18n(app.pages.flight_tuning_pids.f)@",
@@ -286,26 +345,37 @@ local function rateText(raw, rateType, role)
 end
 
 -- Suggests scaling the rate curve by k (e.g. 1.25 = 25% faster everywhere)
-local function rateActions(T, a, axis, k, act)
-  local roles = LINEAR_ROLES[a.ratesType]
+local function rateActions(T, rates, k, act, setting)
+  local roles = LINEAR_ROLES[rates.ratesType]
   if not roles then
     local pct = round(math.abs(k - 1) * 100)
-    act(string.format(k > 1 and T.actRatePctUpFmt or T.actRatePctDownFmt, T.ratesPage, T.ratesAxis[axis], pct))
+    act(string.format(k > 1 and T.actRatePctUpFmt or T.actRatePctDownFmt, T.ratesPage, rates.row, pct))
     return
   end
   for _, role in ipairs(roles) do
-    local raw = (role == "rcRate") and a.rcRate or a.sRate
-    local range = RATE_DISPLAY[a.ratesType][role]
+    local raw = (role == "rcRate") and rates.rcRate or rates.sRate
+    local range = RATE_DISPLAY[rates.ratesType][role]
     local newRaw = clamp(round(raw * k), range.min, range.max)
-    act(string.format(PATH_FMT, T.ratesPage, T.ratesAxis[axis], T.rateColumns[a.ratesType][role],
-      rateText(raw, a.ratesType, role), rateText(newRaw, a.ratesType, role)))
+    local field = (role == "rcRate" and "rcRates_" or "rates_") .. rates.axis
+    setting(string.format(PATH_FMT, T.ratesPage, rates.row, T.rateColumns[rates.ratesType][role],
+      rateText(raw, rates.ratesType, role), rateText(newRaw, rates.ratesType, role)), field, "rates", raw, newRaw, "rate")
   end
 end
 
 -- How many lines rateActions() adds for this rates_type
-local function rateActionCount(a)
-  local roles = LINEAR_ROLES[a.ratesType]
+local function rateActionCount(rates)
+  local roles = LINEAR_ROLES[rates.ratesType]
   return roles and #roles or 1
+end
+
+local function matchesPolarRates(a, axis)
+  local record = ui.rcTuning
+  if not record or record.cyclic_polarity ~= 1 or record.rates_type ~= a.ratesType then return false end
+  -- Polar and rates belong to the active rate profile. Reject mismatched rates from another
+  -- profile when its switch has not been seen yet.
+  if axis == AXIS_ROLL then return record.rcRates_1 == a.rcRate and record.rates_1 == a.sRate end
+  if axis == AXIS_PITCH then return record.rcRates_2 == a.rcRate and record.rates_2 == a.sRate end
+  return false
 end
 
 -- Fills actions/whys (cleared by the caller) for one axis; returns the Response and Stops
@@ -315,10 +385,25 @@ end
 -- that was left out: a later change first checks room(). The first change (fly more, F with its
 -- rates, or full-stick rates) always fits. The reasons for changes stay within MAX_WHYS; only
 -- the closing |collective| fact can be cut.
-local function advise(T, a, axis, actions, whys)
+local function advise(T, a, axis, actions, whys, changes)
+  local rates = { ratesType = a.ratesType, rcRate = a.rcRate, sRate = a.sRate, row = T.ratesAxis[axis], axis = axis }
+  if matchesPolarRates(a, axis) then
+    local record = ui.rcTuning
+    rates = { ratesType = record.rates_type, rcRate = record.rcRates_2, sRate = record.rates_2, row = T.ratesCyclic, axis = 2 }
+  end
   local function room(n) return #actions + n <= MAX_ACTIONS end
   local function act(s) if #actions < MAX_ACTIONS then actions[#actions + 1] = s end end
   local function why(s) if #whys < MAX_WHYS then whys[#whys + 1] = s end end
+  local function setting(text, field, msg, from, to, profileKind)
+    if not room(1) then return end
+    act(text)
+    if from ~= to then
+      changes[#changes + 1] = {
+        key = field, field = field, msg = msg, from = from, to = to, text = text, profileKind = profileKind
+      }
+    end
+  end
+  local pidPrefix = "pid_" .. (axis - 1) .. "_"
 
   -- Response: feed-forward match
   local response
@@ -335,9 +420,23 @@ local function advise(T, a, axis, actions, whys)
     response = string.format(hot and T.respFastFmt or T.respSlowFmt, round(math.abs(g - 1) * 100))
     if a.F > 0 then
       local newF = clamp(round(a.F * clamp(1 / g, 1 - FF_STEP_MAX, 1 + FF_STEP_MAX)), 1, GAIN_MAX)
-      act(string.format(PATH_FMT, T.pidsPage, T.pidsAxis[axis], T.pidsF, a.F, newF))
+      local text = string.format(PATH_FMT, T.pidsPage, T.pidsAxis[axis], T.pidsF, a.F, newF)
+      local roles = LINEAR_ROLES[rates.ratesType]
+      local fIndex
+      if roles then
+        local before = #changes
+        setting(text, pidPrefix .. "F", "tuning", a.F, newF, "pid")
+        if #changes > before then fIndex = #changes end
+      else
+        act(text)
+      end
       -- Keep the stick feel: F x rate is what the pilot feels
-      rateActions(T, a, axis, a.F / newF, act)
+      local ratesBefore = #changes
+      rateActions(T, rates, a.F / newF, act, setting)
+      if fIndex and #changes - ratesBefore < #roles then
+        for i = #changes, ratesBefore + 1, -1 do changes[i] = nil end
+        table.remove(changes, fIndex)
+      end
       why(hot and T.whyFast or T.whySlow)
       why(T.whyKeepFeel)
     else
@@ -345,11 +444,11 @@ local function advise(T, a, axis, actions, whys)
     end
   else
     response = T.respOk
-    local asked = maxRateAsked(a)
+    local asked = maxRateAsked(rates)
     if axis ~= AXIS_YAW and asked and a.fullCount >= FULL_MIN_COUNT
         and a.fullSatCount >= FULL_SAT_SHARE * a.fullCount
-        and a.fullMaxRate < FULL_REACH * asked and room(rateActionCount(a)) then
-      rateActions(T, a, axis, a.fullMaxRate / asked, act)
+        and a.fullMaxRate < FULL_REACH * asked and room(rateActionCount(rates)) then
+      rateActions(T, rates, a.fullMaxRate / asked, act, setting)
       why(string.format(T.whyFullFmt, asked, a.fullMaxRate))
     end
   end
@@ -365,15 +464,17 @@ local function advise(T, a, axis, actions, whys)
       -- No room for the cutoff only after F and two rate lines; F is off then, so the next
       -- branch says to fix F first.
       if a.meanIterm >= ITERM_PUSH and a.relaxCutoff > CUTOFF_MIN and room(1) then
-        act(string.format(ADVANCED_PATH_FMT, T.advancedMenu, T.controllerPage, T.cutoff,
-          T.controllerAxis[axis], a.relaxCutoff,
-          clamp(round(a.relaxCutoff * CUTOFF_STEP), CUTOFF_MIN, a.relaxCutoff - 1)))
+        local cutoff = clamp(round(a.relaxCutoff * CUTOFF_STEP), CUTOFF_MIN, a.relaxCutoff - 1)
+        setting(string.format(ADVANCED_PATH_FMT, T.advancedMenu, T.controllerPage, T.cutoff,
+          T.controllerAxis[axis], a.relaxCutoff, cutoff),
+          "iterm_relax_cutoff_" .. (axis - 1), "profile", a.relaxCutoff, cutoff, "pid")
         why(T.whyRelax)
       elseif ffOff(a) and a.F > 0 then
         why(string.format(T.whyFixFFmt, rebound))
       elseif room(1) then
-        act(string.format(PATH_FMT, T.pidsPage, T.pidsAxis[axis], T.pidsP, a.P,
-          clamp(round(a.P * P_STEP), a.P + 1, GAIN_MAX)))
+        local newP = clamp(round(a.P * P_STEP), a.P + 1, GAIN_MAX)
+        setting(string.format(PATH_FMT, T.pidsPage, T.pidsAxis[axis], T.pidsP, a.P, newP),
+          pidPrefix .. "P", "tuning", a.P, newP, "pid")
         why(string.format(T.whyBrakeFmt, rebound))
       end
     end
@@ -399,7 +500,28 @@ local function advise(T, a, axis, actions, whys)
 end
 
 local function newView()
-  return { data = "-", response = "-", stops = "-", actions = {}, whys = {} }
+  return { data = "-", response = "-", stops = "-", actions = {}, whys = {}, changes = {} }
+end
+
+local function getSession()
+  return _G.rfsuite and _G.rfsuite.session or nil
+end
+
+local function appliedAxes()
+  local session = getSession()
+  if not session or not session.mcu_id then return nil end
+  local marks = session.tuneAdvisorApplied
+  if not marks or marks.mcu ~= session.mcu_id then
+    marks = { mcu = session.mcu_id }
+    session.tuneAdvisorApplied = marks
+  end
+  return marks
+end
+
+local function copy(record)
+  local out = {}
+  for key, value in pairs(record) do out[key] = value end
+  return out
 end
 
 local function showUnsupported()
@@ -417,7 +539,29 @@ local function render()
   local view = newView()
   view.data = string.format(T.dataFmt, math.floor(data.seconds / 60), data.seconds % 60,
     data.collecting and T.collecting or T.paused)
-  view.response, view.stops = advise(T, data.a, ui.selected, view.actions, view.whys)
+  local a, axis = data.a, ui.selected
+  view.tune = {
+    P = a.P, F = a.F, B = a.B, relaxCutoff = a.relaxCutoff,
+    ratesType = a.ratesType, rcRate = a.rcRate, sRate = a.sRate,
+    polar = matchesPolarRates(a, axis),
+    pidProfile = Profile and Profile.getActivePidProfile(1) or 1,
+    rateProfile = getLiveProfile(), axis = axis, seconds = data.seconds,
+    mcu = getSession() and getSession().mcu_id
+  }
+  if view.tune.polar then
+    for _, field in ipairs({ "cyclic_polarity", "rates_type", "rcRates_2", "rates_2" }) do
+      view.tune[field] = ui.rcTuning[field]
+    end
+  end
+  view.response, view.stops = advise(T, a, axis, view.actions, view.whys, view.changes)
+  local marks = appliedAxes()
+  if marks and marks[axis] then
+    if data.seconds ~= marks[axis] then
+      marks[axis] = nil
+    else
+      view.actions, view.whys, view.changes = { T.applied }, {}, {}
+    end
+  end
   ui.view = view
   requestRebuild()
 end
@@ -441,10 +585,51 @@ local function getQueue()
   return queue
 end
 
+local function readRcTuning()
+  if ui.rcTuningPending then return false end
+  local api = RcTuningApi
+  local queue = getQueue()
+  if not api or not queue then return false end
+
+  local generation = ui.generation
+  local profile = getLiveProfile()
+  ui.rcTuningPending = true
+  queue:add({
+    command = api.command,
+    simulatorResponse = api.simulatorResponse,
+    isWrite = false,
+    processReply = function(_, buf)
+      if generation ~= ui.generation then return end
+      ui.rcTuningPending = false
+      local record = api.parse(buf)
+      if type(record) ~= "table" then return end
+      local data = ui.lastData
+      local shown = data and data.axis == ui.selected
+      local matchedBefore = shown and matchesPolarRates(data.a, data.axis)
+      local previous = ui.rcTuning
+      ui.rcTuning = record
+      ui.rcTuningProfile = profile
+      local matchedAfter = shown and matchesPolarRates(data.a, data.axis)
+      local pitchRatesChanged = matchedBefore and matchedAfter
+        and (previous.rates_type ~= record.rates_type or previous.rcRates_2 ~= record.rcRates_2
+          or previous.rates_2 ~= record.rates_2)
+      if matchedBefore ~= matchedAfter or pitchRatesChanged then render() end
+      if ui.rcTuningProfile ~= ui.drawnProfile then requestRebuild() end
+    end,
+    errorHandler = function()
+      if generation ~= ui.generation then return end
+      ui.rcTuningPending = false
+      ui.rcTuningProfile = profile
+      if ui.rcTuningProfile ~= ui.drawnProfile then requestRebuild() end
+    end
+  })
+  return true
+end
+
 local poll
 
 poll = function()
-  if not ui.loaded or ui.pending or ui.unsupported then return end
+  if not ui.loaded or ui.pending or ui.unsupported or ui.applying then return end
   local api = TuneAdvisorApi
   local queue = getQueue()
   if not api or not queue then return end
@@ -488,6 +673,10 @@ poll = function()
 end
 
 local function onCleared()
+  local marks = appliedAxes()
+  if marks then
+    for axis = AXIS_ROLL, AXIS_YAW do marks[axis] = nil end
+  end
   ui.lastSignature = nil
   poll()
 end
@@ -527,6 +716,11 @@ local function ensureLoaded(i18n)
   ui.pending = false
   ui.unsupported = false
   ui.lastPoll = 0
+  ui.rcTuning = nil
+  ui.rcTuningPending = false
+  ui.rcTuningSignature = nil
+  ui.rcTuningProfile = nil
+  ui.drawnProfile = nil
   ui.lastData = nil
   ui.lastSignature = nil
   ui.text = loadTexts(i18n)
@@ -534,6 +728,7 @@ local function ensureLoaded(i18n)
 end
 
 local function onAxis(value)
+  if ui.applying then return end
   ui.selected = tonumber(value) or AXIS_ROLL
   -- Each axis is its own request: fetch the new one now
   ui.lastSignature = nil
@@ -542,14 +737,298 @@ local function onAxis(value)
 end
 
 function M.getHeaderActions()
-  return { reload = true, save = false, help = true, star = true }
+  return { reload = not ui.applying, save = M.canSave(), help = true, star = not ui.applying }
+end
+
+function M.canSave()
+  local T = ui.text
+  if not T then return false, pageText(nil, "read_failed", "Could not read the current settings") end
+  local state = MspRuntime and MspRuntime.getState()
+  if not state or state.lastConnected ~= true then return false, T.disconnected end
+  if state.lastArmed == true or (Armed and Armed.isArmed()) then return false, T.armed end
+  local session = getSession()
+  if not session or session.mcu_id == nil or tostring(session.mcu_id) == "" then return false, T.noBoard end
+  if ui.applying then return false, T.busy end
+  local view = ui.view
+  if not view or not view.tune or view.tune.axis ~= ui.selected or #view.changes == 0 then return false, T.noChanges end
+  return true
+end
+
+function M.getSaveConfirm(ctx)
+  ui.snapshot = nil
+  if not M.canSave() then return nil end
+  local view = ui.view
+  local snapshot = { tune = copy(view.tune), changes = {} }
+  local lines = {}
+  for i, change in ipairs(view.changes) do
+    snapshot.changes[i] = copy(change)
+    lines[i] = change.text
+  end
+  ui.snapshot = snapshot
+  return { title = ui.text.pageTitle, message = table.concat(lines, "\n") .. "\n\n" .. ui.text.saveQuestion, always = true }
+end
+
+local function finishApply(ok, message)
+  local report = ui.reportSave
+  ui.applying, ui.snapshot, ui.status, ui.reportSave = false, nil, nil, nil
+  ui.readStarted, ui.readTimeout = nil, nil
+  requestRebuild()
+  if type(report) == "function" then
+    local title = ui.text and ui.text.pageTitle or pageText(nil, "title", "Tune Advisor")
+    report({ ok = ok, title = title, message = message })
+  end
+end
+
+-- Nothing here is loaded by the opening/read chain. The RC codec is already needed by the
+-- existing polar read; the other modules are needed only after Save has been confirmed.
+local function ensureSaveDeps()
+  if not StatusApi then StatusApi = loadModule("tasks/msp/api/status.lua") end
+  if not PidTuningApi then PidTuningApi = loadModule("tasks/msp/api/pid_tuning.lua") end
+  if not PidProfileApi then PidProfileApi = loadModule("tasks/msp/api/pid_profile.lua") end
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not Cache then Cache = loadModule("tasks/msp/cache.lua") end
+  if not Armed then Armed = loadModule("lib/armed.lua") end
+  if not ChangeJournal then ChangeJournal = loadModule("lib/change_journal.lua") end
+  return StatusApi and PidTuningApi and PidProfileApi and RcTuningApi and SavePipeline and Cache and Armed
+end
+
+-- Serialize fresh reads, preserving the reply buffers independently of the queue/cache.
+local function readSettings(applyGeneration, onRead)
+  local queue = getQueue()
+  local specs = {
+    { key = "status", api = StatusApi, minBytes = 27 },
+    { key = "tuning", api = PidTuningApi }, { key = "profile", api = PidProfileApi }, { key = "rates", api = RcTuningApi }
+  }
+  local records, buffers = {}, {}
+  local function readNext(index)
+    if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
+    local spec = specs[index]
+    if not spec then ui.readStarted, ui.readTimeout = nil, nil; onRead(records, buffers); return end
+    if not queue then ui.readStarted = nil; onRead(nil, nil, spec.key); return end
+    ui.readStarted = nowSeconds()
+    local function failed()
+      if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
+      ui.readStarted, ui.readTimeout = nil, nil
+      onRead(nil, nil, spec.key)
+    end
+    ui.readTimeout = failed
+    queue:add({
+      command = spec.api.command,
+      isWrite = false,
+      processReply = function(_, buf)
+        if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
+        if spec.minBytes and (type(buf) ~= "table" or #buf < spec.minBytes) then failed(); return end
+        local record = spec.api.parse(buf)
+        if not record then failed(); return end
+        records[spec.key], buffers[spec.key] = record, copy(buf)
+        readNext(index + 1)
+      end,
+      errorHandler = function()
+        if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
+        failed()
+      end
+    })
+  end
+  Cache.clear()
+  readNext(1)
+end
+
+local function validateTune(snapshot, records)
+  local tune, T = snapshot.tune, ui.text
+  local session = getSession()
+  local state = MspRuntime and MspRuntime.getState()
+  if Armed.isArmed() or (state and state.lastArmed == true) then return T.armed end
+  if not state or state.lastConnected ~= true or not session or session.mcu_id ~= tune.mcu
+      or Profile.getActivePidProfile(1) ~= tune.pidProfile or getLiveProfile() ~= tune.rateProfile then return T.changed end
+  local status = records.status
+  if status.current_pid_profile_index + 1 ~= tune.pidProfile
+      or status.current_control_rate_profile_index + 1 ~= tune.rateProfile then return T.changed end
+  local prefix = "pid_" .. (tune.axis - 1) .. "_"
+  local tuning, profile, rates = records.tuning, records.profile, records.rates
+  if tuning[prefix .. "P"] ~= tune.P or tuning[prefix .. "F"] ~= tune.F or tuning[prefix .. "B"] ~= tune.B
+      or profile["iterm_relax_cutoff_" .. (tune.axis - 1)] ~= tune.relaxCutoff
+      or rates.rates_type ~= tune.ratesType or rates["rcRates_" .. tune.axis] ~= tune.rcRate
+      or rates["rates_" .. tune.axis] ~= tune.sRate then return T.changed end
+  if tune.polar then
+    if rates.cyclic_polarity ~= 1 or rates.rates_type ~= tune.rates_type
+        or rates.rcRates_2 ~= tune.rcRates_2 or rates.rates_2 ~= tune.rates_2 then return T.changed end
+  elseif tune.axis ~= AXIS_YAW and rates.cyclic_polarity == 1 then
+    return T.changed
+  end
+  for _, change in ipairs(snapshot.changes) do
+    if records[change.msg][change.field] ~= change.from then return T.changed end
+    local lo, hi = 0, GAIN_MAX
+    if change.msg == "profile" then
+      lo, hi = CUTOFF_MIN, 100
+    elseif change.msg == "rates" then
+      local role = string.match(change.field, "^rcRates_") and "rcRate" or "srate"
+      local range = RATE_DISPLAY[tune.ratesType] and RATE_DISPLAY[tune.ratesType][role]
+      if not range then return T.range end
+      lo, hi = range.min, range.max
+    end
+    local value = change.to
+    if type(value) ~= "number" or value ~= math.floor(value) or value < lo or value > hi then return T.range end
+  end
+end
+
+local function buildSteps(snapshot, records, buffers)
+  local steps = {}
+  local specs = {
+    { key = "tuning", api = PidTuningApi, label = "MSP_SET_PID_TUNING" },
+    { key = "profile", api = PidProfileApi, label = "MSP_SET_PID_PROFILE" },
+    { key = "rates", api = RcTuningApi, label = "MSP_SET_RC_TUNING" }
+  }
+  for _, spec in ipairs(specs) do
+    local payload, baseline
+    for _, change in ipairs(snapshot.changes) do
+      if change.msg == spec.key then
+        if not payload then
+          payload = copy(buffers[spec.key])
+          baseline = spec.api.buildWritePayload(records[spec.key])
+          if #baseline > #payload then return nil end
+          for i = 1, #baseline do if baseline[i] ~= payload[i] then return nil end end
+        end
+        local modified = copy(records[spec.key])
+        modified[change.field] = change.to
+        local encoded = spec.api.buildWritePayload(modified)
+        if #encoded ~= #baseline then return nil end
+        local changed = false
+        for i = 1, #baseline do
+          if encoded[i] ~= baseline[i] then payload[i] = encoded[i]; changed = true end
+        end
+        if not changed then return nil end
+      end
+    end
+    if payload then steps[#steps + 1] = { label = spec.label, command = spec.api.writeCommand, payload = payload } end
+  end
+  return steps
+end
+
+function M.onSave(ctx)
+  if ui.applying then return false end
+  local snapshot = ui.snapshot
+  ui.snapshot = nil
+  ui.reportSave = ctx and ctx.reportSave
+  if not snapshot then
+    local message = ui.text and ui.text.noSnapshot or pageText(nil, "save_no_snapshot", "Confirm the changes before saving.")
+    finishApply(false, message)
+    return false
+  end
+  ui.applyGeneration = ui.applyGeneration + 1
+  ui.applying, ui.status = true, ui.text.reading
+  ui.runtime.requestRebuild = ctx and ctx.requestRebuild or ui.runtime.requestRebuild
+  requestRebuild()
+  if not ensureSaveDeps() then finishApply(false, ui.text.readFailed); return false end
+  local applyGeneration = ui.applyGeneration
+  local journalFailed = false
+  local function markApplied()
+    local active = applyGeneration == ui.applyGeneration and ui.applying
+    local marks = appliedAxes()
+    if marks and marks.mcu == snapshot.tune.mcu then
+      local data = active and ui.lastData
+      marks[snapshot.tune.axis] = data and data.axis == snapshot.tune.axis and data.seconds or snapshot.tune.seconds
+      if snapshot.tune.polar then
+        for _, change in ipairs(snapshot.changes) do
+          if change.msg == "rates" then
+            local seconds = marks[snapshot.tune.axis]
+            marks[AXIS_ROLL], marks[AXIS_PITCH] = seconds, seconds
+            break
+          end
+        end
+      end
+    end
+  end
+  local function readBack(records)
+    if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
+    local mismatch
+    local session = getSession()
+    local status = records and records.status
+    local sameProfile = status and session and session.mcu_id == snapshot.tune.mcu
+      and status.current_pid_profile_index + 1 == snapshot.tune.pidProfile
+      and status.current_control_rate_profile_index + 1 == snapshot.tune.rateProfile
+      and Profile.getActivePidProfile(1) == snapshot.tune.pidProfile and getLiveProfile() == snapshot.tune.rateProfile
+    local message
+    if not records then
+      message = ui.text.unverified
+    elseif not sameProfile then
+      message = ui.text.profileMoved
+    else
+      for _, change in ipairs(snapshot.changes) do
+        if records[change.msg][change.field] ~= change.to then
+          mismatch = change.field
+          break
+        end
+      end
+      message = mismatch and string.format(ui.text.differs, mismatch) or string.format(ui.text.saved, #snapshot.changes)
+    end
+    if journalFailed then message = message .. " " .. ui.text.journalFailed end
+    finishApply(records ~= nil and sameProfile and mismatch == nil, message)
+  end
+  readSettings(applyGeneration, function(records, buffers)
+    if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
+    if not records then finishApply(false, ui.text.readFailed); return end
+    local refusal = validateTune(snapshot, records)
+    if refusal then finishApply(false, refusal); return end
+    local steps = buildSteps(snapshot, records, buffers)
+    if not steps then finishApply(false, ui.text.changed); return end
+    ui.status = nil
+    local journal = ChangeJournal
+    local started, reason = SavePipeline.start({
+      pageId = PAGE_ID,
+      steps = steps,
+      reboot = false,
+      onSaved = function()
+        -- A save without reboot can commit after the page closes, so record it regardless.
+        local active = applyGeneration == ui.applyGeneration and ui.applying
+        markApplied()
+        local entries = {}
+        for i, change in ipairs(snapshot.changes) do
+          local profile = change.profileKind == "pid" and snapshot.tune.pidProfile or snapshot.tune.rateProfile
+          entries[i] = { source = "tune_advisor", profile = profile, field = change.field, old = change.from, new = change.to }
+        end
+        local appended = journal and journal.append(snapshot.tune.mcu, entries)
+        if active then
+          journalFailed = not appended
+          render()
+        end
+      end,
+      onDone = function(result)
+        if result.status ~= "done" then markApplied() end
+        if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
+        if result.status ~= "done" then
+          if type(SavePipeline.hasOutcome) == "function" and SavePipeline.hasOutcome() then SavePipeline.dismiss() end
+          local commit = result.step == "commit" or result.phase == "commit"
+          render()
+          finishApply(false, commit and ui.text.notStored or ui.text.writeFailed)
+          return
+        end
+        -- The page reports the verified result. Retire the pipeline's success notice so it
+        -- cannot hide that report or announce completion while the read-back is still pending.
+        if type(SavePipeline.hasOutcome) == "function" and SavePipeline.hasOutcome() then SavePipeline.dismiss() end
+        ui.status = ui.text.reading
+        requestRebuild()
+        readSettings(applyGeneration, readBack)
+      end
+    })
+    if not started then finishApply(false, string.format(ui.text.startFailed, tostring(reason))) end
+  end)
+  return false
 end
 
 -- Polling lives here and never on the pass that built the page: a build this pass defers the
 -- poll to the next one, at most once in a row.
+-- RC tuning is read after the first advisor reply, on a profile change and on Reload.
+-- It is never sent on a pass that polls and is deferred after a build like the poll.
 function M.wakeup(ctx)
   if not ui.loaded then return end
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or ui.runtime.requestRebuild
+  if ui.applying then
+    -- Backstop for a request dropped without a handler, e.g. a simulator message without simulatorResponse.
+    if ui.readStarted and nowSeconds() - ui.readStarted > 30 then
+      if ui.readTimeout then ui.readTimeout() end
+    end
+    return
+  end
 
   if ui.runtime.builtThisPass and not ui.runtime.deferredLastPass then
     ui.runtime.builtThisPass = false
@@ -564,13 +1043,16 @@ function M.wakeup(ctx)
       and (ui.lastPoll == 0 or now - ui.lastPoll >= REFRESH_INTERVAL_SECONDS) then
     ui.lastPoll = now
     poll()
+  elseif ui.lastData ~= nil and not ui.unsupported and not ui.rcTuningPending then
+    local signature = buildSessionSignature()
+    if signature ~= ui.rcTuningSignature and readRcTuning() then ui.rcTuningSignature = signature end
   end
 end
 
 -- One line of text that may wrap, and the height it takes
 local function appendText(children, x, y, w, text, color)
   children[#children + 1] = {
-    type = "label", x = x, y = y, w = w, text = text, color = color or COLOR_THEME_PRIMARY1, font = SMLSIZE
+    type = "label", x = x, y = y, w = w, text = text, color = color or Palette.text, font = SMLSIZE
   }
   local lineH = Controls.LABEL_H or 21
   if type(Controls.estimateWrappedTextHeight) == "function" then
@@ -589,14 +1071,14 @@ local function appendValueRow(children, x, y, w, label, value)
   local labelW = math.floor(w * 0.42)
   children[#children + 1] = {
     type = "label", x = x + 10, y = labelY, w = labelW - 10,
-    text = label, color = COLOR_THEME_PRIMARY1, font = SMLSIZE
+    text = label, color = Palette.text, font = SMLSIZE
   }
   children[#children + 1] = {
     type = "label", x = x + labelW, y = labelY, w = w - labelW - 10,
-    text = value, color = COLOR_THEME_PRIMARY1, align = RIGHT, font = SMLSIZE
+    text = value, color = Palette.text, align = RIGHT, font = SMLSIZE
   }
   children[#children + 1] = {
-    type = "rectangle", x = x, y = y + rowH, w = w, h = 1, color = COLOR_THEME_SECONDARY2, filled = true
+    type = "rectangle", x = x, y = y + rowH, w = w, h = 1, color = Palette.border, filled = true
   }
   return rowH + 1
 end
@@ -626,6 +1108,14 @@ function M.build(ctx)
   local x, y, w = ctx.x, ctx.y, ctx.w
   local cursorY = y
 
+  local profile = ui.rcTuningProfile or getLiveProfile()
+  local headingTitle = string.format("%s #%d", T.pageTitle, profile)
+  Controls.appendStaticSectionHeader(children, x, cursorY, w, headingTitle)
+  cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
+  ui.drawnProfile = profile
+
+  if ui.status then cursorY = cursorY + appendText(children, x + 10, cursorY, w - 20, ui.status) end
+
   local axisOptions = {
     { label = T.axisNames[AXIS_ROLL], value = AXIS_ROLL },
     { label = T.axisNames[AXIS_PITCH], value = AXIS_PITCH },
@@ -644,7 +1134,10 @@ function M.build(ctx)
 end
 
 function M.onReload()
+  if ui.applying then return false end
+  ui.snapshot = nil
   -- Ask again, e.g. after a firmware update
+  ui.rcTuningSignature = nil
   ui.unsupported = false
   ui.lastSignature = nil
   ui.lastPoll = nowSeconds()
@@ -653,6 +1146,7 @@ function M.onReload()
 end
 
 function M.onStar(ctx)
+  if ui.applying then return false end
   ensureDeps()
   if not ConfirmDialog or not ui.text then return false end
   ConfirmDialog.show({
@@ -668,12 +1162,20 @@ end
 function M.onClose()
   ui.loaded = false
   ui.generation = ui.generation + 1
+  ui.applyGeneration = ui.applyGeneration + 1
   ui.pending = false
+  ui.rcTuning = nil
+  ui.rcTuningPending = false
+  ui.rcTuningSignature = nil
+  ui.rcTuningProfile = nil
+  ui.drawnProfile = nil
   ui.unsupported = false
   ui.lastData = nil
   ui.lastSignature = nil
   ui.text = nil
   ui.view = nil
+  ui.snapshot, ui.status, ui.reportSave = nil, nil, nil
+  ui.applying, ui.readStarted, ui.readTimeout = false, nil, nil
   ui.runtime.requestRebuild = nil
   ui.runtime.builtThisPass = false
   ui.runtime.deferredLastPass = false
@@ -681,7 +1183,12 @@ function M.onClose()
   Controls = nil
   MspRuntime = nil
   TuneAdvisorApi = nil
+  RcTuningApi = nil
+  Profile = nil
   ConfirmDialog = nil
+  PidTuningApi, PidProfileApi, SavePipeline = nil, nil, nil
+  StatusApi = nil
+  Cache, Armed, ChangeJournal = nil, nil, nil
   t = nil
 end
 

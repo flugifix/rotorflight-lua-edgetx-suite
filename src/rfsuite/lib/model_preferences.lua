@@ -529,32 +529,14 @@ local function entryName(entry)
   return string.match(trimmed, "([^/\\]+)$")
 end
 
---- The stores this card holds, one record per board, WITH NOTHING CONNECTED. This is the only
---- call in here that does not need an MCU id, because finding the ids is what it is for.
+--- The stores this card holds, without reading them. Answers { mcuId, path, root } records,
+--- sorted by id and de-duplicated across user roots. It writes nothing.
 ---
---- One record per file, sorted by id:
----
----   mcuId  the board id the file is named after
----   name   what the board called itself, or nil where the file does not say
----   path   the file
----   root   the user root it was found in
----   error  why the file could not be read, where it could not be
----
---- A name of nil is the ordinary case and not an error: a store written before this release
---- carries no name, and a board that has none never gets one. Producing something to display
---- for such a record is the caller's.
----
---- WHAT IT COSTS, because this is not a call to make on a cadence. Per store: one directory
---- entry matched, one file read, one compile and one table constructor. The listing is one
---- call per user root. So it is a card read per known board, which is a tool-session cost --
---- the same class as opening a page, and not something to put in a widget pass or a wakeup.
---- Nothing is cached: the answer is a fact about the card, and the caller knows when it asked.
----
---- It writes nothing. `recover = false` is what makes that true even where a save was
---- interrupted: finishing one renames a file, and a call that only lists may not.
-function M.listKnownModels()
+--- WHAT IT COSTS: one directory listing per user root, with each entry matched once. A caller
+--- that must stay inside a widget call lists once, then reads one record per pass with
+--- readKnownModel rather than reading every store in the listing pass.
+function M.listKnownModelIds()
   local out = {}
-  if not ConfigStore or type(ConfigStore.new) ~= "function" then return out end
 
   local ids = {}
   local rootOf = {}
@@ -583,33 +565,76 @@ function M.listKnownModels()
   -- comparator would also make the order depend on the string-hash seed.
   table.sort(ids)
 
+  for i = 1, #ids do
+    local id = ids[i]
+    out[#out + 1] = {
+      mcuId = id,
+      path = buildPathForRoot(rootOf[id], id),
+      root = rootOf[id],
+    }
+  end
+
+  return out
+end
+
+local knownModelReader = nil
+
+--- Reads one record from listKnownModelIds, filling in its name and error and returning it.
+--- A name is nil where the file carries none or it is empty. It writes nothing: recover = false
+--- leaves even an interrupted save alone, and messages = {} keeps complaints in the record.
+---
+--- WHAT IT COSTS: one file read, one compile and one table constructor. The section-only reader
+--- is created on first use and kept; no file contents are cached. A caller that must stay inside
+--- a widget call reads one record per pass.
+function M.readKnownModel(record)
+  if not ConfigStore or type(ConfigStore.new) ~= "function" then
+    record.name = nil
+    return record
+  end
+
   -- A reader of its own, declaring only the section this call reads. Two reasons, and the first
   -- is not a saving: Store:load takes the generation counter out of the file it read, so
   -- scanning every store on the card with the store that also SAVES would leave the connected
   -- board's counter standing at whatever the last file scanned happened to carry, and a reader
   -- watching that board for a change would miss the next save. The second is that merging one
   -- section is cheaper than merging all of them, per file.
-  local reader = ConfigStore.new({
-    name = "model preferences",
-    schema = { [CRAFT_SECTION] = MODEL_SCHEMA[CRAFT_SECTION] },
-  })
+  if not knownModelReader then
+    knownModelReader = ConfigStore.new({
+      name = "model preferences",
+      schema = { [CRAFT_SECTION] = MODEL_SCHEMA[CRAFT_SECTION] },
+    })
+  end
 
-  for i = 1, #ids do
-    local id = ids[i]
-    local path = buildPathForRoot(rootOf[id], id)
-    -- The complaint about a store that will not parse goes into the record rather than into the
-    -- log: one line per unreadable file would bury the answer this call was made for.
-    local prefs, info = reader:load(path, { recover = false, messages = {} })
-    local section = type(prefs) == "table" and prefs[CRAFT_SECTION] or nil
-    local name = type(section) == "table" and section[CRAFT_NAME_KEY] or nil
-    if type(name) ~= "string" or name == "" then name = nil end
-    out[#out + 1] = {
-      mcuId = id,
-      name = name,
-      path = path,
-      root = rootOf[id],
-      error = info and info.error or nil,
-    }
+  -- The complaint about a store that will not parse goes into the record rather than into the
+  -- log: one line per unreadable file would bury the answer this call was made for.
+  local prefs, info = knownModelReader:load(record.path, { recover = false, messages = {} })
+  local section = type(prefs) == "table" and prefs[CRAFT_SECTION] or nil
+  local name = type(section) == "table" and section[CRAFT_NAME_KEY] or nil
+  if type(name) ~= "string" or name == "" then name = nil end
+  record.name = name
+  record.error = info and info.error or nil
+  return record
+end
+
+--- The stores this card holds, one record per board, WITH NOTHING CONNECTED. No MCU id is
+--- needed, because finding the ids is what listKnownModelIds is for.
+---
+--- One record per file, sorted by id:
+---
+---   mcuId  the board id the file is named after
+---   name   what the board called itself, or nil where the file does not say
+---   path   the file
+---   root   the user root it was found in
+---   error  why the file could not be read, where it could not be
+---
+--- A name of nil is the ordinary case and not an error: a store written before this release
+--- carries no name, and a board that has none never gets one. Producing something to display
+--- for such a record is the caller's. It writes nothing and caches no file contents.
+function M.listKnownModels()
+  if not ConfigStore or type(ConfigStore.new) ~= "function" then return {} end
+  local out = M.listKnownModelIds()
+  for i = 1, #out do
+    M.readKnownModel(out[i])
   end
 
   return out
