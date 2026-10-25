@@ -1254,7 +1254,10 @@ function M.build(ctx)
     local unsavedW, unsavedH = Controls.textSize(unsavedStr, SMLSIZE)
     local unsavedX = x + 10 + activeW + statusGap
     local unsavedY = cursorY + 10
-    local unsavedRightX = x + w - 180 - statusGap
+    -- The Output label is right-aligned in the 170 px box at x + w - 180, so its text starts where
+    -- its measured width says, not at the box's left edge.
+    local outputW = Controls.textSize(outputStr, SMLSIZE)
+    local unsavedRightX = x + w - 10 - math.min(outputW, 170) - statusGap
     if unsavedX + unsavedW > unsavedRightX then
       unsavedX = x + 10
       unsavedY = cursorY + 10 + activeH + 2
