@@ -532,13 +532,31 @@ local function buildWritePayload(selected)
     for i = #payload + 1, 52 do payload[i] = 0 end
   end
 
-  local index = 1
+  local pending = {}
+  for i = 1, #selected do
+    pending[selected[i]] = true
+  end
+
   for pos = 13, 52 do
     local origId = tonumber(payload[pos]) or 0
     if origId ~= 0 and not SENSOR_BY_ID[origId] then
       -- Unmanaged sensor slot (e.g. native CRSF telemetry ids 2, 72, 108, 109):
       -- preserve exactly where it was.
+    elseif pending[origId] then
+      -- Keep the first slot of each selected sensor; later duplicates become free.
+      pending[origId] = nil
     else
+      payload[pos] = 0
+    end
+  end
+
+  -- Fill only free slots, without moving existing sensors or their per-slot intervals.
+  local index = 1
+  for pos = 13, 52 do
+    if payload[pos] == 0 then
+      while index <= #selected and not pending[selected[index]] do
+        index = index + 1
+      end
       payload[pos] = selected[index] or 0
       index = index + 1
     end
