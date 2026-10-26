@@ -111,12 +111,19 @@ local function logMsg(msg, level)
   end
 end
 
-local function queueFlyrotorReadActual(queue)
+-- `retryOnError` is set only for the read that FOLLOWS a write. The firmware invalidates
+-- its parameter cache on a successful commit and answers both the read and the next write
+-- with an error until a fresh readback from the ESC has been cached, so that first refusal
+-- is a wait rather than a failure. The queue already knows how to wait for one.
+local function queueFlyrotorReadActual(queue, retryOnError)
   queue:add({
     command = EscParametersFlyrotorApi.command,
     timeout = 15,
+    retryOnErrorReply = retryOnError or nil,
     simulatorResponse = EscParametersFlyrotorApi.simulatorResponse,
     processReply = function(self, buf)
+      -- A queued read may finish after the page has released its runtime.
+      if not ui.runtime then return end
       local parsed = EscParametersFlyrotorApi.parse(buf)
       if parsed then
         for k, v in pairs(ui.config) do
@@ -170,6 +177,8 @@ local function queueFlyrotorReadActual(queue)
       end
     end,
     errorHandler = function()
+      -- A queued read may finish after the page has released its runtime.
+      if not ui.runtime then return end
       ui.runtime.escReadComplete = false
       ui.runtime.readPending = false
       ui.loading = false
@@ -180,7 +189,7 @@ local function queueFlyrotorReadActual(queue)
   })
 end
 
-local function queueFlyrotorRead(isAutoReload)
+local function queueFlyrotorRead(isAutoReload, retryOnError)
   if not MspRuntime or not EscParametersFlyrotorApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -203,7 +212,7 @@ local function queueFlyrotorRead(isAutoReload)
     end
   end
 
-  queueFlyrotorReadActual(queue)
+  queueFlyrotorReadActual(queue, retryOnError)
   return true, nil
 end
 
@@ -282,6 +291,7 @@ local function queueFlyrotorWrite(requestRebuild)
       if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
+      queueFlyrotorRead(true, true)
     end,
     errorHandler = function()
       if not ui.runtime then return end

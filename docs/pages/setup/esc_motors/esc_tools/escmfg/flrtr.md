@@ -68,6 +68,8 @@ one line each.
 - Saving writes the whole parameter block to the ESC, not only the settings that were
   changed. A setting the page does not offer is written back as it was read, so a Save with
   nothing edited changes nothing in the ESC.
+- After a save the page reads the ESC again on its own, and a further save is not
+  accepted until that read has come back.
 - The ESC is read when the page opens, and again on *Reload*, which also drops any unsaved
   edit. Switching *Section* does not read it again.
 - An unsaved edit is marked below the list, and is lost if the page is left without saving.

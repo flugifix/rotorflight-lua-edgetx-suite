@@ -132,12 +132,19 @@ local function packFlags(readFlags)
   return f
 end
 
-local function queueYgeReadActual(queue)
+-- `retryOnError` is set only for the read that FOLLOWS a write. The firmware invalidates
+-- its parameter cache on a successful commit and answers both the read and the next write
+-- with an error until a fresh readback from the ESC has been cached, so that first refusal
+-- is a wait rather than a failure. The queue already knows how to wait for one.
+local function queueYgeReadActual(queue, retryOnError)
   queue:add({
     command = EscParametersYgeApi.command,
     timeout = 15,
+    retryOnErrorReply = retryOnError or nil,
     simulatorResponse = EscParametersYgeApi.simulatorResponse,
     processReply = function(self, buf)
+      -- A queued read may finish after the page has released its runtime.
+      if not ui.runtime then return end
       local parsed = EscParametersYgeApi.parse(buf)
       if parsed then
         for k, v in pairs(ui.config) do
@@ -187,6 +194,8 @@ local function queueYgeReadActual(queue)
       end
     end,
     errorHandler = function()
+      -- A queued read may finish after the page has released its runtime.
+      if not ui.runtime then return end
       ui.runtime.readPending = false
       ui.loading = false
       if type(ui.runtime.requestRebuild) == "function" then
@@ -196,7 +205,7 @@ local function queueYgeReadActual(queue)
   })
 end
 
-local function queueYgeRead(isAutoReload)
+local function queueYgeRead(isAutoReload, retryOnError)
   if not MspRuntime or not EscParametersYgeApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -222,7 +231,7 @@ local function queueYgeRead(isAutoReload)
     end
   end
 
-  queueYgeReadActual(queue)
+  queueYgeReadActual(queue, retryOnError)
   return true, nil
 end
 
@@ -289,6 +298,7 @@ local function queueYgeWrite(requestRebuild)
       if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
+      queueYgeRead(true, true)
     end,
     errorHandler = function()
       if not ui.runtime then return end
