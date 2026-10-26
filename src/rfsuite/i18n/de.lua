@@ -2029,7 +2029,7 @@ return {
       setup_failsafe = {
         title = "Failsafe",
         help_title = "Failsafe Hilfe",
-        help_p1 = "Failsafe-Einstellungen bei RC-Signalverlust konfigurieren.",
+        help_p1 = "Wie sich jeder Kanal bei RC-Signalverlust verhält.\nAuto: Roll, Nick, Gier und Kollektiv gehen in die Mitte, Gas auf das Failsafe-Gas; AUX-Kanäle halten.\nHold: hält den letzten gültigen Wert des Kanals.\nSet: nutzt den Wert daneben, 875 bis 2125 us.",
         roll = "Roll",
         pitch = "Nick",
         yaw = "Gier",

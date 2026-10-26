@@ -2029,7 +2029,7 @@ return {
       setup_failsafe = {
         title = "Failsafe",
         help_title = "Failsafe Help",
-        help_p1 = "Configure the failsafe settings for loss of RC signal.",
+        help_p1 = "How each channel behaves when the RC signal is lost.\nAuto: Roll, Pitch, Yaw and Collective go to center, Throttle to the failsafe throttle; AUX channels hold.\nHold: keeps the channel's last good value.\nSet: uses the value beside it, 875 to 2125 us.",
         roll = "Roll",
         pitch = "Pitch",
         yaw = "Yaw",
