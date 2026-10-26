@@ -60,7 +60,7 @@ local function decCellV(data, pos)
     return val > 0 and val + 200 or 0, ptr
 end
 
--- The decoders below yield several sensors and publish them themselves. `due` is the loader's
+-- Some decoders below publish their own sensors. `due` is the loader's
 -- publish throttle, handed over once as the chunk's second argument rather than to every decoder
 -- call, so the single-value decoders are called exactly as before. It is asked with the bytes the
 -- group was decoded from, and a group it declines is not published at all. Without it -- sensor
@@ -94,6 +94,31 @@ local function decLatLong(data, pos)
     setTelemetryValue(0x1125, 0, 0, 0, UNIT_GPS, 0, "GPS")
     setTelemetryValue(0x1125, 0, 0, lat/10, UNIT_GPS_LATITUDE)
     setTelemetryValue(0x1125, 0, 0, lon/10, UNIT_GPS_LONGITUDE)
+    return nil, pos
+end
+
+local gpsAltitudeApiVersion
+local gpsAltitudePrecision = 2
+
+local function decGpsAltitude(data, pos)
+    local first = pos
+    local val
+    val,pos = decS16(data,pos)
+    if due and not due(0x1126, data, first, pos) then return nil, pos end
+    local session = _G.rfsuite and _G.rfsuite.session
+    local apiVersion = session and session.apiVersion
+    if apiVersion ~= gpsAltitudeApiVersion then
+        gpsAltitudeApiVersion = apiVersion
+        -- Firmware sends S16 decimetres from MSP API 12.10, centimetres before it. The version is
+        -- the session's "major.minor" string; anything unreadable keeps centimetres.
+        local major, minor = string.match(tostring(apiVersion or ""), "^(%d+)%.(%d+)")
+        major, minor = tonumber(major), tonumber(minor)
+        local decimetres = major ~= nil and (major > 12 or (major == 12 and minor >= 10))
+        gpsAltitudePrecision = decimetres and 1 or 2
+    end
+    -- Discovery keeps the stored precision at two decimals, including on newer firmware.
+    local prec = type(requestedSensorsById) == "table" and 2 or gpsAltitudePrecision
+    setTelemetryValue(0x1126, 0, 0, val, UNIT_METERS, prec, "GAlt")
     return nil, pos
 end
 
@@ -298,7 +323,7 @@ local sensorsById = {
     -- GPS Coordinates
     [77] = { sid = 0x1125, name = "GPS", unit = UNIT_RAW, prec = 0, dec = decLatLong },
     -- GPS altitude
-    [78] = { sid = 0x1126, name = "GAlt", unit = UNIT_METERS, prec = 2, dec = decS16 },
+    [78] = { sid = 0x1126, name = "GAlt", unit = UNIT_METERS, prec = 2, dec = decGpsAltitude },
     -- GPS heading
     [79] = { sid = 0x1127, name = "GHdg", unit = UNIT_DEGREE, prec = 1, dec = decS16 },
     -- GPS ground speed
