@@ -248,7 +248,8 @@ return {
         arming_disable_flag_22 = "DSHOT Bitbang",
         arming_disable_flag_23 = "Acc Calibration",
         arming_disable_flag_24 = "Motor Protocol",
-        arming_disable_flag_25 = "Arm Switch"
+        arming_disable_flag_25 = "Override",
+        arming_disable_flag_26 = "Arm Switch"
       },
       rfstatus = { name = "Rotorflight Status" },
       elrs_link = { name = "ELRS Link" },

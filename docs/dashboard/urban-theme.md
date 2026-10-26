@@ -263,8 +263,8 @@ sensor of that name and a declared name that is absent is still searched for.
   never settles a dashboard drawing this theme.
 - **The transmitter power on the statistics bar is the last reading, not the flight's maximum**:
   the flight record keeps no transmitter power.
-- **The arming-disable names cover bits 0 to 25**, named the same whatever MSP API version the
-  flight controller runs.
+- **The arming-disable names follow Rotorflight 4.6 (MSP API 12.09 and later), covering bits 0 to
+  26**: bit 25 is *Override* (an active servo or mixer override), and bit 26 is *Arm Switch*.
 - **Only the menu and tool buttons, the profile row, the link bars and the value rows take a press.**
   The gauge and the status line open nothing.
 - **The *Telemetry* page shows the flight record's extremes for the readings the record keeps**,
