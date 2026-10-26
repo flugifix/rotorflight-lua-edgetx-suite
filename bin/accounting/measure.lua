@@ -946,6 +946,11 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
     state.preferences.dashboard = state.preferences.dashboard or {}
     state.preferences.dashboard.standby_layout = "clock+date+tx_battery+model/"
       .. "timer1+timer2+timer3+uptime/tx_battery+model+timer1+timer2"
+  elseif pagePath == "settings/dashboard/overrides/page.lua" then
+    -- One model setting differs from the radio's standard, so the overview draws its list.
+    state.preferences.dashboard.model_overrides = true
+    state.preferences.dashboard.cfg_system_default_link_colors = false
+    session.modelPreferences.dashboard = { overrides = true, cfg_system_default_link_colors = true }
   end
 
   local function settled(want)
@@ -969,6 +974,14 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
   end
 
   local presses, opens = pathTo(state.manifest, menuId)
+  if presses == nil and pagePath == "settings/dashboard/overrides/page.lua" then
+    -- Entering Settings builds its dynamic tiles; the model's overview is the first one.
+    presses, opens = pathTo(state.manifest, "settings_dashboard_settings_menu")
+    if presses ~= nil then
+      presses[#presses + 1] = "dashboard_overrides"
+      opens[#opens + 1] = menuId
+    end
+  end
   if presses == nil then
     removeDeferredLink()
     return { skipped = "no menu leads to it" }
