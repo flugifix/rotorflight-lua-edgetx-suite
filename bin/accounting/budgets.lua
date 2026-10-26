@@ -414,6 +414,8 @@ return {
     ["page.setup_esc_motors_esc_tools_am32_page.build"] = { target = 6200, measured = 4944 },
     ["page.setup_esc_motors_esc_tools_blheli_s_page.build"] = { target = 6350, measured = 5050 },
     ["page.setup_esc_motors_esc_tools_bluejay_page.build"] = { target = 6450, measured = 5126 },
+    ["page.setup_esc_motors_esc_tools_flrtr_page.build"] = { target = 8850, measured = 7074 },
+    ["page.setup_esc_motors_esc_tools_yge_page.build"] = { target = 6350, measured = 5058 },
     ["page.setup_esc_motors_motor_override_page.build"] = { target = 3850, measured = 3047 },
     ["page.setup_esc_motors_rpm_page.build"] = { target = 4400, measured = 3510 },
     ["page.setup_esc_motors_telemetry_page.build"] = { target = 4000, measured = 3190 },
