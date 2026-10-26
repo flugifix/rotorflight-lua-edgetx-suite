@@ -59,7 +59,7 @@ same message as before. The line and the save check use the same count.
 ## Actions
 
 - **Save**: Writes the enabled telemetry sensors to the flight controller and saves to EEPROM.
-  Save keeps every selected sensor in its existing slot and puts newly switched-on sensors into free slots. A switched-off sensor's slot is left empty.
+  Save keeps every selected sensor in its existing slot. A switched-off sensor frees its slot without moving the others, and newly switched-on sensors fill the lowest free slots in catalogue order, which can be a slot freed in the same save.
 - **Reload**: Re-reads the current telemetry configuration from the flight controller.
 - **Star (*)**: Loads default custom telemetry sensors into the selection.
 
