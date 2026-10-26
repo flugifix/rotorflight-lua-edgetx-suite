@@ -129,7 +129,8 @@ whole configuration from that memory.
 
 A save on Configuration, Alignment, GPS, Ports, Radio Config, and ESC/Motors RPM, Telemetry and
 Throttle restarts the flight controller after writing; on Swash and Tail it does so when the swash
-type or the tail mode differs from what the page read. A Save that was refused or did not finish
+type or the tail mode differs from what the page read; on Governor General it does so when Mode or
+the governor feature changes. A Save that was refused or did not finish
 leaves that comparison as it was, so the next Save restarts the flight controller too; the page
 compares with the new values only once a save is done. While the settings are being written the
 page cannot be left.

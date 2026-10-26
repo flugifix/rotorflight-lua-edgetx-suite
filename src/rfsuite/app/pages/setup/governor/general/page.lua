@@ -365,6 +365,11 @@ function M.build(ctx)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
+  if ui.runtime.readFailed then
+    Common.appendReadFailedNotice(children, x, cursorY, w)
+    return
+  end
+
   -- Mode Options
   local modeOptions = {
     { value = 0, label = pageText(i18n, "mode_off", "OFF") },
