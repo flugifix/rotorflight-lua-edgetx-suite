@@ -115,6 +115,7 @@ for _, spec in ipairs({ { "flrtr", "flyrotor", "cell_count" }, { "yge", "yge", "
     if family == "flrtr" then
       eq(h.ui.runtime.escReadComplete, false, "post-save read clears read-complete gate")
     else
+      eq(h.ui.runtime.escReadComplete, false, "post-save read clears read-complete gate")
       eq(h.ui.parsedCache, nil, "post-save read clears cached-block gate")
       eq(#h.remembers, rememberedBefore, "write success does not remember unconfirmed limit")
     end
@@ -124,6 +125,8 @@ for _, spec in ipairs({ { "flrtr", "flyrotor", "cell_count" }, { "yge", "yge", "
     eq(h.ui.config[field], parsed[field], "read-back replaces edited value with reply")
     eq(h.ui.runtime.readPending, false, "read-back clears pending")
     if family == "yge" then
+      eq(h.ui.runtime.escReadComplete, true, "read-back sets read-complete gate")
+      eq(h.ui.parsedCache ~= nil, true, "read-back restores cached-block gate")
       eq(#h.remembers, rememberedBefore + 1, "read-back remembers current limit")
       local remembered = h.remembers[#h.remembers]
       eq(remembered.session, _G.rfsuite.session, "remember uses current session")
@@ -131,6 +134,22 @@ for _, spec in ipairs({ { "flrtr", "flyrotor", "cell_count" }, { "yge", "yge", "
       eq(remembered.source, "yge", "remember uses YGE source")
     end
     eq(h.page.onSave(h.ctx), true, "save accepted after read-back")
+  end
+
+  if family == "yge" then
+    h = newPage(family, apiName)
+    readInitial(h)
+    eq(h.ui.parsedCache ~= nil, true, "focused gate starts with cached block")
+    eq(h.ui.runtime.escReadComplete, true, "focused gate starts read-complete")
+    -- Inject an inconsistent state: Reload clears the block as it clears the flag,
+    -- so the normal read lifecycle cannot isolate the flag's write gate.
+    h.ui.runtime.escReadComplete = false
+    eq(h.page.onSave(h.ctx), false, "save refused with cached block but incomplete read")
+    eq(#h.queue.entries, 1, "incomplete read prevents write despite cached block")
+    eq(h.ui.parsedCache ~= nil, true, "refused save retains cached block")
+    h.ui.runtime.escReadComplete = true
+    eq(h.page.onSave(h.ctx), true, "save accepted with same block after read-complete restored")
+    eq(#h.queue.entries, 2, "complete read permits write with same cached block")
   end
 
   -- Keep dependencies loaded here: a nil runtime alone must prevent every side effect.

@@ -62,7 +62,8 @@ local ui = {
   runtime = {
     readPending = false,
     requestRebuild = nil,
-    lastSessionSignature = nil
+    lastSessionSignature = nil,
+    escReadComplete = false
   },
   loading = false,
   saving = false,
@@ -97,7 +98,8 @@ local function ensureDeps()
     ui.runtime = {
       readPending = false,
       requestRebuild = nil,
-      lastSessionSignature = nil
+      lastSessionSignature = nil,
+      escReadComplete = false
     }
   end
 end
@@ -168,6 +170,7 @@ local function queueYgeReadActual(queue, retryOnError)
         unpackFlags(parsed.flags or 0)
 
         ui.parsedCache = parsed
+        ui.runtime.escReadComplete = true
 
         local escModel = YgeInit and type(YgeInit.getEscModel) == "function" and YgeInit.getEscModel(buf) or nil
         local escVersion = YgeInit and type(YgeInit.getEscVersion) == "function" and YgeInit.getEscVersion(buf) or nil
@@ -195,6 +198,8 @@ local function queueYgeReadActual(queue, retryOnError)
             session.setup_esc_motors_esc_tools_yge.config[k] = v
           end
         end
+      else
+        ui.runtime.escReadComplete = false
       end
 
       ui.runtime.readPending = false
@@ -208,6 +213,7 @@ local function queueYgeReadActual(queue, retryOnError)
     errorHandler = function()
       -- A queued read may finish after the page has released its runtime.
       if not ui.runtime then return end
+      ui.runtime.escReadComplete = false
       ui.runtime.readPending = false
       ui.loading = false
       if type(ui.runtime.requestRebuild) == "function" then
@@ -235,6 +241,7 @@ local function queueYgeRead(isAutoReload, retryOnError)
   -- cannot leave a save to be built from the previous ESC's block.
   ui.parsedCache = nil
   ui.runtime.readPending = true
+  ui.runtime.escReadComplete = false
   if not isAutoReload then
     ui.loading = true
     ui.progress = 0
@@ -274,7 +281,7 @@ local function queueYgeWrite(requestRebuild)
   -- This write is the whole parameter block, not the changed fields, so it can only be
   -- built from a block that was read. Without one, every field the page does not
   -- itself carry would be packed as zero and written to the ESC.
-  if not ui.parsedCache then
+  if not ui.parsedCache or not (ui.runtime and ui.runtime.escReadComplete) then
     return false, "esc_not_read"
   end
 
