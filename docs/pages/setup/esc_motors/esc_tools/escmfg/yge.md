@@ -8,7 +8,7 @@ sidebar_position: 90
 
 Reads the parameter block out of a YGE ESC and writes it back, so the ESC can be set up from
 the radio instead of from a computer. The page opens on the ESC's own model name, firmware and
-version, and offers its settings in three groups.
+serial number (shown as S/N with plain digits), and offers its settings in three groups.
 
 ## Where to find it
 

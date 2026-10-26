@@ -154,6 +154,7 @@ local function saveModel(i18n)
     ui.notice = t(i18n, "save_error_message", "Save failed") .. ": " .. Common.saveFailureReason(i18n, err, true)
   end
   ui.runtime.markDirty()
+  return ok
 end
 
 -- Removes one override, or all of them with `key` nil, and saves. A model whose switch was only
@@ -167,11 +168,30 @@ local function resetOverrides(i18n, key)
   end
   local modelPrefs = getSession().modelPreferences
   local modelDashboard = modelPrefs.dashboard
-  if type(modelDashboard) == "table" and modelDashboard.overrides == nil then
-    modelDashboard.overrides = DashboardLib.modelOverridesOn(modelDashboard)
+  -- Keep the removed values so a failed write leaves the session's model table unchanged.
+  local modelPrevious = {}
+  local overridesInferred = type(modelDashboard) == "table" and modelDashboard.overrides == nil
+  if type(modelDashboard) == "table" then
+    if key ~= nil then
+      modelPrevious[key] = modelDashboard[key]
+    else
+      for k, value in pairs(modelDashboard) do
+        if type(k) == "string" and string.sub(k, 1, 4) == "cfg_" then
+          modelPrevious[k] = value
+        end
+      end
+    end
+    if overridesInferred then
+      modelDashboard.overrides = DashboardLib.modelOverridesOn(modelDashboard)
+    end
   end
   DashboardLib.clearModelOverride(modelPrefs, key)
-  saveModel(i18n)
+  if not saveModel(i18n) and type(modelDashboard) == "table" then
+    for k, value in pairs(modelPrevious) do
+      modelDashboard[k] = value
+    end
+    if overridesInferred then modelDashboard.overrides = nil end
+  end
 end
 
 local function offerResetAll(i18n)

@@ -147,6 +147,7 @@ M.T = {
   arm_flag_23 = "@i18n(app.modules.fblstatus.arming_disable_flag_23)@",
   arm_flag_24 = "@i18n(app.modules.fblstatus.arming_disable_flag_24)@",
   arm_flag_25 = "@i18n(app.modules.fblstatus.arming_disable_flag_25)@",
+  arm_flag_26 = "@i18n(app.modules.fblstatus.arming_disable_flag_26)@",
   -- The full screen views (menuview, pickview, toolsview, linkview, telemview): their titles, what
   -- the theme's own menu says about the work it ran, the link view's row names, and what the
   -- telemetry view says when every tile is switched off.
@@ -1085,18 +1086,19 @@ local ARM_DISABLE_DESCS = {
   [10] = "NOPREARM", [11] = "LOAD", [12] = "CALIB", [13] = "CLI", [14] = "CMS", [15] = "BST",
   [16] = "MSP", [17] = "PARALYZE", [18] = "GPS", [19] = "RESCUE_SW", [20] = "RPMFILTER",
   [21] = "REBOOT_REQD", [22] = "DSHOT_BBANG", [23] = "NO_ACC_CAL", [24] = "MOTOR_PROTO",
-  [25] = "ARMSWITCH"
+  [25] = "OVERRIDE",
+  [26] = "ARMSWITCH"
 }
 
 -- The readable names are `M.T.arm_flag_<n>`, so they follow the package's language; the keys are built
 -- once here so the decode below concatenates nothing.
 local ARM_FLAG_KEYS = {}
-for i = 0, 25 do ARM_FLAG_KEYS[i] = "arm_flag_" .. i end
+for i = 0, 26 do ARM_FLAG_KEYS[i] = "arm_flag_" .. i end
 
 -- The readable names in bit order, for a caller that prepares something per name at build time.
 function M.armFlagNames()
   local out = {}
-  for b = 0, 25 do out[#out + 1] = M.T[ARM_FLAG_KEYS[b]] end
+  for b = 0, 26 do out[#out + 1] = M.T[ARM_FLAG_KEYS[b]] end
   return out
 end
 
@@ -1114,7 +1116,7 @@ function M.armDisableText(state)
     if v == nil or v == 0 then return "" end
     v = flagBits(v)
     local parts, len = {}, 0
-    for b = 0, 25 do
+    for b = 0, 26 do
       if v % 2 == 1 then
         local desc = ARM_DISABLE_DESCS[b] or ("FLAG" .. b)
         if len + #desc + 1 > 18 then
@@ -1143,7 +1145,7 @@ function M.armDisableList(state)
     if v == nil or v == 0 then return nil end
     v = flagBits(v)
     local out = {}
-    for b = 0, 25 do
+    for b = 0, 26 do
       if v % 2 == 1 then out[#out + 1] = M.T[ARM_FLAG_KEYS[b]] or ("Flag " .. b) end
       v = math.floor(v / 2)
       if v == 0 then break end

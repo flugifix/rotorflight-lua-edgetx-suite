@@ -15,6 +15,8 @@ local Controls = nil
 local Common = nil
 local MspRuntime = nil
 local GovernorConfigApi = nil
+local FeatureConfigApi = nil
+local SavePipeline = nil
 local LoadingOverlay = nil
 local t = nil
 
@@ -34,6 +36,8 @@ local ui = {
     gov_throttle_hold_timeout = 50
   },
   parsedCache = {},
+  featureConfig = {},
+  modeChanged = false,
   runtime = {
     readPending = false,
     requestRebuild = nil,
@@ -52,6 +56,8 @@ local function ensureDeps()
   if not Controls then Controls = loadModule("ui/controls.lua") end
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not GovernorConfigApi then GovernorConfigApi = loadModule("tasks/msp/api/governor_config.lua") end
+  if not FeatureConfigApi then FeatureConfigApi = loadModule("tasks/msp/api/feature_config.lua") end
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not t then t = Common and Common.pageT("setup_governor") or nil end
 end
@@ -87,7 +93,7 @@ end
 local function queueGovRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
   ui.runtime.readComplete = false
-  if not MspRuntime or not GovernorConfigApi or type(MspRuntime.getState) ~= "function" then
+  if not MspRuntime or not GovernorConfigApi or not FeatureConfigApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
 
@@ -97,11 +103,51 @@ local function queueGovRead(isAutoReload)
     return false, "msp_queue_unavailable"
   end
 
-  local readValid = type(getSession()) == "table"
+  local readValid = true
+  local sessionValid = type(getSession()) == "table"
+  local visit = ui.runtime
+  local governorData, featureData
   ui.runtime.readPending = true
+  ui.runtime.readFailed = false
   if not isAutoReload then
     ui.loading = true
     ui.progress = 0
+    if type(ui.runtime.requestRebuild) == "function" then
+      ui.runtime.requestRebuild()
+    end
+  end
+
+  local function failRead()
+    if not readValid then return end
+    readValid = false
+    if ui.runtime ~= visit then return end
+    Common.failPageRead(ui)
+  end
+
+  local function finishRead()
+    if ui.runtime ~= visit or not readValid or not governorData or not featureData then return end
+    ui.parsedCache = governorData
+    ui.featureConfig = featureData
+    -- The control shows the effective mode; the read record keeps the stored mode.
+    ui.config.gov_mode = (featureData.enabledFeatures & (1 << 26)) ~= 0 and governorData.gov_mode or 0
+    ui.config.gov_throttle_type = governorData.gov_throttle_type or 0
+    ui.config.governor_idle_throttle = governorData.governor_idle_throttle or 10
+    ui.config.governor_auto_throttle = governorData.governor_auto_throttle or 10
+    ui.config.gov_handover_throttle = governorData.gov_handover_throttle or 20
+    ui.config.gov_throttle_hold_timeout = governorData.gov_throttle_hold_timeout or 50
+    ui.modeChanged = false
+
+    local session = getSession()
+    if session then
+      session.governor_config = governorData
+      session.governorMode = governorData.gov_mode
+    end
+
+    ui.runtime.readPending = false
+    ui.loading = false
+    ui.dirty = false
+    ui.progress = 100
+    ui.runtime.readComplete = sessionValid
     if type(ui.runtime.requestRebuild) == "function" then
       ui.runtime.requestRebuild()
     end
@@ -112,72 +158,108 @@ local function queueGovRead(isAutoReload)
     simulatorResponse = GovernorConfigApi.simulatorResponse,
     timeout = 5.0,
     processReply = function(self, buf)
-      local parsed = GovernorConfigApi.parse(buf)
-      if type(parsed) ~= "table" then return Common.failPageRead(ui) end
-      if parsed then
-        ui.config.gov_mode = parsed.gov_mode or 0
-        ui.config.gov_throttle_type = parsed.gov_throttle_type or 0
-        ui.config.governor_idle_throttle = parsed.governor_idle_throttle or 10
-        ui.config.governor_auto_throttle = parsed.governor_auto_throttle or 10
-        ui.config.gov_handover_throttle = parsed.gov_handover_throttle or 20
-        ui.config.gov_throttle_hold_timeout = parsed.gov_throttle_hold_timeout or 50
-        ui.parsedCache = parsed
-
-        local session = getSession()
-        if session then
-          session.governor_config = parsed
-          session.governorMode = parsed.gov_mode
-        end
-      end
-
-      ui.runtime.readPending = false
-      ui.loading = false
-      ui.dirty = false
-      ui.progress = 100
-      ui.runtime.readComplete = readValid
-      if type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
+      if ui.runtime ~= visit or not readValid then return end
+      governorData = GovernorConfigApi.parse(buf)
+      if type(governorData) ~= "table" then return failRead() end
+      finishRead()
     end,
-    errorHandler = function()
-      readValid = false
-      ui.runtime.readPending = false
-      ui.loading = false
-      if type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
-    end
+    errorHandler = failRead
+  })
+  queue:add({
+    command = FeatureConfigApi.command,
+    simulatorResponse = FeatureConfigApi.simulatorResponse,
+    timeout = 5.0,
+    processReply = function(self, buf)
+      if ui.runtime ~= visit or not readValid then return end
+      featureData = FeatureConfigApi.parse(buf)
+      if type(featureData) ~= "table" then return failRead() end
+      finishRead()
+    end,
+    errorHandler = failRead
   })
 
   return true, nil
 end
 
-local function queueGovWrite(requestRebuild, ctx)
-  if not MspRuntime or not GovernorConfigApi or type(MspRuntime.getState) ~= "function" then
+local function copyRecord(record)
+  local copy = {}
+  for k, v in pairs(record) do copy[k] = v end
+  return copy
+end
+
+local function queueGovWrite(requestRebuild)
+  if not SavePipeline or not GovernorConfigApi or not FeatureConfigApi then
     return false, "msp_runtime_unavailable"
   end
 
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
-  end
-
-  local writeData = {}
-  if ui.parsedCache then
-    for k, v in pairs(ui.parsedCache) do
-      writeData[k] = v
+  -- Build on copies so a failed save is still compared with what this visit read.
+  local writeData = copyRecord(ui.parsedCache)
+  local writeFeatures = copyRecord(ui.featureConfig)
+  if ui.modeChanged then
+    writeData.gov_mode = ui.config.gov_mode
+    local mask = 1 << 26
+    if writeData.gov_mode > 0 then
+      writeFeatures.enabledFeatures = writeFeatures.enabledFeatures | mask
+    else
+      writeFeatures.enabledFeatures = writeFeatures.enabledFeatures & (~mask)
     end
   end
 
-  writeData.gov_mode = ui.config.gov_mode
   writeData.gov_throttle_type = ui.config.gov_throttle_type
   writeData.governor_idle_throttle = ui.config.governor_idle_throttle
   writeData.governor_auto_throttle = ui.config.governor_auto_throttle
   writeData.gov_handover_throttle = ui.config.gov_handover_throttle
   writeData.gov_throttle_hold_timeout = ui.config.gov_throttle_hold_timeout
 
-  local payload = GovernorConfigApi.buildWritePayload(writeData)
+  local featureChanged = writeFeatures.enabledFeatures ~= ui.featureConfig.enabledFeatures
+  local reboot = featureChanged or writeData.gov_mode ~= ui.parsedCache.gov_mode
+  local steps = {
+    {
+      label = "MSP_SET_GOVERNOR_CONFIG",
+      command = GovernorConfigApi.writeCommand,
+      payload = GovernorConfigApi.buildWritePayload(writeData)
+    }
+  }
+  if featureChanged then
+    steps[#steps + 1] = {
+      label = "MSP_SET_FEATURE_CONFIG",
+      command = FeatureConfigApi.writeCommand,
+      payload = FeatureConfigApi.buildWritePayload(writeFeatures)
+    }
+  end
+
+  local visit = ui.runtime
+  local ok, err = SavePipeline.start({
+    pageId = "setup_governor_general",
+    steps = steps,
+    reboot = reboot,
+    onSaved = function()
+      if ui.runtime ~= visit then return end
+      ui.dirty = false
+    end,
+    onDone = function(result)
+      if result.status == "done" then
+        local session = getSession()
+        if session then
+          session.governor_config = writeData
+          session.governorMode = writeData.gov_mode
+        end
+      end
+      if ui.runtime ~= visit then return end
+      ui.saving = false
+      if result.status == "done" then
+        ui.parsedCache = writeData
+        ui.featureConfig = writeFeatures
+        ui.modeChanged = false
+      else
+        ui.dirty = true
+      end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
+  })
+  if not ok then return false, err end
 
   ui.saving = true
   ui.progress = 0
@@ -185,81 +267,14 @@ local function queueGovWrite(requestRebuild, ctx)
     requestRebuild()
   end
 
-  queue:add({
-    command = GovernorConfigApi.writeCommand,
-    payload = payload,
-    isWrite = true,
-    simulatorResponse = {},
-    processReply = function()
-      -- Write EEPROM
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.writeCommand,
-          payload = {},
-          isWrite = true,
-          simulatorResponse = {},
-          processReply = function()
-            ui.dirty = false
-            ui.saving = false
-            ui.parsedCache = writeData
-            local session = getSession()
-            if session then
-              session.governor_config = writeData
-              session.governorMode = writeData.gov_mode
-            end
-            if ctx and type(ctx.reportSave) == "function" then
-              ctx.reportSave({
-                ok = true,
-                title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
-                message = pageText(ctx and ctx.i18n, "saved_message", "Governor settings saved")
-              })
-            end
-            if type(requestRebuild) == "function" then
-              requestRebuild()
-            end
-          end,
-          errorHandler = function()
-            ui.saving = false
-            if type(requestRebuild) == "function" then
-              requestRebuild()
-            end
-          end
-        })
-      else
-        ui.dirty = false
-        ui.saving = false
-        ui.parsedCache = writeData
-        local session = getSession()
-        if session then
-          session.governor_config = writeData
-          session.governorMode = writeData.gov_mode
-        end
-        if ctx and type(ctx.reportSave) == "function" then
-          ctx.reportSave({
-            ok = true,
-            title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
-            message = pageText(ctx and ctx.i18n, "saved_message", "Governor settings saved")
-          })
-        end
-        if type(requestRebuild) == "function" then
-          requestRebuild()
-        end
-      end
-    end,
-    errorHandler = function()
-      ui.saving = false
-      if type(requestRebuild) == "function" then
-        requestRebuild()
-      end
-    end
-  })
-
   return true, nil
 end
 
 local function ensureLoaded()
   if ui.loaded then return end
+  if SavePipeline and type(SavePipeline.takeResult) == "function" then
+    SavePipeline.takeResult("setup_governor_general")
+  end
 
   if not ui.runtime then
     ui.runtime = {
@@ -279,6 +294,8 @@ local function ensureLoaded()
     gov_throttle_hold_timeout = 50
   }
   ui.parsedCache = {}
+  ui.featureConfig = {}
+  ui.modeChanged = false
 
   loadFromSession()
   ui.loaded = true
@@ -348,6 +365,11 @@ function M.build(ctx)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
+  if ui.runtime.readFailed then
+    Common.appendReadFailedNotice(children, x, cursorY, w)
+    return
+  end
+
   -- Mode Options
   local modeOptions = {
     { value = 0, label = pageText(i18n, "mode_off", "OFF") },
@@ -374,6 +396,7 @@ function M.build(ctx)
       local val = tonumber(newVal) or 0
       if ui.config.gov_mode ~= val then
         ui.config.gov_mode = val
+        ui.modeChanged = true
         ui.dirty = true
         if type(ui.runtime.requestRebuild) == "function" then
           ui.runtime.requestRebuild()
@@ -493,8 +516,9 @@ function M.canSave()
 end
 
 function M.onSave(ctx)
+  if ui.saving then return false end
   if not M.canSave() then return false, "loaded_data_missing" end
-  local ok, err = queueGovWrite(ctx and ctx.requestRebuild, ctx)
+  local ok, err = queueGovWrite(ctx and ctx.requestRebuild)
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({
@@ -508,6 +532,7 @@ function M.onSave(ctx)
 end
 
 function M.onReload(ctx)
+  if ui.saving then return true end
   local session = getSession()
   if session then
     ui.dirty = false
@@ -533,10 +558,13 @@ function M.onClose()
       resetDirty = true
     })
   end
+  ui.saving = false
   Controls = nil
   Common = nil
   MspRuntime = nil
   GovernorConfigApi = nil
+  FeatureConfigApi = nil
+  SavePipeline = nil
   LoadingOverlay = nil
   t = nil
 end

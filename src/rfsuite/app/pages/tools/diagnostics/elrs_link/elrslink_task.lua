@@ -285,9 +285,22 @@ local function classifyChoiceField(lowerName, options)
     return nil
 end
 
+-- DVDA's handset rate is air rate / repeats; telemetry ratios and the flight controller count air packets.
+local DVDA_AIR_RATE_BY_MODE = {
+    d250 = 1000,
+    d500 = 1000,
+    dk250 = 1000,
+    dk500 = 1000,
+    d50hz = 200
+}
+
 local function parseRateFromLabel(label)
     if type(label) ~= "string" or label == "" then return nil end
     local lower = string_lower(label)
+    local mode = string.match(lower, "^%s*(%w+)")
+    local airRate = DVDA_AIR_RATE_BY_MODE[mode]
+    if airRate then return airRate end
+    -- Unknown D-modes keep the existing numeric parsing below.
     
     if string_find(lower, "2.4g", 1, true) and not string_find(lower, "hz", 1, true) then return nil end
     if string_find(lower, "ghz", 1, true) then return nil end
@@ -420,6 +433,12 @@ end
 
 local function findRateTarget(field, targetRate)
     if type(field) ~= "table" or type(field.options) ~= "table" then return nil, nil end
+    -- An air rate can describe several modes, so keep the current mode when it already matches.
+    local selectedIndex = field.selectedIndex
+    local selectedLabel = selectedIndex and field.options[selectedIndex + 1]
+    if selectedLabel and parseRateFromLabel(selectedLabel) == targetRate then
+        return selectedIndex, selectedLabel
+    end
     
     local bestIdx = nil
     local bestLabel = nil
@@ -434,6 +453,8 @@ local function findRateTarget(field, targetRate)
             local prefix = string.match(lowerLabel, "^%s*([a-z]+)%d")
             if not prefix or prefix == "" then
                 score = 10 -- Standard rate (no letter prefix)
+            elseif DVDA_AIR_RATE_BY_MODE[string.match(lowerLabel, "^%s*(%w+)")] then
+                score = 0 -- Prefer a non-repeated mode when choosing a different rate.
             else
                 score = 1
             end

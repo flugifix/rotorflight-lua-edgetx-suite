@@ -393,6 +393,7 @@ return {
     ["page.settings_audio_volume_page.build"] = { target = 2100, measured = 1674 },
     ["page.settings_dashboard_inflight_page.build"] = { target = 10200, measured = 8152 },
     ["page.settings_dashboard_keys_page.build"] = { target = 1400, measured = 1171 },
+    ["page.settings_dashboard_overrides_page.build"] = { target = 12200, measured = 9725 },
     ["page.settings_dashboard_quick_menu_page.build"] = { target = 2500, measured = 2364 },
     ["page.settings_dashboard_standby_page.build"] = { target = 14900, measured = 11763 },
     ["page.settings_dashboard_theme_page.build"] = { target = 13250, measured = 10585 },
