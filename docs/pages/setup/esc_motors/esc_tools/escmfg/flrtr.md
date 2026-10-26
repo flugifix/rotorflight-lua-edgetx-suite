@@ -22,8 +22,7 @@ the model is armed.
 
 The page opens on a safety notice, and behind it on a summary of the ESC's model, firmware
 and version. *Section* switches between three groups of settings; every setting of the
-chosen group is always shown. The `?` in the header explains the rows of the group on screen,
-one line each.
+chosen group is always shown. Each setting has its own `?`; the header `?` describes the page.
 
 | Setting | What it does |
 | --- | --- |

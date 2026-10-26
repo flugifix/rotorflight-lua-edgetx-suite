@@ -19,6 +19,8 @@ while the model is armed.
 
 ## Settings
 
+Each setting has its own `?` for a short explanation.
+
 | Setting | What it does |
 | --- | --- |
 | Section | *Basic*, *Advanced* or *Other*. Switching it rebuilds the list below; nothing is read from the ESC again. |

@@ -132,6 +132,18 @@ local function packFlags(readFlags)
   return f
 end
 
+local function getInlineHelpHandler()
+  if ui.runtime.inlineHelpHandler then return ui.runtime.inlineHelpHandler end
+  ui.runtime.inlineHelpHandler = function(helpText, helpTitle)
+    if type(helpText) ~= "string" or helpText == "" then return end
+    local openHelp = ui.runtime.openHelp
+    if type(openHelp) == "function" then
+      openHelp(helpText, helpTitle)
+    end
+  end
+  return ui.runtime.inlineHelpHandler
+end
+
 -- `retryOnError` is set only for the read that FOLLOWS a write. The firmware invalidates
 -- its parameter cache on a successful commit and answers both the read and the next write
 -- with an error until a fresh readback from the ESC has been cached, so that first refusal
@@ -393,6 +405,7 @@ end
 
 function M.getHeaderActions()
   return {
+    help = true,
     save = true,
     reload = true,
     menu = true
@@ -425,11 +438,18 @@ function M.onReload(ctx)
   return true
 end
 
+function M.onHelp(ctx)
+  local help = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/yge/help.lua")
+  if type(help) ~= "function" then return nil end
+  return help({ i18n = ctx and ctx.i18n })
+end
+
 function M.build(ctx)
   ensureDeps()
   ensureLoaded()
 
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
+  ui.runtime.openHelp = ctx and ctx.openHelp or nil
   ui.i18n = ctx and ctx.i18n or nil
 
   local children = ctx.children
@@ -529,7 +549,11 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, governorModeLabel, modeOpts, ui.config.governor, function(val)
       ui.config.governor = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_yge_governor_mode", "Selects the ESC's operating mode: Mode Free, Mode Ext, Mode Heli, Mode Store, Mode Glider, Mode Air or Mode F3A."),
+      helpTitle = governorModeLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
     local rotOpts = {
@@ -540,7 +564,11 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, directionLabel, rotOpts, ui.config.flags_direction, function(val)
       ui.config.flags_direction = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_yge_direction", "Sets which way the motor turns: Normal or Reverse."),
+      helpTitle = directionLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
     local maxVal = 84
@@ -549,6 +577,9 @@ function M.build(ctx)
     end
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_bec_voltage", "BEC Voltage"), {
+      helpText = pageText(i18n, "help_esc_yge_bec_voltage", "Sets the BEC output voltage; on a model with a 12 V BEC, setting exactly 12.0 V turns that BEC on."),
+      helpTitle = pageText(i18n, "esc_bec_voltage", "BEC Voltage"),
+      onHelp = getInlineHelpHandler(),
       min = 55, max = maxVal, step = 1,
       display = function(val) return string.format("%.1fV", val / 10) end,
       get = function() return ui.config.lv_bec_voltage end,
@@ -572,7 +603,11 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, pageText(i18n, "esc_auto_restart_type", "Auto Restart Type"), autoRestartOpts, ui.config.auto_restart_time, function(val)
       ui.config.auto_restart_time = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_yge_auto_restart_type", "Selects what the ESC does after a cutoff: Off, Slowdown or Cutoff."),
+      helpTitle = pageText(i18n, "esc_auto_restart_type", "Auto Restart Type"),
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
     local cutoffOpts = {
@@ -587,10 +622,17 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, cellCutoffLabel, cutoffOpts, ui.config.cell_cutoff, function(val)
       ui.config.cell_cutoff = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_yge_cell_cutoff", "Per-cell voltage at which the ESC cuts off."),
+      helpTitle = cellCutoffLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_current_limit", "Current Limit"), {
+      helpText = pageText(i18n, "help_esc_yge_current_limit", "Maximum current the ESC is set to allow, in amps."),
+      helpTitle = pageText(i18n, "esc_current_limit", "Current Limit"),
+      onHelp = getInlineHelpHandler(),
       -- The ESC keeps the limit in hundredths of an amp and the control steps from min, so min
       -- sits on the whole-amp grid: from 1, every step would land on x.01 A.
       min = 100, max = 65500, step = 100,
@@ -611,7 +653,11 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, f3cAutoLabel, f3cOpts, ui.config.flags_f3cauto, function(val)
       ui.config.flags_f3cauto = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_yge_f3c_auto", "Enables or disables the ESC's F3C autorotation setting."),
+      helpTitle = f3cAutoLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
     -- Bit 2 of the flags byte, which unpackFlags and packFlags have always carried; it simply
@@ -625,12 +671,19 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, keepMahLabel, keepMahOpts, ui.config.flags_keepmah, function(val)
       ui.config.flags_keepmah = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_yge_keep_mah", "Keeps the ESC's consumed-capacity count across a power cycle when enabled."),
+      helpTitle = keepMahLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
   elseif ui.currentSection == 2 then
     -- Advanced Settings
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_min_start_power", "Min Start Power"), {
+      helpText = pageText(i18n, "help_esc_yge_min_start_power", "Lower bound of the ESC's startup power, from 0% to 26%."),
+      helpTitle = pageText(i18n, "esc_min_start_power", "Min Start Power"),
+      onHelp = getInlineHelpHandler(),
       min = 0, max = 26, step = 1, suffix = "%",
       get = function() return ui.config.min_start_power end,
       set = function(val)
@@ -641,6 +694,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_max_start_power", "Max Start Power"), {
+      helpText = pageText(i18n, "help_esc_yge_max_start_power", "Upper bound of the ESC's startup power, from 0% to 31%."),
+      helpTitle = pageText(i18n, "esc_max_start_power", "Max Start Power"),
+      onHelp = getInlineHelpHandler(),
       min = 0, max = 31, step = 1, suffix = "%",
       get = function() return ui.config.max_start_power end,
       set = function(val)
@@ -661,7 +717,11 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, startupResponseLabel, startupOpts, ui.config.acceleration, function(val)
       ui.config.acceleration = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_yge_startup_response", "Sets how hard the ESC starts the motor: Normal or Smooth."),
+      helpTitle = startupResponseLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
     local respOpts = {
@@ -674,7 +734,11 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, throttleResponseLabel, respOpts, ui.config.throttle_response, function(val)
       ui.config.throttle_response = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_yge_throttle_response", "Selects Slow, Medium or Fast response, or Custom for the curve set in the ESC's PC tool."),
+      helpTitle = throttleResponseLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
     local timingOpts = {
@@ -693,7 +757,11 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, motorTimingLabel, timingOpts, ui.config.timing, function(val)
       ui.config.timing = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_yge_motor_timing", "Sets commutation timing: one of four automatic modes or a fixed advance angle from 0 to 30 degrees."),
+      helpTitle = motorTimingLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
     local fwOpts = {
@@ -706,12 +774,19 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, activeFreewheelLabel, fwOpts, ui.config.active_freewheel, function(val)
       ui.config.active_freewheel = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_yge_active_freewheel", "Selects Off, Auto, Unused or Always On for the ESC's active freewheel."),
+      helpTitle = activeFreewheelLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
   elseif ui.currentSection == 3 then
     -- Other Settings
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_governor_p_gain", "Governor P Gain"), {
+      helpText = pageText(i18n, "help_esc_yge_governor_p_gain", "Sets the P gain of the ESC's governor, from 1 to 10."),
+      helpTitle = pageText(i18n, "esc_governor_p_gain", "Governor P Gain"),
+      onHelp = getInlineHelpHandler(),
       min = 1, max = 10, step = 1,
       get = function() return ui.config.gov_p end,
       set = function(val)
@@ -722,6 +797,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_governor_i_gain", "Governor I Gain"), {
+      helpText = pageText(i18n, "help_esc_yge_governor_i_gain", "Sets the I gain of the ESC's governor, from 1 to 10."),
+      helpTitle = pageText(i18n, "esc_governor_i_gain", "Governor I Gain"),
+      onHelp = getInlineHelpHandler(),
       min = 1, max = 10, step = 1,
       get = function() return ui.config.gov_i end,
       set = function(val)
@@ -732,6 +810,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_motor_pole_pairs", "Motor Pole Pairs"), {
+      helpText = pageText(i18n, "help_esc_yge_motor_pole_pairs", "Number of pole pairs in the motor."),
+      helpTitle = pageText(i18n, "esc_motor_pole_pairs", "Motor Pole Pairs"),
+      onHelp = getInlineHelpHandler(),
       min = 1, max = 100, step = 1,
       get = function() return ui.config.motor_poll_pairs end,
       set = function(val)
@@ -742,6 +823,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_main_gear_teeth", "Main Gear Teeth"), {
+      helpText = pageText(i18n, "help_esc_yge_main_gear_teeth", "Number of teeth on the main gear, from 1 to 1800."),
+      helpTitle = pageText(i18n, "esc_main_gear_teeth", "Main Gear Teeth"),
+      onHelp = getInlineHelpHandler(),
       min = 1, max = 1800, step = 1,
       get = function() return ui.config.main_teeth end,
       set = function(val)
@@ -752,6 +836,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_pinion_teeth", "Pinion Teeth"), {
+      helpText = pageText(i18n, "help_esc_yge_pinion_teeth", "Number of teeth on the motor pinion, from 1 to 255."),
+      helpTitle = pageText(i18n, "esc_pinion_teeth", "Pinion Teeth"),
+      onHelp = getInlineHelpHandler(),
       min = 1, max = 255, step = 1,
       get = function() return ui.config.pinion_teeth end,
       set = function(val)
@@ -762,6 +849,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_stick_zero", "Stick Zero"), {
+      helpText = pageText(i18n, "help_esc_yge_stick_zero", "Throttle pulse width the ESC reads as zero."),
+      helpTitle = pageText(i18n, "esc_stick_zero", "Stick Zero"),
+      onHelp = getInlineHelpHandler(),
       min = 900, max = 1900, step = 10, suffix = "us",
       get = function() return ui.config.stick_zero_us end,
       set = function(val)
@@ -772,6 +862,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_stick_range", "Stick Range"), {
+      helpText = pageText(i18n, "help_esc_yge_stick_range", "Pulse-width span from zero to full throttle."),
+      helpTitle = pageText(i18n, "esc_stick_range", "Stick Range"),
+      onHelp = getInlineHelpHandler(),
       min = 600, max = 1500, step = 10, suffix = "us",
       get = function() return ui.config.stick_range_us end,
       set = function(val)
