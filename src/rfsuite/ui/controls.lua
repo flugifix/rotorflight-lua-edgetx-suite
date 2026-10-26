@@ -160,6 +160,8 @@ local function safeTextSize(text, font)
   return (#str * 8), 16
 end
 
+Controls.textSize = safeTextSize
+
 local function splitLines(text)
   local lines = {}
   if type(text) ~= "string" or text == "" then

@@ -1238,6 +1238,7 @@ function M.build(ctx)
   local outputStr = pageText(i18n, "current_output", "Output") .. ": " .. previewText
 
   -- Status line row
+  local statusRowH = 40
   children[#children + 1] = {
     type = "label",
     x = x + 10, y = cursorY + 10,
@@ -1247,10 +1248,25 @@ function M.build(ctx)
   }
 
   if ui.dirty then
+    local statusGap = 12
+    local activeW, activeH = Controls.textSize(activeStr, SMLSIZE)
+    local unsavedStr = pageText(i18n, "unsaved_changes", "Unsaved changes")
+    local unsavedW, unsavedH = Controls.textSize(unsavedStr, SMLSIZE)
+    local unsavedX = x + 10 + activeW + statusGap
+    local unsavedY = cursorY + 10
+    -- The Output label is right-aligned in the 170 px box at x + w - 180, so its text starts where
+    -- its measured width says, not at the box's left edge.
+    local outputW = Controls.textSize(outputStr, SMLSIZE)
+    local unsavedRightX = x + w - 10 - math.min(outputW, 170) - statusGap
+    if unsavedX + unsavedW > unsavedRightX then
+      unsavedX = x + 10
+      unsavedY = cursorY + 10 + activeH + 2
+      statusRowH = math.max(statusRowH, 10 + activeH + 2 + unsavedH + 6)
+    end
     children[#children + 1] = {
       type = "label",
-      x = x + 160, y = cursorY + 10,
-      text = pageText(i18n, "unsaved_changes", "Unsaved changes"),
+      x = unsavedX, y = unsavedY,
+      text = unsavedStr,
       color = Palette.accent,
       font = SMLSIZE
     }
@@ -1265,7 +1281,7 @@ function M.build(ctx)
     align = RIGHT,
     font = SMLSIZE
   }
-  cursorY = cursorY + 40
+  cursorY = cursorY + statusRowH
   children[#children + 1] = {
     type = "rectangle",
     x = x, y = cursorY,
