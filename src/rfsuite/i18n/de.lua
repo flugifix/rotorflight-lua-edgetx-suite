@@ -3216,6 +3216,7 @@ return {
         max_tmcu = "MAX T.MCU",
         max_emcu = "MAX E.MCU",
       min_volts_cell = "MIN V/ZELLE",
+      cell_voltage = "V/ZELLE",
       watts_max = "MAX WATT",
       volts_per_cell = "SPANNUNG",
       last_flight = "LETZTER FLUG",
