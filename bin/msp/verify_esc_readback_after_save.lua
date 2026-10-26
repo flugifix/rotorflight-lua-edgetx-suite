@@ -48,7 +48,7 @@ local function newPage(family, apiName)
   }
   _G.rfsuite = { palette = {}, session = {} }
   function loadScript(path)
-    local relative = path:match("/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
+    local relative = string.match(path, "/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
     assert(modules[relative], "unexpected module: " .. tostring(path))
     return function() return modules[relative] end
   end
@@ -137,7 +137,7 @@ for _, spec in ipairs({ { "flrtr", "flyrotor", "cell_count" }, { "yge", "yge", "
   for _, kind in ipairs({ "write reply", "write error", "read reply", "read error" }) do
     h = newPage(family, apiName)
     local entry = h.queue.entries[1]
-    if kind:match("^write") then
+    if string.match(kind, "^write") then
       readInitial(h)
       assert(h.page.onSave(h.ctx))
       entry = h.queue.entries[2]
@@ -145,8 +145,8 @@ for _, spec in ipairs({ { "flrtr", "flyrotor", "cell_count" }, { "yge", "yge", "
     h.ui.runtime = nil
     local before = h.snapshot()
     local ok = pcall(function()
-      if kind:match("error$") then entry.errorHandler(entry)
-      else answer(entry, kind:match("^read") and h.api.simulatorResponse or {}) end
+      if string.match(kind, "error$") then entry.errorHandler(entry)
+      else answer(entry, string.match(kind, "^read") and h.api.simulatorResponse or {}) end
     end)
     eq(ok, true, "late " .. kind .. " does not raise")
     eq(same(h.snapshot(), before), true, "late " .. kind .. " changes nothing")
