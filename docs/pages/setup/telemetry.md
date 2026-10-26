@@ -28,6 +28,7 @@ ESC 2, RPM, Barometer, Gyro, GPS, Status, Profiles, Control, System and Debug. E
 many of the group's sensors are switched on, of all the group offers (for example `5 / 7`).
 The chevron opens the group, which shows a switch for each of its sensors and nothing else; Back
 returns to the list, and Back on the list leaves the page.
+Sensor names are translated like the rest of the page.
 
 Switches changed in one group are kept while another group is opened, and Save writes all of
 them at once from either level. Leaving the page without saving discards them.
