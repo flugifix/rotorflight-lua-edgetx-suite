@@ -52,23 +52,38 @@ local function getUInt(page, vals)
     local v = 0
     for idx = 1, #vals do
         local raw_val = page[vals[idx] + mspHeaderBytes] or 0
-        raw_val = raw_val * (256 ^ (idx - 1))
-        v = v + raw_val
+        v = v | (raw_val << (8 * (idx - 1)))
     end
     return v
 end
 
 local function getEscModel(buffer) return getEscTypeLabel(buffer) end
 
+local function formatUInt(v)
+    v = v & 0xFFFFFFFF
+    local digits = ""
+    while v ~= 0 do
+        local q = (v >> 1) // 5
+        -- Integer overflow wraps on 32-bit Lua, leaving a remainder from 0 to 9.
+        digits = tostring(v - q * 10) .. digits
+        v = q
+    end
+    return digits
+end
+
 local function getEscVersion(buffer)
     if type(buffer) ~= "table" then return "" end
     local sn = getUInt(buffer, {29, 30, 31, 32})
-    return sn ~= 0 and tostring(sn) or ""
+    return formatUInt(sn)
 end
 
 local function getEscFirmware(buffer)
     if type(buffer) ~= "table" then return "" end
     local raw = getUInt(buffer, {25, 26, 27, 28})
+    if raw < 0 then
+        -- Preserve the unsigned float value used for firmware formatting on 32-bit Lua.
+        raw = (raw & 0xFFFFFF) + ((raw >> 24) & 0xFF) * 16777216.0
+    end
     return raw ~= 0 and string.format("%.5f", raw / 100000) or ""
 end
 

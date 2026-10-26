@@ -45,6 +45,10 @@ end
 
 local function pack_u32_le(v)
   v = tonumber(v) or 0
+  local integer = math.tointeger(v)
+  if integer then
+    return integer & 0xFF, (integer >> 8) & 0xFF, (integer >> 16) & 0xFF, (integer >> 24) & 0xFF
+  end
   local b1 = v % 256
   local b2 = math.floor(v / 256) % 256
   local b3 = math.floor(v / 65536) % 256
