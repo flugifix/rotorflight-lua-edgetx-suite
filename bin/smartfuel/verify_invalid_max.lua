@@ -253,6 +253,29 @@ case("firmware-source mode does not need local Max", function()
   equal(world.session.smartfuel.unavailable, nil, "firmware-source marker")
   equal(world.session.smartfuel.consumption, nil, "firmware-source consumption")
 end)
+for _, variant in ipairs({
+  { "zero", 0, 0 }, { "ten", 10, 10 }, { "maximum", 60, 60 },
+  { "above maximum", 61, 35 }, { "missing", nil, 35 },
+}) do
+  case("flight-controller reserve: " .. variant[1], function()
+    local world = newWorld()
+    world.session.modelPreferences.battery.consumption_warning_percentage = nil
+    world.battery.consumptionWarningPercentage = variant[2]
+    local reserve = loadModule("lib/smartfuel_reserve.lua")
+    equal(reserve.resolve(world.session, world.battery), variant[3], "resolved reserve")
+  end)
+end
+case("firmware fuel without reserve follows the raw reading", function()
+  local world = newWorld()
+  world.session.modelPreferences.battery.consumption_warning_percentage = nil
+  world.battery.consumptionWarningPercentage = 0
+  world.session.smartfuel_config.smartfuel_mode = 1
+  world.sensors.fuel = 66
+  world:tick(12)
+  near(world.session.smartfuel.fuel, world.sensors.fuel, "firmware fuel without reserve")
+  equal(world.session.smartfuel.unavailable, nil, "firmware-source marker without reserve")
+  assert(#world.publications > 0, "positive control: firmware fuel was never published")
+end)
 case("flight record cannot recover stale sensors or held readings", function()
   local world = newWorld():ready()
   world.sensors.smartfuel, world.sensors.fuel = 73, 66
