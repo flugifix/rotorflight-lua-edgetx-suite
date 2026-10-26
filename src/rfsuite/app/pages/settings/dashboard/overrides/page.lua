@@ -107,8 +107,9 @@ local function formatValue(i18n, value)
     return t(i18n, "value_off", "Off")
   end
   if type(value) == "number" then
-    if value == math.floor(value) then
-      return string.format("%d", value)
+    -- Compare floats: the radio's Lua floors floats in mixed integer/float equality.
+    if value == math.floor(value) + 0.0 then
+      return string.format("%d", math.floor(value))
     end
     -- Two decimals without the trailing zeros: 18.5 rather than 18.50.
     local text = string.gsub(string.format("%.2f", value), "%.?0+$", "")
