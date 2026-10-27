@@ -18,11 +18,18 @@ return function(ctx)
 		t(i18n, "help_p3"),
 		t(i18n, "help_p4"),
 		t(i18n, "help_p5"),
-		t(i18n, "help_p6")
+		t(i18n, "help_p6"),
+		t(i18n, "help_p7"),
+		t(i18n, "help_p8"),
+		t(i18n, "help_p9"),
+		t(i18n, "help_p10"),
+		t(i18n, "help_p11"),
+		t(i18n, "help_p12"),
+		t(i18n, "help_p13")
 	}
 
 	return {
 		title = t(i18n, "help_title"),
-		message = table.concat(parts, "\n\n")
+		message = table.concat(parts, "\n")
 	}
 end

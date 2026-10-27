@@ -15,13 +15,12 @@ local Controls = nil
 local Common = nil
 local MspRuntime = nil
 local GovernorApi = nil
+local SavePipeline = nil
 local GovernorConfigApi = nil
 local LoadingOverlay = nil
 local Sensors = nil
 local Profile = nil
 local t = nil
-
-M.eepromWrite = true
 
 local GROUPS = {
 	{
@@ -139,14 +138,14 @@ local function ensureDeps()
 	end
 end
 
-local function pageText(i18n, key)
+local function pageText(i18n, key, fallback)
 	if t then
 		local translated = t(i18n, key)
 		if translated ~= nil and translated ~= "" and translated ~= key then
 			return translated
 		end
 	end
-	return key
+	return fallback or key
 end
 
 local function getGovConfig(session)
@@ -343,14 +342,9 @@ local function ensureLoaded()
 end
 
 local function queueGovWrite(session)
-	if not GovernorApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+	if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+	if not SavePipeline or not GovernorApi then
 		return false, "msp_runtime_unavailable"
-	end
-
-	local mspState = MspRuntime.getState()
-	local queue = mspState and mspState.queue
-	if not queue or type(queue.add) ~= "function" then
-		return false, "msp_queue_unavailable"
 	end
 
 	local govConfig = getGovConfig(session)
@@ -363,16 +357,29 @@ local function queueGovWrite(session)
 		return false, "invalid_payload"
 	end
 
-	queue:add({
-		command = GovernorApi.writeCommand,
-		payload = payload,
-		timeout = 5.0,
-		isWrite = true,
-		processReply = function() end,
-		errorHandler = function() end
+	return SavePipeline.start({
+		pageId = "flight_tuning_governor",
+		steps = {
+			{
+				label = "MSP_SET_GOVERNOR_PROFILE",
+				command = GovernorApi.writeCommand,
+				payload = payload
+			}
+		},
+		reboot = false,
+		onSaved = function()
+			if not ui.runtime then return end
+			ui.dirty = false
+			ui.runtime.lastSessionSignature = buildSessionSignature()
+		end,
+		onDone = function(result)
+			if not ui.runtime then return end
+			if result.saved then queueGovRead(true) end
+			if type(ui.runtime.requestRebuild) == "function" then
+				ui.runtime.requestRebuild()
+			end
+		end
 	})
-
-	return true, nil
 end
 
 local function applyConfigToSession(session)
@@ -600,27 +607,16 @@ function M.onSave(ctx)
 	end
 
 	applyConfigToSession(session)
-	local okMsp = false
-	local errMsp = nil
-	okMsp, errMsp = queueGovWrite(session)
-
-	if ctx and type(ctx.reportSave) == "function" then
-		if okMsp then
+	local ok, err = queueGovWrite(session)
+	if not ok then
+		if ctx and type(ctx.reportSave) == "function" then
 			ctx.reportSave({
-				ok = true,
-				title = pageText(ctx and ctx.i18n, "saved_title", "@i18n(app.pages.flight_tuning_governor.saved_title)@"),
-				message = pageText(ctx and ctx.i18n, "saved_message", "@i18n(app.pages.flight_tuning_governor.saved_message)@")
-			})
-		else
-			ctx.reportSave({
-				title = pageText(ctx and ctx.i18n, "warning_title", "@i18n(app.pages.flight_tuning_governor.warning_title)@"),
-				message = pageText(ctx and ctx.i18n, "saved_local_only_message", "@i18n(app.pages.flight_tuning_governor.saved_local_only_message)@") .. (errMsp and (": " .. tostring(errMsp)) or "")
+				title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
+				message = tostring(err or "MSP write failed")
 			})
 		end
+		return false
 	end
-
-	ui.dirty = false
-	ui.runtime.lastSessionSignature = buildSessionSignature()
 	return true
 end
 
@@ -793,6 +789,7 @@ function M.onClose()
 	Common = nil
 	MspRuntime = nil
 	GovernorApi = nil
+	SavePipeline = nil
 	LoadingOverlay = nil
 	Sensors = nil
 	t = nil
