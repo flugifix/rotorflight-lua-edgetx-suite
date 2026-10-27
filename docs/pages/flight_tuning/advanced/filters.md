@@ -16,6 +16,8 @@ Read-only while the model is armed.
 
 ## Settings
 
+The on-radio help summarizes Lowpass 1, its dynamic limits, Lowpass 2, Notch 1, Notch 2, Dynamic Filters and RPM filter in page order; the table below keeps the per-field detail.
+
 | Setting | What it does |
 | --- | --- |
 | Lowpass 1 Filter type | Selects NONE, 1ST or 2ND: no filter, first-order or second-order lowpass filtering of the gyro signal. |
