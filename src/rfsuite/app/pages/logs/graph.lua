@@ -718,6 +718,7 @@ end
 local function beginExtract(t0, t1)
   local s = S.sessions[S.sessionIndex]
   if s == nil or S.nbuckets < 2 then return end
+  S.phase = nil
   S.winT0, S.winT1 = t0, t1
   S.winSpan = (t1 - t0 > 0) and (t1 - t0) or 1
   S.extEntry = nil
@@ -725,8 +726,8 @@ local function beginExtract(t0, t1)
   local src = cacheFind(t0, t1)
   if src ~= nil then
     S.rbSrc, S.rbK = src, 1
-    S.phase = "rebkt"
     S.progress = 0
+    S.phase = "rebkt"
     return
   end
 
@@ -747,13 +748,12 @@ local function beginExtract(t0, t1)
   S.seekTo = indexBefore(e0)
   S.progBase = S.seekTo and S.seekTo.off or 0
   S.resetK = 1
-  S.phase = "reset"
   S.progress = 0
   -- The bucket set the last re-bucketing read from is not read again: the extraction ends by
   -- assigning the next one. Kept until then, it would sit beside the new set whenever the
-  -- caller had emptied the cache. Released only after the phase has moved on, so a call
-  -- stopped in here never leaves "rebkt" without its source.
+  -- caller had emptied the cache. Released while idle, before the new phase starts.
   S.rbSrc = nil
+  S.phase = "reset"
 end
 
 -- A min/max envelope: two points per bucket, so a spike between two samples is
@@ -1082,11 +1082,16 @@ function G.applyColumns(colIndices)
   end
   if #curves == 0 then return false end
 
+  S.phase = nil
+  -- The old curves' points and cursor go before the new curves arrive, so a press stopped in
+  -- between leaves an empty plot rather than the old traces or readings under the new names.
+  S.cursorT = nil
+  S.curveEmpty = {}
+  S.points = {}
+  S.curveLo, S.curveHi = {}, {}
   S.curves = curves
   prepareWanted()
   S.scrMin, S.scrMax = {}, {}
-  S.points, S.curveEmpty = {}, {}
-  S.curveLo, S.curveHi = {}, {}
   S.cache, S.extEntry = {}, nil
   for k = 1, #curves do
     S.scrMin[k], S.scrMax[k] = {}, {}
@@ -1128,7 +1133,7 @@ function G.getReadout()
   for k = 1, #S.curves do
     local c = S.curves[k]
     local v = S.tgtMax and S.tgtMax[k] and S.tgtMax[k][bi] or nil
-    if S.curveEmpty[k] or v == nil or v == -HUGE then v = nil end
+    if S.curveEmpty[k] ~= false or v == nil or v == -HUGE then v = nil end
     out[k] = { name = c.name, unit = c.unit, value = v }
   end
   return out
@@ -1312,20 +1317,21 @@ function G.tick()
     end
     if r == "eof" or r == "stop" then
       cacheAdd(S.extEntry)
-      S.rbSrc, S.rbK, S.extEntry = S.extEntry, 1, nil
-      S.phase = "rebkt"
+      S.phase, S.rbSrc, S.rbK, S.extEntry = "rebkt", S.extEntry, 1, nil
     end
     return false
   end
 
   if ph == "rebkt" then
-    local k = S.rbK
-    if k > #S.curves then
+    local k, src = S.rbK, S.rbSrc
+    if src == nil or (k <= #S.curves and (src.min[k] == nil or src.max[k] == nil)) then
+      S.phase = nil
+    elseif k > #S.curves then
       S.tgtMin, S.tgtMax = S.scrMin, S.scrMax
       S.ptsK = 1
       S.phase = "pts"
     else
-      rebucketCurve(S.rbSrc, k)
+      rebucketCurve(src, k)
       S.rbK = k + 1
     end
     return false
