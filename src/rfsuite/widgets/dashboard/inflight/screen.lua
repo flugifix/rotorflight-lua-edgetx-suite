@@ -202,6 +202,27 @@ local function appendLabel(children, x, y, w, text, color, font, align)
   }
 end
 
+--- A reactive text of up to two lines as two labels, `step` apart.
+--
+-- One label holding "a\nb" is laid out with LVGL's own line spacing, which is larger than the
+-- font box the rows below are placed by (about 41 px against 32 for the middle font at 800x480),
+-- so its second line ran into the row under it. Two labels keep both lines on the measured grid.
+-- `textFn` is the row's own cached reader; both labels ask it and split its answer.
+local function appendTwoLines(children, x, y, w, textFn, color, font, step)
+  local lastText, first, second = nil, "", ""
+  local function split()
+    local text = textFn()
+    if text ~= lastText then
+      lastText = text
+      local cut = type(text) == "string" and string.find(text, "\n", 1, true) or nil
+      if cut then first, second = string.sub(text, 1, cut - 1), string.sub(text, cut + 1)
+      else first, second = text or "", "" end
+    end
+  end
+  appendLabel(children, x, y, w, function() split(); return first end, color, font, LEFT)
+  appendLabel(children, x, y + step, w, function() split(); return second end, color, font, LEFT)
+end
+
 --- A label whose glyphs sit centred in a box `boxH` tall.
 local function appendCentredLabel(children, x, y, w, boxH, text, color, font, align, m)
   appendLabel(children, x, y + math.floor((boxH - fontHeight(font)) / 2) + m.textOff,
@@ -951,21 +972,27 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
   local wrap = h >= 320
   local statusH = (fontHeight(lineFont) + 2) * (wrap and 2 or 1)
   local fit = wrap and fitTwoLines or fitText
+  -- One status row at the current y; where rows wrap, its two lines are two labels `step` apart.
+  local function row(textFn, color, font, step)
+    if wrap then appendTwoLines(children, m.pad, y, lineW, textFn, color, font, step)
+    else appendLabel(children, m.pad, y, lineW, textFn, color, font, LEFT) end
+  end
+  local lineStep = fontHeight(lineFont) + 2
 
   local lastVerdict, modelText
-  appendLabel(children, m.pad, y, lineW, function()
+  row(function()
     local verdict = state.inflight and state.inflight.setupVerdict
     if modelText == nil or verdict ~= lastVerdict then
       lastVerdict = verdict
       modelText = fit(t("widgets.dashboard.inflight_model_status", "Model") .. ": " .. M.describeCheck(verdict, t), lineW, lineFont)
     end
     return modelText
-  end, p.text, lineFont, LEFT)
+  end, p.text, lineFont, lineStep)
   y = y + statusH
 
   -- Snapshots are replaced on publication; cache the scalar inputs rather than their tables.
   local lastSource, lastCount, lastSkipped, setText
-  appendLabel(children, m.pad, y, lineW, function()
+  row(function()
     local snap = state.inflight or empty
     local skipped = snap.prime and snap.prime.skipped
     if setText == nil or snap.setSource ~= lastSource or snap.cellCount ~= lastCount or skipped ~= lastSkipped then
@@ -973,11 +1000,11 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
       setText = fit(t("widgets.dashboard.inflight_slots_status", "FC slots") .. ": " .. describeSet(snap, t), lineW, lineFont)
     end
     return setText
-  end, p.text, lineFont, LEFT)
+  end, p.text, lineFont, lineStep)
   y = y + statusH
 
   local lastMode, lastTimestamp, lastPending, lastTransfer, lastReason, lastSummary, lastPhase, lastError, lastDone, sessionText
-  appendLabel(children, m.pad, y, lineW, function()
+  row(function()
     local snap = state.inflight or empty
     local timestamp = snap.baseline and snap.baseline.timestamp
     local transfer, status = snap.transfer, snap.prime
@@ -992,13 +1019,13 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
       sessionText = fit(t("widgets.dashboard.inflight_session_status", "Session") .. ": " .. describeBackup(snap, t), lineW, lineFont)
     end
     return sessionText
-  end, p.text, lineFont, LEFT)
+  end, p.text, lineFont, lineStep)
   y = y + statusH
 
   -- Reserve this row at build time; a completed ground read rebuilds the surface.
   if (state.inflight and state.inflight.boundsCount or 0) > 0 then
     local lastBounds, warning
-    appendLabel(children, m.pad, y, lineW, function()
+    row(function()
       local count = state.inflight and state.inflight.boundsCount or 0
       if count ~= lastBounds then
         lastBounds = count
@@ -1006,7 +1033,7 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
           "%d beyond the FC limits: set up the FC again"), count), lineW, m.small) or ""
       end
       return warning
-    end, p.warn, m.small, LEFT)
+    end, p.warn, m.small, m.lineH)
     y = y + m.lineH * (wrap and 2 or 1)
   end
   -- A model-default save that failed says so until the next build that has nothing to report.

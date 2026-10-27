@@ -425,24 +425,43 @@ do
     local nodes = {}
     Screen.buildFullscreen(nodes, view)
     local modelLine, slotsLine, sessionLine, warning
-    for _, node in ipairs(nodes) do
+    -- A wrapped status row is two labels; its second line is the label right after it.
+    local secondOf = {}
+    for index, node in ipairs(nodes) do
       local text = textOf(node)
+      local nextNode = nodes[index + 1]
+      if nextNode and nextNode.type == "label" and nextNode.x == node.x and (nextNode.y or 0) > (node.y or 0) then
+        secondOf[node] = nextNode
+      end
       if string.find(text, "Model:", 1, true) == 1 then modelLine = node end
       if string.find(text, "FC slots:", 1, true) == 1 then slotsLine = node end
       if string.find(text, "Session:", 1, true) == 1 then sessionLine = node end
       if string.find(text, "2 beyond the FC limits:", 1, true) == 1 then warning = node end
     end
+    local plainTextOf = textOf
+    local function rowText(node)
+      local second = size[2] >= 320 and secondOf[node] and plainTextOf(secondOf[node]) or ""
+      return plainTextOf(node) .. (second ~= "" and (" " .. second) or "")
+    end
     check(modelLine and slotsLine and sessionLine and warning, "ground has three status lines and the FC bounds warning")
-    check(textOf(modelLine) == "Model: Setup OK" and string.find(textOf(slotsLine), "36 parameters from the board", 1, true),
+    check(textOf(modelLine) == "Model: Setup OK" and string.find(rowText(slotsLine), "36 parameters from the board", 1, true),
       "model verdict and parameter count come from the current snapshot")
-    check(string.find(textOf(sessionLine), "Session: Continued,", 1, true) == 1, "stored session is marked continued")
+    check(string.find(rowText(sessionLine), "Session: Continued,", 1, true) == 1, "stored session is marked continued")
     local statusH = size[2] > 350 and 64 or size[2] >= 320 and 32 or 16
     check(slotsLine.y - modelLine.y == statusH and sessionLine.y - slotsLine.y == statusH,
       "each status reserves two lines on taller radios and one on 480x272")
     if size[2] >= 320 then
-      check(string.find(textOf(slotsLine), "(3 skipped)", 1, true)
-        and string.find(textOf(sessionLine), "2026-10-25 12:34", 1, true), "wrapped statuses retain skipped count and baseline timestamp")
-      check(string.find(textOf(warning), "set up the FC again", 1, true), "bounds warning includes the remedy")
+      check(string.find(rowText(slotsLine), "(3 skipped)", 1, true)
+        and string.find(rowText(sessionLine), "2026-10-25 12:34", 1, true), "wrapped statuses retain skipped count and baseline timestamp")
+      check(string.find(rowText(warning), "set up the FC again", 1, true), "bounds warning includes the remedy")
+      -- The second line sits one font box below the first and ends before the next row: one
+      -- label with a line break was laid out at LVGL's wider line pitch and ran into the warning.
+      local fontH = sessionLine.font == MIDSIZE and 30 or 14
+      for _, pair in ipairs({{modelLine, slotsLine}, {slotsLine, sessionLine}, {sessionLine, warning}}) do
+        local second = secondOf[pair[1]]
+        check(second and second.y - pair[1].y == fontH + 2 and second.y + fontH <= pair[2].y,
+          "a wrapped status's second line stays inside its row at " .. size[1] .. "x" .. size[2])
+      end
     end
     check(warning.color ~= slotsLine.color, "FC bounds warning uses a warning colour")
     local choose, chooseLabel = action(nodes, "Choose parameters")
@@ -466,9 +485,9 @@ do
     slotsLine.text(); sessionLine.text(); warning.text()
     check(translations == before, "unchanged scalar inputs reuse cached ground strings even with fresh snapshot tables")
     snap.sessionMode, snap.baseline.timestamp = "new", "2026-10-25 13:45"
-    check(string.find(textOf(sessionLine), "Session: New,", 1, true) == 1, "new session updates the retained status")
+    check(string.find(rowText(sessionLine), "Session: New,", 1, true) == 1, "new session updates the retained status")
     if size[2] >= 320 then
-      check(string.find(textOf(sessionLine), "2026-10-25 13:45", 1, true), "session cache tracks the stored timestamp")
+      check(string.find(rowText(sessionLine), "2026-10-25 13:45", 1, true), "session cache tracks the stored timestamp")
     end
     for _, case in ipairs({{"unread", 36, false}, {"unavailable", 36, false}, {"board", 0, false}, {"board", 1, true}}) do
       snap.setSource, snap.cellCount = case[1], case[2]
@@ -480,19 +499,19 @@ do
       check(button and button.active() == case[3] and button.visible() == case[3] and label.visible() == case[3],
         "initial scene applies the same picker availability")
       if case[1] == "unread" then
-        check(textOf(slotsLine) == "FC slots: Not read yet", "unread board offers no documented set")
+        check(rowText(slotsLine) == "FC slots: Not read yet", "unread board offers no documented set")
       elseif case[1] == "unavailable" then
-        check(string.find(textOf(slotsLine), "No usable slots on the board", 1, true), "unusable board explains the empty set")
+        check(string.find(rowText(slotsLine), "No usable slots on the board", 1, true), "unusable board explains the empty set")
       end
     end
     snap.boundsCount = 0
     check(warning.text() == "", "retained warning clears when no values exceed FC limits")
     snap.sessionMode, snap.baseline, snap.prime = nil, nil, {phase = "idle"}
-    check(textOf(sessionLine) == "Session: Values not read", "session explains that start values have not been read")
+    check(rowText(sessionLine) == "Session: Values not read", "session explains that start values have not been read")
     snap.prime = {phase = "error", error = "no_link"}
-    check(textOf(sessionLine) == "Session: Reading failed: No FC link", "session retains read refusal text")
+    check(rowText(sessionLine) == "Session: Reading failed: No FC link", "session retains read refusal text")
     snap.transfer = {state = "error", reason = "baseline_identity"}
-    check(string.find(textOf(sessionLine), "Session: Restore refused/failed:", 1, true) == 1,
+    check(string.find(rowText(sessionLine), "Session: Restore refused/failed:", 1, true) == 1,
       "session retains backup refusal text")
     snap.transfer = nil
     local epoch = instance.valueEpoch
@@ -1545,11 +1564,15 @@ do
   local snap = {phase="ground", setupVerdict="ok", sessionMode="resume", baseline={timestamp="20261025123456"}}
   local view = {_inflight=instance, state={inflight=snap}, zone={w=800,h=480}}
   local nodes = {}; Screen.buildFullscreen(nodes,view)
-  local session
-  for _, node in ipairs(nodes) do
+  -- The session row is two labels at this size; read it as both lines.
+  local first, second
+  for index, node in ipairs(nodes) do
     local text = type(node.text) == "function" and node.text() or node.text
-    if type(text) == "string" and string.find(text, "Session:", 1, true) == 1 then session=node end
+    if type(text) == "string" and string.find(text, "Session:", 1, true) == 1 then
+      first, second = node, nodes[index + 1]
+    end
   end
+  local session = first and {text = function() return first.text() .. " " .. second.text() end}
   check(session and string.find(session.text(), "2026-10-25 12:34", 1, true), "compact timestamp displays readable date and minutes")
   check(snap.baseline.timestamp == "20261025123456", "stored compact timestamp stays compatible")
   snap.baseline.timestamp = "2026-10-25 12:34:56"
