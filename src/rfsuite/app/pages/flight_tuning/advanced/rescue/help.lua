@@ -17,7 +17,7 @@ return function(ctx)
     t(i18n, "help_p3", "Pull-up: collective pitch and time of the first climb before the flip or climb stage."),
     t(i18n, "help_p4", "Climb: collective pitch and time of the climb stage before hovering."),
     t(i18n, "help_p5", "Hover: collective pitch to maintain altitude after the climb."),
-    t(i18n, "help_p6", "Flip: Fail time limits the flip attempt; Exit time sets how long collective changes are smoothed."),
+    t(i18n, "help_p6", "Flip: Fail time aborts rescue if the flip times out, while Exit time rate-limits collective for a smooth return to normal flight."),
     t(i18n, "help_p7", "Gains: Level and Flip set the strength of leveling and flipping upright."),
     t(i18n, "help_dynamics", "Dynamics: Rate and Accel limit roll/pitch rotation rate and acceleration.")
   }

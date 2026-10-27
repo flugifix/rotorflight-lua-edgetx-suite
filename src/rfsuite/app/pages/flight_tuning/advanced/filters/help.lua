@@ -18,8 +18,8 @@ return function(ctx)
   local help_lpf2 = t(i18n, "help_lpf2", "Lowpass 2: Selects no filter, first-order or second-order filtering and sets the second gyro lowpass cutoff in Hz.")
   local help_notch1 = t(i18n, "help_notch1", "Notch 1: Sets the center frequency and lower cutoff of the first static notch in Hz.")
   local help_notch2 = t(i18n, "help_notch2", "Notch 2: Sets the center frequency and lower cutoff of the second static notch in Hz.")
-  local help_dyn = t(i18n, "help_dyn", "Dynamic Filters: Sets notch count, Q (higher is narrower) and minimum and maximum tracking frequencies in Hz.")
-  local help_rpm = t(i18n, "help_rpm", "RPM filter: Selects the preset strength and sets the minimum frequency slightly below the lowest flying main rotor frequency.")
+  local help_dyn = t(i18n, "help_dyn", "Dynamic Filters: Notches automatically track gyro noise peaks between Min and Max in Hz, with Notch Count setting their number and higher Q making them narrower.")
+  local help_rpm = t(i18n, "help_rpm", "RPM filter: Higher strength removes more vibration but adds delay, and the minimum frequency should be slightly below the main rotor frequency at the lowest flying RPM.")
 
   local parts = { help_p1, help_p2, help_p4, help_lpf2, help_notch1, help_notch2, help_dyn, help_rpm }
 
