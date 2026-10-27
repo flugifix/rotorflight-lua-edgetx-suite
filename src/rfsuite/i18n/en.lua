@@ -1769,6 +1769,7 @@ return {
         help_p4 = "Saving writes these values to EEPROM and reboots the flight controller."
       },
       setup_wizard = {
+        retired_notice = "The setup assistant is being replaced by a new guided setup in an upcoming version and is no longer available in this one.",
         title = "Setup Assistant",
         back = "Back",
         next = "Next",
