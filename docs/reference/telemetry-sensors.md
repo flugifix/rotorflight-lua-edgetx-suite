@@ -96,6 +96,8 @@ SmFt / SmCp* — worth doing on a machine whose sensors nothing reads.
 | `SmFt` | remaining fuel in percent, **with the reserve already taken off** |
 | `SmCp` | the consumption the suite estimates, in mAh — published only where the suite estimates it from the pack voltage, because on the other paths the flight controller's own `Capa` already says it |
 
+Local COMBINED takes the more pessimistic of voltage and current and also publishes the voltage track's virtual consumption on `SmCp`.
+
 **`SmFt` is not the same number as `Bat%`.** The reserve is applied on the way to `SmFt` and not
 on the way to `Bat%`, so `SmFt` reaches 0 while the pack still holds the reserve. That is what makes it worth building a logical switch,
 a special function or a warning on, and it is why `Bat%` is not a substitute for one.
