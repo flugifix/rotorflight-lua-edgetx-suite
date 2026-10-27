@@ -61,7 +61,7 @@ M.log = logDrive
 -- The MODEL half of this table -- the keys M.MODEL_KEYS lists -- is duplicated in
 -- lib/model_preferences.lua, which seeds a new per-model store and cannot require a widget module
 -- to reach these. The two MUST agree; the same note sits on the other side. The radio half is not
--- duplicated anywhere: lib/preferences.lua seeds the section and its switch, and every other radio
+-- duplicated anywhere: lib/preferences.lua seeds the section and its enabled flag, and every other radio
 -- key is filled in from here when the store does not hold it.
 --
 -- No global variable is defaulted: a variable this overlay writes has to be one the pilot
@@ -70,7 +70,6 @@ M.log = logDrive
 M.DEFAULTS = {
   -- The radio master switch defaults to off for every model.
   enabled = false,
-  switch = 0,
   bank_ch = 11,
   value_ch = 12,
   -- The two variables are DEFAULTED, and the pilot's ruling after the third radio round is what
@@ -189,7 +188,7 @@ M.TRIM_MODE_NAVIGATE = "navigate"
 -- Which setting belongs to which file, and the whole of the ownership rule in two lists.
 --
 -- A setting belongs to the RADIO when it is true of the transmitter whatever is plugged into it:
--- the interlock switch, the two channels and the two global variables the mixer devotes to the
+-- the two channels and the two global variables the mixer devotes to the
 -- adjustment pair, and which trims stand in for the rows. One transmitter has
 -- one set of those, and a pilot who set them up once should not meet them again on his next
 -- model. They live in the radio's own preferences file, section [inflight].
@@ -198,7 +197,7 @@ M.TRIM_MODE_NAVIGATE = "navigate"
 -- Those stay in the per-model store, section [inflight], keyed by the flight controller's MCU id.
 --
 M.RADIO_KEYS = {
-  "enabled", "switch", "bank_ch", "value_ch", "bank_gvar", "value_gvar",
+  "enabled", "bank_ch", "value_ch", "bank_gvar", "value_gvar",
   "trims", "trim_mode", "nav_trim", "bank_trim", "adj_trim",
   "row_trim_1", "row_trim_2", "row_trim_3", "row_trim_4", "row_trim_5", "row_trim_6"
 }
@@ -660,7 +659,6 @@ function M.loadRadioSettings(preferences)
 
   local settings = {
     enabled = src.enabled == true,
-    switch = clampNumber(src.switch, -1024, 1024, M.DEFAULTS.switch),
     bank_ch = clampNumber(src.bank_ch, M.CHANNEL_MIN, M.CHANNEL_MAX, M.DEFAULTS.bank_ch),
     value_ch = clampNumber(src.value_ch, M.CHANNEL_MIN, M.CHANNEL_MAX, M.DEFAULTS.value_ch),
     bank_gvar = clampNumber(src.bank_gvar, 0, M.GVAR_MAX_INDEX, M.DEFAULTS.bank_gvar),
@@ -727,7 +725,6 @@ end
 function M.storeRadioSettings(target, settings)
   if type(target) ~= "table" or type(settings) ~= "table" then return end
   target.enabled = settings.enabled == true
-  target.switch = settings.switch or 0
   target.bank_ch = settings.bank_ch
   target.value_ch = settings.value_ch
   target.bank_gvar = settings.bank_gvar
@@ -1019,7 +1016,7 @@ local function checkMixLine(radio, channel, gvarIndex, faults, prefix, gated)
     faults[#faults + 1] = prefix .. "_mix_multiplex"
   end
   -- The bank line is always on: the enable channel has to stand in its band for as long as the
-  -- interlock is closed. The value line is switched by the logical switch that times the pulse, and
+  -- tuning surface is open. The value line is switched by the logical switch that times the pulse, and
   -- a value line without it is the line the widget would have to time itself -- one press, two
   -- steps, on a slow pass.
   if gated then
@@ -1188,7 +1185,6 @@ function M.check(drive, settings, trims)
     faults[#faults + 1] = "flight_list_missing"
     faults.missing = drive.flightListMissing
   end
-  if (settings.switch or 0) == 0 then faults[#faults + 1] = "no_switch" end
   if (settings.bank_gvar or 0) <= 0 then faults[#faults + 1] = "no_bank_gvar" end
   if (settings.value_gvar or 0) <= 0 then faults[#faults + 1] = "no_value_gvar" end
 

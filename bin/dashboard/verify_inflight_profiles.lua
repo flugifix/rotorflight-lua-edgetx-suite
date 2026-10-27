@@ -72,7 +72,8 @@ local radio = {now = function() return tick end, clock = function() return "17:3
   switchValue = function() return true end, flightMode = function() return 0 end,
   channelUs = function() return 998 end, setGlobalVariable = function() return true end}
 local function makeDrive(records)
-  local d = Drive.newDrive(radio, Drive.settings({inflight={enabled=true,switch=1}}, {inflight={enabled=true}}))
+  local d = Drive.newDrive(radio, Drive.settings({inflight={enabled=true}}, {inflight={enabled=true}}))
+  d.open = true
   d.prime = {records = records or {}, phase = "done", pending={}, pendingHead=1, pendingTail=0}
   d.board, d.phase, d.live = fc.identity, "ground", true
   d:watchProfiles(); return d
@@ -188,6 +189,43 @@ check(Profiles.complete(data) and data.meta.timestamp=="2026-10-24 17:30:00", "S
 local _,why=Store.load(fc.uid,"FC-B"); check(why=="baseline_identity", "FC identity refuses wrong baseline")
 local savedFile=files[Store.path(fc.uid)]
 
+-- A full restore plan must be built in bounded pieces before any target is selected.
+do
+  local limit = 0
+  for _, commands in pairs(Profiles.COMMANDS) do limit = math.max(limit, #commands * 4 + 5) end
+  check(Prime.restore(widget, d), "bounded restore-plan control starts")
+  while d.profileJob and not d.profileJob.returning do
+    local job = d.profileJob
+    local before, building, requests = #job.plan, job.planBuild ~= nil, #sent
+    pass(d)
+    if d.profileJob == job and not job.returning then
+      check(#job.plan - before <= limit, "one pass builds at most one restore target")
+      if building then check(#sent == requests, "plan construction sends no profile selection") end
+    end
+  end
+  finish(d)
+  check(d.transfer.state == "ok" and fc.pid == 2 and fc.rate == 3, "bounded plan restores and returns to the original pair")
+end
+
+do
+  check(Prime.restore(widget, d), "plan cancellation control starts")
+  for _ = 1, 2000 do
+    pass(d)
+    if not d.profileJob or d.profileJob.planBuild then break end
+  end
+  local job = d.profileJob
+  check(job and job.planBuild, "restore reaches a cancellable plan boundary")
+  local requests = #sent
+  job.cancelled = true
+  pass(d)
+  check(not job.planBuild and job.returning, "cancellation discards the partial plan and returns")
+  finish(d)
+  for i = requests + 1, #sent do
+    check(not setters[sent[i].command] and sent[i].command ~= 250, "cancelled plan sends no parameter write or save")
+  end
+  check(fc.pid == 2 and fc.rate == 3, "cancelled plan leaves the original profiles active")
+end
+
 -- Out-of-range board values name the function and value, and leave the original pair restored.
 do
   fc.data.pid1[112].pid_1_P = 1001
@@ -298,7 +336,7 @@ end
 msp.lastArmed=true
 check(not Prime.refreshValues(widget,makeDrive(slots)), "MSP runtime arm witness independently refuses reads")
 msp.lastArmed=false
-local legacy=Drive.settings({inflight={enabled=true,switch=1}}, {inflight={enabled=true,backup_profile=6}})
+local legacy=Drive.settings({inflight={enabled=true}}, {inflight={enabled=true,backup_profile=6}})
 check(legacy.backup_profile==nil and legacy.active,"legacy spare-slot setting is ignored harmlessly")
 
 -- Attribution changes ownership, never the baseline or layout epoch. A held report is fenced.
@@ -320,7 +358,7 @@ check(d.profileValues.global[64]==-12, "global report has one owner")
 fc.pid=4; tick=tick+1; d:fastTick(tick)
 ok,reason=d:dispatch("step",1,"touch"); check(not ok and reason=="pid_unread" and sounds[#sounds]=="inflight/paused.wav", "unread profile refuses with paused cue")
 fc.pid=3; adjF=0; tick=tick+1; d:fastTick(tick)
-check(not d.profilePaused and d:tuning() and sounds[#sounds]=="inflight/resumed.wav", "return resumes without an interlock cycle")
+check(not d.profilePaused and d:tuning() and sounds[#sounds]=="inflight/resumed.wav", "return resumes without closing and reopening tuning")
 check(#numbers>0, "profile cue uses number teller")
 local list=Prime.delta(d)
 check(#list==4 and list[1].profile==2 and list[2].profile==3 and list[3].scope=="rate" and list[4].scope=="global", "delta grouped by profile then group")
@@ -373,6 +411,26 @@ for name,result in pairs(d.transfer.results) do
   local witness=d.transfer.verification[name]
   check(result=="ok" and witness.ram and witness.saved and witness.readBack,
     "every restored target retains separate RAM/save/read-back evidence")
+end
+do
+  local command = Profiles.COMMANDS.global[1]
+  local _, fields = Functions.fieldsForCommand(command)
+  local field
+  for _, candidate in ipairs(fields) do if Profiles.tracked(candidate) then field = candidate; break end end
+  check(field ~= nil, "global restore has a tracked positive control")
+  local value = data.global[tostring(field.id)]
+  fc.data.global1[command][field.field] = value + 1
+  sent = {}
+  check(Prime.restore(widget, d, {kind = "global", index = 1}), "global comparison target starts restore")
+  finish(d)
+  check(d.transfer.results.global == "ok" and fc.data.global1[command][field.field] == value,
+    "global comparison target restores and verifies the baseline")
+  for _, request in ipairs(sent) do
+    if setters[request.command] then
+      local _, changed = Functions.fieldsForCommand(setters[request.command])
+      check(Functions.scopeOf(changed[1].id) == nil, "global restore writes no PID or rate target")
+    end
+  end
 end
 local broken=copy(data); broken.pid3=nil
 files[Store.path(fc.uid)]="return ".."{}"

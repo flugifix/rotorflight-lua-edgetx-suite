@@ -1,19 +1,6 @@
--- The three renderings of the in-flight tuning overlay: the widget zone, fullscreen, and the
--- ground surface between flights.
---
--- All three append node tables to `children`, the idiom widgets/dashboard/fullscreen_menu.lua
--- uses, so the runtime builds them exactly the way it builds the quick settings menu.
---
--- The layout is the concept drawing's, and it is laid out in FRACTIONS of the widget's own zone
--- rather than in constants: the reference is 480 x 272, the pilot's radio is 480 x 320 and the
--- large radios are 800 x 480, and a surface a pilot reads at arm's length in sunlight cannot have
--- a row list that runs off the bottom of one of them. Only the fonts step, because the firmware
--- offers a ladder of five and not a size.
---
--- The zone screen carries NO buttons. Whether an LVGL button in a non-fullscreen widget zone ever
--- receives a press is not something this file knows, and a control that may or may not answer is
--- worse on a tuning screen than no control at all: there the pilot's trims are the input and the
--- screen is the read-out.
+-- The ground, live and post-flight phases of the fullscreen tuning surface.
+-- Each appends node tables to `children`, as the dashboard quick menu does.
+-- Geometry scales with the display; fonts use the firmware's discrete size ladder.
 --
 -- What is reactive here is what the FLIGHT CONTROLLER moves -- the value, the value it stepped
 -- from, the six row values, the active row's colour and the lines that expire on the clock -- and
@@ -73,8 +60,7 @@ if type(Functions) ~= "table" or type(Drive) ~= "table" or type(Input) ~= "table
 end
 
 -- The ground half, loaded only when the ground surface is actually built. It pulls in the MSP
--- runtime and the api modules behind it, and the zone screen -- the one that is built while the
--- pilot is flying -- has no use for any of that.
+-- runtime and the api modules behind it; the live surface has no use for any of that.
 local PrimeModule = nil
 local function prime()
   if PrimeModule == nil then
@@ -169,7 +155,7 @@ local function charWidth(font)
 end
 
 -- Geometry scales with the surface; fonts use the firmware's discrete size ladder.
-local function metrics(w, h, fullscreen)
+local function metrics(w, h)
   local m = {}
   m.large = h > 350
   m.font = m.large and MIDSIZE or SMLSIZE
@@ -183,7 +169,7 @@ local function metrics(w, h, fullscreen)
   m.headerH = math.max(16, math.floor(h * 0.125 + 0.5))
   m.chipY = m.headerH + math.max(2, math.floor(h * 0.029 + 0.5))
   m.statusLineH = math.max(m.fontH + 2, math.max(10, math.floor(h * 0.081 + 0.5)))
-  m.actionH = fullscreen and math.max(18, math.floor(h * 0.206 + 0.5)) or 0
+  m.actionH = math.max(18, math.floor(h * 0.206 + 0.5))
   m.glyphFont = m.actionH >= 80 and XXLSIZE or DBLSIZE
   m.glyphH = fontHeight(m.glyphFont)
   m.footerH = math.max(22, math.floor(h * 0.081))
@@ -306,18 +292,11 @@ end
 -- without the pilot leaving this screen; widgets/dashboard/inflight/drive.lua's own settings
 -- comparison drops the cache when it re-settles a drive.
 --
--- What holds the walk off is the PHASE and not the interlock, and the difference is the whole of
--- the verdict on a great many screens. `live` says the interlock is closed; the phase says the
--- craft is in the air, since it only reaches `live` on the arm reading. A pilot who closes the
--- interlock on the ground -- to look at the surface before he flies, which is what it is for --
--- had a drive whose `live` was already true, so the walk never ran and the one line that exists
--- to tell him whether his model is wired up read "Setup not checked" for the whole session. The
--- reason the walk is held off at all is the pass that is driving the flight controller, and that
--- pass is the airborne one.
+-- The airborne phase uses the cached ground verdict; no model walk shares a flying pass.
 function M.checkVerdict(widget)
   local drive = widget and widget._inflight
   if drive == nil then return nil end
-  -- One cache, and the drive owns it: the same verdict decides whether the interlock may close at
+  -- One cache, and the drive owns it: the same verdict decides whether output may be released at
   -- all, so a walk of this screen's own would be a second answer to a question with one.
   return Drive.verdict(drive)
 end
@@ -333,7 +312,7 @@ function M.describeCheck(result, t)
     return t("widgets.dashboard.inflight_check_ok", "Setup OK")
   end
   if type(result) ~= "table" then return "" end
-  -- The interlock refused because the trim block is still being walked (inflight/drive.lua,
+  -- Output was refused because the trim block is still being walked (inflight/drive.lua,
   -- M.TRIMS_PENDING). Not a fault the pilot has to fix, so it is the whole sentence.
   if result[1] == "trims_pending" then
     return t("widgets.dashboard.inflight_check_trims_pending", "Checking trims")
@@ -366,7 +345,7 @@ function M.describeCheck(result, t)
   end
 
   local parts = {}
-  if unset then parts[#parts + 1] = t("widgets.dashboard.inflight_check_unset", "Switch or variables not set") end
+  if unset then parts[#parts + 1] = t("widgets.dashboard.inflight_check_unset", "Variables not set") end
   if same then parts[#parts + 1] = t("widgets.dashboard.inflight_check_same", "Bank and value share a variable or a channel") end
   if mix then parts[#parts + 1] = t("widgets.dashboard.inflight_check_mix", "Mixer line missing or wrong") end
   if gvar then parts[#parts + 1] = t("widgets.dashboard.inflight_check_gvar", "Variable range or precision") end
@@ -469,7 +448,7 @@ end
 -- The title is the only group selector. Rows retain full names and their hidden cell address;
 -- the native focus ring supplies browse feedback without changing the FC table. Value reports
 -- replace snapshot strings only, never the objects that receive a press or an encoder detent.
-local function appendFlight(children, widget, m, w, h, t, p, interactive)
+local function appendFlight(children, widget, m, w, h, t, p)
   local snapshot = widget.state.inflight or {}
   local drive, state = widget._inflight, widget.state
   local group = snapshot.groups and snapshot.groups[snapshot.group or 1]
@@ -559,7 +538,7 @@ local function appendFlight(children, widget, m, w, h, t, p, interactive)
       if name ~= lastName then lastName, fittedName = name, fitText(name, lineW, nameFont) end
       return fittedName or ""
     end
-    if interactive and drive then
+    if drive then
       local ladderRows = Input.LADDER_ROWS
       local sensor = Input.sensor(widget, nameH, ladderRows, true)
       local forward, reverse = sensor.windows()
@@ -656,7 +635,7 @@ local function appendFlight(children, widget, m, w, h, t, p, interactive)
     local rows = snapshot.groupRows or {}
     local rowH = m.browseH
     -- The selected row is taller than its neighbours: its value is the one the pilot reads.
-    local selH = interactive and m.selectedH or rowH
+    local selH = m.selectedH
     local hintH = m.smallH + 2
     local visible = math.max(1, 1 + math.floor((footerY - contentY - hintH * 2 - selH) / rowH))
     local anchor = math.min(2, visible)
@@ -665,11 +644,11 @@ local function appendFlight(children, widget, m, w, h, t, p, interactive)
     local valueW = m.large and 140 or 84
     local diffW = m.large and 86 or 44
     local nameW = lineW - valueW - diffW - 20
-    local selValueW = interactive and (m.large and 190 or 120) or valueW
+    local selValueW = m.large and 190 or 120
     local selNameW = lineW - selValueW - diffW - 20
     local list, scrollRows = {}, {}
     local selectedButton
-    local sensor = interactive and #rows > 0 and Input.sensor(widget, selH, #rows, false) or nil
+    local sensor = #rows > 0 and Input.sensor(widget, selH, #rows, false) or nil
     local previous, forward, reverse = {}
     if sensor then
       forward, reverse = sensor.windows()
@@ -735,27 +714,25 @@ local function appendFlight(children, widget, m, w, h, t, p, interactive)
         t("widgets.dashboard.inflight_list_end", "End of list"), sensor.press(#rows + 2))
     end
     -- Neighbour slots read the semantic selection, while the native sensor stays at a fixed row.
-    if interactive then
-      children[#children + 1] = {
-        type = "box", x = m.pad, y = selectedY, w = lineW, h = selH, borderPad = 0,
-        scrollDir = (lvgl and lvgl.SCROLL_VER) or 12, scrollBar = false, color = p.bg, children = list,
-        scrolled = forward and forward.scrolled, opacity = forward and forward.opacity,
-        scrollTo = forward and forward.scrollTo or function()
-          local snap = state.inflight; return 0, snap and scrollRows[snap.entry] or 0
-        end
-      }
-      if sensor then
-        previous[#previous + 1] = {type = "rectangle", x = 0, y = (#rows + 2) * selH,
-          w = 1, h = 1, color = p.bg}
-        widget._inflightReverseNode = {
-          type = "box", x = m.pad, y = selectedY, w = lineW, h = selH, borderPad = 0,
-          scrollDir = (lvgl and lvgl.SCROLL_VER) or 12, scrollBar = false, color = p.bg,
-          scrolled = reverse.scrolled, scrollTo = reverse.scrollTo, opacity = reverse.opacity, children = previous
-        }
+    children[#children + 1] = {
+      type = "box", x = m.pad, y = selectedY, w = lineW, h = selH, borderPad = 0,
+      scrollDir = (lvgl and lvgl.SCROLL_VER) or 12, scrollBar = false, color = p.bg, children = list,
+      scrolled = forward and forward.scrolled, opacity = forward and forward.opacity,
+      scrollTo = forward and forward.scrollTo or function()
+        local snap = state.inflight; return 0, snap and scrollRows[snap.entry] or 0
       end
+    }
+    if sensor then
+      previous[#previous + 1] = {type = "rectangle", x = 0, y = (#rows + 2) * selH,
+        w = 1, h = 1, color = p.bg}
+      widget._inflightReverseNode = {
+        type = "box", x = m.pad, y = selectedY, w = lineW, h = selH, borderPad = 0,
+        scrollDir = (lvgl and lvgl.SCROLL_VER) or 12, scrollBar = false, color = p.bg,
+        scrolled = reverse.scrolled, scrollTo = reverse.scrollTo, opacity = reverse.opacity, children = previous
+      }
     end
     for slot = 1, visible do
-      if slot ~= anchor or not interactive then
+      if slot ~= anchor then
         local offset = slot - anchor
         local rowY = listY + (slot - 1) * rowH + (slot > anchor and selH - rowH or 0)
         local function field(key, fallback)
@@ -789,53 +766,12 @@ local function appendFlight(children, widget, m, w, h, t, p, interactive)
       return snap and (snap.stepRefusedReason == "list_end" and endText or snap.stepRefusedReason == "cooling" and busyText) or ""
     end, p.warn, m.small, CENTER)
   end
-  if interactive then
-    button(children, m.pad, groupY, arrowW, groupH, "<", action("function", -1), p.accent)
-    button(children, titleX, groupY, titleW, groupH, title, function() openGroupMenu(widget, groups, t) end)
-    button(children, w - m.pad - arrowW, groupY, arrowW, groupH, ">", action("function", 1), p.accent)
-  else appendCentredLabel(children, m.pad, groupY, lineW, groupH, title, p.accent, m.font, CENTER, m) end
+  button(children, m.pad, groupY, arrowW, groupH, "<", action("function", -1), p.accent)
+  button(children, titleX, groupY, titleW, groupH, title, function() openGroupMenu(widget, groups, t) end)
+  button(children, w - m.pad - arrowW, groupY, arrowW, groupH, ">", action("function", 1), p.accent)
 end
 
--- ---------------------------------------------------------------------------
--- The zone screen
--- ---------------------------------------------------------------------------
-
---- The overlay in the widget's own zone, while the interlock is on.
---
--- No controls out here: the trims drive it and this is the read-out. WHICH read-out is the phase's
--- to say, and that is the pilot's core change after the third radio round. The interlock is the
--- one entry he has, and what it shows follows the flight rather than the switch -- the preflight
--- read-out on the ground, the tuning surface in the air, and the delta and the undo on the ground
--- after a flight that moved something. Three screens on one switch, and nothing to remember.
 local appendBusy
-
-function M.buildZone(children, widget)
-  local w = (widget.zone and widget.zone.w) or LCD_W or 480
-  local h = (widget.zone and widget.zone.h) or LCD_H or 272
-  local t = translator(widget)
-  local p = palette()
-  local m = metrics(w, h, false)
-  local snapshot = widget.state.inflight or {}
-
-  children[#children + 1] = { type = "rectangle", x = 0, y = 0, w = w, h = h, color = p.bg, filled = true }
-  appendHeader(children, widget, m, w, t, p, 0)
-
-  if widget._inflight and widget._inflight.profileJob and snapshot.phase ~= "live" then
-    appendBusy(children, widget, m, w, h, t, p, false)
-    return
-  end
-  if snapshot.phase == "post" then
-    M.buildPost(children, widget, m, w, h, t, p, false)
-    return
-  end
-  if snapshot.phase ~= "live" then
-    M.buildGround(children, widget, m, w, h, t, p, false)
-    return
-  end
-
-  appendFlight(children, widget, m, w, h, t, p, false)
-
-end
 
 -- ---------------------------------------------------------------------------
 -- The fullscreen screen
@@ -963,7 +899,7 @@ local function wrapSetup(text, width, font)
 end
 
 --- The ground surface shows model readiness, board slots and the stored session.
-function M.buildGround(children, widget, m, w, h, t, p, interactive)
+function M.buildGround(children, widget, m, w, h, t, p)
   local drive = widget._inflight
   local Prime = prime()
   local armed = (widget.state and widget.state.armed) == true
@@ -1071,17 +1007,6 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
     blocked = true
   end
 
-  if not interactive then
-    -- The zone screen has no buttons at all -- whether an LVGL button in a widget zone even takes
-    -- a press is unmeasured -- so it says where the actions are instead. It says it whatever
-    -- else stands above it: the two states that used to return before this line are exactly the
-    -- ones a pilot is looking for something to do about, and the hint is the only thing on the
-    -- zone that tells him this screen has more on it than he can see.
-    appendLabel(children, m.pad, y, lineW,
-      fitText(t("widgets.dashboard.inflight_hint_touch", "long press for touch controls"), lineW, m.small),
-      p.dim, m.small, LEFT)
-    return
-  end
   if blocked then return end
   if drive == nil or Prime == nil then return end
 
@@ -1166,18 +1091,17 @@ end
 -- ---------------------------------------------------------------------------
 
 -- Each page repeats its profile/group heading so a continued group retains its identity.
-function M.buildPost(children, widget, m, w, h, t, p, interactive)
+function M.buildPost(children, widget, m, w, h, t, p)
   local drive, Prime = widget._inflight, prime()
   local lineW, y = w - m.pad * 2, m.chipY
   local footerY = h - m.footerH
   local list = drive and Prime and Prime.delta(drive)
-  local actionY = interactive and footerY - m.actionH - m.pad or footerY
+  local actionY = footerY - m.actionH - m.pad
   local rowH = m.large and 32 or 24
   local rowFont = m.large and MIDSIZE or 0
-  local footer = interactive and (widget.state.armed == true
+  local footer = widget.state.armed == true
     and t("widgets.dashboard.inflight_post_armed_controls", "Board has saved")
-    or t("widgets.dashboard.inflight_post_controls", "RTN close / Board has saved"))
-    or t("widgets.dashboard.inflight_post_saved_zone", "board has saved - restore: full screen")
+    or t("widgets.dashboard.inflight_post_controls", "RTN close / Board has saved")
   children[#children + 1] = {type = "rectangle", x = 0, y = footerY, w = w, h = m.footerH, color = p.header, filled = true}
   appendCentredLabel(children, m.pad, footerY, lineW, m.footerH, footer, p.dim, m.small, LEFT, m)
 
@@ -1259,7 +1183,7 @@ function M.buildPost(children, widget, m, w, h, t, p, interactive)
   local note = target.scope == "rate" and t("widgets.dashboard.inflight_rate_restore_note", "PID restore does not cover rate profiles")
     or t("widgets.dashboard.inflight_delta_title", "CHANGED SINCE SD BASELINE")
   appendLabel(children, m.pad, actionY - m.lineH - 2, lineW, note, p.dim, m.small, LEFT)
-  if not interactive or not drive or not Prime then return end
+  if not drive or not Prime then return end
   local arrowW = m.large and 72 or 48
   local buttonW = lineW - arrowW * 2 - m.pad * 2
   appendAction(children, m, m.pad, actionY, buttonW, t("widgets.dashboard.inflight_post_actions", "Restore / read values"), p, function()
@@ -1571,7 +1495,7 @@ local function appendBusyAction(children, m, x, y, width, label, p, active, pres
 end
 
 -- Zone and fullscreen draw the same busy surface; only fullscreen has the two actions.
-appendBusy = function(children, widget, m, w, h, t, p, interactive)
+appendBusy = function(children, widget, m, w, h, t, p)
   local drive = widget._inflight
   local job = drive.profileJob
   local restoring = drive.transfer and drive.transfer.state == "busy" and drive.transfer.kind == "restore"
@@ -1625,7 +1549,6 @@ appendBusy = function(children, widget, m, w, h, t, p, interactive)
     end
     return warning
   end, p.warn, m.small, LEFT)
-  if not interactive then return end
   local retryActive = function() return drive.profileJob == job and job.returnBlocked == true end
   appendBusyAction(children, m, m.pad, actionY, width,
     t("widgets.dashboard.inflight_read_again", "Read again"), p, retryActive, function()
@@ -1649,9 +1572,7 @@ appendBusy = function(children, widget, m, w, h, t, p, interactive)
     end)
 end
 
---- The overlay with its controls. Reached by a long press while the interlock is on, and from the
--- quick settings menu while it is off -- there the drive is inert and what is shown instead is
--- the ground surface.
+--- The tuning fullscreen opened from the dashboard quick menu.
 function M.buildFullscreen(children, widget)
   widget._inflightReverseNode = nil
   widget._inflightSensor = nil
@@ -1659,25 +1580,31 @@ function M.buildFullscreen(children, widget)
   local h = (widget.zone and widget.zone.h) or LCD_H or 272
   local t = translator(widget)
   local p = palette()
-  local m = metrics(w, h, true)
+  local m = metrics(w, h)
 
   children[#children + 1] = { type = "rectangle", x = 0, y = 0, w = w, h = h, color = p.bg, filled = true }
   -- Armed layouts reserve no close box, even before the live phase is published.
   local armed = widget.state.armed == true
   appendHeader(children, widget, m, w, t, p, armed and 0 or closeWidth(m))
 
-  -- The same three phases the zone screen picks between, with the touch controls added. Reached
-  -- from the quick settings menu as well, with the interlock OFF: there the drive is inert, the
-  -- phase is nil, and what stands is the ground surface -- which is exactly right, because the
-  -- ground actions are the only ones that could do anything without an interlock.
+  -- Arm state chooses ground, live or post; a setup fault stays on the ground surface.
   local snapshot = widget.state.inflight or {}
+  if snapshot.linkLost == true then
+    local width = w - m.pad * 2
+    appendCentredLabel(children, m.pad, m.chipY, width, m.statusLineH,
+      t("widgets.dashboard.inflight_paused", "PAUSED"), p.error, m.font, CENTER, m)
+    appendCentredLabel(children, m.pad, m.chipY + m.statusLineH, width, m.statusLineH,
+      t("widgets.dashboard.inflight_no_link", "No FC link"), p.warn, m.font, CENTER, m)
+    appendClose(children, widget, m, w, p)
+    return
+  end
   if widget._inflight and widget._inflight.fcSetupOpen and widget.state.armed ~= true then
     local surface = widget._inflight.fcSurface
     if surface then surface.build(children, widget, m, w, h, t, p, appendLabel, appendAction, wrapSetup) end
     return
   end
   if widget._inflight and widget._inflight.profileJob and snapshot.phase ~= "live" then
-    appendBusy(children, widget, m, w, h, t, p, true)
+    appendBusy(children, widget, m, w, h, t, p)
     appendClose(children, widget, m, w, p)
     return
   end
@@ -1698,12 +1625,12 @@ function M.buildFullscreen(children, widget)
     return
   end
   if snapshot.phase == "post" then
-    M.buildPost(children, widget, m, w, h, t, p, true)
+    M.buildPost(children, widget, m, w, h, t, p)
     appendClose(children, widget, m, w, p)
     return
   end
   if snapshot.live ~= true or snapshot.phase ~= "live" then
-    M.buildGround(children, widget, m, w, h, t, p, true)
+    M.buildGround(children, widget, m, w, h, t, p)
     appendClose(children, widget, m, w, p)
     return
   end
@@ -1711,7 +1638,7 @@ function M.buildFullscreen(children, widget)
   -- No setup verdict on the LIVE surface. It is a sentence about a model that cannot change while
   -- the pilot is flying it, it belongs to the ground surface where he can act on it, and on the
   -- shortest radio the line it needed was the line the parameter name was drawn on.
-  appendFlight(children, widget, m, w, h, t, p, true)
+  appendFlight(children, widget, m, w, h, t, p)
   if widget._inflightReverseNode then children[#children + 1] = widget._inflightReverseNode end
 end
 

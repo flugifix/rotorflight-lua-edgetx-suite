@@ -92,6 +92,7 @@ local function targetPlan(plan, kind, index, restore)
 end
 
 local function returnPlan(job)
+  job.planBuild = nil
   job.plan, job.at, job.returning, job.returned = {}, 1, true, nil
   add(job.plan, "returnSelect", "pid", job.original.pid)
   add(job.plan, "returnSelect", "rate", job.original.rate)
@@ -285,14 +286,24 @@ local function buildPlan(job, drive, parsed)
     end
   end
   job.reachable = reachable
-  for _, kind in ipairs({"pid", "rate"}) do
-    for index = 1, 6 do
-      if reachable[kind][index] and (not job.target or (job.target.kind == kind and job.target.index == index)) then
-        targetPlan(job.plan, kind, index, job.mode == "restore")
-      end
+  job.planBuild = 1
+  return nil
+end
+
+-- Build one target per pass. A full restore spans every profile and must leave room for the
+-- dashboard's telemetry drain and the fullscreen input path on the same widget call.
+local function buildPlanStep(job)
+  for position = job.planBuild, 13 do
+    local kind = position <= 6 and "pid" or position <= 12 and "rate" or "global"
+    local index = kind ~= "global" and (position - 1) % 6 + 1 or nil
+    local reachable = kind == "global" or job.reachable[kind][index]
+    if reachable and (not job.target or (job.target.kind == kind and (kind == "global" or job.target.index == index))) then
+      targetPlan(job.plan, kind, index, job.mode == "restore")
+      job.planBuild = position + 1
+      return
     end
   end
-  if not job.target or job.target.kind == "global" then targetPlan(job.plan, "global", nil, job.mode == "restore") end
+  job.planBuild = nil
   if job.prime then
     local replies = job.mode == "restore" and 6 or 4
     for _, op in ipairs(job.plan) do if op.op ~= "targetDone" then replies = replies + 1 end end
@@ -306,7 +317,6 @@ local function buildPlan(job, drive, parsed)
       end
     end
   end
-  return nil
 end
 
 local function fieldsInto(job, op, parsed)
@@ -574,6 +584,7 @@ function M.tick(widget, drive, hasRoom)
     end
     return true
   end
+  if job.planBuild then buildPlanStep(job); return true end
   if job.finished then finish(drive, job); return true end
   if job.store then
     local done, reason = Store.step(job.store)

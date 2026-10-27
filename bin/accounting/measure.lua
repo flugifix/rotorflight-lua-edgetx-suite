@@ -1581,10 +1581,9 @@ end
 -- The in-flight tuning overlay: the pass that drives it, the pass a reply lands on, and the
 -- builds of its two screens.
 --
--- The overlay replaces the scene while its interlock is closed, so the widget is settled FIRST
--- with the interlock open -- that is the only way the reference scene ever reaches its swap --
--- and the switch is thrown afterwards. The fullscreen build is measured with a non-nil event,
--- which is what the firmware passes there and what no other row in this file covers.
+-- Settle the dashboard with tuning closed, then open its fullscreen visit from the quick
+-- menu flag. Every tuning pass carries a non-nil event, as the firmware does in fullscreen.
+-- The zone keeps the theme and has no tuning build.
 --
 -- The ground half is measured as a window of its own, between the prime starting and the prime
 -- being finished, and everything after it is measured with the prime DONE. Both halves of that
@@ -1601,12 +1600,12 @@ do
   --
   -- The preview switch is the pilot saying he wants an unfinished feature on the radio; the
   -- [inflight] section's own `enabled` is the overlay's master switch, and the rest of that
-  -- section is the radio's half of the settings -- the interlock switch, the two channels and
+  -- section is the radio's half of the settings -- the two channels and
   -- variables, the pulse length and the trims. See widgets/dashboard/inflight/setup.lua.
   widget.preferences.general = widget.preferences.general or {}
   widget.preferences.general.preview_inflight_tuning = true
   widget.preferences.inflight = {
-    enabled = true, switch = 1, bank_ch = 11, value_ch = 12,
+    enabled = true, bank_ch = 11, value_ch = 12,
     bank_gvar = 1, value_gvar = 2, pulse_ms = 150, trims = true,
     trim_mode = "rows", nav_trim = 2, adj_trim = 4,
     row_trim_1 = 2, row_trim_2 = 4, row_trim_3 = 1,
@@ -1705,9 +1704,8 @@ do
   -- than of the suite, and both are what make the rows below reproducible; see their comments.
   installDeferredLink()
 
-  -- The interlock, thrown after the dashboard is up. The drive seeds on its first evaluation and
-  -- waits out its stability delay, so the passes in between are the ones a pilot's hand produces.
-  Stubs.switchValues[1] = true
+  -- The quick-menu visit is the release after the dashboard has settled.
+  widget.inflightFullscreen = true
 
   -- Swapping the store is a change the widget reacts to -- it compares what a rebuild would
   -- read and reloads the theme when that moved -- so the passes right after the swap carry a
@@ -1718,7 +1716,7 @@ do
     releaseReplies()
     feedLink(World.sensorIds, 900 + i)
     Stubs.tick()
-    widget.refresh(widget, nil, nil)
+    widget.refresh(widget, 0, nil)
   end
 
   local drive = widget._inflight
@@ -1768,7 +1766,7 @@ do
     local doneBefore = (type(prime) == "table" and prime.done) or 0
     local banksBefore = drive.groupWork and drive.groupWork.bank
     local class = passClass(widget)
-    local n = count(widget.refresh, widget, nil, nil)
+    local n = count(widget.refresh, widget, 0, nil)
     -- The group table is built a bank per pass; more than one in a pass is the bound gone.
     local banksAfter = drive.groupWork and drive.groupWork.bank
     if banksBefore and banksAfter and banksAfter - banksBefore > 1 then
@@ -1810,7 +1808,7 @@ do
     if not drive.profileJob then break end
     local before = drive.prime.done or 0
     local class = passClass(widget)
-    local n = count(widget.refresh, widget, nil, nil)
+    local n = count(widget.refresh, widget, 0, nil)
     primePasses = primePasses + 1
     if n > (primeWorst[class] or 0) then
       primeWorst[class] = n
@@ -1831,7 +1829,7 @@ do
   ----------------------------------------------------------------------------
   -- THE LIVE SURFACE, which since the phase machine is the ARMED one.
   --
-  -- One interlock switch, three surfaces, and the drive picks between them off the widget's own
+  -- One fullscreen visit, three phases, and the drive picks between them off the widget's own
   -- arm reading: the ground read-out before a flight, the tuning surface in the air, the delta
   -- after a flight that moved something. All three are the same job kind and their worst pass is
   -- one row, so all three are driven here -- and the state has to be SET rather than assumed,
@@ -1852,7 +1850,7 @@ do
     releaseReplies()
     feedLink(World.sensorIds, 800 + i)
     Stubs.tick()
-    widget.refresh(widget, nil, nil)
+    widget.refresh(widget, 0, nil)
   end
   for i = 1, 240 do
     holdLinkBacklog()
@@ -1860,7 +1858,7 @@ do
     feedLink(World.sensorIds, i)
     if i % 3 == 0 then invalidate(widget) end
     local class = passClass(widget)
-    local n = count(widget.refresh, widget, nil, nil)
+    local n = count(widget.refresh, widget, 0, nil)
     if n > (worst[class] or 0) then worst[class] = n end
   end
   if drive.phase ~= "live" then
@@ -1947,7 +1945,7 @@ do
   ----------------------------------------------------------------------------
   -- THE OTHER TWO SURFACES, on the same budget row.
   --
-  -- Both are reached by DISARMING with the interlock still on, which is the pilot's whole flow:
+  -- Both are reached by DISARMING with the tuning surface still open, which is the pilot's whole flow:
   -- the delta after a flight that fired a step, the ground read-out after one that did not. They
   -- are two different trees and they are one job kind, so their worst pass goes into the same
   -- `pass.job.tuning` as the live surface's -- named here rather than given a row of its own,
@@ -1984,7 +1982,7 @@ do
     releaseReplies()
     feedLink(World.sensorIds, 2800 + i)
     Stubs.tick()
-    widget.refresh(widget, nil, nil)
+    widget.refresh(widget, 0, nil)
   end
   for i = 1, 60 do
     holdLinkBacklog()

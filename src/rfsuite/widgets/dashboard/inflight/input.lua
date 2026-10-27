@@ -89,6 +89,7 @@ end
 -- epoch because completed reads and transfers change their controls. Never key a live scene on
 -- a cell, an input counter or the value epoch: that would delete the object observing focus.
 function M.renderKey(snapshot)
+  if snapshot.linkLost == true then return "link_lost" end
   if snapshot.phase == "live" then
     return tostring(snapshot.live) .. "|" .. tostring(snapshot.groups) .. "|" .. tostring(snapshot.group) .. "|"
       .. tostring(snapshot.valueMode) .. "|" .. tostring(snapshot.profileRefusal) .. "|" .. tostring(snapshot.ladderEpoch)

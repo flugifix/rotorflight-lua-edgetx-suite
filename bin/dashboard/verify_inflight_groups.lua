@@ -3,7 +3,7 @@ debug.getmetatable("").__index = nil
 -- Offline groups, session ownership and semantic input checks. The native LVGL focus/scroll
 -- delivery is outside this fixture; callbacks are injected exactly where the Lua API exposes them.
 local cache, sounds, numbers, writes = {}, {}, {}, {}
-local ticks, pid, rate, switch = 1000, 1, 2, false
+local ticks, pid, rate = 1000, 1, 2
 local audioAllowed = true
 local inputTraces, debugInput = {}, false
 _G.rfsuite = { preferences = { audio_events = { adjustment_events = true } }, require = function(path)
@@ -37,7 +37,7 @@ check(assert(loadfile("src/rfsuite/tasks/events/telemetry_bg/adjustments.lua"))(
 local radio = {
   now = function() return ticks end,
   sensor = function(name) if name == "AdjF" then return 0 elseif name == "PID#" then return pid elseif name == "RTE#" then return rate end end,
-  switchValue = function() return switch end,
+  switchValue = function() return false end,
   flightMode = function() return 0 end,
   setGlobalVariable = function(index, fm, value) writes[#writes + 1] = { index, fm, value }; return true end,
   channelUs = function() return 998 end,
@@ -61,7 +61,7 @@ local function readBoard(d, mutate)
   return d
 end
 local function drive(mutate)
-  local d = Drive.newDrive(radio, Drive.settings({ inflight = { enabled = true, switch = 1 } },
+  local d = Drive.newDrive(radio, Drive.settings({ inflight = { enabled = true } },
     { inflight = { enabled = true } }))
   check(#d.groups == 0 and d.setSource == "unread", "nothing is tunable before the board has been read")
   readBoard(d, mutate)
@@ -70,7 +70,7 @@ local function drive(mutate)
   d.profilePrevious = {pid = {}, rate = {}, global = {}}
   d:watchProfiles()
   d.reportFence = nil
-  d.live, d.phase = true, "live"
+  d.open, d.live, d.phase = true, true, "live"
   return d
 end
 
@@ -78,7 +78,7 @@ end
 -- (the firmware constrains a stepped result into adjMin..adjMax): it is refused until the board is
 -- set up again. A board written with the documented 10..200 on the rescue hover collective.
 do
-  local narrow = readBoard(Drive.newDrive(radio, Drive.settings({ inflight = { enabled = true, switch = 1 } },
+  local narrow = readBoard(Drive.newDrive(radio, Drive.settings({ inflight = { enabled = true } },
     { inflight = { enabled = true } })), function(records)
       for _, record in pairs(records) do
         if record.adjFunction == 40 then record.adjMin, record.adjMax = 10, 200 end
@@ -119,10 +119,10 @@ for _, group in ipairs(d.groups) do
 end
 check(count == 36, "all standard driveable cells are present")
 local armedPhase = d.phase
-d.live, d.phase = false, "ground"
+d.open, d.live, d.phase = false, false, "ground"
 local groundWrites = #writes
-check(not d:dispatch("group", 1, "key") and #writes == groundWrites, "PAGE cannot arm a bank with the interlock open")
-d.live, d.phase = true, armedPhase
+check(not d:dispatch("group", 1, "key") and #writes == groundWrites, "PAGE cannot arm a bank with the surface closed")
+d.open, d.live, d.phase = true, true, armedPhase
 local set = { { 1, 82, 250, 5, 14, 4 }, { 64, 3, 2 } }
 local windows = { { { up = 5 }, { up = 5 }, { down = -5 }, { up = 10 }, { up = 15 }, { up = 20 } },
   { { up = 5 }, { up = 10 }, { up = 15 } } }
@@ -165,7 +165,7 @@ accepted, reason = d:dispatch("step", 1, "touch")
 check(not accepted and reason == "profile_unknown", "unknown profile refuses")
 rate = 2
 accepted, reason = d:dispatch("step", 1, "touch")
-check(accepted and not d.profilePaused and d:tuning(), "read profile resumes without interlock cycle")
+check(accepted and not d.profilePaused and d:tuning(), "read profile resumes without closing and reopening tuning")
 check(sounds[#sounds] == "inflight/resumed.wav", "returning to a read profile requests resumed clip")
 d:cleanup(false)
 local trimHeld = true
@@ -203,7 +203,7 @@ fenced:activateProfiles()
 pid = 3; ticks = ticks + 1; fenced:fastTick(ticks)
 pid = 1; ticks = ticks + 1; fenced:fastTick(ticks)
 check(fenced.values[14] == 100, "returning profiles cannot adopt a stale foreign report while paused")
--- Acknowledge the profiles as a stable interlock cycle does; the report fence is independent.
+-- Acknowledge the profiles as reopening tuning does; the report fence is independent.
 fenced.profilePaused = false
 ticks = ticks + 1; fenced:fastTick(ticks)
 accepted, reason = fenced:dispatch("step", 1, "touch")
@@ -353,8 +353,8 @@ local lastEntry = #d.groups[d.group].entries
 check(d:dispatch("function", nil, "key", lastEntry), "select last function for end control")
 check(Input.key(widget, 516) and d.entry == lastEntry and d.stepRefusedReason == "list_end" and d.valueMode,
   "PAGE last end does not wrap or leave value mode")
-check(Input.key(widget, 513) and not d.valueMode and not d.closedByInput, "RTN leaves value mode only")
-check(Input.key(widget, 513) and not d.closedByInput, "duplicate RTN cannot leave two levels")
+check(Input.key(widget, 513) and not d.valueMode and d.open and d.live, "RTN leaves value mode only")
+check(Input.key(widget, 513) and d.open and d.live, "duplicate RTN cannot leave two levels")
 ticks = ticks + 1
 local exits = 0
 lcd = { exitFullScreen = function() exits = exits + 1 end }
@@ -365,7 +365,7 @@ check(Input.key(widget, 516) and d.group == valueGroup + 1, "PAGE changes group 
 widget._job = { kind = "tuning_fs" }
 widget.state.armed = true
 check(d.live and d.phase == "live", "close controls run in the air")
-check(Input.key(widget, 513) and not d.closedByInput and widget._job ~= nil and exits == 0 and d.live,
+check(Input.key(widget, 513) and d.open and d.live and widget._job ~= nil and exits == 0 and d.live,
   "RTN from browse in the air is consumed and does not close")
 check(not d:dispatch("close", nil, "touch", nil, true) and d.live and exits == 0, "a close request in the air is refused")
 local liveGroup = d.group
@@ -404,7 +404,7 @@ do
     print((ok and "PASS " or "FAIL ") .. name .. (ok and "" or ": " .. tostring(err)))
   end
   regression("ground RTN closes only tuning and cancels build", function()
-    check(groundCloseAccepted and d.closedByInput and widget._job == nil and exits == 0,
+    check(groundCloseAccepted and not d.open and not d.live and widget._job == nil and exits == 0,
       "RTN on the ground stays fullscreen")
   end)
   local function viewFor(instance, armed)
@@ -463,7 +463,7 @@ do
           local view = viewFor(instance, true)
           local beforeWrites = #writes
           local ok = Input.dispatch(view, action, nil, source)
-          check(not ok and not instance.closeRequested and not instance.closedByInput
+          check(not ok and not instance.closeRequested and instance.open and instance.live
             and (phase ~= "setup" or instance.fcSetupOpen)
             and view.inflightFullscreen and #writes == beforeWrites, "armed browse cannot close")
           check(not instance:dispatch(action, nil, source, nil, true), "drive guard refuses armed close directly")
@@ -475,7 +475,7 @@ do
         instance.valueMode = true
         local view = viewFor(instance, true)
         check(Input.dispatch(view, "back", nil, source) and not instance.valueMode
-          and not instance.closedByInput and view.inflightFullscreen, "RTN leaves only value mode")
+          and instance.open and instance.live and view.inflightFullscreen, "RTN leaves only value mode")
       end)
     end
   end
@@ -510,6 +510,7 @@ do
     check(instance.post and instance.fired == 3 and instance.primedValues[18] == 100, "post comparison retained on close")
     -- The quick menu raises only this flag; a normal drive tick republishes the read-out.
     view.inflightFullscreen = true
+    instance.open = true
     instance._checkedAt, instance._checkResult = ticks, "ok"
     Drive.tick(view, instance)
     check(view.state.inflight.phase == "post" and instance.post and instance.deltaPage == 2,
@@ -519,17 +520,15 @@ do
     walk(nodes, function(node) if node.text == "RTN close / Board has saved" then saved = true end end)
     check(saved, "reopened post surface renders its footer")
   end)
-  regression("ground interlock release retains session", function()
+  regression("ground surface close retains session", function()
     local instance = drive()
     instance:setPhase("ground")
     instance.primedValues, instance.baseline = {[18] = 100}, {pid1 = {[18] = 100}}
     local baseline = instance.baseline
-    instance.seeded, instance.rawSwitch, instance.rawSince = true, false, ticks - 100
     instance._checkedAt, instance._checkResult = ticks, "ok"
-    switch = false
-    instance:evaluateInterlock(ticks)
-    check(not instance.live and instance.bankWritten == 0, "interlock release clears the live output")
-    check(instance.baseline == baseline and instance.primedValues[18] == 100, "interlock release retains start values")
+    instance:evaluateInterlock(ticks, false)
+    check(not instance.live and instance.bankWritten == 0, "surface close clears the live output")
+    check(instance.baseline == baseline and instance.primedValues[18] == 100, "surface close retains start values")
   end)
   print(passed .. " close regressions passed; " .. #failures .. " failed")
   check(#failures == 0, table.concat(failures, "\n"))
@@ -704,13 +703,7 @@ do
         and not action(locked, "Read again") and not action(locked, "Restore all"), "armed/missing-arm scenes retain no ground actions")
     end
     view.state.armed, refusal = false, nil
-    local zone, hint = {}, false
-    Screen.buildZone(zone, view)
-    walk(zone, function(node)
-      check(node.type ~= "button", "zone remains a read-out without touch actions")
-      if textOf(node) == "long press for touch controls" then hint = true end
-    end)
-    check(hint, "zone retains its fullscreen hint")
+    check(Screen.buildZone == nil, "the dashboard zone has no tuning builder")
   end
   BoardPrime.start, BoardPrime.refreshValues, BoardPrime.retryReturn = savedStart, savedRefresh, savedRetry
   BoardPrime.groundRefusal, BoardPrime.isRunning = savedRefusal, savedRunning
@@ -753,21 +746,6 @@ for _, size in ipairs({ { 480, 272 }, { 480, 320 }, { 800, 480 } }) do
     end
     check(bar and step and current and title and cancel and retry, "busy scene has title, bar, steps and actions")
     check(title.font == (size[2] > 350 and DBLSIZE or MIDSIZE), "busy title uses the large font")
-    -- The zone shows the same busy surface while the job runs, without the two actions.
-    local zoneNodes, zoneTexts, zoneButtons = {}, {}, 0
-    Screen.buildZone(zoneNodes, view)
-    for _, node in ipairs(zoneNodes) do
-      if node.type == "button" then zoneButtons = zoneButtons + 1 end
-      if node.type == "label" then
-        local text = type(node.text) == "function" and node.text() or node.text
-        zoneTexts[tostring(text) .. "@" .. node.y] = true
-      end
-    end
-    check(zoneButtons == 0, "zone busy surface has no actions")
-    for _, node in ipairs({title, step, current}) do
-      local text = type(node.text) == "function" and node.text() or node.text
-      check(zoneTexts[tostring(text) .. "@" .. node.y], "zone busy surface matches fullscreen: " .. tostring(text))
-    end
     check(title.y < bar.y and bar.y + bar.h < step.y and step.y < current.y and current.y < cancel.y,
       "busy rows and bottom action fit at every supported size")
     local background
@@ -1750,18 +1728,15 @@ do
   for _, background in ipairs({false, true}) do
     for _, stepped in ipairs({true, false}) do
       local instance = drive()
-      instance.seeded, instance.rawSwitch, instance._checkedAt, instance._checkResult = true, true, ticks, "ok"
-      switch = true
+      instance.open, instance._checkedAt, instance._checkResult = true, ticks, "ok"
       if stepped then check(instance:dispatch("step", 1, "touch"), "interrupted-flight positive step") end
       if background then
         Drive.cleanup({_inflight = instance})
       else
-        switch = false; instance:tick(true)
-        ticks = ticks + 31; instance:tick(true)
-        check(not instance.live, "interlock opens while armed")
+        instance.open = false; instance:tick(true)
+        check(not instance.live, "surface closes while armed")
       end
-      switch = true; instance:tick(true)
-      ticks = ticks + 31; instance:tick(true)
+      instance.open = true; instance:tick(true)
       check(instance.live and instance.phase == "live", "interrupted flight resumes in the air")
       instance:tick(false)
       check(instance.phase == (stepped and "post" or "ground"), "landing retains only a flight that stepped")
@@ -1771,7 +1746,7 @@ do
   local instance = drive()
   instance:dispatch("step", 1, "touch")
   Drive.cleanup({_inflight = instance})
-  switch = true; instance:tick(false); ticks = ticks + 31; instance:tick(false)
+  instance.open = true; instance:tick(false)
   check(instance.phase == "post", "landing while backgrounded retains the post-flight list on reopening")
   instance:cleanup(false)
 end
@@ -1801,8 +1776,8 @@ do
   instance:forgetVerdict(); instance._checkResult, instance._checkedAt, instance._checkFault = "ok", ticks, false
   Drive.sample(view)
   check(text() == "Model: Setup OK", "control: all repaired produces setup OK")
-  instance.phase, instance.live, instance.seeded, instance.rawSwitch = nil, false, true, true
-  instance.rawSince = ticks - 31; switch = true; instance:tick(true)
+  instance.phase, instance.live, instance.open = nil, false, true
+  instance:tick(true)
   check(instance.phase == "live", "all repaired permits the live phase")
 end
 

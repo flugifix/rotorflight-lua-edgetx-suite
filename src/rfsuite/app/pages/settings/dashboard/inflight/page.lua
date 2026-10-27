@@ -21,7 +21,7 @@ local M = {}
 -- The switch picker's filters, as the firmware numbers them. Named here rather than reached for
 -- as globals, following app/pages/setup_wizard/proc_radio.lua: SW_SWITCH is the physical switch
 -- block, SW_NONE the empty entry that lets a pilot clear the choice. Trims are a filter of their
--- own and are deliberately not offered -- a trim is a row, not the interlock.
+-- own and are deliberately not offered -- a trim drives a row rather than releasing the surface.
 local SW_SWITCH = 1
 -- The trim block, as its own filter. A trim is offered by the picker as two positions -- the
 -- decrement and the increment -- and the overlay stores the increment; see Setup.normaliseTrim.
@@ -359,7 +359,7 @@ local function describeCheck(i18n, result)
   end
 
   local parts = {}
-  if unset then parts[#parts + 1] = t(i18n, "check_unset", "Switch or variables not set") end
+  if unset then parts[#parts + 1] = t(i18n, "check_unset", "Variables not set") end
   if sameGvar then
     parts[#parts + 1] = t(i18n, "check_same_gvar", "Bank and value point at the same variable")
   end
@@ -721,25 +721,7 @@ local function buildGeneral(children, x, y, w, i18n)
     ui.runtime.getBoolSetter("enabled"))
   cursorY = cursorY + appendNote(children, x, cursorY, w,
     t(i18n, "enabled_note",
-      "The master switch. Each model has one of its own under Setup > Controls, and both have to be on."))
-
-  -- The interlock. The picker stores a signed switch POSITION, which is what getSwitchValue takes,
-  -- so nothing has to be resolved between what the pilot chose and what the overlay reads.
-  local pickerW = 172
-  if pickerW > w then pickerW = w end
-  local rowH = Controls.ROW_H
-  children[#children + 1] = {
-    type = "label", x = x, y = Controls.labelY(cursorY, rowH), w = w - pickerW - 18,
-    text = t(i18n, "switch", "Interlock switch"), color = Palette.text, font = SMLSIZE
-  }
-  children[#children + 1] = {
-    type = "switch",
-    x = x + w - pickerW - 10, y = Controls.controlY(cursorY, rowH), w = pickerW, h = rowH - 6,
-    filter = SW_SWITCH | SW_NONE,
-    get = function() return ui.config.switch or 0 end,
-    set = function(value) markValue("switch", tonumber(value) or 0) end
-  }
-  cursorY = cursorY + rowH
+      "The master switch for every model."))
 
   cursorY = cursorY + appendNote(children, x, cursorY, w, describeCheck(i18n, checkResult()))
 

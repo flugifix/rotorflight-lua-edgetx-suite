@@ -35,7 +35,7 @@ for _, mode in ipairs({"read", "restore"}) do
     owner.state.profile, owner.state.rateProfile=index,index
     process(); Teller.profile(owner,index)
   end
-  check(#files==0 and #numbers==0, mode.." suppresses both announcers with interlock absent")
+  check(#files==0 and #numbers==0, mode.." suppresses both announcers with the surface closed")
   check(owner.audioState.lastValues.pid_profile==1 and owner.audioState.lastValues.rate_profile==2,
     "general announcer remembers the original pair")
   rfsuite.inflightProfileJob=nil
@@ -58,7 +58,8 @@ do
   local radio = {now = function() return tick end, sensor = function(name)
     if name == "PID#" then return pid elseif name == "RTE#" then return rate end
   end, setGlobalVariable = function() return true end, flightMode = function() return 0 end}
-  local drive = Drive.newDrive(radio, Drive.settings({inflight={enabled=true,switch=1}}, {inflight={enabled=true}}))
+  local drive = Drive.newDrive(radio, Drive.settings({inflight={enabled=true}}, {inflight={enabled=true}}))
+  drive.open = true
   drive._radioSource = owner.preferences
   drive.profile, drive.rateProfile, drive.phase, drive.live = 1, 2, "live", true
   drive.sessionProfiles = {pid={[1]=true,[2]=true,[3]=true}, rate={[2]=true,[3]=true}}

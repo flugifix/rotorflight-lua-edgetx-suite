@@ -48,6 +48,7 @@ local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
 local function translate(_, fallback) return fallback end
 local function view(count)
   local drive = Drive.newDrive(nil, Setup.settings({inflight = {enabled = true}}, {}))
+  drive.open = true
   drive.phase, drive._checkResult, drive._checkedAt = "ground", "ok", 1000
   local widget = {_inflight = drive, i18n = {t = translate}, zone = {w = 480, h = 272},
     state = {armed = false, armedSeen = true, fblConnected = true,

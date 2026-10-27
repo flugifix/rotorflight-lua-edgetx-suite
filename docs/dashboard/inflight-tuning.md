@@ -5,8 +5,9 @@ sidebar_label: In-flight tuning
 
 # In-flight tuning overlay
 
-A surface the dashboard widget puts in front of the theme while a switch is on, so that the
-flight controller's own adjustment functions can be driven from the air without a menu.
+A fullscreen surface opened from the dashboard's quick menu, so that the flight controller's
+own adjustment functions can be driven from the air. Tuning is released only while this surface
+is open in the foreground; the dashboard zone continues to draw its theme.
 
 It is a **preview feature**: it is hidden until *System* → *Settings* → *General* →
 *Preview* → *In-flight tuning* is switched on, and switching it on asks first. It changes the
@@ -29,23 +30,24 @@ turning, and while the arm state has not been read at all.
 
 The radio wiring stays in
 [*System* → *Settings* → *Dashboard* → *In-Flight Tuning*](../pages/settings/dashboard/inflight.md):
-the master switch, interlock switch, channels, variables and optional trims.
+the master switch, channels, variables and optional trims.
 **Set up the model** shows its proposed mixer, pulse-timer, variable and trim changes before writing.
 A model set up by an earlier version needs this once more if its value line has no logical
 switch and the check reports **Mixer line missing or wrong**.
 
-A model whose board carries tuning slots is now tunable whenever the radio's master switch is on.
-The per-model tuning switch has been removed; old stored switch and set-layout values are ignored.
-The model setup check must still pass before the interlock can drive the channels.
+A model whose board carries tuning slots is tunable while the radio's master switch is on and
+the tuning fullscreen is open. Open the dashboard in fullscreen, then choose **In-flight tuning**
+from its quick menu. Stored interlock-switch and set-layout values are ignored.
+The model setup check must still pass before the surface can drive the channels. A setup fault
+is shown on the fullscreen ground surface.
 
 With **Drive rows from the trims** on, the check also needs to know which of the radio's
-switch positions are its trims. The first time the interlock is closed after the widget
-starts, or after these settings change, the surface the closing brings up shows **Model: Checking
-trims** while the radio's switch list is read, a slice per pass, and the interlock stays refused
-until that is done — about one pass of the widget for every 32 positions the radio lists, plus one.
-Until the check after that first closing is in, the ground surface reached from the quick settings
-menu reads *Setup not checked*, and a fault of the model is shown only once the interlock is
-closed. A trim the overlay
+switch positions are its trims. The first time tuning is opened after the widget starts, or after
+these settings change, the surface shows **Model: Checking trims** while the radio's switch list
+is read, a slice per pass. Output stays refused until that is done — about one pass of the widget
+for every 32 positions the radio lists, plus one. The setup check follows on the next pass.
+Close tuning and open it again from the quick menu to repeat the setup check after a repair.
+A trim the overlay
 claims has to be off in every flight mode, not only the active one. A flight mode that uses
 another mode's trim (EdgeTX's default for FM1 to FM8, which follow FM0) counts as that mode;
 one with a trim of its own, or with an offset of its own on top of another mode's, counts as
@@ -77,8 +79,16 @@ cells. This prevents the FC's clamp from jumping an out-of-range value to a slot
 
 ## The three surfaces
 
-Open the tuning screen with the interlock switch or the dashboard quick menu. What it shows
-follows the flight.
+Open the dashboard in fullscreen and choose **In-flight tuning** from the quick menu. What it
+shows follows the flight. Opening releases tuning on that pass, with no switch or debounce.
+On the ground, X or RTN closes tuning and returns to the quick menu; the session persists.
+In the air there is no X, and RTN only leaves value mode. A firmware fullscreen exit (long RTN)
+or a page switch pauses tuning immediately: both variables go to zero. Reopen tuning from the
+quick menu while still armed to continue at the same group and parameter. Link loss removes the
+release immediately but keeps the tuning visit open, showing **PAUSED** and **No FC link**.
+When the link and arm telemetry return, the same visit resumes automatically at the same group
+and parameter, subject to the existing flight-controller identity and session checks. Disabling
+the feature closes the visit; enabling it again requires opening tuning from the quick menu.
 
 ### On the ground, before the flight
 
@@ -236,8 +246,8 @@ values, steps and post-flight comparison remain available when tuning is reopene
 Every flight starts at the first function of the first group. The overlay
 owns these release events ahead of pending builds and theme bindings. Navigation stops at list ends and gives end feedback; a request during a pulse or
 cooldown is refused and never queued. Closing clears the variables, cancels pending speech and
-leaves value mode. The interlock must be released before it can activate tuning again; the quick
-menu can reopen the read-out immediately.
+leaves value mode. Opening tuning again from the quick menu releases it immediately. A pause
+within the same flight keeps the selected group and parameter.
 
 **Encoder:** rotate to highlight the previous/next function and request its settled name
 announcement. Press once to select it. In value mode, rotate one row to request one signed
@@ -292,7 +302,7 @@ Further steps in that direction can also be ignored until a step in the opposite
 changes the value and clears the tie.
 
 An unread PID/rate profile or unknown PID#/RTE# refuses steps with a clear reason and
-`inflight/paused.wav`. Returning to read profiles resumes without an interlock cycle; the held
+`inflight/paused.wav`. Returning to read profiles resumes without closing and reopening tuning; the held
 report fence still applies. Add another profile with **Reset start values** on the ground.
 
 **Speech uses the existing Adjustments announcer and its audio setting.** A selected group
@@ -305,7 +315,13 @@ the existing critical-alarm guard still applies.
 
 A per-model **flight_list** scalar can restrict the list to comma-separated adjustment function
 ids; an empty string means all safe parameters. A stored id no longer driveable on the FC
-is named by the setup check and refuses the interlock. Choose it under **Settings > Dashboard > In-Flight Tuning > Flight list (this model)**. The picker uses the completed ground slot read for this FC and channel pair; without slot data it shows the function table's tunable entries and says so. Choose a group, then toggle parameters; Previous/Next pages through groups longer than six rows. Stored unavailable IDs remain checked and marked **(missing)** until removed. **All parameters** clears the stored list; at least one parameter must remain selected in a filtered list. Save with the same FC connected to store this model's list. The picker sends no MSP; read the slots on the ground before checking availability. Opening it closes the radio sections to bound construction work. Native acceptance of the controls remains pending.
+is named by the setup check and refuses output. Choose the list with **Choose parameters** on the
+tuning ground screen after the ground slot read for this FC and channel pair has completed.
+Choose a group, then toggle parameters; Previous/Next pages through groups longer than six rows.
+Stored unavailable IDs remain checked and marked **(missing)** until removed. **All parameters**
+clears the filtered list; at least one parameter must remain selected in a filtered list.
+**Apply** changes this session's list; **Save default** also stores it for this model with the
+same FC connected. The picker sends no MSP. Native acceptance of the controls remains pending.
 
 In the widget zone the surface is a read-out; a long press opens the touch controls fullscreen.
 
@@ -340,16 +356,19 @@ Per-target results distinguish RAM verification with an unconfirmed save, an ack
 with read-back pending, and verified read-back after the save. The last case proves a save
 acknowledgement plus immediate rereading, not survival of a power cycle. A failed restore may
 already have written some fields: this is not an atomic FC rollback. An uncertain save is not
-repeated automatically. Return recovery remains deferred while armed or disconnected.
+repeated automatically. Return recovery remains deferred while armed, disconnected, or tuning
+is closed. Reopen tuning on the ground to let an outstanding original-profile return continue.
 
 Read and restore jobs show their current target instead of the change list; restore/read actions
 are unavailable until the job finishes. Temporary profile selections and the final return are
-silent in both the overlay and the general profile announcer, including with the interlock off.
+silent in both the overlay and the general profile announcer, including while tuning is closed.
 Ordinary in-flight profile announcements remain enabled.
 
-Closing on the ground and releasing the interlock retain the in-memory session and the completed
-SD baseline. Only an explicit session reset or the existing model, flight-controller and link
-changes end the session. Closing, backgrounding, link loss and profile edges clear
+Closing tuning on the ground or in the air retains the in-memory session and the completed
+SD baseline. Only an explicit session reset or the existing model and identified flight-controller
+changes end the session. A link interruption to the same flight controller keeps the session and
+the fullscreen visit, resuming automatically once the link and arm state are known. Closing,
+backgrounding, link loss and profile edges clear
 pulse/hold ownership and GVAR output in the flight mode where it was written. MSP never runs
 while armed. Existing setup, collision, range, trim, pulse and input ownership refusals remain.
 The encoder has two scroll windows sharing one input owner and the same row set. Their creation
@@ -366,7 +385,11 @@ Ground reads accept the firmware range of PID gains and rescue altitude P/I/D ga
 
 After a link interruption, tuning waits for the flight controller's UID to answer. The paused surface says *Waiting for FC identity*; a matching identity permits tuning again. Another identified controller ends the previous session. If a read or restore was suspended, its original-profile return is still owed to the disconnected controller and is logged; it does not block a new read on the connected controller.
 
-Opening the interlock or backgrounding the widget in flight retains the flight's steps for the post-flight list, including when the widget returns after landing. The ground model-status sentence updates as setup faults are repaired. Session timestamps are displayed as `YYYY-MM-DD HH:MM`; existing SD snapshots remain compatible.
+Closing fullscreen or backgrounding the widget in flight pauses tuning, clears both variables,
+and retains the flight's steps for the post-flight list, including when the widget returns after
+landing. Reopening during the same flight continues at the same group and parameter. Ground MSP
+work runs only while tuning is open. The ground model-status sentence updates as setup faults are
+repaired. Session timestamps are displayed as `YYYY-MM-DD HH:MM`; existing SD snapshots remain compatible.
 
 ## Related
 

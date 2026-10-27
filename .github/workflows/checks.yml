@@ -50,6 +50,9 @@ jobs:
       - name: Grouped in-flight tuning and session ownership
         run: lua5.3 bin/dashboard/verify_inflight_groups.lua
 
+      - name: In-flight fullscreen release and exit safety
+        run: lua5.3 bin/dashboard/verify_inflight_surface.lua
+
       - name: Multi-profile ground transactions and SD baseline
         run: lua5.3 bin/dashboard/verify_inflight_profiles.lua
       - name: Silent ground profile selections

@@ -691,13 +691,8 @@ local function inflightDrive()
   return loadInflightModule(InflightDriveCache, "widgets/dashboard/inflight/drive.lua")
 end
 
--- Three switches, and they answer different questions. The preview switch under
--- Settings > General is the pilot saying he wants an unfinished feature on the radio at all;
--- the radio's own `enabled`, beside the interlock switch it belongs with, says he wants the
--- overlay on this transmitter; the per-model `enabled` says which model it is set up for. None
--- implies another, so all three are read, and this is the one place the widget half asks: with
--- any of them off the drive is never constructed, no module of the overlay is loaded and no
--- variable is written.
+-- Preview and the radio master setting enable tuning. Opening its fullscreen surface releases
+-- output; the setup check and the completed FC slot read determine what can be tuned.
 --
 -- The global preferences the widget holds are re-read when the file changes, and that reload
 -- is held back while the craft is armed -- so a preview or a radio switch changed in the air is
@@ -712,13 +707,28 @@ local function inflightEnabled(self)
 end
 
 --- Everything the overlay wrote goes back to 0. Called on every way out -- the widget going to
--- background, the link dropping, the feature being switched off -- because which transition is
+-- background, fullscreen closing, the feature being switched off -- because which transition is
 -- actually observed is not knowable in advance, and a value variable left standing keeps the
 -- flight controller stepping.
 local function cleanupInflight(self)
-  if self._inflight == nil then return end
+  local instance = self._inflight
+  if self.inflightFullscreen == true or (instance and instance.open == true) then
+    self.built, self.renderKey, self._cachedTuningKey = false, nil, nil
+  end
+  if self._job and self._job.kind == "tuning_fs" then self._job = nil end
+  self.inflightFullscreen = nil
+  if instance == nil then return end
   local drive = inflightDrive()
   if drive then drive.cleanup(self) end
+end
+
+-- Telemetry loss revokes output but keeps the fullscreen visit available for automatic resume.
+local function pauseInflight(self)
+  local instance = self._inflight
+  if instance == nil then return end
+  if instance.linkLost ~= true then self._tuningKeyDirty = true end
+  local drive = inflightDrive()
+  if drive then drive.pause(self) end
 end
 
 -- The overlay's ground half, loaded on the same terms and separately from the drive: it speaks
@@ -728,7 +738,7 @@ local function inflightPrime()
   return loadInflightModule(InflightPrimeCache, "widgets/dashboard/inflight/prime.lua")
 end
 
--- The screen is loaded by the two tuning job steps, which already answer "nothing built this pass"
+-- The screen is loaded by the tuning fullscreen job, which already answers "nothing built this pass"
 -- when it is not there. It goes through the same gate so that a job pass cannot re-read the file
 -- on every pass either.
 local InflightScreenCache = {}
@@ -745,7 +755,7 @@ end
 --
 -- src/widgets/rfsuite/main.lua holds a widget off for 1.2 s after a CPU limit and RETURNS before
 -- widget.refresh for the whole of that time. Every path that takes the overlay's two variables
--- back to 0 -- the interlock falling, fullscreen closing, the widget going to background, the link
+-- back to 0 -- tuning closing, fullscreen closing, the widget going to background, the link
 -- dropping -- lives inside refresh or background, so for those 1.2 s not one of them runs. A value
 -- left standing there is a flight controller stepping a parameter every 200 ms with nothing
 -- driving it, which is exactly the state the whole drive is built to make impossible.
@@ -779,24 +789,27 @@ local function installInflightPanic(self)
   end
 end
 
---- One pass of the overlay. Off the overlay this costs one table lookup; with it enabled but the
--- interlock open, one switch read.
+--- Advance ground work only while the tuning fullscreen owns the foreground surface.
 local function tickInflight(self)
   local enabled = inflightEnabled(self)
   if self._inflight and self._inflight.profileJob and
     (self._foreground ~= true or not enabled) then
     self._inflight.profileJob.cancelled = true
-    local prime = inflightPrime()
-    if prime then prime.tick(self, self._inflight) end
   end
-  if self._foreground ~= true or not enabled then
+  if self._foreground ~= true or not enabled or self.inflightFullscreen ~= true then
     cleanupInflight(self)
     return
   end
+  if self.state.fblConnected ~= true or (self._inflight and self._inflight.linkLost == true
+      and self.state.armedSeen ~= true) then pauseInflight(self); return end
   local drive = inflightDrive()
   if not drive then return end
   local instance = drive.get(self)
-  if instance ~= nil then installInflightPanic(self) end
+  if instance ~= nil then
+    if instance.linkLost then self._tuningKeyDirty = true; instance.linkLost = nil end
+    instance.open = true
+    installInflightPanic(self)
+  end
   -- The ground half runs BEFORE the drive's own pass, on the same drive object: what it moves has
   -- to reach the published snapshot in the pass that moved it, and it is the drive's pass that
   -- publishes.
@@ -820,21 +833,36 @@ local function sampleInflight(self)
   if drive and type(drive.sample) == "function" then drive.sample(self) end
 end
 
--- Which tuning surface this pass belongs to, or nil for the dashboard as it has always been.
--- `zone` needs the interlock; `fs` is also reached from the quick settings menu with the
--- interlock open, where the drive is inert and the screen is a read-out.
-local function inflightMode(self, isInteractive)
-  local snapshot = self.state and self.state.inflight
-  if type(snapshot) ~= "table" then return nil end
-  if isInteractive then
-    if snapshot.live == true or self.inflightFullscreen == true then return "fs" end
-    return nil
+-- Surface ownership is sampled before native input and before any job can return early.
+local function updateInflightRelease(self)
+  if self.inflightFullscreen ~= true or self._foreground ~= true
+      or not inflightEnabled(self) then
+    cleanupInflight(self)
+    return
   end
-  -- `setupFault` is the interlock closed and the overlay refusing: the model's setup check found
-  -- something that would make a press move the wrong parameter. The zone surface comes up anyway
-  -- and its ground read-out names the fault, because a switch that does nothing and says nothing
-  -- is the one failure a pilot cannot act on.
-  if snapshot.live == true or snapshot.setupFault == true then return "zone" end
+  local Drive = inflightDrive()
+  local instance = Drive and (self._inflight or Drive.get(self))
+  if instance then
+    installInflightPanic(self)
+    -- Reconnection resets the arm latch; missing arm data must not turn a paused flight into
+    -- a landing and then reset its selection when armed telemetry arrives again.
+    if self.state.fblConnected ~= true or (instance.linkLost == true
+        and self.state.armedSeen ~= true) then pauseInflight(self); return end
+    if instance.linkLost then self._tuningKeyDirty = true; instance.linkLost = nil end
+    instance.open = true
+    -- Steady passes use the fast sampler. Opening and an arm/disarm edge must also choose
+    -- the phase before native input; neither waits for the dashboard's slower logic tick.
+    if not instance.live or instance.settings.active ~= true
+        or (self.state.armed == true) ~= (instance.phase == "live") then
+      instance:tick(self.state.armed == true)
+    end
+  end
+end
+
+-- Only the explicitly opened fullscreen visit can draw tuning.
+local function inflightMode(self, isInteractive)
+  if isInteractive and self.inflightFullscreen == true
+      and type(self.state and self.state.inflight) == "table" then return "fs" end
   return nil
 end
 
@@ -1589,21 +1617,8 @@ local function releaseInflightHold(self)
   if drive and type(drive.release) == "function" then drive.release(self) end
 end
 
--- The tuning overlay's two builds. Both complete in one step, like the menu: the tree is a fixed
+-- The tuning fullscreen build completes in one step, like the menu: the tree is a fixed
 -- handful of nodes rather than a theme's box list, so there is nothing to spread over passes.
-local function tuningJobStep(self)
-  local screen = inflightScreen()
-  if not (screen and type(screen.buildZone) == "function") then return true end
-  local children = {}
-  screen.buildZone(children, self)
-  releaseInflightHold(self)
-  lvgl.clear()
-  lvgl.build(children)
-  self.built = true
-  self._lastChildCount = #children
-  return true
-end
-
 local function tuningFullscreenJobStep(self)
   local screen = inflightScreen()
   if not (screen and type(screen.buildFullscreen) == "function") then return true end
@@ -4344,8 +4359,8 @@ function Runtime.new(zone, options)
         Sensors.reset()
       end
       -- The link is gone, so nothing can report what the board is doing with what the overlay
-      -- last wrote. Both variables go back to 0 here rather than being left for the interlock.
-      cleanupInflight(self)
+      -- last wrote. Both variables go back to 0 here rather than being left for the next tuning pass.
+      pauseInflight(self)
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
         DashboardAudio.resetConnectionState(self.audioState)
       end
@@ -4495,8 +4510,7 @@ function Runtime.new(zone, options)
     if event == nil then
       -- Outside fullscreen there is no touch target that could be holding a step: a hold left by
       -- a fullscreen exit ends on this pass rather than on the next rebuild.
-      releaseInflightHold(self)
-      self.inflightFullscreen = nil
+      cleanupInflight(self)
       self._viewStack = nil
       self._cachedFullscreenKey = nil
       local job = self._job
@@ -4505,6 +4519,12 @@ function Runtime.new(zone, options)
         self.built = false
         self.renderKey = nil
       end
+    end
+
+    -- Revoke before any fast sample, native callback, build or early return. Link recovery
+    -- resumes a retained visit; feature recovery requires opening tuning from the quick menu again.
+    if event ~= nil and (self._inflight ~= nil or self.inflightFullscreen == true) then
+      updateInflightRelease(self)
     end
 
     -- The suite's tool, opened from a fullscreen control, runs in place of the whole pass until
@@ -4570,6 +4590,11 @@ function Runtime.new(zone, options)
        -- We need to ensure LVGL knows the widget's offset if it doesn't handle it.
        -- However, in Fullscreen, offset is usually 0,0.
        lvgl.onEvent(event, touchState)
+    end
+    -- The quick-menu press can open tuning inside onEvent on this very pass.
+    if self.inflightFullscreen == true and (self._inflight == nil or self._inflight.open ~= true) then
+      updateInflightRelease(self)
+      sampleInflight(self)
     end
     if self._toolHost ~= nil then
       releaseStandby(self, "tool_open")
@@ -4716,6 +4741,7 @@ function Runtime.new(zone, options)
       end
     end
     local ready = performBackgroundWork(self, false)
+    local tuningMode = inflightMode(self, event ~= nil)
 
     local dashboardPrefs = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
     local standbyEnabled = dashboardPrefs.standby_enabled == true
@@ -4724,6 +4750,7 @@ function Runtime.new(zone, options)
       standbyFcDetected = type(runtimeState) == "table" and runtimeState.lastConnected == true
     end
     local standbyRenderActive = self._toolHost == nil and not ready
+      and not tuningMode
       and self.flightMode ~= "postflight" and self.flightMode ~= "offline"
       and standbyEnabled and self.state.armed ~= true
       and self.state.hadInflightFlight ~= true
@@ -4782,7 +4809,7 @@ function Runtime.new(zone, options)
       local Views = viewsModule()
       explicitView = Views ~= nil and Views.top(self) ~= nil
     end
-    if not ready and self.flightMode ~= "postflight" and self.flightMode ~= "offline" and not explicitView then
+    if not ready and self.flightMode ~= "postflight" and self.flightMode ~= "offline" and not explicitView and not tuningMode then
       local statusLine = self.statusLine or "Please wait..."
       -- Full screen and the zone are two splashes, because only the first carries the tool control.
       local fullscreenSplash = event ~= nil
@@ -4820,14 +4847,13 @@ function Runtime.new(zone, options)
     -- A theme reload that fell on a read pass waits for the next logic tick; the deferral itself
     -- is in performBackgroundWork. Queuing a scene job here would build against the theme that
     -- reload is about to replace, and run ahead of it. widget.background queues no scene jobs.
-    if self._themeReloadPending then
+    if self._themeReloadPending and not tuningMode then
       self._passEndAt = nowSeconds()
       return
     end
 
-    if not self.theme then return end
+    if not self.theme and not tuningMode then return end
 
-    local tuningMode = inflightMode(self, isInteractive)
     -- The readings of the fullscreen view on top, where it names any (viewSnapshotSources); every
     -- other surface leaves this nil, so leaving fullscreen stops reading them.
     local viewSources = nil
@@ -4930,9 +4956,7 @@ function Runtime.new(zone, options)
     -- `jobFullscreen` is the base layer's mark, which views.lua reads to drop a queued fullscreen
     -- build on a key; the failure surface that stands in for that build carries it too.
     local jobKind, jobStep, jobFullscreen = nil, nil, nil
-    if tuningMode == "zone" then
-      jobKind, jobStep = "tuning", tuningJobStep
-    elseif tuningMode == "fs" then
+    if tuningMode == "fs" then
       jobKind, jobStep = "tuning_fs", tuningFullscreenJobStep
     elseif isInteractive then
       -- The job is named after the view, so the job log line reads "menu" and "battery_pick"
@@ -4964,7 +4988,7 @@ function Runtime.new(zone, options)
     -- The hold rule above keeps the tuning key still, but `built` and the render key are cleared
     -- from elsewhere as well: a theme reload (the latch into flight loads the in-flight module, a
     -- changed preference), the voltage bounds moving, new widget options. Each would rebuild the
-    -- tuning surface under the finger, and the rebuild lets go of the hold first (tuningJobStep),
+    -- tuning surface under the finger, and the rebuild lets go of the hold first (tuningFullscreenJobStep),
     -- so the held step ended with the finger still down. While a control is held and the tree on
     -- screen is the one this pass would build -- same job, same key -- that rebuild waits: `built`
     -- stays false and the first pass after the release builds it. A build of another surface --
@@ -5002,6 +5026,7 @@ function Runtime.new(zone, options)
     -- Off screen. The overlay's own tick refuses to drive from here and cleans up instead, which
     -- is what makes a widget scrolled away stop writing the two variables.
     self._foreground = false
+    cleanupInflight(self)
     releaseStandby(self, "widget_background")
 
     -- Still running, so still passing: the heartbeat, as traceInstructionUsage publishes it at
