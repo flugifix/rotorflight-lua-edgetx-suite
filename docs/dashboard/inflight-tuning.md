@@ -82,7 +82,7 @@ follows the flight.
 
 ### On the ground, before the flight
 
-![Historical ground surface (previous palette)](../images/inflight/overlay-ground.png)
+![The ground surface: model check, FC slots, session, and the actions](../images/inflight/overlay-ground.png)
 
 Three status lines show **Model** (the setup verdict), **FC slots** (the number of parameters
 read from the board, plus skipped slots), and **Session** (continued or new, with the stored
