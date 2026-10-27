@@ -663,12 +663,13 @@ end
 -- limit, so a model that does not use it never pays for the module.
 --- A load that FAILED is not a load that will always fail.
 --
--- These files are read the first time a pilot's model has the overlay switched on, which on a
--- radio that came up without a flight controller is the pass the connect chain and the theme
--- reload are already filling. lib/require.lua runs a chunk under pcall, and a pcall catches the
--- firmware's instruction-limit error like any other -- so that pass can lose the load through no
--- fault of the file. Latching the answer to `false` there turned one busy pass into an overlay
--- that stayed off for the rest of the session.
+-- These files are read the first time a pilot opens the fullscreen overlay with tuning enabled.
+-- Loading at feature enablement used to put them on a pass the connect chain and the theme
+-- reload were already filling, particularly on a radio that came up without a flight controller.
+-- lib/require.lua runs a chunk under pcall, and a pcall catches the firmware's instruction-limit
+-- error like any other -- so that pass could lose the load through no fault of the file.
+-- Latching the answer to `false` there turned one busy pass into an overlay that stayed off for
+-- the rest of the session. Staged loads still keep this failure gate for missing files.
 --
 -- So a failure is retried, and not on every pass: RETRY_TICKS apart, which on a radio's 10 ms tick
 -- is a second. A file that genuinely is not there then costs one load attempt per second and
@@ -688,7 +689,7 @@ end
 
 local InflightDriveCache = {}
 local function inflightDrive()
-  return loadInflightModule(InflightDriveCache, "widgets/dashboard/inflight/drive.lua")
+  return InflightDriveCache.module
 end
 
 -- Preview and the radio master setting enable tuning. Opening its fullscreen surface releases
@@ -735,20 +736,44 @@ end
 -- MSP and the drive does not, and a widget whose pilot has the feature off loads neither.
 local InflightPrimeCache = {}
 local function inflightPrime()
-  return loadInflightModule(InflightPrimeCache, "widgets/dashboard/inflight/prime.lua")
+  return InflightPrimeCache.module
 end
 
--- The screen is loaded by the tuning fullscreen job, which already answers "nothing built this pass"
--- when it is not there. It goes through the same gate so that a job pass cannot re-read the file
--- on every pass either.
+-- The screen is staged before the tuning fullscreen job, which already answers "nothing built this pass"
+-- when it is not there. Its preload goes through the same retry gate so that a loading pass cannot
+-- re-read a missing file on every pass either, and a build never has to compile it beside its tree.
 local InflightScreenCache = {}
 local function inflightScreen()
-  return loadInflightModule(InflightScreenCache, "widgets/dashboard/inflight/screen.lua")
+  return InflightScreenCache.module
 end
 
 local InflightInputCache = {}
 local function inflightInput()
-  return loadInflightModule(InflightInputCache, "widgets/dashboard/inflight/input.lua")
+  return InflightInputCache.module
+end
+
+-- Dependencies precede their callers, including the ground modules reached lazily by prime.
+-- Each refresh loads one entry and returns, even after the final successful load: source
+-- compilation and the firmware's bytecode write must have the pass to themselves. Accessors
+-- above only read these caches, so release, sampling, native input and jobs cannot load them.
+-- The list is shared like require's module cache; no widget starts it until tuning is opened.
+-- Suggested-functions modules keep their separate load/unload lifecycle inside that dialog.
+local InflightLoads = {
+  {name = "setup.lua"},
+  {name = "functions.lua"},
+  {name = "baseline.lua"},
+  {name = "profiles.lua"},
+  {name = "drive.lua", cache = InflightDriveCache},
+  {name = "input.lua", cache = InflightInputCache},
+  {name = "prime.lua", cache = InflightPrimeCache},
+  {name = "screen.lua", cache = InflightScreenCache}
+}
+local InflightLoadIndex = 1
+local function preloadInflight()
+  local entry = InflightLoads[InflightLoadIndex]
+  if loadInflightModule(entry.cache or entry, "widgets/dashboard/inflight/" .. entry.name) then
+    InflightLoadIndex = InflightLoadIndex + 1
+  end
 end
 
 --- The clear the widget's entry point can reach when the widget itself has been shut down.
@@ -4521,6 +4546,20 @@ function Runtime.new(zone, options)
       end
     end
 
+    -- Loading has no live drive or native tuning controls yet. RTN cancels the pending visit
+    -- without loading input.lua, and the firmware/feature exits still reach cleanup below.
+    if event ~= nil and self.inflightFullscreen == true and inflightEnabled(self)
+        and InflightLoadIndex <= #InflightLoads then
+      if _G.EVT_VIRTUAL_EXIT ~= nil and event == _G.EVT_VIRTUAL_EXIT then
+        cleanupInflight(self)
+      else
+        self._passWork = "tuning_load"
+        preloadInflight()
+      end
+      self._passEndAt = nowSeconds()
+      return
+    end
+
     -- Revoke before any fast sample, native callback, build or early return. Link recovery
     -- resumes a retained visit; feature recovery requires opening tuning from the quick menu again.
     if event ~= nil and (self._inflight ~= nil or self.inflightFullscreen == true) then
@@ -4592,6 +4631,12 @@ function Runtime.new(zone, options)
        lvgl.onEvent(event, touchState)
     end
     -- The quick-menu press can open tuning inside onEvent on this very pass.
+    -- Bound keys use the same flag. Leave that event's work on this pass and start loading
+    -- on the next refresh, with neither a drive nor a build alongside the first module.
+    if self.inflightFullscreen == true and InflightLoadIndex <= #InflightLoads then
+      self._passEndAt = nowSeconds()
+      return
+    end
     if self.inflightFullscreen == true and (self._inflight == nil or self._inflight.open ~= true) then
       updateInflightRelease(self)
       sampleInflight(self)

@@ -38,6 +38,9 @@ switch and the check reports **Mixer line missing or wrong**.
 A model whose board carries tuning slots is tunable while the radio's master switch is on and
 the tuning fullscreen is open. Open the dashboard in fullscreen, then choose **In-flight tuning**
 from its quick menu. Stored interlock-switch and set-layout values are ignored.
+On the first opening after the widget starts, the previous view stays visible for a few widget
+passes while tuning becomes ready. Output stays inactive throughout this wait. Later openings
+reuse the loaded surface.
 The model setup check must still pass before the surface can drive the channels. A setup fault
 is shown on the fullscreen ground surface.
 

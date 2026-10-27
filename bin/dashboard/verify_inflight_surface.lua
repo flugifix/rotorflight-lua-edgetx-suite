@@ -67,6 +67,20 @@ local function job(widget)
   widget._job = {kind = "control", oneShot = true, step = function() return true end}
 end
 
+-- The release fixtures model an already loaded surface. Exercise the normal preload path
+-- once so their injected live drives use the same ready module caches as a real open visit.
+do
+  local widget = Runtime.new({x = 0, y = 0, w = 480, h = 320}, {})
+  widget.preferences.general = {preview_inflight_tuning = true}
+  widget.preferences.inflight = {enabled = true}
+  widget.inflightFullscreen = true
+  for _ = 1, 20 do
+    job(widget); widget:refresh(0, nil)
+    if widget._inflight then break end
+  end
+  job(widget); widget:refresh(nil, nil)
+end
+
 scenario("foreground open takes effect before a pending job", function()
   local widget, d = fixture(true)
   d.live, d.open, d.phase = false, false, "ground"
@@ -409,6 +423,146 @@ scenario("a hardware key bound to in-flight tuning opens the surface", function(
   Views.navigate(widget, action)
   check(widget.inflightFullscreen ~= true, "with the overlay disabled the key opens nothing")
 end)
+-- A fresh loader per visit is essential: the earlier drive fixtures deliberately start warm.
+-- loadScript observes cache misses in the shipped memoizer, including nested dependencies.
+-- The host compiler is C code outside debug.sethook's count, so count module loads and overlay
+-- calls independently instead of pretending these passes price the firmware's compilation.
+for _, opening in ipairs({"quick_menu", "bound_key", "firmware", "background", "radio_disabled", "preview_disabled", "RTN"}) do
+  scenario(opening .. " cold opening isolates each first module load", function()
+    Stubs.install(arg[1] or "."); Stubs.reset(); FC.install(Stubs); FC.reset()
+    local pass, loaded, wrapped = nil, {}, {}
+    local realLoad, realRequire = loadScript, rfsuite.require
+    _G.loadScript = function(path, ...)
+      local name = string.match(path, "/widgets/dashboard/inflight/([^/]+%.lua)$")
+      if name then
+        if pass then pass.loads[#pass.loads + 1] = name end
+        loaded[name] = (loaded[name] or 0) + 1
+      end
+      return realLoad(path, ...)
+    end
+    local observed = {
+      ["drive.lua"] = {"get", "tick", "sample"}, ["prime.lua"] = {"tick"},
+      ["screen.lua"] = {"renderKey", "buildFullscreen", "ready"}, ["input.lua"] = {"key"}
+    }
+    rfsuite.require = function(path, ...)
+      local module = realRequire(path, ...)
+      local name = string.match(path, "widgets/dashboard/inflight/([^/]+%.lua)$")
+      if type(module) == "table" and observed[name] and not wrapped[module] then
+        wrapped[module] = true
+        for _, key in ipairs(observed[name]) do
+          local original = module[key]
+          module[key] = function(...)
+            if pass then pass.work = pass.work + 1 end
+            return original(...)
+          end
+        end
+      end
+      return module
+    end
+    local ColdRuntime = rfsuite.require("widgets/dashboard/runtime.lua")
+    local Menu = rfsuite.require("widgets/dashboard/fullscreen_menu.lua")
+    local widget = ColdRuntime.new({x = 0, y = 0, w = 480, h = 320}, {})
+    widget.preferences.general = {preview_inflight_tuning = true}
+    widget.preferences.inflight = {enabled = true}
+    widget.preferences.dashboard = {key_tele = "inflight_tuning"}
+    widget.state.armed, widget.state.armedSeen, widget.state.fblConnected = true, true, true
+    local builds, writes, loadPasses = 0, 0, 0
+    local realBuild, realWrite, realEvent = lvgl.build, model.setGlobalVariable, lvgl.onEvent
+    local realTele, realExit = _G.EVT_TELEM_BREAK, _G.EVT_VIRTUAL_EXIT
+    lvgl.build = function(...)
+      if pass then pass.work = pass.work + 1 end
+      if widget.state.inflight then builds = builds + 1 end
+      return realBuild(...)
+    end
+    model.setGlobalVariable = function(...)
+      writes = writes + 1
+      return realWrite(...)
+    end
+    local function refresh(event)
+      Stubs.tick()
+      widget._lastWorkTick = getTime() / 100
+      pass = {loads = {}, work = 0}
+      local before = writes
+      local ok, err = pcall(widget.refresh, widget, event, nil)
+      local result = pass
+      pass = nil
+      check(ok, tostring(err))
+      check(#result.loads <= 1, "one first load per pass, saw " .. table.concat(result.loads, ", "))
+      if #result.loads > 0 then
+        loadPasses = loadPasses + 1
+        check(result.work == 0, "module load shared a pass with overlay calls or a build")
+        check(widget._inflight == nil and writes == before, "preloading creates no drive and writes nothing")
+      end
+      return result
+    end
+    local ok, err = pcall(function()
+      for _, disabled in ipairs({"radio", "preview"}) do
+        widget.inflightFullscreen = true
+        if disabled == "radio" then widget.preferences.inflight.enabled = false
+        else widget.preferences.general.preview_inflight_tuning = false end
+        job(widget); refresh(0)
+        check(next(loaded) == nil and widget._inflight == nil and writes == 0,
+          "a disabled overlay with a stale open request loads nothing and writes nothing")
+        check(widget.inflightFullscreen ~= true, "disabling consumes the pending visit")
+        widget.preferences.inflight.enabled = true
+        widget.preferences.general.preview_inflight_tuning = true
+      end
+      -- Positive entry controls use the real menu callback and the runtime's hardware-key route.
+      job(widget); refresh(0)
+      check(next(loaded) == nil, "an enabled but unopened overlay loads nothing")
+      if opening ~= "bound_key" then
+        local entry = Menu.entry(widget, "inflight_tuning")
+        check(entry and entry.press, "positive control: tuning entry exists")
+        lvgl.onEvent = function() entry.press() end
+        job(widget); refresh(0)
+        lvgl.onEvent = realEvent
+      else
+        _G.EVT_TELEM_BREAK = 9001
+        job(widget); refresh(EVT_TELEM_BREAK)
+      end
+      check(widget.inflightFullscreen == true, "positive control: the event opened tuning")
+      check(next(loaded) == nil and widget._inflight == nil, "the opening event defers all first loads and drive work")
+      if opening ~= "quick_menu" and opening ~= "bound_key" then
+        refresh(0); refresh(0)
+        check(loadPasses == 2, "positive control: preloading has started")
+        if opening == "firmware" then refresh(nil)
+        elseif opening == "background" then widget:background()
+        elseif opening == "RTN" then
+          _G.EVT_VIRTUAL_EXIT = 9002
+          refresh(EVT_VIRTUAL_EXIT)
+        else
+          if opening == "radio_disabled" then widget.preferences.inflight.enabled = false
+          else widget.preferences.general.preview_inflight_tuning = false end
+          refresh(0)
+        end
+        check(widget.inflightFullscreen ~= true and widget._inflight == nil and writes == 0,
+          "exit cancels preloading immediately without creating a drive or writing output")
+        widget.preferences.inflight.enabled = true
+        widget.preferences.general.preview_inflight_tuning = true
+        for _ = 1, 3 do job(widget); refresh(0) end
+        check(loadPasses == 2 and widget._inflight == nil, "recovery cannot resume an abandoned preload")
+        return
+      end
+      widget._job = nil
+      for _ = 1, 40 do
+        refresh(0)
+        if builds > 0 then break end
+      end
+      check(loadPasses > 0 and builds > 0 and widget._inflight ~= nil,
+        "positive control: isolated loads finish and later passes build the surface")
+      for _, name in ipairs({"setup.lua", "functions.lua", "baseline.lua", "profiles.lua", "drive.lua",
+          "input.lua", "prime.lua", "screen.lua"}) do
+        check(loaded[name] == 1, "each overlay module loads exactly once: " .. name)
+      end
+      check(not loaded["fcsetup.lua"] and not loaded["fctext.lua"] and not loaded["fcsurface.lua"],
+        "the separate suggested-functions dialog is not loaded by opening tuning")
+      print("  cold opening: " .. loadPasses .. " isolated module-load passes; " .. builds .. " later build")
+    end)
+    _G.loadScript, lvgl.build, model.setGlobalVariable, lvgl.onEvent = realLoad, realBuild, realWrite, realEvent
+    _G.EVT_TELEM_BREAK, _G.EVT_VIRTUAL_EXIT = realTele, realExit
+    check(ok, tostring(err))
+  end)
+end
 Stubs.releaseCard()
 print(passed .. " surface regressions passed; " .. #failed .. " failed; " .. checks .. " assertions")
 assert(#failed == 0, table.concat(failed, "\n"))

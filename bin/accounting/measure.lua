@@ -1584,6 +1584,9 @@ end
 -- Settle the dashboard with tuning closed, then open its fullscreen visit from the quick
 -- menu flag. Every tuning pass carries a non-nil event, as the firmware does in fullscreen.
 -- The zone keeps the theme and has no tuning build.
+-- The first 30 opening passes below are warm-up, not tuning rows. The loadScript stub uses
+-- host loadfile: its C compiler is outside the Lua instruction hook, and it writes no .luac.
+-- verify_inflight_surface.lua checks cold first-load isolation independently of these counts.
 --
 -- The ground half is measured as a window of its own, between the prime starting and the prime
 -- being finished, and everything after it is measured with the prime DONE. Both halves of that
