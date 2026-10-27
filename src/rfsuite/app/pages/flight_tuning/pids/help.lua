@@ -13,15 +13,17 @@ return function(ctx)
   local i18n = ctx and ctx.i18n
 
   local parts = {
+    t(i18n, "help_intro"),
     t(i18n, "help_p1"),
     t(i18n, "help_p2"),
     t(i18n, "help_p3"),
     t(i18n, "help_p4"),
-    t(i18n, "help_p5")
+    t(i18n, "help_p5"),
+    t(i18n, "help_p6")
   }
 
   return {
     title = t(i18n, "help_title"),
-    message = table.concat(parts, "\n\n")
+    message = table.concat(parts, "\n")
   }
 end
