@@ -589,6 +589,21 @@ for _, size in ipairs({ { 480, 272 }, { 480, 320 }, { 800, 480 } }) do
     end
     check(bar and step and current and title and cancel and retry, "busy scene has title, bar, steps and actions")
     check(title.font == (size[2] > 350 and DBLSIZE or MIDSIZE), "busy title uses the large font")
+    -- The zone shows the same busy surface while the job runs, without the two actions.
+    local zoneNodes, zoneTexts, zoneButtons = {}, {}, 0
+    Screen.buildZone(zoneNodes, view)
+    for _, node in ipairs(zoneNodes) do
+      if node.type == "button" then zoneButtons = zoneButtons + 1 end
+      if node.type == "label" then
+        local text = type(node.text) == "function" and node.text() or node.text
+        zoneTexts[tostring(text) .. "@" .. node.y] = true
+      end
+    end
+    check(zoneButtons == 0, "zone busy surface has no actions")
+    for _, node in ipairs({title, step, current}) do
+      local text = type(node.text) == "function" and node.text() or node.text
+      check(zoneTexts[tostring(text) .. "@" .. node.y], "zone busy surface matches fullscreen: " .. tostring(text))
+    end
     check(title.y < bar.y and bar.y + bar.h < step.y and step.y < current.y and current.y < cancel.y,
       "busy rows and bottom action fit at every supported size")
     local background
@@ -645,7 +660,7 @@ for _, size in ipairs({ { 480, 272 }, { 480, 320 }, { 800, 480 } }) do
     check(job.cancelled == (not restoring or nil), "pressing Cancel requests cancellation of a read only")
 
     local cases = {
-      { "initial", nil, nil, "Connecting to the flight controller" },
+      { "initial", nil, nil, "Reading the active profiles" },
       { "select", "pid", 3, "PID profile 3: reading values" },
       { "status", "rate", 4, "Rate profile 4: reading values" },
       { "read", "global", nil, "Global values: reading" },
@@ -661,6 +676,12 @@ for _, size in ipairs({ { 480, 272 }, { 480, 320 }, { 800, 480 } }) do
       job.plan[1] = { op = case[1], kind = case[2], index = case[3] }
       check(current.text() == case[4], "reactive caption for " .. case[1])
     end
+    -- The SD session check runs before the first message; its caption must not claim a connect.
+    job.plan[1] = { op = "initial" }
+    job.validation = {}
+    check(current.text() == "Checking the saved session", "reactive caption while the saved session is checked")
+    job.validation = nil
+    check(current.text() == "Reading the active profiles", "caption follows the end of the session check")
     instance.profileJob = nil
     check(not cancel.active() and not retry.active(), "old actions cannot operate on a finished job")
   end

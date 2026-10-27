@@ -785,6 +785,8 @@ end
 -- one entry he has, and what it shows follows the flight rather than the switch -- the preflight
 -- read-out on the ground, the tuning surface in the air, and the delta and the undo on the ground
 -- after a flight that moved something. Three screens on one switch, and nothing to remember.
+local appendBusy
+
 function M.buildZone(children, widget)
   local w = (widget.zone and widget.zone.w) or LCD_W or 480
   local h = (widget.zone and widget.zone.h) or LCD_H or 272
@@ -796,6 +798,10 @@ function M.buildZone(children, widget)
   children[#children + 1] = { type = "rectangle", x = 0, y = 0, w = w, h = h, color = p.bg, filled = true }
   appendHeader(children, widget, m, w, t, p, 0)
 
+  if widget._inflight and widget._inflight.profileJob and snapshot.phase ~= "live" then
+    appendBusy(children, widget, m, w, h, t, p, false)
+    return
+  end
   if snapshot.phase == "post" then
     M.buildPost(children, widget, m, w, h, t, p, false)
     return
@@ -1485,10 +1491,13 @@ local function appendRestoreResults(children, widget, m, w, h, t, p)
   end
 end
 
-local function busyStepText(op, original, t)
+local function busyStepText(op, original, t, checking)
   local name, kind, index = op.op, op.kind, op.index
   if name == "initial" then
-    return t("widgets.dashboard.inflight_progress_connecting", "Connecting to the flight controller")
+    -- The saved session is validated from the SD card before the first message goes out, a slice
+    -- per pass; that is the long wait on this step, and no link is being set up during it.
+    if checking then return t("widgets.dashboard.inflight_progress_checking", "Checking the saved session") end
+    return t("widgets.dashboard.inflight_progress_connecting", "Reading the active profiles")
   elseif name == "returnSelect" or name == "returnCheck" or name == "returnStatus" then
     return string.format(t("widgets.dashboard.inflight_progress_return", "Back to PID %s / RTE %s"),
       original and original.pid or UNKNOWN_VALUE, original and original.rate or UNKNOWN_VALUE)
@@ -1530,7 +1539,8 @@ local function appendBusyAction(children, m, x, y, width, label, p, active, pres
   children[#children].visible = active
 end
 
-local function appendBusy(children, widget, m, w, h, t, p)
+-- Zone and fullscreen draw the same busy surface; only fullscreen has the two actions.
+appendBusy = function(children, widget, m, w, h, t, p, interactive)
   local drive = widget._inflight
   local job = drive.profileJob
   local restoring = drive.transfer and drive.transfer.state == "busy" and drive.transfer.kind == "restore"
@@ -1564,13 +1574,14 @@ local function appendBusy(children, widget, m, w, h, t, p)
     end
     return stepText
   end, p.dim, m.small, LEFT)
-  local lastOp, lastKind, lastIndex, progress
+  local lastOp, lastKind, lastIndex, lastChecking, progress
   appendLabel(children, m.pad, stepY + m.statusLineH, width, function()
     local op = job.plan[job.at]
     local name, kind, index = op and op.op, op and op.kind, op and op.index
-    if name ~= lastOp or kind ~= lastKind or index ~= lastIndex then
-      if op then progress = busyStepText(op, job.original, t) or progress end
-      lastOp, lastKind, lastIndex = name, kind, index
+    local checking = job.recovery ~= nil or job.validation ~= nil
+    if name ~= lastOp or kind ~= lastKind or index ~= lastIndex or checking ~= lastChecking then
+      if op then progress = busyStepText(op, job.original, t, checking) or progress end
+      lastOp, lastKind, lastIndex, lastChecking = name, kind, index, checking
     end
     return progress or ""
   end, p.text, m.listFont, LEFT)
@@ -1583,6 +1594,7 @@ local function appendBusy(children, widget, m, w, h, t, p)
     end
     return warning
   end, p.warn, m.small, LEFT)
+  if not interactive then return end
   local retryActive = function() return drive.profileJob == job and job.returnBlocked == true end
   appendBusyAction(children, m, m.pad, actionY, width,
     t("widgets.dashboard.inflight_read_again", "Read again"), p, retryActive, function()
@@ -1636,7 +1648,7 @@ function M.buildFullscreen(children, widget)
     return
   end
   if widget._inflight and widget._inflight.profileJob and snapshot.phase ~= "live" then
-    appendBusy(children, widget, m, w, h, t, p)
+    appendBusy(children, widget, m, w, h, t, p, true)
     appendClose(children, widget, m, w, p)
     return
   end

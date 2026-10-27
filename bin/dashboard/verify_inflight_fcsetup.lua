@@ -55,7 +55,15 @@ local function view(count)
   return widget, drive
 end
 local function build(widget)
-  local nodes = {}; Screen.buildFullscreen(nodes, widget); return nodes
+  local nodes = {}; Screen.buildFullscreen(nodes, widget)
+  -- lvgl.build raises "number expected, got function" for a function in a geometry field; a live
+  -- geometry goes through `pos` or `size`.
+  for _, node in ipairs(nodes) do
+    for _, key in ipairs({"x", "y", "w", "h"}) do
+      check(node[key] == nil or type(node[key]) == "number", "build node " .. key .. " is a number")
+    end
+  end
+  return nodes
 end
 local function action(nodes, text)
   for index, node in ipairs(nodes) do
@@ -91,6 +99,33 @@ setupTitle(build(widget))
 Surface.tick(widget, drive, fakePrime)
 check(drive.fcSetup.step == 2 and drive.fcSetup.step_headspeed == 25, "choices start at model defaults")
 setupTitle(build(widget))
+-- The intro names what is replaced; with it, every choice row still ends above the bottom actions.
+do
+  local de = assert(loadfile(sourceRoot .. "/rfsuite/i18n/de.lua"))()
+  local function german(key, fallback)
+    local node = de
+    for part in string.gmatch(key, "[^%.]+") do node = type(node) == "table" and node[part] or nil end
+    return type(node) == "string" and node or fallback
+  end
+  local savedT, savedZone = widget.i18n.t, widget.zone
+  for _, lang in ipairs({{"en", translate}, {"de", german}}) do
+    for _, size in ipairs({{480, 272}, {480, 320}, {800, 480}}) do
+      widget.i18n.t, widget.zone = lang[2], {w = size[1], h = size[2]}
+      local nodes, lowest, actionsY = build(widget), 0, nil
+      local nextText = lang[2]("widgets.dashboard.inflight_fc_next", "Next")
+      for index, node in ipairs(nodes) do
+        if node.type == "label" and node.text == nextText then actionsY = nodes[index - 1].y end
+      end
+      for _, node in ipairs(nodes) do
+        if node.type == "button" and node.y ~= actionsY then lowest = math.max(lowest, node.y + node.h) end
+      end
+      check(actionsY and lowest <= actionsY,
+        string.format("%s choices fit above the actions at %dx%d (%d > %s)", lang[1], size[1], size[2],
+          lowest, tostring(actionsY)))
+    end
+  end
+  widget.i18n.t, widget.zone = savedT, savedZone
+end
 local oldChoice = action(build(widget), "1")
 oldChoice.press()
 check(drive.fcSetup.step == 1, "focusable choice callback selects a step")

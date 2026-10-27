@@ -5,7 +5,8 @@ local requireModule = _G.rfsuite.require
 local Setup = requireModule("widgets/dashboard/inflight/setup.lua")
 local FcSetup = requireModule("widgets/dashboard/inflight/fcsetup.lua")
 local Text = requireModule("widgets/dashboard/inflight/fctext.lua")
-if not Setup or not FcSetup or not Text then error("inflight/fcsurface.lua: missing dependency", 0) end
+local Functions = requireModule("widgets/dashboard/inflight/functions.lua")
+if not Setup or not FcSetup or not Text or not Functions then error("inflight/fcsurface.lua: missing dependency", 0) end
 
 local function refresh(widget, drive)
   drive.valueEpoch = drive.valueEpoch + 1
@@ -166,8 +167,10 @@ function M.build(children, widget, m, w, h, t, p, label, action, wrap)
   text(t("widgets.dashboard.inflight_fc_setup_action", "Set up suggested functions"), p.accent)
   if not state then text(t("widgets.dashboard.inflight_fc_preparing", "Preparing setup")); return end
   if state.phase == "choices" then
-    local intro = t("widgets.dashboard.inflight_fc_setup_intro",
-      "Writes suggested functions to FC slots.\nLists other functions before overwriting.")
+    local first = Functions.STANDARD_FIRST_SLOT + 1
+    local intro = string.format(t("widgets.dashboard.inflight_fc_setup_intro",
+      "Replaces adjustment slots %d-%d with the suggestions, whatever they hold now.\nSlots 1-%d (profile selection) stay.\nThe next page lists what is replaced."),
+      first, first + #Functions.STANDARD_SLOT_ORDER - 1, first - 1)
     local introW = width + 2
     for _, line in ipairs(wrap(intro, introW, m.small)) do
       label(children, m.pad, y, introW, line, p.text, m.small, LEFT)
@@ -234,9 +237,12 @@ function M.build(children, widget, m, w, h, t, p, label, action, wrap)
     text(counters)
     y = y + lineH
     children[#children + 1] = {type = "rectangle", x = m.pad, y = y, w = width, h = lineH, color = p.button, filled = true}
-    children[#children + 1] = {type = "rectangle", x = m.pad, y = y,
-      w = function() return math.floor(width * math.min(1, (run.done or 0) / math.max(1, run.total or 0))) end,
-      h = lineH, color = p.accent, filled = true}
+    -- lvgl.build takes only numbers for w and h; a live width goes through `size`.
+    children[#children + 1] = {type = "rectangle", x = m.pad, y = y, w = 0, h = lineH,
+      color = p.accent, filled = true,
+      size = function()
+        return math.floor(width * math.min(1, (run.done or 0) / math.max(1, run.total or 0))), lineH
+      end}
     y = y + lineH * 2
     local step = (state.phase == "saving" or state.phase == "reread")
       and t("widgets.dashboard.inflight_fc_done", "Flight controller set up")
