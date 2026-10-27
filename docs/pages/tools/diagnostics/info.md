@@ -40,6 +40,11 @@ the flight controller over MSP.
 
 ## Notes
 
+- **Loading failed names a refused MSP API version.** If the flight controller answered with
+  an unsupported API version, the notice shows that version instead of a generic timeout.
+  If the controller did not answer, it says so and asks you to check
+  `FEATURE_TELEMETRY` and the MSP serial port configuration. The *Supported MSP API* row lists
+  the versions the suite supports.
 - **A dash means the value was not read, and never a guessed one.** *RF Mode* and *RF Band* need
   an RF module that publishes an `RFMD` telemetry sensor and a link that is currently delivering
   it; with either missing, both rows read `-` rather than the mode that happens to sit at the

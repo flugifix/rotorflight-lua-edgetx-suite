@@ -359,6 +359,17 @@ end
 local function readRuntimeErrorMessage()
   local root = _G and _G.rfsuite
   if type(root) ~= "table" then return nil end
+  local kind = readRuntimeField("mspErrorKind")
+  local i18n = state.i18n
+  if kind == "refused" then
+    local fmt = t(i18n, "api_refused", "MSP API %s is not supported.")
+    return string.format(fmt, readRuntimeField("refusedApiVersion", "?"))
+  elseif kind == "no_reply" then
+    local l1 = i18n and i18n.t and i18n.t("app.msp.no_reply_message_1") or "No MSP reply from flight controller."
+    local l2 = i18n and i18n.t and i18n.t("app.msp.no_reply_message_2")
+      or "Check that FEATURE_TELEMETRY is enabled and the MSP serial port is configured."
+    return l1 .. "\n" .. l2
+  end
   local diagnostics = root.diagnostics
   if type(diagnostics) == "table" and diagnostics.mspLastError and diagnostics.mspLastError ~= "" then
     return tostring(diagnostics.mspLastError)

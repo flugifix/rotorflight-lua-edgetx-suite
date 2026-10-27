@@ -696,7 +696,7 @@ local function doDisconnect(now, reason, keepLink)
     state.requestBackoffUntil = 0
   else
     if type(reason) == "string" and reason ~= "" then
-      setMspError(reason, now)
+      setMspError("Unsupported MSP API version " .. tostring(state.refusedApiVersion or "?"), now, "refused")
     end
   end
 
@@ -731,8 +731,10 @@ local function doDisconnect(now, reason, keepLink)
   state.consecutiveApiVersionFailures = 0
   state.consecutiveUidFailures = 0
   state.requestBackoffUntil = 0
-  state.mspLastError = nil
-  state.mspLastErrorAt = 0
+  if not keepLink then
+    state.mspLastError = nil
+    state.mspLastErrorAt = 0
+  end
   state.values.apiVersion = "0"
   state.values.fcVersion = "0"
   state.values.rfVersion = "0"
