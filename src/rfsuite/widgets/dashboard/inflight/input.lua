@@ -12,6 +12,21 @@ local function trace(kind, value, reason)
   end
 end
 
+function M.rebuild(widget, row)
+  local drive = widget._inflight
+  if not (drive and drive.live == true and drive.phase == "live") then return end
+  local sensor = widget._inflightSensor
+  if sensor then
+    if sensor.rebuildRequested then return end
+    sensor.rebuildRequested = true
+  end
+  drive.ladderEpoch = (drive.ladderEpoch or 0) + 1
+  -- The snapshot is republished only when the layout epoch moves.
+  drive.valueEpoch = (drive.valueEpoch or 0) + 1
+  widget._tuningKeyDirty = true
+  trace("ladder rebuild row=" .. tostring(row), row, "requested")
+end
+
 -- The same close is used by the touch box and RTN. Cancel a pending build before leaving: a
 -- build-job pass can otherwise draw the overlay again after its input has already closed it.
 function M.dispatch(widget, action, direction, source, index)
@@ -34,6 +49,9 @@ function M.dispatch(widget, action, direction, source, index)
   if action == "back" or action == "leave" then drive.backHandledAt = now end
   local ok, reason = drive:dispatch(action, direction, source, index)
   if ok then widget._tuningKeyDirty = true end
+  -- Touch moves native focus out of the ladder even when the action is refused. Keep a held
+  -- button alive until release; rebuilding then returns focus to the fullscreen widget.
+  if source == "touch" or (source == "touch_hold" and action == "release") then M.rebuild(widget) end
   if drive.closeRequested then
     drive.closeRequested = nil
     widget.inflightFullscreen = nil
@@ -110,15 +128,6 @@ function M.sensor(widget, rowHeight, count, valueMode)
   -- ladder is not recentred in place; before a half runs out the live scene is rebuilt, the new
   -- ladder starts in the middle again, and the first detent after a build lands on a half's entry
   -- row. The rows left before the end absorb the detents that arrive while the build is pending.
-  local function rebuild(row)
-    if sensor.rebuildRequested then return end
-    sensor.rebuildRequested = true
-    drive.ladderEpoch = (drive.ladderEpoch or 0) + 1
-    -- The snapshot is republished only when the layout epoch moves.
-    drive.valueEpoch = (drive.valueEpoch or 0) + 1
-    widget._tuningKeyDirty = true
-    trace("ladder rebuild row=" .. tostring(row), row, "requested")
-  end
   sensor.first = start + 1
   sensor.scrollTo = function() return 0, sensor.y end
   sensor.position = function(index)
@@ -164,19 +173,19 @@ function M.sensor(widget, rowHeight, count, valueMode)
     if delta == 0 then return result("unchanged") end
     if index == nil or previous == nil then
       if not valueMode then endFeedback() end
-      if index == nil then rebuild(row) end
+      if index == nil then M.rebuild(widget, row) end
       return result("focus_boundary")
     end
     if math.abs(delta) > 1 then
       if not valueMode then endFeedback() end
-      if valueMode and (row <= 4 or row > count - 4) then rebuild(row) end
+      if valueMode and (row <= 4 or row > count - 4) then M.rebuild(widget, row) end
       return result("jump")
     end
     -- Baseline first, even on refusal. No callback is kept for replay after the pulse/gap.
     local ok, reason
     if valueMode then
       ok, reason = M.dispatch(widget, "step", delta, "encoder")
-      if row <= 4 or row > count - 4 then rebuild(row) end
+      if row <= 4 or row > count - 4 then M.rebuild(widget, row) end
     else
       local target
       if not sensor.split then target = index end

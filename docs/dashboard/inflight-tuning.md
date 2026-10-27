@@ -222,6 +222,11 @@ glyph. The full-width name remains the
 one-row encoder sensor. The footer gives PAGE, encoder and RTN hints. Reports update snapshot
 text without rebuilding the scene.
 
+After a touch action in browse or value mode, the live scene is rebuilt to return encoder
+focus to the tuning sensor. A held plus/minus target waits until release before rebuilding.
+This also applies when a touch step is refused during a pulse or cooldown; the next encoder
+detent uses the tuning sensor again and remains subject to the same pulse/cooldown rules.
+
 **PAGE up/down** selects the previous/next group in browse. In value mode it selects the previous/next function within the current group, keeps value mode, and announces the new name and current value. Group ends give an end tone without wrapping. PAGE during a step, pulse or cooldown is refused and spent, never queued. Function navigation and value reports retain the scene.
 **RTN** leaves value mode. In the air it does nothing more, and the surface carries no Close:
 one tap or one key must not end the tuning. Disarming, the interlock and leaving fullscreen

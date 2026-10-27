@@ -800,6 +800,110 @@ local function nativeScene(nodes, view, counts, tall)
   return scene
 end
 
+-- Touch controls take native focus away from the ladder. Only a completed touch may rebuild
+-- the scene; a held button must survive until release, even when its step was refused.
+for _, valueMode in ipairs({true, false}) do
+  local instance = drive()
+  instance.valueMode = valueMode
+  local view = {_inflight = instance, state = {armed = true}, zone = {w = 480, h = 320}}
+  local counts, nodes, scene = {scenes = 0, sensors = 0, nativeRoot = true}
+  local function render()
+    Drive.sample(view)
+    nodes = {}
+    Screen.buildFullscreen(nodes, view)
+    scene = nativeScene(nodes, view, counts)
+    view._tuningKeyDirty = nil
+  end
+  local function touch(text)
+    for index, object in ipairs(scene.focus) do
+      local node = object.node
+      if node.text == text or (node.children and node.children[1] and node.children[1].text == text) then
+        scene:focusAt(index)
+        node.press()
+        return node
+      end
+    end
+    error("touch control missing: " .. text)
+  end
+  local function returned(epoch, key)
+    check(instance.ladderEpoch == epoch + 1 and view._tuningKeyDirty,
+      "one completed live touch requests exactly one ladder rebuild")
+    check(view._inflightSensor.index == nil, "touch still fences the first sensor return")
+    render()
+    check(Screen.renderKey(view.state.inflight) ~= key and scene.at == 0,
+      "the touch rebuild republishes the live key and restores native root focus")
+  end
+  render()
+  if valueMode then
+    local epoch, valueEpoch = instance.ladderEpoch or 0, instance.valueEpoch
+    local key, fired = Screen.renderKey(view.state.inflight), instance.fired
+    local plus = touch("+")
+    check(instance.fired == fired + 1 and instance.holdRow ~= nil, "touch hold starts a pulse")
+    check((instance.ladderEpoch or 0) == epoch and instance.valueEpoch == valueEpoch,
+      "touch hold press preserves the held scene")
+    Drive.sample(view)
+    check(Screen.renderKey(view.state.inflight) == key, "a held touch keeps the live render key")
+    plus.release()
+    check(instance.holdRow == nil and instance.valueEpoch == valueEpoch + 1,
+      "release ends the hold and republishes the snapshot once")
+    returned(epoch, key)
+    epoch, key = instance.ladderEpoch, Screen.renderKey(view.state.inflight)
+    plus = touch("+")
+    check(instance.fired == fired + 1 and instance.stepRefusedReason == "cooling",
+      "control: a second held press during the pulse is refused")
+    check(instance.ladderEpoch == epoch, "a refused held press also waits for release")
+    plus.release()
+    returned(epoch, key)
+    epoch, key = instance.ladderEpoch, Screen.renderKey(view.state.inflight)
+    check(not Input.dispatch(view, "step", 1, "touch"), "a plain touch step is refused during cooling")
+    returned(epoch, key)
+    ticks = ticks + 31; instance:fastTick(ticks)
+    ticks = ticks + 16; instance:fastTick(ticks)
+    epoch, fired = instance.ladderEpoch, instance.fired
+    scene:rotate(1); scene:sweep()
+    check(instance.fired == fired + 1 and instance.ladderEpoch == epoch,
+      "the first encoder detent after touch steps once without rebuilding away from the ladder end")
+    ticks = ticks + 31; instance:fastTick(ticks)
+    ticks = ticks + 16; instance:fastTick(ticks)
+  end
+  local epoch, key = instance.ladderEpoch or 0, Screen.renderKey(view.state.inflight)
+  local entry = instance.entry
+  ticks = ticks + 1; touch(">")
+  check(instance.entry == entry + 1, "control: the plain touch arrow changes the function")
+  returned(epoch, key)
+  local group = instance.group
+  epoch, key = instance.ladderEpoch, Screen.renderKey(view.state.inflight)
+  ticks = ticks + 1; touch(instance.groups[group].name)
+  check(instance.group == group + 1, "control: the title without a menu changes the group")
+  returned(epoch, key)
+  local menu
+  lvgl.menu = function(spec) menu = spec end
+  epoch, key = instance.ladderEpoch, Screen.renderKey(view.state.inflight)
+  touch(instance.groups[instance.group].name)
+  check(menu ~= nil, "control: the title opens the group menu")
+  returned(epoch, key)
+  epoch, key = instance.ladderEpoch, Screen.renderKey(view.state.inflight)
+  ticks = ticks + 1; menu.set(group)
+  check(instance.group == group, "control: the menu choice changes the group")
+  returned(epoch, key)
+  lvgl.menu = nil
+  instance:cleanup(false)
+end
+
+for _, surface in ipairs({{"ground", false}, {"ground", true}, {"post", false}, {"post", true}, {"live", false}}) do
+  local instance = drive()
+  instance.phase, instance.live = surface[1], surface[2]
+  local view = {_inflight = instance}
+  local epoch = instance.ladderEpoch
+  for _, action in ipairs({"step", "function", "group"}) do
+    Input.dispatch(view, action, 1, "touch")
+    Input.dispatch(view, action, 1, "touch_hold")
+    Input.dispatch(view, "release", nil, "touch_hold")
+    check(instance.ladderEpoch == epoch, "touch does not rebuild a non-live surface: " .. instance.phase)
+  end
+  instance:cleanup(false)
+end
+
 for _, directions in ipairs({{1, 1, -1, -1, 1}, {-1, 1, 1, -1, -1, 1}}) do
   local instance = drive()
   instance.valueMode = true

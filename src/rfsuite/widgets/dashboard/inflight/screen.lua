@@ -449,6 +449,7 @@ local function openGroupMenu(widget, groups, t)
     Input.dispatch(widget, "group", 1, "touch")
     return
   end
+  Input.rebuild(widget)
   local names = {}
   for i, group in ipairs(groups) do names[i] = group.name end
   lvgl.menu({
