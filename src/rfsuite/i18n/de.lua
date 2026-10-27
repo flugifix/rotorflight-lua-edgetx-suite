@@ -1730,6 +1730,7 @@ return {
         help_p4 = "Speichern schreibt diese Werte in das EEPROM und startet den Flugcontroller neu."
       },
       setup_wizard = {
+        retired_notice = "Der Einrichtungsassistent wird in einer kommenden Version durch eine neue geführte Einrichtung ersetzt und ist in dieser Version nicht mehr verfügbar.",
         title = "Einrichtungsassistent",
         back = "Zurück",
         next = "Weiter",
