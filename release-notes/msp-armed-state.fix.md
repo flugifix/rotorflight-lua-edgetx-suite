@@ -1,2 +1,2 @@
 - **MSP armed gates use the shared telemetry reader (`tasks/msp/runtime.lua`, `lib/armed.lua`)**:
-  - The queue clear and save refusal now follow the sensor layer's arming flags, including packed System Status, instead of treating a missing ARM sensor's zero as disarmed; an unknown arm state still allows writes (#598).
+  - The queue clear and save refusal now follow the sensor layer's arming flags, including packed System Status, instead of treating a missing ARM sensor's zero as disarmed; an uncertain arm state retains a previously armed state until disarm is confirmed, while a model never seen armed still allows writes (#598).

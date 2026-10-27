@@ -3223,25 +3223,8 @@ local function setField(field, value)
   end
 end
 
--- Whether this read's arm flags are left untaken, because the MSP runtime still reads the model
--- as armed.
---
--- While the link is up the runtime reads the same ARM sensor on every logic tick and keeps the
--- answer in `lastArmed`, and this widget ticks it at the top of the very pass that reads below --
--- ahead of the event runtimes, whose custom-telemetry drain publishes that sensor. So when the
--- runtime holds armed and this read finds bit 0 clear, the sensor changed between two reads of
--- one pass: a frame the drain published in between, possibly one queued long before, or a sensor
--- that read 0 for that moment. (While the link is down the runtime does not read at all and keeps
--- its last answer; a disarmed reading taken then is a reading from a link that is not there.)
--- Taking it would end the flight on this screen -- the phase drops to postflight and back, the
--- disarm is announced, the landing voltage and `lastDisarmAt` are stamped -- for a model that is
--- still flying. Left untaken, a real disarm is taken by the first read after the runtime's next
--- tick, which has read it by then.
---
--- One direction only. A reading of ARMED is always taken: the runtime's `false` is also what it
--- holds when no arm source answers at all -- a simulator with no flight controller behind it is
--- one such case -- so it cannot overrule a reading that says the model is armed, and erring
--- towards armed is the safe side of that question.
+-- Defer disarm while the MSP runtime's shared armflags reader still holds armed, including
+-- uncertain readings after a link gap. Armed readings are always accepted.
 --
 -- One log line per run of untaken reads, not one per read.
 local armFlagsRefusalLogged = false

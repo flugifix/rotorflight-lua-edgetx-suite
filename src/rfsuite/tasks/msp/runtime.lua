@@ -35,6 +35,7 @@ local Version = nil
 local ApiVersion = nil
 local ModelPreferences = nil
 local Armed = nil
+local armedLoadFailureLogged = false
 
 local state = {
   initialized = false,
@@ -430,25 +431,36 @@ local function readArmedState()
     return false
   end
 
-  if Armed == nil then
-    Armed = loadModule("lib/armed.lua") or false
+  if not Armed then
+    Armed = loadModule("lib/armed.lua")
   end
-  if not Armed or type(Armed.isArmed) ~= "function" then
-    return false
+  if type(Armed) ~= "table" or type(Armed.isArmed) ~= "function" then
+    Armed = nil
+    if not armedLoadFailureLogged then
+      armedLoadFailureLogged = true
+      log("Armed reader unavailable; retrying on next read", "warn")
+    end
+    return state.lastArmed == true
   end
 
-  return Armed.isArmed() == true
+  local ok, armed = pcall(Armed.isArmed)
+  if not ok then
+    return state.lastArmed == true
+  end
+  if armed == true then
+    return true
+  end
+  if state.lastArmed == true then
+    local okUncertain, uncertain = pcall(Armed.isUncertain)
+    if not okUncertain or uncertain == true then
+      return true
+    end
+  end
+  return false
 end
 
---- The armed state from the radio's named sources, and whether it was written since the link
---- last came back.
---
--- getValue() answers a sensor that has stopped arriving with its last value, so once a lost link
--- returns, tick() reads the armed state the craft had BEFORE the loss until a decoder writes the
--- sensor again. getSourceValue()'s second result tells the two apart: EdgeTX marks every sensor
--- old once the link stops streaming, and the next value written clears the mark. Answers
--- `armed, current`, `current` true only for a reading written since; nil where no source
--- answers or the radio has no getSourceValue().
+--- Return `armed, current` from named radio sources for flight confirmation after a link gap.
+-- Unlike tick()'s shared reader, which retains armed while uncertain, this reports freshness.
 function Runtime.armedReading()
   local getSrcV = _G.getSourceValue
   if type(getSrcV) ~= "function" then return nil end
