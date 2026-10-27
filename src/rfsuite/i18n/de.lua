@@ -3387,6 +3387,7 @@ return {
       inflight_browse_controls = "PAGE Gruppe / Drehen Funktion / Druck Wert",
       inflight_browse_controls_short = "PAGE Gruppe / Drehen / Druck Wert",
       inflight_post_controls = "RTN zu / Im FC gespeichert",
+      inflight_post_armed_controls = "Im FC gespeichert",
       inflight_post_actions = "Werte lesen / wiederherstellen",
       inflight_post_back = "Zur Änderungsliste",
       inflight_changed_count = "%d Parameter geändert",

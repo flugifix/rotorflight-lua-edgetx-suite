@@ -3392,6 +3392,7 @@ return {
       inflight_browse_controls = "PAGE group / Rotate function / Press tune",
       inflight_browse_controls_short = "PAGE group / Rotate / Press tune",
       inflight_post_controls = "RTN close / Board has saved",
+      inflight_post_armed_controls = "Board has saved",
       inflight_post_actions = "Restore / read values",
       inflight_post_back = "Back to changes",
       inflight_changed_count = "%d parameters changed",

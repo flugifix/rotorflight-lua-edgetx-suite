@@ -36,7 +36,8 @@ function M.dispatch(widget, action, direction, source, index)
   -- first sensor return even when that control's action is refused by the pulse owner.
   local sensor = widget._inflightSensor
   if sensor and (source == "touch" or source == "touch_hold") then sensor.index = nil end
-  if drive.fcSetupOpen and drive.fcSurface then
+  local armed = widget.state and widget.state.armed == true
+  if drive.fcSetupOpen and drive.fcSurface and not armed then
     if action == "back" then
       local phase = drive.fcSetup and drive.fcSetup.phase
       if phase ~= "saving" and phase ~= "reread" then drive.fcSurface.close(widget, drive) end
@@ -47,7 +48,7 @@ function M.dispatch(widget, action, direction, source, index)
   local now = drive.radio.now()
   if action == "back" and drive.backHandledAt == now then return true end
   if action == "back" or action == "leave" then drive.backHandledAt = now end
-  local ok, reason = drive:dispatch(action, direction, source, index)
+  local ok, reason = drive:dispatch(action, direction, source, index, armed)
   if ok then widget._tuningKeyDirty = true end
   -- Touch moves native focus out of the ladder even when the action is refused. Keep a held
   -- button alive until release; rebuilding then returns focus to the fullscreen widget.
@@ -58,7 +59,6 @@ function M.dispatch(widget, action, direction, source, index)
     widget._job = nil
     widget.built, widget.renderKey = false, nil
     if widget.state then widget.state.inflight = nil end
-    if lcd and type(lcd.exitFullScreen) == "function" then lcd.exitFullScreen() end
   end
   trace("dispatch " .. action .. " source=" .. tostring(source) .. " index=" .. tostring(index),
     direction, ok and "accepted" or reason)

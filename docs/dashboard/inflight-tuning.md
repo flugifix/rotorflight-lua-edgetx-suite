@@ -228,13 +228,16 @@ This also applies when a touch step is refused during a pulse or cooldown; the n
 detent uses the tuning sensor again and remains subject to the same pulse/cooldown rules.
 
 **PAGE up/down** selects the previous/next group in browse. In value mode it selects the previous/next function within the current group, keeps value mode, and announces the new name and current value. Group ends give an end tone without wrapping. PAGE during a step, pulse or cooldown is refused and spent, never queued. Function navigation and value reports retain the scene.
-**RTN** leaves value mode. In the air it does nothing more, and the surface carries no Close:
-one tap or one key must not end the tuning. Disarming, the interlock and leaving fullscreen
-still end it. On the ground and after landing RTN from browse, and the Close in the header,
-close the overlay. Every flight starts at the first function of the first group. The overlay
+**RTN** leaves value mode. While the model is armed it does nothing more, and no tuning surface
+carries a Close, including busy reads, setup and restore dialogs before the live phase.
+On the ground and after landing RTN from browse, and the Close in the header,
+return to the dashboard's fullscreen quick menu. Fullscreen stays open, and the session's start
+values, steps and post-flight comparison remain available when tuning is reopened from that menu.
+Every flight starts at the first function of the first group. The overlay
 owns these release events ahead of pending builds and theme bindings. Navigation stops at list ends and gives end feedback; a request during a pulse or
-cooldown is refused and never queued. Closing clears the variables and requires the interlock
-to be released before reopening.
+cooldown is refused and never queued. Closing clears the variables, cancels pending speech and
+leaves value mode. The interlock must be released before it can activate tuning again; the quick
+menu can reopen the read-out immediately.
 
 **Encoder:** rotate to highlight the previous/next function and request its settled name
 announcement. Press once to select it. In value mode, rotate one row to request one signed
@@ -344,8 +347,9 @@ are unavailable until the job finishes. Temporary profile selections and the fin
 silent in both the overlay and the general profile announcer, including with the interlock off.
 Ordinary in-flight profile announcements remain enabled.
 
-Closing on the ground ends the in-memory session; the completed SD baseline remains. Releasing
-the interlock in flight preserves it. Closing, backgrounding, link loss and profile edges clear
+Closing on the ground and releasing the interlock retain the in-memory session and the completed
+SD baseline. Only an explicit session reset or the existing model, flight-controller and link
+changes end the session. Closing, backgrounding, link loss and profile edges clear
 pulse/hold ownership and GVAR output in the flight mode where it was written. MSP never runs
 while armed. Existing setup, collision, range, trim, pulse and input ownership refusals remain.
 The encoder has two scroll windows sharing one input owner and the same row set. Their creation

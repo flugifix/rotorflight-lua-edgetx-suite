@@ -846,6 +846,7 @@ local function closeWidth(m)
 end
 
 local function appendClose(children, widget, m, w, p)
+  if widget.state.armed == true then return end
   local size = closeWidth(m)
   local x = w - size - (m.large and 8 or 1)
   local y = math.floor((m.headerH - size) / 2)
@@ -1173,7 +1174,9 @@ function M.buildPost(children, widget, m, w, h, t, p, interactive)
   local actionY = interactive and footerY - m.actionH - m.pad or footerY
   local rowH = m.large and 32 or 24
   local rowFont = m.large and MIDSIZE or 0
-  local footer = interactive and t("widgets.dashboard.inflight_post_controls", "RTN close / Board has saved")
+  local footer = interactive and (widget.state.armed == true
+    and t("widgets.dashboard.inflight_post_armed_controls", "Board has saved")
+    or t("widgets.dashboard.inflight_post_controls", "RTN close / Board has saved"))
     or t("widgets.dashboard.inflight_post_saved_zone", "board has saved - restore: full screen")
   children[#children + 1] = {type = "rectangle", x = 0, y = footerY, w = w, h = m.footerH, color = p.header, filled = true}
   appendCentredLabel(children, m.pad, footerY, lineW, m.footerH, footer, p.dim, m.small, LEFT, m)
@@ -1659,11 +1662,9 @@ function M.buildFullscreen(children, widget)
   local m = metrics(w, h, true)
 
   children[#children + 1] = { type = "rectangle", x = 0, y = 0, w = w, h = h, color = p.bg, filled = true }
-  local early = widget.state.inflight or {}
-  -- In the air there is no Close: one tap in the header must not end the tuning.
-  local flying = early.live == true and early.phase == "live"
-    and not (widget._inflight and (widget._inflight.restoreResultOpen or widget._inflight.restoreConfirm))
-  appendHeader(children, widget, m, w, t, p, flying and 0 or closeWidth(m))
+  -- Armed layouts reserve no close box, even before the live phase is published.
+  local armed = widget.state.armed == true
+  appendHeader(children, widget, m, w, t, p, armed and 0 or closeWidth(m))
 
   -- The same three phases the zone screen picks between, with the touch controls added. Reached
   -- from the quick settings menu as well, with the interlock OFF: there the drive is inert, the

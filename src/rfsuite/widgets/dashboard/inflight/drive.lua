@@ -690,31 +690,29 @@ end
 -- One semantic route owns navigation and adjustment, regardless of the physical input. A busy
 -- gesture is consumed here and never saved for later. Touch holds retain their bounded pulse
 -- train; keys, encoder changes and trim edges use taps and cannot start a hold.
-function Drive:dispatch(action, direction, source, index)
+function Drive:dispatch(action, direction, source, index, armed)
   local now = self.radio.now()
   if action == "release" then self:release(); return true end
-  -- Tuning in the air is not ended by one tap or one key: the surface carries no Close there and
-  -- RTN only leaves value mode. The interlock, the disarm and losing fullscreen still end it.
+  -- Armed input cannot close the surface, including before a live phase is published.
+  -- RTN can still leave value mode through the common leave action.
   if (action == "close" or (action == "back" and not self.valueMode))
-      and self.live == true and self.phase == M.PHASE_LIVE then
-    return false, "live"
+      and armed == true then
+    return false, "armed"
   end
   if action == "close" then
-    local closedOnGround = self.phase == M.PHASE_GROUND or self.phase == M.PHASE_POST
     self.live = false
-    self:setPhase(nil)
+    self:setPhase(self.post and M.PHASE_POST or nil)
     self:cleanup(false)
     self:cancelSpeech()
     self.valueMode = false
     self.seeded = false
     self.closeRequested = true
     self.closedByInput = true
-    if closedOnGround then self:endSession() end
     return true
   end
   if action == "back" then
-    if self.valueMode then return self:dispatch("leave", nil, source) end
-    return self:dispatch("close", nil, source)
+    if self.valueMode then return self:dispatch("leave", nil, source, nil, armed) end
+    return self:dispatch("close", nil, source, nil, armed)
   end
   if action == "leave" then
     if self:valueBusy() then self:refuseStep("cooling", now); return false, "busy" end
@@ -910,7 +908,7 @@ function Drive:forgetVerdict()
   self._checkResult = nil
 end
 
--- Closing on the ground drops session caches and requests a new read on reopening.
+-- An explicit new session drops session caches and requests a new read.
 -- The SD baseline remains available across restarts; a pending transaction retains its return pair.
 function Drive:endSession()
   if self.profileJob then self.profileJob.cancelled = true end
@@ -1064,21 +1062,10 @@ function Drive:evaluateInterlock(now)
     self.bankShown = nil
     logDrive("interlock on: bank ch%d value ch%d", settings.bank_ch, settings.value_ch)
   else
-    -- Closed. On the GROUND -- before a flight or after one -- that ends the tuning session, and
-    -- everything the session stood on goes with it; see Drive:endSession. In the AIR it ends
-    -- nothing: nothing may be sent to a flying machine, and the comparison the landing is going to
-    -- show is measured against a snapshot that has to survive the cycle.
-    --
-    -- The phase read here is the one the previous pass left, and that is what tells the two apart:
-    -- Drive:tick evaluates the interlock before it decides which surface the pass belongs to.
-    local closedOnGround = (self.phase == M.PHASE_GROUND or self.phase == M.PHASE_POST)
+    -- The interlock ends output and the postflight surface; the session baseline survives it.
     self:setPhase(nil)
-    -- One of the three things that end the postflight read-out. In the air the list itself stands --
-    -- it is measured against the SD baseline -- so the same interlock brings the same list
-    -- back; on the ground the line above has just taken that snapshot away with the session.
     self:endPost("interlock_off")
       self:cleanup(false)
-    if closedOnGround then self:endSession() end
     logDrive("interlock off")
   end
   return self.live

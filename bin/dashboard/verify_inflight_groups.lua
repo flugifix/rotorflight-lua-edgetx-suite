@@ -358,19 +358,24 @@ check(Input.key(widget, 513) and not d.closedByInput, "duplicate RTN cannot leav
 ticks = ticks + 1
 local exits = 0
 lcd = { exitFullScreen = function() exits = exits + 1 end }
+lcd.exitFullScreen()
+check(exits == 1, "positive fullscreen exit stub control")
+exits = 0
 check(Input.key(widget, 516) and d.group == valueGroup + 1, "PAGE changes group in browse")
 widget._job = { kind = "tuning_fs" }
+widget.state.armed = true
 check(d.live and d.phase == "live", "close controls run in the air")
 check(Input.key(widget, 513) and not d.closedByInput and widget._job ~= nil and exits == 0 and d.live,
   "RTN from browse in the air is consumed and does not close")
-check(not d:dispatch("close", nil, "touch") and d.live and exits == 0, "a close request in the air is refused")
+check(not d:dispatch("close", nil, "touch", nil, true) and d.live and exits == 0, "a close request in the air is refused")
 local liveGroup = d.group
 d:setPhase(nil); d:setPhase("live")
 check(d.group == 1 and d.entry == 1 and d.bank == d.groups[1].entries[1].bank and liveGroup ~= 1,
   "a new flight starts at the first function of the first group")
 d:setPhase("ground")
+widget.state.armed = false
 ticks = ticks + 1
-check(Input.key(widget, 513) and d.closedByInput and widget._job == nil and exits == 1, "RTN on the ground closes and cancels build")
+local groundCloseAccepted = Input.key(widget, 513)
 
 -- Profile select/read/restore and SD persistence have their own FC/file fixture.
 local originalRequire = rfsuite.require
@@ -388,6 +393,146 @@ local function walk(nodes, fn)
     fn(node)
     if node.children then walk(node.children, fn) end
   end
+end
+
+-- Closing is a surface transition; armed input and the session survive intermediate layouts.
+do
+  local failures, passed = {}, 0
+  local function regression(name, fn)
+    local ok, err = pcall(fn)
+    if ok then passed = passed + 1 else failures[#failures + 1] = name .. ": " .. tostring(err) end
+    print((ok and "PASS " or "FAIL ") .. name .. (ok and "" or ": " .. tostring(err)))
+  end
+  regression("ground RTN closes only tuning and cancels build", function()
+    check(groundCloseAccepted and d.closedByInput and widget._job == nil and exits == 0,
+      "RTN on the ground stays fullscreen")
+  end)
+  local function viewFor(instance, armed)
+    local view = {_inflight = instance, inflightFullscreen = true, state = {armed = armed}, zone = {w = 480, h = 272}}
+    Drive.sample(view)
+    return view
+  end
+  for _, source in ipairs({"key", "touch"}) do
+    for _, action in ipairs({"close", "back"}) do
+      regression("ground " .. source .. " " .. action .. " stays fullscreen", function()
+        local instance = drive()
+        instance:setPhase("ground")
+        local view = viewFor(instance, false)
+        view._job, view.built, view.renderKey = {kind = "tuning_fs"}, true, "tuning"
+        local beforeExits = exits
+        check(Input.dispatch(view, action, nil, source), "ground close accepted")
+        check(exits == beforeExits and view.inflightFullscreen == nil and view._job == nil
+          and not view.built and view.renderKey == nil and view.state.inflight == nil,
+          "close returns to the fullscreen base view and cancels the overlay build")
+      end)
+    end
+  end
+  regression("ground close retains session and clears outputs", function()
+    local instance = drive()
+    instance.primedValues, instance.baseline = {[18] = 100}, {pid1 = {[18] = 100}}
+    instance.profileValues.pid[1][18] = 105
+    check(instance:ensureBankArmed() and instance.bankWritten ~= 0, "positive bank output control")
+    check(instance:dispatch("step", 1, "touch"), "positive output control")
+    instance:setPhase("ground")
+    instance.valueMode = true
+    local view = viewFor(instance, false)
+    local beforeWrites, steps, baseline = #writes, instance.fired, instance.baseline
+    instance:speakSelection("group")
+    check(Input.dispatch(view, "close", nil, "touch"), "ground X accepted")
+    check(instance.baseline == baseline and instance.primedValues[18] == 100
+      and instance.profileValues.pid[1][18] == 105 and instance.fired == steps, "start values and steps retained")
+    check(#writes > beforeWrites and writes[#writes][3] == 0 and instance.written == 0
+      and instance.bankWritten == 0 and not instance.valueMode, "cleanup clears both outputs and value mode")
+    check(not Announcer.selectionTick(ticks + 100), "close cancels pending selection speech")
+  end)
+  local function setState(instance, phase)
+    instance:setPhase((phase == "live" or phase == "post") and phase or "ground")
+    if phase == "busy" then instance.profileJob = {plan = {}, at = 1}
+    elseif phase == "setup" then
+      instance.fcSetupOpen = true
+      instance.fcSurface = {close = function() instance.fcSetupOpen = false end}
+    elseif phase == "restore" then instance.restoreConfirm = {all = true}
+    elseif phase == "reset" then instance.resetConfirm = true end
+  end
+  for _, phase in ipairs({"ground", "live", "post", "busy", "setup", "restore", "reset"}) do
+    for _, source in ipairs({"key", "touch"}) do
+      for _, action in ipairs({"close", "back"}) do
+        regression("armed " .. phase .. " " .. source .. " " .. action .. " refused", function()
+          local instance = drive()
+          setState(instance, phase)
+          local view = viewFor(instance, true)
+          local beforeWrites = #writes
+          local ok = Input.dispatch(view, action, nil, source)
+          check(not ok and not instance.closeRequested and not instance.closedByInput
+            and (phase ~= "setup" or instance.fcSetupOpen)
+            and view.inflightFullscreen and #writes == beforeWrites, "armed browse cannot close")
+          check(not instance:dispatch(action, nil, source, nil, true), "drive guard refuses armed close directly")
+        end)
+      end
+      regression("armed " .. phase .. " " .. source .. " back leaves value mode", function()
+        local instance = drive()
+        setState(instance, phase)
+        instance.valueMode = true
+        local view = viewFor(instance, true)
+        check(Input.dispatch(view, "back", nil, source) and not instance.valueMode
+          and not instance.closedByInput and view.inflightFullscreen, "RTN leaves only value mode")
+      end)
+    end
+  end
+  for _, substate in ipairs({"busy", "browse", "value", "setup", "post", "restore", "reset", "results"}) do
+    regression("armed " .. substate .. " has no X or close hint", function()
+      local instance = drive()
+      local view = viewFor(instance, true)
+      if substate == "busy" then instance.profileJob = {plan = {}, at = 1}; view.state.inflight.phase = "ground"
+      elseif substate == "value" then instance.valueMode = true; view.state.inflight.valueMode = true
+      elseif substate == "setup" then instance.fcSetupOpen = true; view.state.inflight.phase = "ground"
+      elseif substate == "post" then instance:setPhase("post"); view.state.inflight.phase = "post"
+      elseif substate == "restore" then instance.restoreConfirm = {all = true}
+      elseif substate == "reset" then instance.resetConfirm = true
+      elseif substate == "results" then instance.restoreResultOpen = 1 end
+      local nodes, closes, hints = {}, 0, 0
+      Screen.buildFullscreen(nodes, view)
+      walk(nodes, function(node)
+        local text = type(node.text) == "function" and node.text() or node.text
+        if text == "X" then closes = closes + 1 end
+        if type(text) == "string" and string.find(text, "RTN close", 1, true) then hints = hints + 1 end
+      end)
+      check(closes == 0 and hints == 0, "armed tree contains no close control or hint")
+    end)
+  end
+  regression("post-flight read-out survives close and reopen", function()
+    local instance = drive()
+    instance.fired, instance.primedValues = 3, {[18] = 100}
+    instance:setPhase("post")
+    instance.deltaPage = 2
+    local view = viewFor(instance, false)
+    check(Input.dispatch(view, "close", nil, "touch"), "post close accepted")
+    check(instance.post and instance.fired == 3 and instance.primedValues[18] == 100, "post comparison retained on close")
+    -- The quick menu raises only this flag; a normal drive tick republishes the read-out.
+    view.inflightFullscreen = true
+    instance._checkedAt, instance._checkResult = ticks, "ok"
+    Drive.tick(view, instance)
+    check(view.state.inflight.phase == "post" and instance.post and instance.deltaPage == 2,
+      "reopening republishes the same post-flight read-out")
+    local nodes, saved = {}, false
+    Screen.buildFullscreen(nodes, view)
+    walk(nodes, function(node) if node.text == "RTN close / Board has saved" then saved = true end end)
+    check(saved, "reopened post surface renders its footer")
+  end)
+  regression("ground interlock release retains session", function()
+    local instance = drive()
+    instance:setPhase("ground")
+    instance.primedValues, instance.baseline = {[18] = 100}, {pid1 = {[18] = 100}}
+    local baseline = instance.baseline
+    instance.seeded, instance.rawSwitch, instance.rawSince = true, false, ticks - 100
+    instance._checkedAt, instance._checkResult = ticks, "ok"
+    switch = false
+    instance:evaluateInterlock(ticks)
+    check(not instance.live and instance.bankWritten == 0, "interlock release clears the live output")
+    check(instance.baseline == baseline and instance.primedValues[18] == 100, "interlock release retains start values")
+  end)
+  print(passed .. " close regressions passed; " .. #failures .. " failed")
+  check(#failures == 0, table.concat(failures, "\n"))
 end
 
 -- Ground actions use the published slot/session scalars and require an explicit reset decision.
