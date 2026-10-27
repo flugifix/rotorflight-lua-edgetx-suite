@@ -19,6 +19,8 @@ while the model is armed.
 
 ## Settings
 
+Each setting has its own `?` for a short explanation.
+
 | Setting | What it does |
 | --- | --- |
 | Section | *Basic*, *Advanced* or *Other*. Switching it rebuilds the list below; nothing is read from the ESC again. |
@@ -73,6 +75,8 @@ while the model is armed.
   page does not set: it sets four of them -- *Direction*, *F3C Auto*, *Keep mAh*, and the 12 V
   BEC flag, which follows *BEC Voltage* reaching 12.0 V -- and writes the rest back as the ESC
   reported them.
+- After a save the page reads the ESC again on its own, and a further save is not
+  accepted until that read has come back.
 - *Motor Timing* is stored in the ESC in an encoding of its own, which is not the order the
   list is drawn in: the automatic modes and the fixed angles are separate ranges, and the ESC
   defines no value between them. The page translates in both directions, so what the row reads

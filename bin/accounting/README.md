@@ -100,6 +100,11 @@ How a page is opened:
   lvgl table's layout figures, the telemetry unit numbers). The dashboard reads several of the
   same names, and the other rows were written on a world without them, so only the page worlds
   get them; `install()` takes them away again.
+- **Flyrotor and YGE** get their own telemetry protocol, matching parameter reply and temporary
+  card for their page world. YGE remembers its current limit in the model's preference file;
+  isolating that write keeps later pages on the same settings as before. The original replies
+  and card are restored even if the page fails to open. Their safety notice is acknowledged
+  through its button so the row includes the settings build.
 - **The presses** are the tool's own: the tool is opened through the host the way a press on
   the dashboard opens it, and every step after that parks the target in the tool's
   `pendingMenuOpen`, which is all a tile press does. The path is read off the manifest. The
