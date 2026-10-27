@@ -82,6 +82,10 @@ the offered sets (*Power*, *Battery*, *Link*, *Governor*, whichever this log can
 press *Show*. Zoom, page and a cursor readout work on the plotted flight; where the log holds
 more than one flight, the chooser also offers which one.
 
+Changing the curves while a plot is still being read is safe. If the tool reaches its
+instruction limit in the middle of a change, the plot stays empty instead of the page failing
+on every pass. Choose the curves again and press *Show* to draw it.
+
 The graph needs the `Date` and `Time` columns and at least one row whose time it can read, written
 the way EdgeTX writes it (`HH:MM:SS.mmm`). A file that lacks either says so instead of offering
 columns: *Not an EdgeTX telemetry log* without the two columns, *No row carries a time the graph
