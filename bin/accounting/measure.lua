@@ -948,6 +948,9 @@ local function openToolPageActual(theme, menuId, pagePath, pad, counted, fault, 
       .. "timer1+timer2+timer3+uptime/tx_battery+model+timer1+timer2"
   elseif pagePath == "settings/dashboard/overrides/page.lua" then
     -- One model setting differs from the radio's standard, so the overview draws its list.
+    -- These tables belong to this world: World.reset replaces the session and module loader,
+    -- and the next ui/home.lua creates its own state and preferences, even after a failed open.
+    -- The card survives that reset; opening this page does not save these seeded values.
     state.preferences.dashboard.model_overrides = true
     state.preferences.dashboard.cfg_system_default_link_colors = false
     session.modelPreferences.dashboard = { overrides = true, cfg_system_default_link_colors = true }

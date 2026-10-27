@@ -1,4 +1,4 @@
--- Checks Reset rollback through the real Per-Model Settings page and dashboard library.
+-- Checks Reset rollback and value formatting through the real page and dashboard library.
 -- Desktop Lua 5.3, from the repository root:
 --   lua5.3 bin/dashboard/verify_overrides_reset.lua
 --   lua5.3 bin/dashboard/verify_overrides_reset.lua --page <pre-fix-page.lua>
@@ -168,5 +168,61 @@ for _, case in ipairs(cases) do
   end
 end
 
-print(string.format("6 reset scenarios, %d assertions, %d failures", assertions, failures))
+-- Check the actual row labels, including the standard value, without pressing Reset.
+-- Stock Lua cannot emulate LUA_FLOORN2I mixed numeric equality through a math stub
+-- or __eq proxy; these assertions check formatting but cannot reproduce the radio's floor.
+local formatCases = {
+  { value = 25.2, text = "25.2" },
+  { value = 18.1, text = "18.1" },
+  { value = 18.0, text = "18" },
+  { value = 20, text = "20" },
+  { value = 18.5, text = "18.5" },
+  { value = 3.14, text = "3.14" },
+  { value = true, text = "On" },
+  { value = false, text = "Off" },
+  { value = "unchanged", text = "unchanged" },
+}
+do
+  local formatPreferences = { dashboard = {} }
+  local modelPrefs = { dashboard = {} }
+  _G.rfsuite = {
+    palette = { text = 1, border = 2 }, preferences = formatPreferences,
+    session = { mcu_id = "0123456789ABCDEF01234567", modelPreferences = modelPrefs },
+  }
+  _G.SMLSIZE = 0
+  _G.lvgl = { UI_ELEMENT_HEIGHT = 32 }
+  local Common = {
+    pageT = function() return function(_, _, fallback) return fallback end end,
+    createFormRuntime = function()
+      return { setRequestRebuild = function() end }
+    end,
+  }
+  local Controls = { SECTION_H = 30, appendSectionHeader = function() end }
+  local DashboardLib
+  _G.loadScript = function(path)
+    local rel = string.sub(path, #CORE + 1)
+    if rel == "lib/log.lua" then return nil end
+    if rel == "app/pages/settings/common.lua" then return function() return Common end end
+    if rel == "ui/controls.lua" then return function() return Controls end end
+    if rel == "app/pages/settings/dashboard/lib.lua" then return function() return DashboardLib end end
+    error("unexpected module: " .. tostring(path))
+  end
+  DashboardLib = assert(loadfile(ROOT .. "/src/rfsuite/app/pages/settings/dashboard/lib.lua"))()
+  DashboardLib.listThemes = function() return themes end
+  local page = assert(loadfile(pagePath))()
+  for _, case in ipairs(formatCases) do
+    modelPrefs.dashboard[KEY] = case.value
+    formatPreferences.dashboard[KEY] = case.value
+    local children = {}
+    page.build({ children = children, preferences = formatPreferences, x = 0, y = 0, w = 800 })
+    local expected = "Default / colors = " .. case.text .. "  (standard " .. case.text .. ")"
+    local found = false
+    for _, child in ipairs(children) do
+      if child.type == "label" and child.text == expected then found = true end
+    end
+    check(found, "drawn model and standard row: " .. expected)
+  end
+end
+
+print(string.format("6 reset scenarios, %d format rows, %d assertions, %d failures", #formatCases, assertions, failures))
 os.exit(failures == 0 and 0 or 1)

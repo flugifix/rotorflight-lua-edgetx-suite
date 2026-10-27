@@ -114,7 +114,15 @@ How a page is opened:
   request on, as in the in-flight tuning scenario. An open is over when the page has stayed
   quiet for ten passes: no build, nothing outstanding on the link, nothing to redraw.
 - **One world per page**, rebuilt as for every scenario here, and the pages opened in the
-  registry's sorted order. That is not quite the same as no inheritance: run in reverse order,
+  registry's sorted order. `World.reset()` replaces the `rfsuite` root, including its session
+  and module loader; loading `ui/home.lua` then creates a new tool state and loads its preferences.
+  The Per-Model Settings world seeds `state.preferences.dashboard.model_overrides`,
+  `state.preferences.dashboard.cfg_system_default_link_colors` and
+  `session.modelPreferences.dashboard` only in those fresh tables. None survives the next
+  world's reset, including after an open fails, so no preference value needs restoring. The
+  simulated card does survive `World.reset()`, but opening this page does not save the seeded
+  values: the driver opens and builds it without pressing Reset or Reset all.
+  That is not quite the same as no inheritance: run in reverse order,
   82 of the 83 rows read the same and one moves by 50 (`tools_select_profile`, which then follows
   the service widget's world instead of another page's). The order is fixed, so two runs agree;
   a page added ahead of others in that order can move a row behind it by about as much.
