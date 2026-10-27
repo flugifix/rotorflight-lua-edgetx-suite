@@ -70,12 +70,18 @@ function M.show(ctx)
   local function doConfirm()
     if handled then return end
     handled = true
-    if type(onConfirm) == "function" then pcall(onConfirm) end
+    if type(onConfirm) == "function" then
+      local ok, err = pcall(onConfirm)
+      if not ok and type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "confirm handler failed: " .. tostring(err), "warn") end
+    end
   end
   local function doCancel()
     if handled then return end
     handled = true
-    if type(onCancel) == "function" then pcall(onCancel) end
+    if type(onCancel) == "function" then
+      local ok, err = pcall(onCancel)
+      if not ok and type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "cancel handler failed: " .. tostring(err), "warn") end
+    end
   end
 
   -- Prefer `lvgl.confirm` when available; avoid noisy lvgl.message/dialog attempts.
