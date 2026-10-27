@@ -1,21 +1,20 @@
 -- Whether the craft is armed, and whether that question can be answered at all.
 --
--- One definition for the tool's own screens. The header's Reload refuses on isArmed(), its Save
+-- Shared by the tool's screens and MSP runtime. The header's Reload refuses on isArmed(), its Save
 -- refuses on isArmed() and asks on isUncertain(), and the menu registry locks an entry while the
 -- first one holds -- but both predicates were file-locals in ui/home.lua, so a page that draws a
 -- write button of its own had nothing to ask, and every page that grew one would have grown a
 -- second, weaker test with it.
 --
--- Not the only definition in the repository, and deliberately so. tasks/msp/runtime.lua reads the
--- radio's own ARM source to decide whether to carry configuration traffic at all, which is a
--- question about the link rather than about a screen; and widgets/dashboard/inflight/fcsetup.lua
--- answers with a NAMED refusal ("no_sensors", no link, armed) because it has to tell the pilot
--- which of the three it is. Neither is replaced here.
+-- tasks/msp/runtime.lua uses isArmed() for its queue and save gates, so they follow the same
+-- sensor mapping as the screens. It treats an uncertain reading as disarmed and allows writes.
+-- widgets/dashboard/inflight/fcsetup.lua keeps a NAMED refusal ("no_sensors", no link, armed)
+-- because it has to tell the pilot which of the three it is.
 --
 -- isArmed() answers the question the screen needs -- "paint the warning?" -- and answers false
 -- for three different reasons: not armed, no sensor, no link. That is the right default for a
 -- warning, which must not stand permanently on a radio that cannot know. It is the wrong
--- default in front of a WRITE, where "cannot tell" is not "safe to proceed".
+-- default for a screen's WRITE confirmation, where "cannot tell" is not "safe to proceed".
 --
 -- isUncertain() is that remaining case, and it is deliberately narrow. A missing sensor module
 -- is a broken tool and not this question; a link that is down cannot carry the write either, so

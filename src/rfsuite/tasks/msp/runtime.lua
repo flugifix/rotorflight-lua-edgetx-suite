@@ -34,6 +34,7 @@ local Log = nil
 local Version = nil
 local ApiVersion = nil
 local ModelPreferences = nil
+local Armed = nil
 
 local state = {
   initialized = false,
@@ -429,18 +430,17 @@ local function readArmedState()
     return false
   end
 
-  for i = 1, #ARM_SOURCES do
-    local ok, value = pcall(getValue, ARM_SOURCES[i])
-    if ok and value ~= nil then
-      local armed = armedFromValue(value)
-      if armed ~= nil then return armed end
-    end
+  if Armed == nil then
+    Armed = loadModule("lib/armed.lua") or false
+  end
+  if not Armed or type(Armed.isArmed) ~= "function" then
+    return false
   end
 
-  return false
+  return Armed.isArmed() == true
 end
 
---- The armed state off the same sources tick() reads, and whether it was written since the link
+--- The armed state from the radio's named sources, and whether it was written since the link
 --- last came back.
 --
 -- getValue() answers a sensor that has stopped arriving with its last value, so once a lost link

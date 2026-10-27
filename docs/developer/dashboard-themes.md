@@ -88,6 +88,8 @@ state, the throttle percentage, and — with the governor off — headspeed and 
 
 The arm flag is the spine. It comes from the `armflags` sensor, and the widget keeps the
 previous pass's value beside it, so an arm and a disarm are edges rather than states.
+The MSP runtime uses the shared arming reader and sensor mapping for its queue clear and save
+refusal, treating an unknown arm state as disarmed.
 
 A reading that says *disarmed* is not taken while the MSP runtime still reads the model as armed.
 The runtime reads the same sensor at the top of the same pass, ahead of the custom-telemetry
