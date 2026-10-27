@@ -44,6 +44,10 @@ The collective row has its own range wherever the table names one. The flight co
 limits Roll, Pitch and Yaw per rate type when it stores the settings and leaves Collective
 alone, so Collective keeps the wider range the Configurator offers.
 
+Save reports success only once the flight controller has stored the rates; a failed or
+refused save is shown. After a successful save, the page reads the values back because the
+flight controller limits Roll, Pitch and Yaw to its own per-type range when it stores them.
+
 ## Notes
 
 - Changing the rate type changes what the three columns mean and what they may hold. The
