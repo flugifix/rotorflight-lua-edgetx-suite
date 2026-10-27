@@ -189,6 +189,21 @@ local function rangeError(fn, value)
   return {kind = "firmware_range", name = fn.name, value = value}
 end
 
+-- The fields a section of each kind is checked for, built once. Walking the whole function table
+-- for every section spent most passes on fields of another scope: a full baseline took 135 passes,
+-- which at the widget's cadence is about ten seconds in front of the first profile read.
+local scopeFields
+local function buildScopeFields()
+  scopeFields = {pid = {}, rate = {}, global = {}}
+  for _, fn in ipairs(Functions.FUNCTIONS) do
+    local list = scopeFields[Functions.scopeOf(fn.id) or "global"]
+    if list and tracked(fn) then list[#list + 1] = fn end
+  end
+end
+
+-- Sixteen checks per pass: about a thousand instructions, and a full baseline in about 30 passes.
+local CHECKS_PER_PASS = 16
+
 function M.validateStep(work)
   local data = work.data
   if not work.started then
@@ -197,7 +212,9 @@ function M.validateStep(work)
       or type(data.meta.uid) ~= "string" or type(data.meta.masterGains) ~= "boolean" then return true, false end
     work.started = true
   end
-  for _ = 1, 8 do
+  -- The lists are built once per session, in a pass that checks nothing else.
+  if not scopeFields then buildScopeFields(); return false end
+  for _ = 1, CHECKS_PER_PASS do
     if not work.name then
       local name, values = next(data, work.last)
       if name == "meta" then work.last = name; name, values = next(data, name) end
@@ -215,12 +232,13 @@ function M.validateStep(work)
         work[kind .. "Mask"] = work[kind .. "Mask"] | (1 << (index - 1))
       end
       work.name, work.kind, work.values, work.field = name, kind, values, 1
+      work.fields = scopeFields[kind]
     end
-    local fn = Functions.FUNCTIONS[work.field]
+    local fn = work.fields[work.field]
     if not fn then
       work.last, work.name = work.name, nil
     else
-      if tracked(fn) and (fn.id < 83 or data.meta.masterGains) and (Functions.scopeOf(fn.id) or "global") == work.kind then
+      if fn.id < 83 or data.meta.masterGains then
         local value = work.values[tostring(fn.id)]
         if type(value) ~= "number" or value ~= value or value ~= math.floor(value) then return true, false end
         if value < (fn.fwMin or fn.min) or value > (fn.fwMax or fn.max) then return true, false, rangeError(fn, value) end
