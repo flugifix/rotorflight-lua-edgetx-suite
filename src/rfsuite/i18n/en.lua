@@ -647,13 +647,15 @@ return {
         tta_unavailable = "Tail Torque Assist unavailable — governor profile could not be read. PID settings can still be saved.",
         loading_title = "Loading",
         loading_message = "Reading Tail Rotor settings",
+        save_error_title = "Error",
         help_title = "Tail Rotor Help",
-        help_p1 = "Yaw Stop Gain: Higher stop gain will make the tail stop more aggressively but may cause oscillations if too high. Adjust CW or CCW to make the yaw stops even.",
+        help_p1 = "Yaw stop gain: CW and CCW set the stop gains for clockwise and counter-clockwise yaw.",
         help_p2 = "Precomp Cutoff: Frequency limit for all yaw precompensation actions.",
-        help_p3 = "Cyclic FF Gain: Tail precompensation for cyclic inputs.",
-        help_p4 = "Collective FF Gain: Tail precompensation for collective inputs.",
-        help_p5 = "Collective Impulse FF: Impulse tail precompensation for collective inputs. If you need extra tail precompensation at the beginning of collective input.",
-        help_p6 = "Tail Torque Assist: For motorized tails. Gain and limit of headspeed increase when using main rotor torque for yaw assist."
+        help_p3 = "Cyclic FF gain: Tail precompensation for cyclic inputs.",
+        help_p4 = "Collective FF gain: Tail precompensation for collective inputs.",
+        help_p5 = "Collective Impulse FF: Gain sets the impulse precompensation for sudden collective inputs and Decay sets its decay time.",
+        help_p6 = "Tail Torque Assist: Gain sets the headspeed increase for motorized-tail yaw assist and Limit caps the increase.",
+        help_p7 = "Inertia Precomp: Gain sets the inertia compensation strength and Cutoff controls how quickly it is applied."
       },
       flight_tuning_advanced_main_rotor = {
         save_error_title = "Error",

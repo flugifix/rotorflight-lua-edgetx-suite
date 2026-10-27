@@ -13,10 +13,10 @@ return function(ctx)
   local ApiVersion = loadModule("lib/api_version.lua")
   local i18n = ctx.i18n
 
-  local help_p1 = t(i18n, "help_p1", "Yaw Stop Gain: Higher stop gain will make the tail stop more aggressively but may cause oscillations if too high. Adjust CW or CCW to make the yaw stops even.")
+  local help_p1 = t(i18n, "help_p1", "Yaw stop gain: CW and CCW set the stop gains for clockwise and counter-clockwise yaw.")
   local help_p2 = t(i18n, "help_p2", "Precomp Cutoff: Frequency limit for all yaw precompensation actions.")
-  local help_p3 = t(i18n, "help_p3", "Cyclic FF Gain: Tail precompensation for cyclic inputs.")
-  local help_p4 = t(i18n, "help_p4", "Collective FF Gain: Tail precompensation for collective inputs.")
+  local help_p3 = t(i18n, "help_p3", "Cyclic FF gain: Tail precompensation for cyclic inputs.")
+  local help_p4 = t(i18n, "help_p4", "Collective FF gain: Tail precompensation for collective inputs.")
 
   local parts = { help_p1, help_p2, help_p3, help_p4 }
 
@@ -33,15 +33,17 @@ return function(ctx)
   end
 
   if isBefore12_0_8 then
-    parts[#parts + 1] = t(i18n, "help_p5", "Collective Impulse FF: Impulse tail precompensation for collective inputs. If you need extra tail precompensation at the beginning of collective input.")
+    parts[#parts + 1] = t(i18n, "help_p5", "Collective Impulse FF: Gain sets the impulse precompensation for sudden collective inputs and Decay sets its decay time.")
+  else
+    parts[#parts + 1] = t(i18n, "help_p7", "Inertia Precomp: Gain sets the inertia compensation strength and Cutoff controls how quickly it is applied.")
   end
 
   if isAtLeast12_0_9 then
-    parts[#parts + 1] = t(i18n, "help_p6", "Tail Torque Assist: For motorized tails. Gain and limit of headspeed increase when using main rotor torque for yaw assist.")
+    parts[#parts + 1] = t(i18n, "help_p6", "Tail Torque Assist: Gain sets the headspeed increase for motorized-tail yaw assist and Limit caps the increase.")
   end
 
   return {
     title = t(i18n, "help_title", "Tail Rotor Help"),
-    message = table.concat(parts, "\n\n")
+    message = table.concat(parts, "\n")
   }
 end
