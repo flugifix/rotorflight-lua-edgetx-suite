@@ -15,6 +15,7 @@ local Controls = nil
 local Common = nil
 local MspRuntime = nil
 local RescueProfileApi = nil
+local SavePipeline = nil
 local LoadingOverlay = nil
 local Sensors = nil
 local Profile = nil
@@ -92,8 +93,8 @@ local function loadFromSession()
   end
   -- The mode as read, kept apart from the session record, which a save overwrites before the
   -- board has taken it; and the altitude-hold choice, kept while rescue is switched off and on.
-  -- boardMode is deliberately NOT refreshed when a write fails: the write's errorHandler leaves
-  -- ui.dirty set, so no read reply loads over it and the Altitude hold row stays. Open and Reload
+  -- boardMode is deliberately NOT refreshed when a save fails: only onSaved clears
+  -- ui.dirty, so no read reply loads over it and the Altitude hold row stays. Open and Reload
   -- run this from the session record and then read the board, whose reply sets its own mode.
   ui.boardMode = tonumber(ui.config.rescue_mode) or 0
   ui.altHold = ui.boardMode > 1
@@ -164,14 +165,9 @@ local function queueRcRead(isAutoReload)
 end
 
 local function queueRcWrite()
-  if not RescueProfileApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not RescueProfileApi then
     return false, "msp_runtime_unavailable"
-  end
-
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
   end
 
   local session = getSession()
@@ -182,32 +178,27 @@ local function queueRcWrite()
     rcConfig[k] = v
   end
 
-  queue:add({
-    command = RescueProfileApi.writeCommand,
-    payload = RescueProfileApi.buildWritePayload(rcConfig),
-    isWrite = true,
-    processReply = function() 
+  return SavePipeline.start({
+    pageId = "flight_tuning_advanced_rescue",
+    steps = {
+      {
+        label = "MSP_SET_RESCUE_PROFILE",
+        command = RescueProfileApi.writeCommand,
+        payload = RescueProfileApi.buildWritePayload(rcConfig)
+      }
+    },
+    reboot = false,
+    onSaved = function()
       ui.dirty = false
-      
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.command,
-          payload = {},
-          isWrite = true,
-          processReply = function()
-            queueRcRead(true)
-          end
-        })
-      else
-        queueRcRead(true)
-      end
     end,
-    -- Leaves ui.dirty set on purpose; see loadFromSession, which keeps ui.boardMode through it.
-    errorHandler = function() end
+    onDone = function(result)
+      if not ui.runtime then return end
+      if result.saved then queueRcRead(true) end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
   })
-
-  return true, nil
 end
 
 local function getLiveProfile()
@@ -440,7 +431,10 @@ function M.build(ctx)
     if type(ui.runtime.requestRebuild) == "function" then
       ui.runtime.requestRebuild()
     end
-  end)
+  end, {
+    helpText = pageText(i18n, "help_p1", "Enables or disables rescue in this profile."),
+    helpTitle = pageText(i18n, "mode_enable", "Rescue mode enable")
+  })
 
   -- Altitude hold is offered only to a profile that already uses it, as in the Configurator;
   -- its own settings are not on this page.
@@ -450,7 +444,10 @@ function M.build(ctx)
       ui.altHold = nextBool == true
       ui.config.rescue_mode = ui.altHold and 2 or 1
       ui.dirty = true
-    end)
+    end, {
+      helpText = pageText(i18n, "help_alt_hold", "Keeps altitude hold enabled; switching it off makes rescue climb instead."),
+      helpTitle = altHoldLabel
+    })
   end
 
   if modeVal then
@@ -459,7 +456,10 @@ function M.build(ctx)
     cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "flip_upright", "Flip to upright"), flipUpVal, function(nextBool)
       ui.config.rescue_flip_mode = nextBool and 1 or 0
       ui.dirty = true
-    end)
+    end, {
+      helpText = pageText(i18n, "help_p2", "Flips upright if rescue is activated while inverted."),
+      helpTitle = pageText(i18n, "flip_upright", "Flip to upright")
+    })
 
     -- Specs
     local specCollective = { scale=10, mult=1, min=0, max=1000, step=10, suffix="%", decimals=0 }
@@ -524,7 +524,16 @@ end
 
 function M.onSave(ctx)
   if not M.canSave() then return false, "loaded_data_missing" end
-  queueRcWrite()
+  local ok, err = queueRcWrite()
+  if not ok then
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
+        title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
+        message = tostring(err or "MSP write failed")
+      })
+    end
+    return false
+  end
   return true
 end
 
@@ -551,6 +560,7 @@ function M.onClose()
   Common = nil
   MspRuntime = nil
   RescueProfileApi = nil
+  SavePipeline = nil
   LoadingOverlay = nil
   Sensors = nil
   t = nil

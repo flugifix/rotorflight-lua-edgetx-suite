@@ -1,0 +1,3 @@
+- **Rescue and Filters report confirmed saves and failures (`flight_tuning/advanced/rescue`, `flight_tuning/advanced/filters`)**:
+  - Route the existing rescue-profile or filter-configuration write and one EEPROM commit through the shared save pipeline without a reboot. Success is reported and edits are marked saved only after the flight controller acknowledges both; refused or lost writes and failed commits report an outcome (#594).
+  - Keep the same save-time payload and re-read after a successful save. Align both help texts with the displayed settings and document Rescue and Filters.
