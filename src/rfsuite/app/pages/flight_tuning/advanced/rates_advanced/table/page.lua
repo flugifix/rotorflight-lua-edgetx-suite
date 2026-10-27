@@ -378,6 +378,8 @@ end
 
 function M.onSave(ctx)
   if not M.canSave() then return false, "loaded_data_missing" end
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if SavePipeline and SavePipeline.isActive() then return false end
   if ui.runtime.resetRates then
     local ConfirmDialog = loadModule("ui/confirm_dialog.lua")
     if ConfirmDialog and type(ConfirmDialog.show) == "function" then

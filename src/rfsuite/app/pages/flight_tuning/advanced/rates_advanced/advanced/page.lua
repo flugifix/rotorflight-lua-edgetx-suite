@@ -573,6 +573,8 @@ end
 
 function M.onSave(ctx)
   if not M.canSave() then return false, "loaded_data_missing" end
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if SavePipeline and SavePipeline.isActive() then return false end
   local ok, err = queueRcWrite()
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then

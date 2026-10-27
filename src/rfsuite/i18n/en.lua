@@ -567,7 +567,7 @@ return {
         help_title = "Cyclic Behaviour",
         help_intro = "Set how combined roll and pitch stick inputs are processed in the active rate profile.",
         help_p1 = "Applies cyclic rates to the combined direction and magnitude instead of each axis separately.",
-        help_p2 = "Limits combined roll and pitch input to prevent excessive diagonal rates.",
+        help_p2 = "Limits combined roll and pitch input to a circular range to prevent excessive diagonal rates.",
         help_p3 = "At 100% the limit is circular; higher values allow more diagonal input."
       },
       flight_tuning_rates_advanced_advanced = {

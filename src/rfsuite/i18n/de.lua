@@ -567,7 +567,7 @@ return {
         help_title = "Zyklisches Verhalten",
         help_intro = "Legt fest, wie kombinierte Roll- und Nick-Eingaben im aktiven Ratenprofil verarbeitet werden.",
         help_p1 = "Wendet zyklische Raten auf die gemeinsame Richtung und Stärke statt auf jede Achse einzeln an.",
-        help_p2 = "Begrenzt kombinierte Roll- und Nick-Eingaben gegen überhöhte diagonale Raten.",
+        help_p2 = "Begrenzt kombinierte Roll- und Nick-Eingaben auf einen Kreisbereich, um überhöhte diagonale Raten zu verhindern.",
         help_p3 = "Bei 100% ist die Grenze kreisförmig; höhere Werte erlauben mehr diagonalen Ausschlag."
       },
       flight_tuning_rates_advanced_advanced = {
