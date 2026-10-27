@@ -11,7 +11,7 @@ One file per page, at the path of the page under `src/rfsuite/app/pages/` with `
 appended: the page `setup/power/smartfuel/page.lua` is documented in
 `docs/pages/setup/power/smartfuel.md`. Menu entries that only open a submenu have no file.
 
-**Status:** 97 reachable pages, 40 written. 81 of them carry an in-app help text behind the
+**Status:** 97 reachable pages, 43 written. 81 of them carry an in-app help text behind the
 `?` in the header, which is the text to start a page file from; the others start from the
 page source.
 
@@ -35,9 +35,9 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Governor | `flight_tuning/governor.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
 | Advanced → Filters | `flight_tuning/advanced/filters.md` | yes | read-only while armed | to write |
 | Advanced → PID Controller | [flight_tuning/advanced/pid_controller.md](flight_tuning/advanced/pid_controller.md) | yes | read-only while armed | written |
-| Advanced → PID Bandwidth | `flight_tuning/advanced/pid_bandwidth.md` | yes | read-only while armed | to write |
-| Advanced → Autolevel | `flight_tuning/advanced/autolevel.md` | yes | read-only while armed | to write |
-| Advanced → Main Rotor | `flight_tuning/advanced/main_rotor.md` | yes | read-only while armed | to write |
+| Advanced → PID Bandwidth | [flight_tuning/advanced/pid_bandwidth.md](flight_tuning/advanced/pid_bandwidth.md) | yes | read-only while armed | written |
+| Advanced → Autolevel | [flight_tuning/advanced/autolevel.md](flight_tuning/advanced/autolevel.md) | yes | read-only while armed | written |
+| Advanced → Main Rotor | [flight_tuning/advanced/main_rotor.md](flight_tuning/advanced/main_rotor.md) | yes | read-only while armed | written |
 | Advanced → Tail Rotor | [flight_tuning/advanced/tail_rotor.md](flight_tuning/advanced/tail_rotor.md) | yes | read-only while armed | written |
 | Advanced → Rescue | `flight_tuning/advanced/rescue.md` | yes | read-only while armed | to write |
 | Advanced → Rates (Advanced) → Advanced | `flight_tuning/advanced/rates_advanced/advanced.md` | yes | read-only while armed | to write |
