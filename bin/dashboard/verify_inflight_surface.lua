@@ -379,6 +379,20 @@ scenario("automatic link resume retains the board identity refusal", function()
   end
   Prime.boardOnLink = saved
 end)
+scenario("the quick-menu entry is offered before the tuning surface was ever opened", function()
+  local Views = rfsuite.require("widgets/dashboard/views.lua")
+  local widget = Runtime.new({x = 0, y = 0, w = 480, h = 320}, {})
+  widget.preferences.general = {preview_inflight_tuning = true}
+  widget.preferences.inflight = {enabled = true}
+  widget.state.inflight, widget._inflight, widget.inflightFullscreen = nil, nil, nil
+  check(Views.condition("previewInflightTuning", widget) == true,
+    "the entry is the only way in, so it must not wait for a snapshot only an open surface publishes")
+  widget.preferences.inflight.enabled = false
+  check(Views.condition("previewInflightTuning", widget) ~= true, "radio master switch off hides the entry")
+  widget.preferences.inflight.enabled = true
+  widget.preferences.general.preview_inflight_tuning = false
+  check(Views.condition("previewInflightTuning", widget) ~= true, "preview off hides the entry")
+end)
 Stubs.releaseCard()
 print(passed .. " surface regressions passed; " .. #failed .. " failed; " .. checks .. " assertions")
 assert(#failed == 0, table.concat(failed, "\n"))
