@@ -192,13 +192,22 @@ end
 -- The fields a section of each kind is checked for, built once. Walking the whole function table
 -- for every section spent most passes on fields of another scope: a full baseline took 135 passes,
 -- which at the widget's cadence is about ten seconds in front of the first profile read.
-local scopeFields
-local function buildScopeFields()
-  scopeFields = {pid = {}, rate = {}, global = {}}
-  for _, fn in ipairs(Functions.FUNCTIONS) do
-    local list = scopeFields[Functions.scopeOf(fn.id) or "global"]
+local scopeFields, building
+-- Answers true once the lists are complete; sorts CHECKS_PER_PASS entries per call.
+local function buildScopeFields(perPass)
+  building = building or {lists = {pid = {}, rate = {}, global = {}}, at = 1}
+  local functions = Functions.FUNCTIONS
+  for _ = 1, perPass do
+    local fn = functions[building.at]
+    if not fn then
+      scopeFields, building = building.lists, nil
+      return true
+    end
+    local list = building.lists[Functions.scopeOf(fn.id) or "global"]
     if list and tracked(fn) then list[#list + 1] = fn end
+    building.at = building.at + 1
   end
+  return false
 end
 
 -- Sixteen checks per pass: about a thousand instructions, and a full baseline in about 30 passes.
@@ -212,8 +221,8 @@ function M.validateStep(work)
       or type(data.meta.uid) ~= "string" or type(data.meta.masterGains) ~= "boolean" then return true, false end
     work.started = true
   end
-  -- The lists are built once per session, in a pass that checks nothing else.
-  if not scopeFields then buildScopeFields(); return false end
+  -- The lists are built once per session, a slice per pass, in passes that check nothing else.
+  if not scopeFields then buildScopeFields(CHECKS_PER_PASS); return false end
   for _ = 1, CHECKS_PER_PASS do
     if not work.name then
       local name, values = next(data, work.last)
