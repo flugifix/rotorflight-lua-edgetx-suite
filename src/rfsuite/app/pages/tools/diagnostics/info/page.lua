@@ -444,7 +444,8 @@ local function startLiveLoad()
   -- Show the same progress overlay pattern used by other MSP read flows.
   AsyncLoadUi.begin(state, nowSeconds(), 4, true)
 
-  local function onFailure(name, cmd)
+  local function onFailure(name, cmd, reason)
+    if reason == "cleared" then return end
     local runtimeMsg = readRuntimeErrorMessage()
     local details = runtimeMsg or (tostring(name or "MSP") .. " timed out / failed (cmd=" .. tostring(cmd or "?") .. ")")
     abortLoading(state.i18n, details)
@@ -463,7 +464,7 @@ local function startLiveLoad()
       end
       markStepDone()
     end,
-    errorHandler = function() onFailure("VARIANT", VariantApi.command) end
+    errorHandler = function(_, reason) onFailure("VARIANT", VariantApi.command, reason) end
   })
 
   queue:add({
@@ -485,7 +486,7 @@ local function startLiveLoad()
       end
       markStepDone()
     end,
-    errorHandler = function() onFailure("BOARD_INFO", BoardInfoApi.command) end
+    errorHandler = function(_, reason) onFailure("BOARD_INFO", BoardInfoApi.command, reason) end
   })
 
   queue:add({
@@ -501,7 +502,7 @@ local function startLiveLoad()
       end
       markStepDone()
     end,
-    errorHandler = function() onFailure("BUILD_INFO", BuildInfoApi.command) end
+    errorHandler = function(_, reason) onFailure("BUILD_INFO", BuildInfoApi.command, reason) end
   })
 
   -- The re-read counts its interval from this read. Left at 0, it would ask for the same
@@ -522,7 +523,7 @@ local function startLiveLoad()
       end
       markStepDone()
     end,
-    errorHandler = function() onFailure("TELEMETRY_CONFIG", TelemetryConfigApi.command) end
+    errorHandler = function(_, reason) onFailure("TELEMETRY_CONFIG", TelemetryConfigApi.command, reason) end
   })
 
   requestRebuild()

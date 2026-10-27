@@ -59,7 +59,7 @@ connection that answered only part of the way still reads sensibly.
 A board that answers with an MSP API version the suite does not support is refused. That is
 different from a board that does not answer. The home screen's notice, the service widget and
 the dashboard's standby line name that version. The *Info* page's *Loading failed* notice now
-names it too instead of reporting a timeout; its *Supported MSP API* row lists the supported
+names it too when loading times out; its *Supported MSP API* row lists the supported
 versions. When the board does not answer, the home screen and the *Info* page ask you to check
 `FEATURE_TELEMETRY` and the MSP serial port configuration.
 

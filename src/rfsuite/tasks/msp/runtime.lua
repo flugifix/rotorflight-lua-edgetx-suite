@@ -533,6 +533,7 @@ local function enqueueVersionReads(now)
         state.requestBackoffUntil = 0
         state.mspLastError = nil
         state.mspLastErrorAt = 0
+        state.mspErrorKind = nil
         state.values.apiVersion = parsed.version
         local fullySupported = isApiVersionSupported(parsed.version)
         local limitedCompatible = (not fullySupported) and isApiVersionLimitedCompatible(parsed.version)
@@ -731,10 +732,6 @@ local function doDisconnect(now, reason, keepLink)
   state.consecutiveApiVersionFailures = 0
   state.consecutiveUidFailures = 0
   state.requestBackoffUntil = 0
-  if not keepLink then
-    state.mspLastError = nil
-    state.mspLastErrorAt = 0
-  end
   state.values.apiVersion = "0"
   state.values.fcVersion = "0"
   state.values.rfVersion = "0"
@@ -908,6 +905,7 @@ function Runtime.tick()
       state.unsupportedApiLogged = false
       state.mspLastError = nil
       state.mspLastErrorAt = 0
+      state.mspErrorKind = nil
       state.consecutiveApiVersionFailures = 0
       state.requestBackoffUntil = 0
       log("MSP link connected", "info")

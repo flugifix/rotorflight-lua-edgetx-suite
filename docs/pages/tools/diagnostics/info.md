@@ -41,7 +41,7 @@ the flight controller over MSP.
 ## Notes
 
 - **Loading failed names a refused MSP API version.** If the flight controller answered with
-  an unsupported API version, the notice shows that version instead of a generic timeout.
+  an unsupported API version, the notice shows that version when loading times out.
   If the controller did not answer, it says so and asks you to check
   `FEATURE_TELEMETRY` and the MSP serial port configuration. The *Supported MSP API* row lists
   the versions the suite supports.
@@ -53,7 +53,7 @@ the flight controller over MSP.
   Info are the flight controller's, so they are dropped when the page is left and fetched again
   on the next visit — which is what makes them right after a model change rather than the
   previous helicopter's.
-- **Reload in the header re-reads everything on demand**, and leaving the page and coming back
-  does the same, because the flight controller's rows are dropped when the page closes.
+- **Reload in the header re-reads Variant, Board Info, Build Info and Packet Ratio on demand.**
+  Leaving the page and coming back reads those fields again too.
 
 *Documented against RFSuite 0.1.7.*
