@@ -2747,6 +2747,7 @@ return {
         suite_tool = "Hauptmenü",
         flight_log = "Flugbuch",
         exit = "Vollbild verlassen",
+        inflight_tuning = "In-Flight-Tuning",
         saved_title = "Gespeichert",
         saved_message = "Tasten gespeichert",
         save_error_title = "Fehler",

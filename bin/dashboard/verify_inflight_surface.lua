@@ -393,6 +393,22 @@ scenario("the quick-menu entry is offered before the tuning surface was ever ope
   widget.preferences.general.preview_inflight_tuning = false
   check(Views.condition("previewInflightTuning", widget) ~= true, "preview off hides the entry")
 end)
+scenario("a hardware key bound to in-flight tuning opens the surface", function()
+  local Views = rfsuite.require("widgets/dashboard/views.lua")
+  local Keys = rfsuite.require("widgets/dashboard/keys.lua")
+  local widget = Runtime.new({x = 0, y = 0, w = 480, h = 320}, {})
+  widget.preferences.general = {preview_inflight_tuning = true}
+  widget.preferences.inflight = {enabled = true}
+  widget.inflightFullscreen = nil
+  local action, global = Keys.resolve({key_tele = "inflight_tuning"}, "tele", nil, nil)
+  check(action == "openTuning" and global == true, "the Keys choice resolves to the open-tuning action")
+  Views.navigate(widget, action)
+  check(widget.inflightFullscreen == true and widget.built == false, "the bound key raises the tuning flag")
+  widget.inflightFullscreen = nil
+  widget.preferences.inflight.enabled = false
+  Views.navigate(widget, action)
+  check(widget.inflightFullscreen ~= true, "with the overlay disabled the key opens nothing")
+end)
 Stubs.releaseCard()
 print(passed .. " surface regressions passed; " .. #failed .. " failed; " .. checks .. " assertions")
 assert(#failed == 0, table.concat(failed, "\n"))

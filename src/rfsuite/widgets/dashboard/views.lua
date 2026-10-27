@@ -563,8 +563,10 @@ end
 -- ---------------------------------------------------------------------------
 
 -- An action is a string: `openView:<id>`, `closeView`, `done`, `exitFullscreen`, `openTool`,
--- `openTool:<menuId>` or `none`.
-local SIMPLE_ACTIONS = { closeView = true, done = true, exitFullscreen = true, openTool = true, none = true }
+-- `openTool:<menuId>`, `openTuning` or `none`.
+local SIMPLE_ACTIONS = {
+  closeView = true, done = true, exitFullscreen = true, openTool = true, openTuning = true, none = true
+}
 
 -- The pages `openTool:<menuId>` may open the tool on, each with the condition that has to hold for
 -- it: the page has to be in the tool's menu and reachable now. A target that is not here is
@@ -680,6 +682,15 @@ function M.navigate(widget, after)
     widget._viewStack = nil
     exitFullscreen(widget)
     return true
+  elseif verb == "openTuning" then
+    -- The same flag the quick menu's IN-FLIGHT TUNING entry raises, under the same condition: a
+    -- key bound to it does nothing where the entry would not be offered.
+    if not M.condition("previewInflightTuning", widget) then
+      viewLog("in-flight tuning not opened: the overlay is not enabled")
+      return
+    end
+    widget.inflightFullscreen = true
+    M.invalidate(widget)
   elseif verb == "openTool" then
     if id ~= nil and not M.condition(TOOL_LANDINGS[id], widget) then
       viewLog("tool not opened on '" .. id .. "': that page is not offered now")

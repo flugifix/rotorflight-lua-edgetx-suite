@@ -79,7 +79,8 @@ cells. This prevents the FC's clamp from jumping an out-of-range value to a slot
 
 ## The three surfaces
 
-Open the dashboard in fullscreen and choose **In-flight tuning** from the quick menu. What it
+Open the dashboard in fullscreen and choose **In-flight tuning** from the quick menu, or press a
+hardware key set to **In-flight tuning** under *Settings* → *Dashboard* → *Keys*. What it
 shows follows the flight. Opening releases tuning on that pass, with no switch or debounce.
 On the ground, X or RTN closes tuning and returns to the quick menu; the session persists.
 In the air there is no X, and RTN only leaves value mode. A firmware fullscreen exit (long RTN)

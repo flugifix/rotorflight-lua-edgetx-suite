@@ -2719,6 +2719,7 @@ return {
         suite_tool = "Main menu",
         flight_log = "Flight log",
         exit = "Exit fullscreen",
+        inflight_tuning = "In-flight tuning",
         saved_title = "Saved",
         saved_message = "Keys saved",
         save_error_title = "Error",
