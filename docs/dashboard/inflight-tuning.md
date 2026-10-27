@@ -106,20 +106,30 @@ After a completed read with no tunable slots on the configured channel pair, a l
 that the FC has no adjustment functions for in-flight tuning and this becomes the large primary
 action in place of **Choose parameters**. It is absent while armed or during a read or restore.
 
-The setup surface explains what it writes and starts with **Step size** (1, 2, 5 or 10) and
+![Set up suggested functions: what is replaced, and the two step sizes](../images/inflight/fc-setup-choices.png)
+
+The setup surface says what it writes before anything is read: adjustment slots 3 to 38 are
+replaced with the suggestions whatever they hold now, and slots 1 and 2 (the profile selection)
+stay. It then offers **Step size** (1, 2, 5 or 10) and
 **Head speed step** (10, 25, 50 or 100), prefilled from this model's saved choices; the defaults
 are 5 and 50. Touch and the hardware encoder select them. **Next** reads the receiver map and
 slot function IDs and shows how many slots will be written and how many hold another function. It names
 up to six slots holding other functions and counts the rest: those functions are overwritten,
-regardless of which switches use them. Slots 0 and 1 are kept. Channels and windows are checked
+regardless of which switches use them. Slots are numbered from 1, as on the Adjustments page;
+slots 1 and 2 are kept. Channels and windows are checked
 by the read-back, since the plan reads function IDs only. Pages break between complete sentences
 and slot entries; **Confirm** follows the last plan entry.
+
+![The plan: slots written, slots overwritten and what they held, slots left alone](../images/inflight/fc-setup-plan.png)
 
 Only the function of each slot was read. Which channel it watches is checked after the write.
 The values only come back to the radio with telemetry sensor 99 selected and CRSF custom telemetry on.
 
 **Confirm** writes each suggested slot, saves once on the FC, then reads back and compares every
 written record. One progress screen shows **Step x of y**, a bar and the current operation.
+
+![Writing the suggested functions](../images/inflight/fc-setup-writing.png)
+
 Only a matching read-back saves the selected step sizes to this model, on a separate idle pass.
 It then drops the old board set and starts a fresh ground read continuing the session.
 An error is shown in words with **Back**. **Cancel** is available until the write is verified;
@@ -137,9 +147,14 @@ read and return to the original pair succeed. Cancel leaves the stored start val
 existing confirmation naming its targets. No spare FC profile is reserved; old stored
 spare-slot settings are ignored.
 
+![Reading the profiles: the same surface in the widget zone and, with Cancel, full screen](../images/inflight/overlay-reading.png)
+
 A read or restore shows a progress surface with a **Reading** or **Restoring** title, a bar,
-**Step x of y**, and the current operation. **Cancel** is offered only during a read, before
-the return to the original profiles; a restore must finish its writes and return.
+**Step x of y**, and the current operation. The widget zone shows the same surface without the
+buttons. Before the first profile is read, a saved session is checked on the SD card
+(*Checking the saved session*); then the active profiles are read. **Cancel** is offered only
+during a read, before the return to the original profiles; a restore must finish its writes and
+return.
 
 The reachable set is the union of `adjMin..adjMax` from all PID-profile (function 2)
 and rate-profile (function 1) adjustment slots, capped to 1..6 and the FC-reported counts,
