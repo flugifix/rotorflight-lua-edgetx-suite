@@ -35,11 +35,11 @@ return function(ctx)
   if isBefore12_0_8 then
     parts[#parts + 1] = t(i18n, "help_p5", "Collective Impulse FF: Gain sets the impulse precompensation for sudden collective inputs and Decay sets its decay time.")
   else
-    parts[#parts + 1] = t(i18n, "help_p7", "Inertia Precomp: Gain sets the inertia compensation strength and Cutoff controls how quickly it is applied.")
+    parts[#parts + 1] = t(i18n, "help_p7", "Inertia Precomp: Gain increases yaw precompensation for main-rotor inertia; a higher derivative Cutoff applies it more sharply.")
   end
 
   if isAtLeast12_0_9 then
-    parts[#parts + 1] = t(i18n, "help_p6", "Tail Torque Assist: Gain sets the headspeed increase for motorized-tail yaw assist and Limit caps the increase.")
+    parts[#parts + 1] = t(i18n, "help_p6", "Tail Torque Assist: Gain raises headspeed for negative-direction yaw on motorized tails; Limit caps the increase above full headspeed.")
   end
 
   return {
