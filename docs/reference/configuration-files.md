@@ -103,7 +103,12 @@ by hand, and a save keeps whatever the section holds.
   suite* until every file has its compiled copy beside it, so no page pays for that later. The
   dashboard connects to the flight controller only once that has finished; when the tool is
   opened from the dashboard meanwhile, its start screen shows the same pass rather than starting
-  another. `false` skips this in both places: the start screen and the splash wait for the
+  another. After an install or an update the dashboard then reads *Suite updated. Please restart
+  the radio.* and does not connect until the radio has been restarted, and the tool shows the same
+  request once when its start screen closes: what was loaded before the pass is still the previous
+  build's code, and only a restart replaces it. This applies to an install made from the release
+  archive, which carries the build identity; a source tree copied by hand is compiled but never
+  holds the dashboard back. `false` skips this in both places: the start screen and the splash wait for the
   connection only, and each file is compiled the first time a page needs it, which makes that
   first opening slower. It is meant for automated test runs on a card that starts without
   compiled files every time; on a radio there is no reason to set it.

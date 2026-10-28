@@ -435,6 +435,19 @@ do
     #record.loads == 0, table.concat(record.loads, ", "))
 end
 
+-- A tree without the packager's build identity, started the way the widgets start it (no version
+-- to fall back on): nothing starts, so a hand-copied source tree never holds the connection.
+do
+  local card = installedCard()
+  card.files[CORE .. "/build.txt"] = nil
+  local Precompile, record, _, close = widgetState(card, true)
+  local api = hasWidgetApi(Precompile)
+  local started = api and Precompile.startIfStale(nil)
+  close()
+  check("widget without a build identity: no pass starts", api and started == false)
+  check("widget without a build identity: nothing is loaded", #record.loads == 0, #record.loads .. " loads")
+end
+
 -- Without the uncached loader nothing could be compiled, so nothing starts and no stamp claims the
 -- tree compiled.
 do
@@ -499,6 +512,41 @@ do
   check("callers sharing a tick: a shared step after the tool's step does nothing",
     afterStep == 1 and afterShared == 1, afterStep .. " then " .. afterShared)
   check("callers sharing a tick: the next tick takes the next unit", nextTick == 2, tostring(nextTick))
+end
+
+-- A pass that rebuilt the whole tree asks for a restart of the radio, because a state that loaded
+-- modules before it keeps running them; one that only filled in a source does not, and neither
+-- does one whose stamp did not land -- the next start would compile everything and ask again.
+local function needsRestartAfter(card, starter)
+  local Precompile, _, advance, close = widgetState(card, true)
+  local answer = nil
+  if type(Precompile.needsRestart) == "function" then
+    starter(Precompile)
+    driveShared(Precompile, advance)
+    answer = Precompile.needsRestart()
+  end
+  close()
+  return answer
+end
+
+do
+  local rebuilt = needsRestartAfter(installedCard(), function(P) P.startIfStale("0.2.0") end)
+  check("restart: asked after a pass that rebuilt the tree", rebuilt == true, tostring(rebuilt))
+
+  local card = compiledCard()
+  card.put(CORE .. "/added.lua", VALID, 200)
+  local filled = needsRestartAfter(card, function(P) P.start("0.2.0") end)
+  check("restart: not asked after a pass that only filled in a source", filled == false, tostring(filled))
+
+  local unpackaged = installedCard()
+  unpackaged.files[CORE .. "/build.txt"] = nil
+  local bare = needsRestartAfter(unpackaged, function(P) P.start("0.2.0") end)
+  check("restart: not asked for a tree without the packager's build identity", bare == false, tostring(bare))
+
+  local unwritable = installedCard()
+  unwritable.mkdirAvailable = false
+  local noStamp = needsRestartAfter(unwritable, function(P) P.startIfStale("0.2.0") end)
+  check("restart: not asked when the stamp could not be written", noStamp == false, tostring(noStamp))
 end
 
 if failures > 0 then

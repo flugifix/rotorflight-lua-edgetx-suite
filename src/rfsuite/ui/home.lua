@@ -649,6 +649,7 @@ state = {
   connStatusNoticeVisible = false,
   connStatusNoticeTitle = nil,
   connStatusNoticeMessage = nil,
+  restartNoticeVisible = false,
   lastAudioTick = 0,
   -- Whether the audio block's readiness test held on the previous audio tick. The clean-up on
   -- the other side of that test runs on the ready-to-not-ready edge, and this is what remembers
@@ -2895,6 +2896,37 @@ local function buildScene()
     return
   end
 
+  -- Raised once after a pass that rebuilt the whole tree (see the start screen's finish above),
+  -- in the same box as the two notices before it.
+  if state.restartNoticeVisible then
+    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
+    local lyt = {
+      {
+        type = "rectangle",
+        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
+        color = Palette.panel,
+        filled = true
+      }
+    }
+    local i18n = state.i18n
+    LoadingOverlay.appendNotice(lyt, {
+      x = 0,
+      y = 0,
+      w = LCD_W or 320,
+      h = LCD_H or 240,
+      title = i18n and i18n.t and i18n.t("app.restart_radio.title") or "Restart the radio",
+      message = i18n and i18n.t and i18n.t("app.restart_radio.message")
+        or "The suite was updated and prepared. Restart the radio once so that the dashboard runs the new version too.",
+      buttonText = i18n and i18n.t and i18n.t("app.actions.close") or "Close",
+      press = function()
+        state.restartNoticeVisible = false
+        scheduleBuildUI(false)
+      end
+    })
+    lvgl.build(lyt)
+    return
+  end
+
   syncActivePageModule()
 
   local profile = DisplayProfile.current()
@@ -3403,6 +3435,7 @@ function M.init(opts)
   state.armedFeedbackUntil = nil
   state.armedFeedbackText = nil
   state.connStatusNoticeVisible = false
+  state.restartNoticeVisible = false
   state.pendingMenuOpen = nil
   state.pendingPageOpen = nil
   state.isClosing = false
@@ -4019,6 +4052,12 @@ function M.run(event, touchState)
       -- here rather than on the first page that happens to need a file.
       if mspSettled and compileFinished then
         state.initialLoad = false
+        -- A pass that rebuilt the whole tree leaves the dashboard -- and, hosted, this tool --
+        -- running the previous build's modules until the radio is restarted, so the pilot is
+        -- asked for that once, on the screen that follows.
+        if Precompile and type(Precompile.needsRestart) == "function" and Precompile.needsRestart() then
+          state.restartNoticeVisible = true
+        end
         scheduleBuildUI(false)
       end
     end

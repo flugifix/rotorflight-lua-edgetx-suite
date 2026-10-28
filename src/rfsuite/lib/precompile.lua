@@ -192,7 +192,9 @@ local function writeStamp(identity)
 
   if readStampFile(STAMP_PATH, STAMP_LIMIT) ~= identity then
     warn("could not write rfsuite.user/precompiled.txt, every start compiles everything")
+    return false
   end
+  return true
 end
 
 local function beginDirectory(path)
@@ -310,7 +312,8 @@ end
 -- of its own; without either the pass still fills in missing and outdated bytecode but never
 -- forces a rebuild.
 function Precompile.start(version)
-  local identity = readStampFile(IDENTITY_PATH, STAMP_LIMIT) or version
+  local built = readStampFile(IDENTITY_PATH, STAMP_LIMIT)
+  local identity = built or version
 
   -- The widget state is one Lua state for the dashboard, the service widget and the tool opened
   -- from the dashboard, and they share this module. A pass one of them started is joined rather
@@ -324,6 +327,7 @@ function Precompile.start(version)
 
   state = {
     identity = identity,
+    packaged = built ~= nil,
     force = identity ~= nil and stamp ~= identity,
     dirs = {},
     cursor = nil,
@@ -378,7 +382,7 @@ function Precompile.step()
       state.firstError)
   end
   if state.force and state.identity ~= nil then
-    writeStamp(state.identity)
+    state.stampWritten = writeStamp(state.identity)
   end
 end
 
@@ -387,6 +391,9 @@ end
 -- so the compile does not compete with the connect chain and every page is ready when the
 -- flight controller is. A tree that is already compiled costs two small file reads here and no
 -- walk at all; filling in a single edited source is left to the tool's own start.
+--
+-- version is the fallback identity, as for start(); the widgets pass none, so a tree without the
+-- packager's build identity starts nothing from them.
 --
 -- Returns true while such a pass runs, whether this call started it or another caller did.
 -- Without the uncached loader nothing would actually be compiled, yet the pass would finish and
@@ -398,6 +405,11 @@ function Precompile.startIfStale(version)
 
   local utils = _G.rfsuite and _G.rfsuite.utils
   if not utils or type(utils.loadScriptUncached) ~= "function" then
+    return false
+  end
+  -- The same for the listing: without dir() the walk finds nothing, and a pass that compiled
+  -- nothing would still record the build as compiled and ask for a restart.
+  if type(dir) ~= "function" then
     return false
   end
 
@@ -422,6 +434,17 @@ function Precompile.stepShared()
     return
   end
   Precompile.step()
+end
+
+-- True once a pass that rebuilt the whole tree has finished and recorded it. Whatever was loaded
+-- before or during that pass in a Lua state that outlives it -- the widgets', above all -- is
+-- still the previous build's code, and only a restart of the radio replaces it. Never true when
+-- the stamp did not land: the next start would then compile everything again and ask again, for
+-- ever. And only for a tree the packager stamped: a source tree copied by hand, compiled against
+-- the version number, is a developer's, and is not held up for a restart.
+function Precompile.needsRestart()
+  return state ~= nil and state.finished and state.force and state.packaged
+    and state.stampWritten == true
 end
 
 function Precompile.isRunning()

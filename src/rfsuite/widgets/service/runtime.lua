@@ -266,8 +266,9 @@ local function compileHoldsConnect(self)
     if developer and developer.precompile == false then return false end
     local Precompile = requireModule("lib/precompile.lua")
     if type(Precompile) ~= "table" or type(Precompile.startIfStale) ~= "function" then return false end
-    local Version = requireModule("lib/version.lua")
-    if not Precompile.startIfStale(type(Version) == "table" and Version.VERSION or nil) then
+    -- No version to fall back on: the widgets act only on a tree the packager stamped with its
+    -- build identity, so a source tree copied by hand never holds the connection back.
+    if not Precompile.startIfStale(nil) then
       if not Precompile.isRunning() and _G.rfsuite and type(_G.rfsuite.clearModule) == "function" then
         _G.rfsuite.clearModule("lib/precompile.lua")
       end
@@ -277,7 +278,8 @@ local function compileHoldsConnect(self)
     log("compile pass after install: connection held until it finishes", "info")
   end
   Compile.stepShared()
-  if Compile.isRunning() then return true end
+  -- Held after the pass too, until the radio is restarted: see the dashboard's gate.
+  if Compile.isRunning() or Compile.needsRestart() then return true end
   Compile = false
   return false
 end

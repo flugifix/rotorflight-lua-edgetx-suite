@@ -533,8 +533,11 @@ end
 -- then; a tree that is already compiled costs two small file reads, and the module is let go.
 local Compile = nil
 
--- True while the pass runs. It takes one unit of the pass per call, so the dashboard and the
--- service widget wait for it together and either of them alone still finishes it.
+-- True while the pass runs, and after it for as long as the radio has not been restarted: the
+-- modules this state loaded at start are the previous build's, so the dashboard does not connect
+-- on them and asks for the restart instead. It takes one unit of the pass per call, so the
+-- dashboard and the service widget wait for it together and either of them alone still finishes
+-- it.
 local function compileHoldsConnect(self)
   if Compile == false then return false end
   if Compile == nil then
@@ -543,8 +546,9 @@ local function compileHoldsConnect(self)
     if developer and developer.precompile == false then return false end
     local Precompile = requireModule("lib/precompile.lua")
     if type(Precompile) ~= "table" or type(Precompile.startIfStale) ~= "function" then return false end
-    local Version = requireModule("lib/version.lua")
-    if not Precompile.startIfStale(type(Version) == "table" and Version.VERSION or nil) then
+    -- No version to fall back on: the widgets act only on a tree the packager stamped with its
+    -- build identity, so a source tree copied by hand never holds the connection back.
+    if not Precompile.startIfStale(nil) then
       if not Precompile.isRunning() and _G.rfsuite and type(_G.rfsuite.clearModule) == "function" then
         _G.rfsuite.clearModule("lib/precompile.lua")
       end
@@ -555,15 +559,26 @@ local function compileHoldsConnect(self)
   end
   Compile.stepShared()
   if Compile.isRunning() then return true end
+  if Compile.needsRestart() then
+    if not self._compileRestartLogged then
+      self._compileRestartLogged = true
+      widgetLog(self, "compile pass finished: waiting for a restart of the radio", "info")
+    end
+    return true
+  end
   Compile = false
   widgetLog(self, "compile pass finished", "info")
   return false
 end
 
--- The splash line while the pass runs. It names the work the way the tool's start screen does,
--- and the count in it moves once a second at most: the splash is rebuilt whenever its line
--- changes, and a count taken on every pass would turn every pass into a build.
+-- The splash line while the pass runs, and the request to restart once it has finished. It names
+-- the work the way the tool's start screen does, and the count in it moves once a second at most:
+-- the splash is rebuilt whenever its line changes, and a count taken on every pass would turn every
+-- pass into a build.
 local function compileStatusLine(self, t)
+  if Compile and Compile.needsRestart() then
+    return (t and t("app.restart_radio.splash")) or "Suite updated. Please restart the radio."
+  end
   local now = nowSeconds()
   if self._compileLine == nil or (now - (self._compileLineAt or 0)) >= 1 then
     local done, total = 0, 0

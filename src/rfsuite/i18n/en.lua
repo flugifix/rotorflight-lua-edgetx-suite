@@ -5,6 +5,11 @@ return {
     erasing = "Erasing...",
     connecting = "Connecting",
     preparing = "Preparing suite",
+    restart_radio = {
+      splash = "Suite updated. Please restart the radio.",
+      title = "Restart the radio",
+      message = "The suite was updated and prepared. Restart the radio once so that the dashboard runs the new version too."
+    },
     read_failed = "Could not read the settings from the flight controller. Use Reload to try again.",
     unknown_value = "Unknown (%s)",
     page_error = {
