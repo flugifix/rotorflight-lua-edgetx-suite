@@ -15,6 +15,7 @@ local MspRuntime = nil
 local BatteryConfigApi = nil
 local LoadingOverlay = nil
 local ApiVersion = nil
+local PowerFields = nil
 local t = nil
 
 M.eepromWrite = true
@@ -68,6 +69,7 @@ local function ensureDeps()
 	if not BatteryConfigApi then BatteryConfigApi = loadModule("tasks/msp/api/battery_config.lua") end
 	if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
 	if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
+	if not PowerFields then PowerFields = loadModule("lib/power_fields.lua") end
 	if not t then t = Common and Common.pageT("setup_power_sources") or nil end
 end
 
@@ -214,38 +216,8 @@ local function getCurrentSourceSetter()
 end
 
 local function buildSourceOptions(i18n, selectedValue)
-	local options = {
-		{ value = 0, label = pageText(i18n, "source_none", "NONE") },
-		{ value = 1, label = pageText(i18n, "source_adc", "ADC") },
-		{ value = 2, label = pageText(i18n, "source_esc", "ESC") },
-		{ value = 3, label = pageText(i18n, "source_fbus", "FBUS") }
-	}
-
-	-- The CRSF meter source (an external CRSF sensor on a port set to CRSF Sensors) reached the
-	-- firmware while the API was already at 12.10. Without a known version it is not offered;
-	-- a value already stored still shows below as Unknown and is kept on save.
 	local session = getSession()
-	local rawApiVersion = session and session.apiVersion
-	if rawApiVersion and ApiVersion and ApiVersion.isAtLeast(rawApiVersion, {12, 0, 10}) then
-		options[#options + 1] = { value = 4, label = pageText(i18n, "source_crsf", "CRSF") }
-	end
-
-	local known = false
-	for i = 1, #options do
-		if options[i].value == selectedValue then
-			known = true
-			break
-		end
-	end
-
-	if not known and type(selectedValue) == "number" then
-		options[#options + 1] = {
-			value = selectedValue,
-			label = pageText(i18n, "source_unknown", "Unknown") .. " (" .. tostring(selectedValue) .. ")"
-		}
-	end
-
-	return options
+	return PowerFields.sourceOptions(i18n, selectedValue, session and session.apiVersion, ApiVersion)
 end
 
 local function buildBatteryPayload(batteryConfig)
@@ -448,6 +420,7 @@ function M.onClose()
 	BatteryConfigApi = nil
 	LoadingOverlay = nil
 	ApiVersion = nil
+	PowerFields = nil
 	t = nil
 end
 

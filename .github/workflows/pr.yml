@@ -137,6 +137,29 @@ jobs:
         run: |
           python bin/docs/verify_documentation_rule.py             --base '${{ github.event.pull_request.base.sha }}'             --body-file pr-body.txt
 
+  menu-structure:
+    # docs/reference/menu-structure.md is generated from the menu definition, the page
+    # registry, the English titles and the files under docs/pages/. A change to any of them
+    # that does not regenerate the page turns this red; `python3 bin/docs/menu_structure.py`
+    # writes it.
+    name: Menu structure page
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Prove the check can go red
+        run: python3 bin/docs/menu_structure.py --self-test
+
+      - name: Check the page matches the menu definition
+        run: python3 bin/docs/menu_structure.py --check
+
   translation-coverage:
     name: Translation coverage
     runs-on: ubuntu-latest
@@ -321,6 +344,9 @@ jobs:
           lua5.3 bin/smartfuel/verify_invalid_max.lua
           lua5.3 bin/smartfuel/verify_readers.lua
 
+      - name: Check the combined source
+        run: lua5.3 bin/smartfuel/verify_combined_source.lua
+
   flight-record-absent-sources:
     name: Flight record absent sources
     runs-on: ubuntu-latest
@@ -385,6 +411,17 @@ jobs:
             --base '${{ github.event.pull_request.base.sha }}' \
             --body-file pr-body.txt
 
+  packed-system-state:
+    name: Live packed system state
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install Lua 5.3
+        run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - name: Check fields, freshness and negative control
+        run: lua5.3 bin/telemetry/verify_system_state.lua --self-test
+
   msp-override-payloads:
     name: MSP override payloads
     runs-on: ubuntu-latest
@@ -401,3 +438,11 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y lua5.3
       - run: lua5.3 bin/msp/verify_esc_parameters_pack.lua
       - run: lua5.3 bin/msp/verify_esc_readback_after_save.lua
+
+  esc-yge-flag-bit3:
+    name: YGE flags bit 3
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/esc/verify_yge_flag_bit3.lua

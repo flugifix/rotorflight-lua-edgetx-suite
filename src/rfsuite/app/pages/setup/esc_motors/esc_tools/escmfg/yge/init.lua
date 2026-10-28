@@ -12,8 +12,7 @@ local mspHeaderBytes = 2
 -- remembering both -- which is how 4691 came to be in neither.
 --
 -- `bec12v` is what raises the BEC Voltage field's ceiling from 8.4 V to 12.0 V. It is a property
--- of the model rather than of the flags word: the flag says what the ESC is set to, this says
--- what it can be set to.
+-- of the model, independent of flags bit 3, whose meaning is not documented.
 local escModels = {
     [848] = { name = "YGE 35 LVT BEC", bec12v = false },
     [1616] = { name = "YGE 65 LVT BEC", bec12v = false },
