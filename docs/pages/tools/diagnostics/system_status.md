@@ -176,6 +176,10 @@ When neither packed sensor is received, the page says so in one line instead of 
   profiles are read from their own sensors, and from the packed sensors only when the own sensor is missing.
   This page shows both for the five shared fields above, whichever the suite uses; the rescue state it shows
   from the packed sensor only.
+- **The field layout has one owner in the suite**, `lib/system_state.lua`, and this page decodes
+  through it. A value that is not a whole number from 0 to `0x7FFFFFFF` is not decoded: its raw
+  value and its rows read `-`. The *Own sensor* column still reads each own sensor directly rather than through
+  the packed word, so a disagreement between the two still shows.
 
 ## Related
 
