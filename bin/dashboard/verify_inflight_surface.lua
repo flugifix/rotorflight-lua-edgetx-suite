@@ -311,17 +311,23 @@ scenario("a link back in the air resumes on a current armed reading without an i
     -- for a while: that must not hold the continued flight's steps back.
     local sensor, held = d.radio.sensor, cell.id
     local heldValue = d.values[held] or 100
+    -- Across the gap the profile sensors read 0, which makes both profiles unknown for a while.
+    local gap = true
     d.radio.sensor = function(name)
       if name == "AdjF" then return held elseif name == "AdjV" then return heldValue end
+      if gap and (name == "PID#" or name == "RTE#") then return 0 end
       return sensor(name)
     end
+    d:watchProfiles()
+    check(d.profile == nil and d.rateProfile == nil, "positive control: the gap makes both profiles unknown")
+    gap = false
     reading[1], reading[2] = true, true
     Stubs.tick(); job(widget); widget:refresh(0, nil)
     check(d.live and not d.linkLost and d.phase == "live" and d.group == 2 and d.entry == 3,
       "a current armed reading resumes the same flight and selection")
     check(d:profileRefusal() == nil, "the unidentified board does not refuse the continued flight: "
       .. tostring(d:profileRefusal()))
-    check(not d.reportFence, "a link gap alone sets no report fence")
+    check(not d.reportFence, "a link gap alone sets no report fence, also when the profiles read unknown in it")
     Stubs.tick(); d:fastTick(getTime())
     local stepped, why = d:dispatch("step", 1, "touch")
     check(stepped and d.fired == fired + 1, "a fresh step is accepted on the continued flight: " .. tostring(why))
@@ -333,6 +339,13 @@ scenario("a link back in the air resumes on a current armed reading without an i
     reading[2] = false
     Stubs.tick(); job(widget); widget:refresh(0, nil)
     check(not d.live and d.linkLost, "a second loss pauses again")
+    -- A profile that comes back as ANOTHER known profile after an unknown stretch is an edge.
+    gap = true; d:watchProfiles()
+    gap = false
+    local plain = d.radio.sensor
+    d.radio.sensor = function(name) if name == "PID#" then return 2 end return plain(name) end
+    d:watchProfiles()
+    check(d.reportFence == true, "known profile 1, unknown, then known profile 2 is still fenced")
   end)
   Msp.armedReading, values.mcuId = savedReading, savedMcu
   check(ok, tostring(err))

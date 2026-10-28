@@ -321,6 +321,7 @@ function M.newDrive(radio, settings)
   self.reportEpoch = 0
   self.profile = nil
   self.rateProfile = nil
+  self.knownPid, self.knownRate = nil, nil
   self.sessionProfiles = nil
   self.profileValues = nil
   self.profilePrevious = nil
@@ -1388,9 +1389,19 @@ function Drive:watchProfiles()
   local wasPaused = self.profilePaused
   self.profilePaused = refusal ~= nil
   if changed then
-    if oldPid ~= nil or oldRate ~= nil then
+    -- The fence is for a change between two KNOWN profiles: a report the board still holds from
+    -- the old one must not be credited to the new one. A profile that only turns unknown is no
+    -- such edge -- the sensors read 0 across a link loss -- and fencing it would leave the steps
+    -- of a flight that continues after the gap waiting for an AdjF of 0 the board need not send.
+    -- Output still stops while the profile is unknown.
+    if pid ~= nil and rate ~= nil then
+      if self.knownPid ~= nil and (self.knownPid ~= pid or self.knownRate ~= rate) then
+        self:cleanup(false)
+        self.reportFence = true
+      end
+      self.knownPid, self.knownRate = pid, rate
+    elseif oldPid ~= nil or oldRate ~= nil then
       self:cleanup(false)
-      self.reportFence = true
     end
     self:cancelSpeech()
     self:activateProfiles()
