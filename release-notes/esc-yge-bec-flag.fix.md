@@ -1,0 +1,2 @@
+- **Preserve YGE flags bit 3 (`setup/esc_motors/esc_tools/escmfg/yge`)**:
+  - Keeps the flags byte's bit 3 as read instead of switching it with the selected BEC voltage (#601).

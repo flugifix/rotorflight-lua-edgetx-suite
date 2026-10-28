@@ -649,6 +649,7 @@ state = {
   connStatusNoticeVisible = false,
   connStatusNoticeTitle = nil,
   connStatusNoticeMessage = nil,
+  restartNoticeVisible = false,
   lastAudioTick = 0,
   -- Whether the audio block's readiness test held on the previous audio tick. The clean-up on
   -- the other side of that test runs on the ready-to-not-ready edge, and this is what remembers
@@ -2895,6 +2896,37 @@ local function buildScene()
     return
   end
 
+  -- Raised once after a pass that rebuilt the whole tree (see the start screen's finish above),
+  -- in the same box as the two notices before it.
+  if state.restartNoticeVisible then
+    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
+    local lyt = {
+      {
+        type = "rectangle",
+        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
+        color = Palette.panel,
+        filled = true
+      }
+    }
+    local i18n = state.i18n
+    LoadingOverlay.appendNotice(lyt, {
+      x = 0,
+      y = 0,
+      w = LCD_W or 320,
+      h = LCD_H or 240,
+      title = i18n and i18n.t and i18n.t("app.restart_radio.title") or "Restart the radio",
+      message = i18n and i18n.t and i18n.t("app.restart_radio.message")
+        or "The suite was updated and prepared. Restart the radio once so that the dashboard runs the new version too.",
+      buttonText = i18n and i18n.t and i18n.t("app.actions.close") or "Close",
+      press = function()
+        state.restartNoticeVisible = false
+        scheduleBuildUI(false)
+      end
+    })
+    lvgl.build(lyt)
+    return
+  end
+
   syncActivePageModule()
 
   local profile = DisplayProfile.current()
@@ -3403,6 +3435,7 @@ function M.init(opts)
   state.armedFeedbackUntil = nil
   state.armedFeedbackText = nil
   state.connStatusNoticeVisible = false
+  state.restartNoticeVisible = false
   state.pendingMenuOpen = nil
   state.pendingPageOpen = nil
   state.isClosing = false
@@ -3421,19 +3454,27 @@ function M.init(opts)
   state.precompileDone = 0
   state.precompileTotal = 0
   ensureVersion()
-  -- Hosted, the walk is not this file's to make: lib/precompile.lua compiles through the
-  -- uncached loader that only the tool script installs (src/main.lua), and the host's state
-  -- has none. `developer.precompile = false` skips it too: every file is then compiled by the
-  -- loader when a page first needs it, and the start screen waits for the connection alone --
-  -- meant for automated runs on a card that starts without bytecode each time. Like the rest of
-  -- the developer section it is written by hand; an absent key keeps the pass. Either way,
-  -- without Precompile the start screen counts the compile as finished.
+  -- `developer.precompile = false` skips the pass: every file is then compiled by the loader
+  -- when a page first needs it, and the start screen waits for the connection alone -- meant for
+  -- automated runs on a card that starts without bytecode each time. Like the rest of the
+  -- developer section it is written by hand; an absent key keeps the pass. Without Precompile
+  -- the start screen counts the compile as finished.
+  --
+  -- Hosted, the tool shares the widget state, and with it the pass the widgets run after an
+  -- install (lib/precompile.lua, startIfStale): a pass still running is joined and its progress
+  -- shown here, and a tree the widgets have already compiled is not walked again on every open
+  -- from the dashboard. The whole walk stays with the tool's own start.
   local developer = prefs and prefs.developer
-  local skipPrecompile = state.hosted or (developer and developer.precompile == false)
+  local skipPrecompile = developer and developer.precompile == false
   if not skipPrecompile then
     ensurePrecompile()
     if Precompile then
-      Precompile.start(Version and Version.VERSION or nil)
+      local version = Version and Version.VERSION or nil
+      if state.hosted then
+        Precompile.startIfStale(version)
+      else
+        Precompile.start(version)
+      end
     end
   end
   state.landingMenuId = nil
@@ -4011,6 +4052,12 @@ function M.run(event, touchState)
       -- here rather than on the first page that happens to need a file.
       if mspSettled and compileFinished then
         state.initialLoad = false
+        -- A pass that rebuilt the whole tree leaves the dashboard -- and, hosted, this tool --
+        -- running the previous build's modules until the radio is restarted, so the pilot is
+        -- asked for that once, on the screen that follows.
+        if Precompile and type(Precompile.needsRestart) == "function" and Precompile.needsRestart() then
+          state.restartNoticeVisible = true
+        end
         scheduleBuildUI(false)
       end
     end
