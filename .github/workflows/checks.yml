@@ -251,6 +251,9 @@ jobs:
       - name: Check per-model reset rollback
         run: lua5.3 bin/dashboard/verify_overrides_reset.lua
 
+      - name: Check dashboard tile choices and theme key pages
+        run: lua5.3 bin/dashboard/verify_field_choices.lua
+
       - name: Check dashboard standby geometry and formatting
         run: lua5.3 bin/dashboard/verify_standby.lua
 
