@@ -84,6 +84,7 @@ local ui = {
   portsOriginal = {},
   portsWorking = {},
   boardDesign = nil,
+  boardName = nil,
   runtime = newRuntime(),
   loading = false,
   progress = 0,
@@ -329,12 +330,12 @@ end
 --
 -- The identifier the firmware reports is a UART number, and that is not what is written beside
 -- the socket: the board says "Port A" or "S.BUS", and which UART that is depends on the board.
--- MSP_BOARD_INFO reports a board design, and the design is the key to the printed names, so a
+-- MSP_BOARD_INFO reports the design and board name used to find printed names, so a
 -- row carries both -- the label the pilot can find on the machine in front of him, and the UART
 -- name the firmware's CLI and the documentation use for the same socket.
 --
 -- The pairing is the Configurator's, which draws exactly this on its own Ports tab and falls
--- back to the bare UART name for a design it has no map for
+-- back to the bare UART name for a board it has no map for
 -- (rotorflight-configurator src/js/tabs/configuration.js:475-481). A board outside those designs
 -- is the normal case rather than an error, and it looks exactly as this page always has.
 local function portLabel(identifier)
@@ -342,7 +343,7 @@ local function portLabel(identifier)
   if not name then
     return pageText(nil, "port_prefix", "Port") .. " " .. tostring(identifier)
   end
-  local printed = PortLabels and PortLabels.label(ui.boardDesign, identifier)
+  local printed = PortLabels and PortLabels.label(ui.boardDesign, identifier, ui.boardName)
   if not printed then return name end
   return printed .. " [" .. name .. "]"
 end
@@ -356,6 +357,7 @@ local function loadFromSession()
     ui.portsWorking = clonePorts(saved.ports)
   end
   ui.boardDesign = saved.boardDesign
+  ui.boardName = saved.boardName
 end
 
 local function saveToSession()
@@ -366,6 +368,7 @@ local function saveToSession()
   end
   session.setup_ports.ports = clonePorts(ui.portsWorking)
   session.setup_ports.boardDesign = ui.boardDesign
+  session.setup_ports.boardName = ui.boardName
 end
 
 local function queuePortsRead(isAutoReload)
@@ -417,12 +420,14 @@ local function queuePortsRead(isAutoReload)
       processReply = function(self, buf)
         local parsed = BoardInfoApi.parse(buf)
         ui.boardDesign = parsed and parsed.board_design or nil
+        ui.boardName = parsed and parsed.board_name or nil
         saveToSession()
         ui.progress = 100
         finishRead()
       end,
       errorHandler = function()
         ui.boardDesign = nil
+        ui.boardName = nil
         saveToSession()
         ui.progress = 100
         finishRead()

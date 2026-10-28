@@ -18,15 +18,14 @@ local BatteryProfileApi = nil
 local Sensors = nil
 local SmartFuelReserve = nil
 local t = nil
+local PowerFields = nil
 
 M.eepromWrite = true
 
 local PROFILE_MIN = 0
 local PROFILE_MAX = 5
-local CAPACITY_MIN = 0
-local CAPACITY_MAX = 40000
-local CELL_COUNT_MIN = 0
-local CELL_COUNT_MAX = 24
+-- Capacity and cell-count limits come from lib/power_fields.lua, set in ensureDeps().
+local CAPACITY_MIN, CAPACITY_MAX, CELL_COUNT_MIN, CELL_COUNT_MAX
 local RESERVE_MIN = 0
 local RESERVE_MAX = 60
 
@@ -40,7 +39,7 @@ local CELL_VOLTAGE_MAX = 500
 -- pilot does not touch keeps the board's own value.
 local CELL_FIELDS = { "batteryCellCount", "vbatmincellvoltage", "vbatmaxcellvoltage", "vbatfullcellvoltage", "vbatwarningcellvoltage" }
 local CELL_LIMITS = {
-	batteryCellCount = { CELL_COUNT_MIN, CELL_COUNT_MAX, 0 },
+	-- batteryCellCount is added in ensureDeps(), from lib/power_fields.lua.
 	vbatmincellvoltage = { CELL_VOLTAGE_MIN, CELL_VOLTAGE_MAX, 330 },
 	vbatmaxcellvoltage = { CELL_VOLTAGE_MIN, CELL_VOLTAGE_MAX, 430 },
 	vbatfullcellvoltage = { CELL_VOLTAGE_MIN, CELL_VOLTAGE_MAX, 410 },
@@ -119,6 +118,12 @@ local function ensureRuntime()
 end
 
 local function ensureDeps()
+	if not PowerFields then
+		PowerFields = loadModule("lib/power_fields.lua")
+		CAPACITY_MIN, CAPACITY_MAX = PowerFields.capacity.min, PowerFields.capacity.max
+		CELL_COUNT_MIN, CELL_COUNT_MAX = PowerFields.cellCount.min, PowerFields.cellCount.max
+		CELL_LIMITS.batteryCellCount = { CELL_COUNT_MIN, CELL_COUNT_MAX, 0 }
+	end
 	if not Common then Common = loadModule("app/pages/settings/common.lua") end
 	if not Controls then Controls = loadModule("ui/controls.lua") end
 	if not PowerModelPreferences then PowerModelPreferences = loadModule("app/pages/setup/power/model_preferences.lua") end
@@ -783,7 +788,7 @@ function M.build(ctx)
 				helpText = pageText(i18n, "help_capacity"),
 				helpTitle = label,
 				onHelp = getInlineHelpHandler(),
-				display = function(v) return tostring(v) .. " mAh" end
+				display = PowerFields.capacityText
 			})
 	end
 
@@ -915,6 +920,7 @@ function M.onClose()
 	BatteryProfileApi = nil
 	Sensors = nil
 	SmartFuelReserve = nil
+	PowerFields = nil
 	t = nil
 end
 
