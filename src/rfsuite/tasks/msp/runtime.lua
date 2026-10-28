@@ -61,6 +61,7 @@ local state = {
   consecutiveApiVersionFailures = 0,
   consecutiveUidFailures = 0,
   mspLastError = nil,
+  mspErrorKind = nil,
   mspLastErrorAt = 0,
   pendingVersionRead = true,
   pendingUidRead = true,
