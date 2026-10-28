@@ -2560,7 +2560,7 @@ return {
         differs_fmt = "%s (abweichend)",
         waiting = "Lese die Telemetriesensoren",
         no_words = "Weder System Status noch System Config wird empfangen. Beide brauchen MSP API 12.10 oder neuer.",
-        help_message = "Die gepackten Statussensoren des Flight Controllers, entschlüsselt; zweimal pro Sekunde vom Sender gelesen.\nSystem Status, System Config: Empfang, Nicht aktuell, Nicht empfangen oder Kein Sensor im Modell.\nSensor: der gelesene Sensor. Rohwert: das Wort, wie es ankam.\nGemeinsame Felder: jeder Wert gepackt und vom eigenen Sensor (ARM, Gov, PID#, RTE#, BAT#); Abweichung zeigt (abweichend)."
+        help_message = "Die gepackten Statussensoren des Flight Controllers, entschlüsselt; zweimal pro Sekunde vom Sender gelesen.\nSystem Status: Empfang, Nicht aktuell, Nicht empfangen oder Kein Sensor im Modell.\nSystem Config: dasselbe für den Konfigurationssensor.\nSensor: der gelesene Sensor. Rohwert: das Wort, wie es ankam.\nGemeinsame Felder: jeder Wert gepackt und vom eigenen Sensor (ARM, Gov, PID#, RTE#, BAT#); Abweichung zeigt (abweichend)."
       },
       diagnostics_fblstatus = {
         date = "Datum",
