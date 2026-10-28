@@ -169,7 +169,15 @@ for _, list in ipairs({ M.LIVE, M.STATS }) do
     entry.chars = (DIGITS[entry.id] or 4) + #(entry.unit or "") + (TEMPERATURES[entry.id] and 2 or 0)
   end
 end
+local TEMPERATURES = { esc_temp = true, mcu_temp = true, Tbec = true, max_esc_temp = true, max_mcu_temp = true }
+
 local LIVE_BY_ID, STATS_BY_ID = {}, {}
+for _, list in ipairs({ M.LIVE, M.STATS }) do
+  for i = 1, #list do
+    local entry = list[i]
+    entry.chars = (DIGITS[entry.id] or 4) + #(entry.unit or "") + (TEMPERATURES[entry.id] and 2 or 0)
+  end
+end
 for i = 1, #M.LIVE do LIVE_BY_ID[M.LIVE[i].id] = M.LIVE[i] end
 for i = 1, #M.STATS do STATS_BY_ID[M.STATS[i].id] = M.STATS[i] end
 
