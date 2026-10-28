@@ -77,7 +77,6 @@ function M.themeBindings(config, declared)
   for i = 1, #M.THEME_KEYS do
     local entry = M.THEME_KEYS[i]
     local action = ACTIONS[config[entry.pref]]
-    if action ~= nil then
     if action ~= nil and action ~= "none" then
       if out == nil then
         out = {}
