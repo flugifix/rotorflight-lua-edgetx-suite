@@ -5,6 +5,11 @@ return {
     erasing = "Lösche...",
     connecting = "Verbinde",
     preparing = "Bereite Suite vor",
+    restart_radio = {
+      splash = "Suite aktualisiert. Bitte den Sender neu starten.",
+      title = "Sender neu starten",
+      message = "Die Suite wurde aktualisiert und vorbereitet. Den Sender einmal neu starten, damit auch das Dashboard die neue Version ausführt."
+    },
     read_failed = "Die Einstellungen konnten nicht vom Flugcontroller gelesen werden. Mit Neu laden erneut versuchen.",
     unknown_value = "Unbekannt (%s)",
     page_error = {

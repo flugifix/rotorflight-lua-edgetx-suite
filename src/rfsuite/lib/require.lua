@@ -24,6 +24,16 @@ _G.rfsuite.modules = _G.rfsuite.modules or {}
 -- itself, or the bytecode beside the source is never read.
 _G.rfsuite.loadMode = "bt"
 
+-- The loader lib/precompile.lua compiles through, which must not keep what it loads. The tool
+-- has set it by now (src/main.lua, the function its caching wrapper replaced). A widget state
+-- reaches this file first from a widget's create, before the tool can be opened from the
+-- dashboard and put a caching wrapper over _G.loadScript, so what is there now is the radio's
+-- own. Never replaced once set, so a later load of this file cannot pick up such a wrapper.
+_G.rfsuite.utils = _G.rfsuite.utils or {}
+if _G.rfsuite.utils.loadScriptUncached == nil then
+  _G.rfsuite.utils.loadScriptUncached = loadScript
+end
+
 local modules = _G.rfsuite.modules
 
 local function normalizePath(path)
