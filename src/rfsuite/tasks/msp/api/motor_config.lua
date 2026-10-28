@@ -4,6 +4,10 @@ local Api = {
     writeCommand = 222
 }
 
+-- Editor limits of the three pulse widths, in microseconds, for every page that edits them.
+local PULSE_LIMITS = {min = 50, max = 2250}
+Api.limits = {mincommand = PULSE_LIMITS, minthrottle = PULSE_LIMITS, maxthrottle = PULSE_LIMITS}
+
 local FIELD_SPEC = {
     {"minthrottle", "U16"},
     {"maxthrottle", "U16"},
