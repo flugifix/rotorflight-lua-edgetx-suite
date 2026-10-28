@@ -381,7 +381,7 @@ function M.build(ctx)
     label,
     {
       helpText = pageText(i18n, "help_spoolup_time",
-        "The ramp from idle up to the target headspeed; long enough to be gentle on the drivetrain, about 10 s."),
+        "The throttle ramp from idle up to the target headspeed; long enough to be gentle on the drivetrain, about 10 s."),
       helpTitle = label,
       onHelp = onRowHelp,
       min = GovernorFields.gov_spoolup_time.min,
