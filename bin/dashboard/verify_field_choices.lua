@@ -121,6 +121,8 @@ check(Fields.apply(pre, "preflight", { [first.key] = first.default }) == pre, "a
 check(Fields.apply(pre, "preflight", { [first.key] = "no_such_value" }) == pre, "an unknown choice changes nothing")
 check(Fields.apply(pre, "inflight", { [first.key] = chosen }) == pre, "a choice of another phase changes nothing")
 check(Fields.apply(pre, "preflight", { [first.key] = "max_current" }) == pre, "a statistic is not offered to a live tile")
+local computed = { { col = 1, row = 1, type = "text", subtype = "telemetry", source = "a_theme_value" } }
+check(#Fields.rows(computed, "preflight") == 0, "a box showing a value the catalogue lacks is not listed")
 
 -- A box that sizes its font to a width is sized for the value it now shows; its room is kept.
 local sized
@@ -156,7 +158,9 @@ check(statBox and statBox.thresholds == nil, "a chosen value drops the theme's t
 local declared = { exit = "exitFullscreen" }
 local bound = Keys.themeBindings({ theme_key_mdl = "suite_tool", theme_key_sys = "none" }, declared)
 check(bound ~= declared and bound.mdl == "openTool", "a chosen key binds the host's action")
-check(bound.sys == nil, "Nothing binds nothing")
+check(bound.sys == "none", "Nothing is a binding of its own")
+check(Keys.themeBindings({ theme_key_mdl = "none" }, { mdl = "openTool" }).mdl == "none",
+  "Nothing silences a key the manifest binds")
 check(bound.exit == "exitFullscreen", "the manifest's bindings remain")
 check(declared.mdl == nil, "the manifest's table is not written to")
 check(Keys.themeBindings({}, declared) == declared, "no choice leaves the manifest's table")

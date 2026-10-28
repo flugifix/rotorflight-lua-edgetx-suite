@@ -64,7 +64,9 @@ M.LIVE = {
   -- The radio's sensors by the names the suite's decoder gives them (lib/rf2tlm_sensors.lua);
   -- TQly, TPWR and RSNR are the link's own. A tile showing one costs the host one sensor read per
   -- telemetry pass, and only while it is shown.
-  { id = "Tbec", source = "Tbec", transform = "floor",
+  -- Not a temperature to objects/text/telemetry.lua, which converts only the ESC and MCU ones to
+  -- the pilot's scale, so it carries its unit itself.
+  { id = "Tbec", source = "Tbec", unit = "°C", transform = "floor",
     label = "@i18n(widgets.dashboard.fields.bec_temp)@", title = "@i18n(widgets.dashboard.fields.bec_temp_title)@" },
   { id = "Tspd", source = "Tspd", unit = "rpm", transform = "floor",
     label = "@i18n(widgets.dashboard.fields.tail_speed)@", title = "@i18n(widgets.dashboard.fields.tail_speed_title)@" },
@@ -157,7 +159,7 @@ local DIGITS = {
   max_throttle = 3, max_current = 5, min_current = 5, max_altitude = 5, max_esc_temp = 3,
   max_mcu_temp = 3, min_fuel = 3, max_link = 3, min_link = 3, min_cell = 7,
 }
-local TEMPERATURES = { esc_temp = true, mcu_temp = true, Tbec = true, max_esc_temp = true, max_mcu_temp = true }
+local TEMPERATURES = { esc_temp = true, mcu_temp = true, max_esc_temp = true, max_mcu_temp = true }
 
 local LIVE_BY_ID, STATS_BY_ID = {}, {}
 for _, list in ipairs({ M.LIVE, M.STATS }) do
@@ -276,8 +278,9 @@ end
 
 --- The reassignable boxes of one phase, in the order the theme declares them, for the settings
 --- page: `{ key, title, default, list }` -- the setting key, the box's own caption (nil where it
---- has none), the catalogue id it shows by default (nil where its value is not in the
---- catalogue) and the catalogue it chooses from.
+--- has none), the catalogue id it shows by default and the catalogue it chooses from. A box whose
+--- value is not in the catalogue -- one a theme computes -- is not listed: its choice would have
+--- to start on a value it does not show.
 function M.rows(boxes, phase)
   local rows = {}
   if type(boxes) ~= "table" then return rows end
@@ -285,15 +288,15 @@ function M.rows(boxes, phase)
     local box = boxes[i]
     local kind = kindOf(box)
     local id = kind and M.boxId(box) or nil
-    if id then
-      local entry = M.defaultEntry(box)
+    local entry = id and M.defaultEntry(box) or nil
+    if entry then
       local title = box.title
       if type(title) ~= "string" or title == "" then title = nil end
       rows[#rows + 1] = {
         key = M.settingKey(phase, id),
         title = title,
-        default = entry and entry.id or nil,
-        defaultLabel = entry and entry.label or nil,
+        default = entry.id,
+        defaultLabel = entry.label,
         list = kind.list,
       }
     end
