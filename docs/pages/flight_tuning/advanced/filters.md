@@ -41,6 +41,8 @@ The on-radio help summarizes Lowpass 1, its dynamic limits, Lowpass 2, Notch 1, 
 
 Save writes the whole filter configuration, commits it once to EEPROM, and reports success only once the flight controller has stored the values; a failed write or commit is reported, and a successful save re-reads the configuration without a reboot.
 
+The four Dynamic Filters fields take effect only after the next flight controller restart because the firmware reads them at start-up, while the other filter settings apply when saved.
+
 ## Related
 
 - [Rotorflight documentation: Gyro tab](https://doc.rotorflight.org/configurator/tabs/gyro/)

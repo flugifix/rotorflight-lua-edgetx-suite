@@ -21,6 +21,17 @@ local Sensors = nil
 local Profile = nil
 local t = nil
 
+-- Reuse option tables; translated help is refreshed on every build.
+local modeOptions = {}
+local altHoldOptions = {}
+local flipUpOptions = {}
+
+local specCollective = { scale=10, mult=1, min=0, max=1000, step=10, suffix="%", decimals=0 }
+local specTime       = { scale=10, mult=1, min=0, max=250, suffix="s", decimals=1 }
+local specGain       = { scale=1, mult=1, min=0, max=250, suffix="", decimals=0 }
+local specRate       = { scale=1, mult=1, min=5, max=1000, suffix="°/s", decimals=0 }
+local specAccel      = { scale=1, mult=1, min=0, max=10000, suffix="°/s^2", decimals=0 }
+
 local function newRuntime()
   return {
     readPending = false,
@@ -425,73 +436,69 @@ function M.build(ctx)
   -- any mode above 0, and the mode written is composed from both switches as the Configurator
   -- does, so an altitude-hold profile is never turned into a climbing one by the enable switch.
   local modeVal = (tonumber(ui.config.rescue_mode) or 0) > 0
-  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "mode_enable", "Rescue mode enable"), modeVal, function(nextBool)
+  local modeLabel = pageText(i18n, "mode_enable", "Rescue mode enable")
+  modeOptions.helpText = pageText(i18n, "help_p1", "Enables or disables rescue in this profile.")
+  modeOptions.helpTitle = modeLabel
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, modeLabel, modeVal, function(nextBool)
     ui.config.rescue_mode = nextBool and (ui.altHold and 2 or 1) or 0
     ui.dirty = true
     if type(ui.runtime.requestRebuild) == "function" then
       ui.runtime.requestRebuild()
     end
-  end, {
-    helpText = pageText(i18n, "help_p1", "Enables or disables rescue in this profile."),
-    helpTitle = pageText(i18n, "mode_enable", "Rescue mode enable")
-  })
+  end, modeOptions)
 
   -- Altitude hold is offered only to a profile that already uses it, as in the Configurator;
   -- its own settings are not on this page.
   if modeVal and (ui.boardMode or 0) > 1 then
     local altHoldLabel = pageText(i18n, "alt_hold", "Altitude hold")
+    altHoldOptions.helpText = pageText(i18n, "help_alt_hold", "Keeps altitude hold enabled; switching it off makes rescue climb instead.")
+    altHoldOptions.helpTitle = altHoldLabel
     cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, altHoldLabel, ui.altHold == true, function(nextBool)
       ui.altHold = nextBool == true
       ui.config.rescue_mode = ui.altHold and 2 or 1
       ui.dirty = true
-    end, {
-      helpText = pageText(i18n, "help_alt_hold", "Keeps altitude hold enabled; switching it off makes rescue climb instead."),
-      helpTitle = altHoldLabel
-    })
+    end, altHoldOptions)
   end
 
   if modeVal then
     -- 2) Flip to upright (Switch)
     local flipUpVal = (tonumber(ui.config.rescue_flip_mode) or 0) == 1
-    cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "flip_upright", "Flip to upright"), flipUpVal, function(nextBool)
+    local flipUpLabel = pageText(i18n, "flip_upright", "Flip to upright")
+    flipUpOptions.helpText = pageText(i18n, "help_p2", "Flips upright if rescue is activated while inverted.")
+    flipUpOptions.helpTitle = flipUpLabel
+    cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, flipUpLabel, flipUpVal, function(nextBool)
       ui.config.rescue_flip_mode = nextBool and 1 or 0
       ui.dirty = true
-    end, {
-      helpText = pageText(i18n, "help_p2", "Flips upright if rescue is activated while inverted."),
-      helpTitle = pageText(i18n, "flip_upright", "Flip to upright")
-    })
+    end, flipUpOptions)
 
-    -- Specs
-    local specCollective = { scale=10, mult=1, min=0, max=1000, step=10, suffix="%", decimals=0 }
-    local specTime       = { scale=10, mult=1, min=0, max=250, suffix="s", decimals=1 }
-    local specGain       = { scale=1, mult=1, min=0, max=250, suffix="", decimals=0 }
-    local specRate       = { scale=1, mult=1, min=5, max=1000, suffix="°/s", decimals=0 }
-    local specAccel      = { scale=1, mult=1, min=0, max=10000, suffix="°/s^2", decimals=0 }
+    local collectiveLabel = pageText(i18n, "collective", "Collective")
+    local timeLabel = pageText(i18n, "time", "Time")
+    local flipLabel = pageText(i18n, "flip", "Flip")
 
     -- 3) Pull-up (Collective & Time)
     cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
       pageText(i18n, "pull_up", "Pull-up"), 
-      pageText(i18n, "collective", "Collective"), "rescue_pull_up_collective", specCollective, 
-      pageText(i18n, "time", "Time"), "rescue_pull_up_time", specTime
+      collectiveLabel, "rescue_pull_up_collective", specCollective,
+      timeLabel, "rescue_pull_up_time", specTime
     )
 
     -- 4) Climb (Collective & Time)
     cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
       pageText(i18n, "climb", "Climb"), 
-      pageText(i18n, "collective", "Collective"), "rescue_climb_collective", specCollective, 
-      pageText(i18n, "time", "Time"), "rescue_climb_time", specTime
+      collectiveLabel, "rescue_climb_collective", specCollective,
+      timeLabel, "rescue_climb_time", specTime
     )
 
     -- 5) Hover (Collective)
     cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
       pageText(i18n, "hover", "Hover"), 
-      pageText(i18n, "collective", "Collective"), "rescue_hover_collective", specCollective, 
+      collectiveLabel, "rescue_hover_collective", specCollective,
       nil, nil, nil
     )
 
     -- 6) Flip (Fail time & Exit time)
     cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
-      pageText(i18n, "flip", "Flip"), 
+      flipLabel,
       pageText(i18n, "fail_time", "Fail time"), "rescue_flip_time", specTime, 
       pageText(i18n, "exit_time", "Exit time"), "rescue_exit_time", specTime
     )
@@ -500,7 +507,7 @@ function M.build(ctx)
     cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
       pageText(i18n, "gains", "Gains"), 
       pageText(i18n, "level_gain", "Level"), "rescue_level_gain", specGain, 
-      pageText(i18n, "flip", "Flip"), "rescue_flip_gain", specGain
+      flipLabel, "rescue_flip_gain", specGain
     )
 
     -- 8) Dynamics (Rate & Accel)
