@@ -141,14 +141,16 @@ def get_theme_metadata(theme_dir, source_name):
         return None
     config_m = re.search(r'configure\s*=\s*"([^"]+)"', content)
     stand_m = re.search(r"standalone\s*=\s*(true|false)", content)
-    # Every icon the row names is checked here, against the staged tree, and the row says so:
-    # the radio then takes a shipped theme's icons as named instead of opening each one in its
-    # theme scan (app/pages/settings/dashboard/lib.lua, appendTheme). An icon that is not there
-    # is left out, which is what the lookup on the radio would have concluded.
+    # A shipped theme's icons are checked here, against the staged tree, and the row says so:
+    # the radio then takes them as named instead of opening each one in its theme scan
+    # (app/pages/settings/dashboard/lib.lua, appendTheme). An icon that is not there is left out,
+    # which is what the lookup on the radio would have concluded. A theme of the pilot's own can
+    # gain an icon after the build, so its rows keep what they declare and the radio looks.
     pages = parse_theme_pages(content)
-    for page in pages:
-        if page.get("icon") and not os.path.isfile(os.path.join(theme_dir, page["icon"])):
-            page["icon"] = None
+    if source_name == "system":
+        for page in pages:
+            if page.get("icon") and not os.path.isfile(os.path.join(theme_dir, page["icon"])):
+                page["icon"] = None
     return {
         "name": name_m.group(1),
         "source": source_name,

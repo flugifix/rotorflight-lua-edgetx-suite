@@ -5,7 +5,7 @@ sidebar_label: Themes
 
 # Dashboard themes
 
-A theme decides what the *RFSuite* dashboard widget draws. The suite ships nine of them, and
+A theme decides what the *RFSuite* dashboard widget draws. The suite ships ten of them, and
 every theme draws three screens: one before the flight, one in flight and one after it. This page
 shows each shipped theme on them, and says how to choose one.
 
