@@ -142,24 +142,6 @@ if sized then
   check(resized and resized.max_chars_lowres == sized.max_chars_lowres, "a resized box keeps its room")
 end
 
--- A box that sizes its font to a width is sized for the value it now shows; its room is kept.
-local sized
-for _, box in ipairs(pre) do
-  if Fields.catalogue(box) and type(box.autosize_chars) == "number" then sized = box end
-end
-check(sized ~= nil, "Default has a reassignable box that sizes its font")
-if sized then
-  local key = Fields.settingKey("preflight", Fields.boxId(sized))
-  local wide = (sized.source == "voltage") and "current" or "voltage"
-  local resized
-  for _, box in ipairs(Fields.apply(pre, "preflight", { [key] = wide })) do
-    if Fields.settingKey("preflight", Fields.boxId(box)) == key then resized = box end
-  end
-  check(resized and resized.autosize_chars == Fields.entry(wide).chars and resized.autosize_chars > sized.autosize_chars,
-    "a resized box takes the width of its new value")
-  check(resized and resized.max_chars_lowres == sized.max_chars_lowres, "a resized box keeps its room")
-end
-
 local post = phaseBoxes("default", "postflight.lua")
 local statRow = Fields.rows(post, "postflight")[1]
 check(statRow ~= nil and statRow.list == Fields.STATS, "a statistics tile chooses from the statistics")
@@ -179,7 +161,6 @@ check(bound ~= declared and bound.mdl == "openTool", "a chosen key binds the hos
 check(bound.sys == "none", "Nothing is a binding of its own")
 check(Keys.themeBindings({ theme_key_mdl = "none" }, { mdl = "openTool" }).mdl == "none",
   "Nothing silences a key the manifest binds")
-check(bound.sys == nil, "Nothing binds nothing")
 check(bound.exit == "exitFullscreen", "the manifest's bindings remain")
 check(declared.mdl == nil, "the manifest's table is not written to")
 check(Keys.themeBindings({}, declared) == declared, "no choice leaves the manifest's table")
