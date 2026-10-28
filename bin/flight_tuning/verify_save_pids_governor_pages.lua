@@ -52,6 +52,7 @@ local function newPage(spec)
   -- The host and page load separate instances; their public views must share the run.
   local pipeline = assert(loadfile("src/rfsuite/" .. pipelinePath))()
   local page = assert(loadfile("src/rfsuite/" .. base .. spec.name .. "/page.lua"))()
+  equal(page.eepromWrite, nil, spec.name .. " leaves EEPROM commit to the pipeline")
   local ui
   for i = 1, 20 do
     local key, value = debug.getupvalue(page.hasUnsavedChanges, i)
