@@ -108,6 +108,8 @@ local function ensureDeps()
     end
     if type(ui.runtime) ~= "table" then
       ui.runtime = newRuntime()
+    end
+    if getmetatable(ui.runtime) == nil then
       setmetatable(ui.runtime, { __index = ui.runtimeBase })
     end
   end

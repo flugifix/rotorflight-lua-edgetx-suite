@@ -274,12 +274,16 @@ local function ensureDeps()
   if not Sensors then Sensors = loadModule("lib/sensors.lua") end
   if not Profile then Profile = loadModule("lib/profile.lua") end
   if not t then t = Common and Common.pageT("flight_tuning_rates") or nil end
-  if Common and not ui.runtimeBase then
-    ui.runtimeBase = Common.createProfileAwareRuntime({ profileType = "rate" })
+  if Common then
+    if not ui.runtimeBase then
+      ui.runtimeBase = Common.createProfileAwareRuntime({ profileType = "rate" })
+    end
     if type(ui.runtime) ~= "table" then
       ui.runtime = newRuntime()
     end
-    setmetatable(ui.runtime, { __index = ui.runtimeBase })
+    if getmetatable(ui.runtime) == nil then
+      setmetatable(ui.runtime, { __index = ui.runtimeBase })
+    end
   end
 end
 

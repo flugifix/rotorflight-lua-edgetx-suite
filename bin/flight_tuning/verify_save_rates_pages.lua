@@ -11,6 +11,14 @@ end
 local base = "app/pages/flight_tuning/"
 local advanced = "advanced/rates_advanced/"
 local pipelinePath = "tasks/msp/save_pipeline.lua"
+local function newContext(reports)
+  return {
+    children = {}, x = 0, y = 0, w = 800, h = 480,
+    requestRebuild = function() end,
+    reportSave = function(report) reports[#reports + 1] = report end
+  }
+end
+
 local function newPage(spec)
   -- Module handles, the queue and the pipeline's shared state belong to one scenario.
   _G.rfsuite = { palette = {}, session = {} }
@@ -25,11 +33,13 @@ local function newPage(spec)
   local modules = {
     ["app/pages/settings/common.lua"] = {
       pageT = function() return function(_, _, fallback) return fallback end end,
-      createProfileAwareRuntime = function() return {} end,
+      createProfileAwareRuntime = function() return { syncHeaderTitle = function() end } end,
       resetPageState = assert(loadfile("src/rfsuite/app/pages/settings/common.lua"))().resetPageState
     },
     ["ui/controls.lua"] = {
-      -- Only the Rate Table is built: retain its real type-selection callback.
+      appendRadioSwitch = function() return 0 end,
+      appendNumberField = function() return 0 end,
+      -- Retain the Rate Table's real type-selection callback.
       appendComboSelect = function(_, _, _, _, _, _, _, setter)
         controls.selectType = setter
       end
@@ -37,7 +47,7 @@ local function newPage(spec)
     ["ui/confirm_dialog.lua"] = {
       show = function(dialog) dialogs[#dialogs + 1] = dialog; return true end
     },
-    ["ui/loading_overlay.lua"] = {},
+    ["ui/loading_overlay.lua"] = { append = function() end },
     ["lib/sensors.lua"] = {},
     ["lib/profile.lua"] = { getActiveRateProfile = function() return 1 end },
     ["lib/api_version.lua"] = {},
@@ -68,11 +78,7 @@ local function newPage(spec)
   end
   assert(ui, "page state not found")
   local reports = {}
-  local ctx = {
-    children = {}, x = 0, y = 0, w = 800, h = 480,
-    requestRebuild = function() end,
-    reportSave = function(report) reports[#reports + 1] = report end
-  }
+  local ctx = newContext(reports)
   local function wakeup()
     -- EdgeTX getTime() counts 10 ms ticks. Keep successful notices visible for inspection.
     ticks = ticks + 1
@@ -99,6 +105,8 @@ end
 local function loadAndEdit(h, eq)
   eq(h.pipeline.isActive(), false, "fresh pipeline is idle")
   eq(h.pipeline.hasOutcome(), false, "fresh pipeline has no outcome")
+  h.page.build(h.ctx)
+  eq(type(h.ui.runtime.syncHeaderTitle), "function", "first build links runtime methods")
   h.page.wakeup(h.ctx)
   eq(#h.queue.entries, 1, "one initial read")
   local initial = assert(h.queue.entries[1], "initial read missing")
@@ -263,6 +271,17 @@ local scenarios = {
     eq(countCommand(h, h.eeprom.command), 1, "close repeats no EEPROM write")
     eq(countCommand(h, h.api.command), 1, "closed page queues no read-back")
     eq(#h.queue.entries, 3, "successful save after close queues no further work")
+  end },
+  { "REOPEN", function(h, eq)
+    h.page.build(h.ctx)
+    local close = h.page.onClose or h.page.close or h.page.closePage or h.page.destroy
+    assert(close, "page has no close hook")()
+    eq(h.ui.runtime, nil, "close clears runtime")
+    local ctx = newContext(h.reports)
+    local ok, err = pcall(h.page.build, ctx)
+    eq(ok, true, "build after close completed" .. (ok and "" or ": " .. tostring(err)))
+    eq(type(h.ui.runtime), "table", "build after close restores runtime")
+    eq(type(h.ui.runtime.syncHeaderTitle), "function", "build after close links runtime methods")
   end },
   { "REFUSE", function(h, eq)
     -- errorHandler is the queue's final refusal callback. Bound any newly queued
