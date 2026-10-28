@@ -396,8 +396,8 @@ return {
     ["page.settings_dashboard_overrides_page.build"] = { target = 12200, measured = 9725 },
     ["page.settings_dashboard_quick_menu_page.build"] = { target = 2500, measured = 2364 },
     -- Priced on the Default theme's Before flight page (measure.lua, SETTINGS_THEME/SETTINGS_PAGE):
-    -- the heaviest of its pages, which reads a phase module and lists its tiles. Look measured 12926.
-    ["page.settings_dashboard_settings_page.build"] = { target = 18650, measured = 14895 },
+    -- the heaviest of its pages, which reads a phase module and lists its tiles.
+    ["page.settings_dashboard_settings_page.build"] = { target = 18650, measured = 12895 },
     ["page.settings_dashboard_standby_page.build"] = { target = 14900, measured = 11763 },
     ["page.settings_dashboard_theme_page.build"] = { target = 13250, measured = 10585 },
     ["page.settings_general_page.build"] = { target = 2200, measured = 1747 },

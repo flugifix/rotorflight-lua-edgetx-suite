@@ -297,5 +297,33 @@ check(string.find(text, "field_postflight_", 1, true) == nil and string.find(tex
   "no stored name is shown")
 overrides.onClose()
 
+-- 6. The theme index a shipped theme is listed from says its icons were checked, so the theme
+--    scan takes them as named; the checked-in fallback has to hold to that, icon for icon.
+local index = assert(loadfile(SRC .. "app/pages/settings/dashboard/theme_index.lua"))()
+for _, row in ipairs(index) do
+  check(row.checked == true, row.folder .. " index row is marked checked")
+  local function exists(name)
+    local f = io.open(THEMES .. row.folder .. "/" .. name, "rb")
+    if f then f:close() end
+    return f ~= nil
+  end
+  if row.icon then check(exists(row.icon), row.folder .. " index icon exists") end
+  for _, page in ipairs(row.pages or {}) do
+    if page.icon then check(exists(page.icon), row.folder .. " page " .. page.id .. " icon exists") end
+  end
+end
+-- A checked row's icons are not opened on the radio; an unchecked one's are, as before.
+local opened = 0
+local realOpen = io.open
+io.open = function(path, ...)
+  if type(path) == "string" and string.find(path, "/icons/", 1, true) then opened = opened + 1 end
+  return realOpen(path, ...)
+end
+local Lib = assert(loadfile(SRC .. "app/pages/settings/dashboard/lib.lua"))()
+local listed = Lib.listThemes(true)
+io.open = realOpen
+check(type(listed) == "table" and #listed >= #index, "the theme list is built from the index")
+check(opened == 0, "no page icon of a checked row is opened (" .. opened .. ")")
+
 print(string.format("%d assertions, %d failures", assertions, failures))
 os.exit(failures == 0 and 0 or 1)
