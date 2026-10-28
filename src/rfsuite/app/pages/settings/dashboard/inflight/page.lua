@@ -10,6 +10,18 @@ end
 
 local Palette = _G.rfsuite and _G.rfsuite.palette or (_G.rfsuite and _G.rfsuite.require or loadModule)("ui/palette.lua")
 
+-- The tuning overlay's own instance when one is already loaded: the tool opened from the dashboard
+-- runs in the widget's Lua state (widgets/dashboard/tool_host.lua), and a second instance of this
+-- module is some 80 kB for nothing. Otherwise a private one, released with the page, so the
+-- standalone tool keeps nothing of it after the page closes. The module holds no state of its own.
+local SETUP_PATH = "widgets/dashboard/inflight/setup.lua"
+local function loadSetup()
+  local modules = _G.rfsuite and _G.rfsuite.modules
+  local shared = modules and modules["/SCRIPTS/TOOLS/rfsuite-core/" .. SETUP_PATH]
+  if type(shared) == "table" then return shared end
+  return loadModule(SETUP_PATH)
+end
+
 local Common = nil
 local Controls = nil
 local Setup = nil
@@ -55,7 +67,7 @@ local function ensureDeps()
     Controls = loadModule("ui/controls.lua")
   end
   if not Setup then
-    Setup = loadModule("widgets/dashboard/inflight/setup.lua")
+    Setup = loadSetup()
   end
   if not ui.runtime then
     ui.runtime = Common.createFormRuntime(ui)

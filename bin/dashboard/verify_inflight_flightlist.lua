@@ -74,6 +74,41 @@ check(ui.flightPicker == nil and ui.flightWanted == nil, "radio page contains no
 for key in pairs(cache) do check(not string.find(key, "flightlist", 1, true), "no old editor loaded") end
 Page.onClose()
 
+-- The radio page takes the overlay's instance of the setup module when the dashboard holds one
+-- (the tool hosted in the widget shares its Lua state), and a private one released with the page
+-- otherwise, so the standalone tool keeps nothing of it after closing.
+do
+  local key = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/inflight/setup.lua"
+  -- This harness has a minimal memoizer of its own; the suite's keeps its modules here.
+  rfsuite.modules = rfsuite.modules or {}
+  local saved = rfsuite.modules[key]
+  local overlay = saved or Setup
+  local function used()
+    for _, name in ipairs({"build", "onReload", "getHeaderActions"}) do
+      for i = 1, 100 do
+        local upname, value = debug.getupvalue(Page[name], i)
+        if upname == nil then break end
+        if upname == "ensureDeps" then return upvalue(value, "Setup") end
+      end
+    end
+    error("the page's dependency loader was not found")
+  end
+  for _, loaded in ipairs({true, false}) do
+    rfsuite.modules[key] = loaded and overlay or nil
+    Page.onReload(ctx); Page.build(ctx)
+    local instance = used()
+    if loaded then
+      check(instance == overlay, "the hosted page shares the overlay's setup module")
+    else
+      check(type(instance) == "table" and instance ~= overlay and rfsuite.modules[key] == nil,
+        "without an overlay the page loads a private setup module and caches nothing")
+    end
+    Page.onClose()
+    check(used() == nil, "closing the page drops its setup reference")
+  end
+  rfsuite.modules[key] = saved
+end
+
 -- The sheet builds wrapped labels inside the actual scrollable help page at 480x320.
 LCD_W, LCD_H = 480, 320
 local HelpView = rfsuite.require("ui/help_view.lua")
