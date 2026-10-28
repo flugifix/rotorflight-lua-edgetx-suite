@@ -120,6 +120,8 @@ class Reader:
     def string(self, ts, what):
         value = lua_source.literal(ts)
         if value is None:
+            value = assembled(ts)
+        if value is None:
             self.fail(ts, f"{what} is not a string literal")
         return value
 
@@ -130,6 +132,30 @@ class Reader:
             inner = self.items(ts, "value")
             return "{ " + ", ".join(self.render(p) for p in inner) + " }" if inner else "{}"
         return lua_source.expression(ts)
+
+
+def assembled(ts):
+    """The string Lua builds from a `..` chain of string and integer literals, such as
+    `1 .. ". " .. "@i18n(key)@"`, or None when any part is not a literal."""
+    parts, current = [], []
+    for t in ts:
+        if t.value == "..":
+            parts.append(current)
+            current = []
+        else:
+            current.append(t)
+    parts.append(current)
+    if len(parts) < 2:
+        return None
+    text = []
+    for part in parts:
+        value = lua_source.literal(part)
+        if value is None and len(part) == 1 and re.fullmatch(r"\d+", part[0].value):
+            value = part[0].value
+        if value is None:
+            return None
+        text.append(value)
+    return "".join(text)
 
 
 def read_manifest(text):
@@ -403,6 +429,10 @@ def self_test(root):
     no_menu_id = manifest.replace('menuId = "tools_menu", ', "", 1)
     bad_registry = registry.replace('definePage("logs")', 'definePage(LOGS_PATH)', 1)
     unknown_key = manifest.replace("@i18n(app.modules.tools.name)@", "@i18n(app.modules.tools.no_such_key)@", 1)
+    tools_title = 'title = "@i18n(app.modules.tools.name)@", menuId = "tools_menu"'
+    numbered = manifest.replace(tools_title, 'title = 1 .. ". " .. "@i18n(app.modules.tools.name)@", menuId = "tools_menu"', 1)
+    computed = manifest.replace(tools_title, 'title = n .. "@i18n(app.modules.tools.name)@", menuId = "tools_menu"', 1)
+    numbered_title = "1. " + titles("@i18n(app.modules.tools.name)@", "self-test")
 
     def verdict(run):
         try:
@@ -421,8 +451,12 @@ def self_test(root):
         ("an entry without `menuId` fails", lambda: page(no_menu_id) and "ok", "error"),
         ("a registry path that is not a literal fails", lambda: page(g=bad_registry) and "ok", "error"),
         ("a title key without English text fails", lambda: page(unknown_key) and "ok", "error"),
+        ("a title assembled from literals is read as one string",
+         lambda: "listed" if numbered_title in page(numbered) and numbered_title not in baseline else "missing", "listed"),
+        ("a title assembled from a variable fails", lambda: page(computed) and "ok", "error"),
     ]
-    if manifest in (unbalanced, no_menu_id, without_menus, unknown_key, changed) or bad_registry == registry:
+    if manifest in (unbalanced, no_menu_id, without_menus, unknown_key, changed, numbered, computed) \
+            or bad_registry == registry:
         print("FAIL  a mutation found nothing to change -- the control is stale")
         return 1
 
