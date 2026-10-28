@@ -184,6 +184,7 @@ local function queueRcWrite()
     },
     reboot = false,
     onSaved = function()
+      -- Cleared only here: the pipeline calls onSaved once the flight controller has acknowledged the write and the EEPROM commit.
       ui.dirty = false
     end,
     onDone = function(result)
