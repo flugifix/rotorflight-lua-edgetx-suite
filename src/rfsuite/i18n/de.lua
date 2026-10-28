@@ -1484,7 +1484,7 @@ return {
         help_esc_flrtr_governor_i = "Stellt die I-Verstärkung des Governors im Regler ein; sie wirkt nur im Modus ESC Gov.",
         help_esc_yge_governor_mode = "Wählt den Betriebsmodus des Reglers: Mode Free, Mode Ext, Mode Heli, Mode Store, Mode Glider, Mode Air oder Mode F3A.",
         help_esc_yge_direction = "Legt die Motordrehrichtung fest: Normal oder Reverse.",
-        help_esc_yge_bec_voltage = "Stellt die BEC-Ausgangsspannung ein; bei einem Modell mit 12-V-BEC schaltet genau 12,0 V dieses BEC ein.",
+        help_esc_yge_bec_voltage = "Stellt die BEC-Ausgangsspannung ein. Der Einstellbereich hängt vom ESC-Modell ab.",
         help_esc_yge_auto_restart_type = "Wählt das Verhalten des Reglers nach einer Abschaltung: Off, Slowdown oder Cutoff.",
         help_esc_yge_cell_cutoff = "Zellenspannung, bei der der Regler abschaltet.",
         help_esc_yge_current_limit = "Maximaler Strom, den der Regler zulässt, in Ampere.",
