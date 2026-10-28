@@ -1,5 +1,5 @@
 return {
-  { name = "Default", source = "system", folder = "default", configure = "configure.lua", standalone = false },
+  { name = "Default", source = "system", folder = "default", configure = "configure.lua", standalone = false, pages = { { id = "look", title = "@i18n(app.pages.settings_dashboard_settings.urban_page_look)@", icon = "icons/look.png" }, { id = "preflight", title = "@i18n(app.pages.settings_dashboard_settings.page_preflight)@", icon = "icons/preflight.png" }, { id = "inflight", title = "@i18n(app.pages.settings_dashboard_settings.page_inflight)@", icon = "icons/inflight.png" }, { id = "postflight", title = "@i18n(app.pages.settings_dashboard_settings.page_postflight)@", icon = "icons/postflight.png" }, { id = "keys", title = "@i18n(app.pages.settings_dashboard_settings.urban_page_keys)@", icon = "icons/keys.png" } } },
   { name = "RF Status", source = "system", folder = "rfstatus", configure = "configure.lua", standalone = false },
   { name = "@AERC", source = "system", folder = "@aerc", configure = "configure.lua", standalone = false },
   { name = "@AERC Nitro", source = "system", folder = "@aerc-n", configure = "configure.lua", standalone = false },

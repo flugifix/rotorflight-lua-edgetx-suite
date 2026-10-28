@@ -47,6 +47,48 @@ function M.global(dashboard, name)
   return M.choice(type(dashboard) == "table" and dashboard[entry.pref] or nil, name)
 end
 
+-- The keys a theme that declares boxes rather than drawing its own tree binds on its Keys
+-- settings page: the stored setting and the choices, the host's actions. A theme that draws its
+-- own tree fills `ctx.keys` itself and offers its own views besides (themes/urban/layout.lua).
+-- Unbound is the default, so a key stays with what the radio-wide page and the theme's manifest
+-- give it until the pilot chooses.
+M.THEME_KEYS = {
+  { id = "pageDown", pref = "theme_key_page_down" },
+  { id = "pageUp", pref = "theme_key_page_up" },
+  { id = "mdl", pref = "theme_key_mdl" },
+  { id = "sys", pref = "theme_key_sys" },
+  { id = "tele", pref = "theme_key_tele" },
+}
+M.THEME_OPTIONS = {
+  { value = "none", label = "@i18n(app.pages.settings_dashboard_keys.none)@" },
+  { value = "menu", label = "@i18n(app.pages.settings_dashboard_keys.menu)@" },
+  { value = "suite_tool", label = "@i18n(app.pages.settings_dashboard_keys.suite_tool)@" },
+  { value = "flight_log", label = "@i18n(app.pages.settings_dashboard_keys.flight_log)@" },
+  { value = "exit", label = "@i18n(app.pages.settings_dashboard_keys.exit)@" },
+}
+
+-- The bindings such a theme's configuration holds, laid over its manifest's `keys`: a table in
+-- the shape `resolve` reads as declared keys, or `declared` itself where the pilot bound nothing.
+-- "none" is no binding, as on the page it is the first choice of.
+function M.themeBindings(config, declared)
+  if type(config) ~= "table" then return declared end
+  local out = nil
+  for i = 1, #M.THEME_KEYS do
+    local entry = M.THEME_KEYS[i]
+    local action = ACTIONS[config[entry.pref]]
+    if action ~= nil and action ~= "none" then
+      if out == nil then
+        out = {}
+        if type(declared) == "table" then
+          for k, v in pairs(declared) do out[k] = v end
+        end
+      end
+      out[entry.id] = action
+    end
+  end
+  return out or declared
+end
+
 -- The second result distinguishes a radio-wide choice from the theme's binding, and a deliberate
 -- Nothing from an absent binding. A key on Theme uses `ctx.keys`, then the manifest's `keys`,
 -- then nothing. Short RTN has no preference: view back/close and firmware long RTN keep ownership.

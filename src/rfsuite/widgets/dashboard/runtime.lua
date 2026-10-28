@@ -2574,6 +2574,34 @@ local function themeStateKeys(declared)
   return keys
 end
 
+-- The pilot's choice of what a box theme's tiles show (widgets/dashboard/fields.lua), put on the
+-- phase module just loaded. The module is a fresh table on every load, so its `boxes` can be
+-- replaced; the boxes themselves are not written to. A theme whose configuration holds no choice
+-- for this phase -- every theme until the pilot makes one -- costs one walk of that small table
+-- and never loads the catalogue. A `boxes` function is wrapped, so the choices are applied on
+-- each build, where the engine calls it, and never per frame.
+local Fields = nil
+local function applyFieldChoices(theme, phase, config)
+  if type(theme) ~= "table" or type(config) ~= "table" or type(phase) ~= "string" then return end
+  local boxes = theme.boxes
+  if type(boxes) ~= "table" and type(boxes) ~= "function" then return end
+  local prefix = "field_" .. phase .. "_"
+  local any = false
+  for k in pairs(config) do
+    if type(k) == "string" and string.sub(k, 1, #prefix) == prefix then any = true; break end
+  end
+  if not any then return end
+  if Fields == nil then Fields = requireModule("widgets/dashboard/fields.lua") or false end
+  if not Fields then return end
+  if type(boxes) == "table" then
+    theme.boxes = Fields.apply(boxes, phase, config)
+  else
+    theme.boxes = function(zone, state)
+      return Fields.apply(boxes(zone, state), phase, config)
+    end
+  end
+end
+
 -- Returns the theme module, the phase key it was resolved for, and the theme's own init table.
 -- The caller keeps the last two so that a phase change can be told from a MODULE change without
 -- reading init.lua off the card again: a phase that falls back to the module already on screen
@@ -2705,6 +2733,14 @@ local function takeFullscreenMode(self)
   local themeMode = type(initTable) == "table" and initTable.fullscreen == "theme"
   self._viewBase = themeMode and "theme" or nil
   self._declaredKeys = type(initTable) == "table" and initTable.keys or nil
+  -- A theme that declares boxes has no build of its own to fill `ctx.keys` from, so the bindings
+  -- the pilot chose on its Keys page are read here, with the manifest's, once per theme load.
+  if themeMode and type(self.theme) == "table" and type(self.theme.build) ~= "function" then
+    local KeyBindings = requireModule("widgets/dashboard/keys.lua")
+    if KeyBindings and type(KeyBindings.themeBindings) == "function" then
+      self._declaredKeys = KeyBindings.themeBindings(self.state and self.state.themeConfig, self._declaredKeys)
+    end
+  end
   local ready = self.connectionReady == true or self.flightMode == "postflight" or self.flightMode == "offline"
   holder.ready = ready
   self._viewCtx = nil
@@ -4011,6 +4047,7 @@ function Runtime.new(zone, options)
     local declares
     self.theme, self.themeStateKey, declares = loadThemeModuleForState(selectedTheme, self.flightMode)
     self.themeStateKeys = themeStateKeys(declares)
+    applyFieldChoices(self.theme, self.themeStateKey or self.flightMode, nextConfig)
 
     -- A theme of the pilot's own may read the flight record under the names it carried before it
     -- moved to the session table. The mapping goes on HERE -- with the theme, in the same call,

@@ -67,6 +67,20 @@ and a voltage gauge. In flight it is reduced to the flight time, the link qualit
 gauge; after the flight it shows the last flight's time, the total time, the lowest voltage per
 cell and the lowest link quality.
 
+Default's settings now open a grid of five pages: **Look**, **Before flight**, **In flight**,
+**Statistics** and **Keys**. Look holds the existing voltage range and link colours. Each
+flight-phase page offers one dropdown per plain value tile, labelled with that tile's own
+caption: choose a live reading before or during flight, or a figure from the last flight on
+Statistics. Each choice starts on the theme's own value; choosing another changes the caption,
+unit and decimals with it, while a tile without a caption keeps none. Gauges, timers, governor,
+blackbox, flight count and the model image keep what the theme draws.
+
+Keys assigns PAGE >, PAGE <, MDL, SYS and TELE to nothing, the quick menu, the suite tool,
+Flight Log or leaving full screen. A key held by *Settings* → *Dashboard* → *Keys* is greyed
+out and marked *(global)*; set it to **Theme** on that radio-wide page to use the theme's
+binding. These choices are standard settings for the theme, and a model can override each
+one through [Per-Model Settings](../pages/settings/dashboard/overrides.md).
+
 In fullscreen, Default shows the dashboard at the full screen size with the same layouts.
 The controls at the top right open the suite tool (while disarmed), open the quick menu,
 and leave fullscreen with **X**. A long press on the return key also leaves fullscreen.
@@ -74,6 +88,8 @@ With the global [Keys](../pages/settings/dashboard/keys.md) choices as they come
 the suite tool, and TELE and the page keys open the quick menu, also before the FC connects;
 Default binds no key itself, so MDL, and any key put on **Theme**, does nothing while the
 dashboard itself is showing.
+That describes the initial settings; Default's **Keys** page can now bind those keys, and a
+saved binding acts on the dashboard when the radio-wide page leaves that key on **Theme**.
 With a view open, PAGE as it comes, or on **Theme**, closes the quick menu or opens it over
 another view; PAGE set there to another action does that action, and on **Nothing** nothing. Closing the menu returns to the
 dashboard.
