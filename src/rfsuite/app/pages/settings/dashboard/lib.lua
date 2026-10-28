@@ -106,7 +106,11 @@ end
 -- folder. An entry that fails any of it is dropped rather than costing the theme its page, and
 -- a list that ends up shorter than two entries is dropped altogether, so everywhere else the
 -- presence of the list is what says the theme is split.
-local function themePages(declared, loadBasePath, folder, log)
+-- `checked` is the packager's word that every icon the entry names exists (bin/package,
+-- generate_theme_index): an index row of a shipped theme carries it, and its icons are then taken
+-- as named instead of opened one by one -- a lookup on the card costs a file open each, and a
+-- theme scan otherwise opens every page icon of every theme.
+local function themePages(declared, loadBasePath, folder, log, checked)
   if type(declared) ~= "table" then return nil end
 
   local pages = {}
@@ -121,7 +125,7 @@ local function themePages(declared, loadBasePath, folder, log)
       local iconPath = nil
       if type(entry.icon) == "string" and entry.icon ~= "" then
         local candidate = loadBasePath .. folder .. "/" .. entry.icon
-        if iconExists(candidate) then iconPath = candidate end
+        if checked or iconExists(candidate) then iconPath = candidate end
       end
       pages[#pages + 1] = { id = id, title = title, iconPath = iconPath }
     else
@@ -142,6 +146,16 @@ local function appendTheme(themes, nextId, entry, loadBasePath, log)
   if type(entry.name) ~= "string" or entry.name == "" then return nextId end
   if type(entry.folder) ~= "string" or entry.folder == "" then return nextId end
 
+  -- Only a shipped theme's row is trusted: a theme on the pilot's own folder can change after
+  -- the build, and is looked up as before.
+  local checked = entry.checked == true and entry.source == "system"
+  local iconPath
+  if checked then
+    iconPath = type(entry.icon) == "string" and (loadBasePath .. entry.folder .. "/" .. entry.icon) or nil
+  else
+    iconPath = themeIconPath(loadBasePath, entry.folder)
+  end
+
   local configurePath = nil
   if type(entry.configure) == "string" and entry.configure ~= "" then
     configurePath = loadBasePath .. entry.folder .. "/" .. entry.configure
@@ -155,8 +169,8 @@ local function appendTheme(themes, nextId, entry, loadBasePath, log)
     path = asThemePath(entry.source, entry.folder),
     configure = entry.configure,
     configurePath = configurePath,
-    iconPath = themeIconPath(loadBasePath, entry.folder),
-    pages = themePages(entry.pages, loadBasePath, entry.folder, log),
+    iconPath = iconPath,
+    pages = themePages(entry.pages, loadBasePath, entry.folder, log, checked),
     standalone = entry.standalone == true
   }
   return nextId + 1
