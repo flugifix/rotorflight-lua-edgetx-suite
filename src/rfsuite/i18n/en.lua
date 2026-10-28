@@ -1366,7 +1366,7 @@ return {
         unsynced = "Unsynced ESC Update",
         help_title = "Throttle Help",
         help_p1 = "The signal sent to the speed controller and its pulse limits; saving reboots the flight controller, and each row's ? explains its setting.",
-        help_throttle_protocol = "The protocol the flight controller drives the ESC with; DISABLED stops the motor output. CASTLE needs MSP API 12.08, SRXL2 12.10.",
+        help_throttle_protocol = "The protocol the flight controller drives the ESC with; DISABLED stops the motor output. CASTLE needs API 12.08, SRXL2 12.10.",
         help_motor_pwm_rate = "Output rate of the unsynchronised PWM protocols, 50 to 8000 Hz. Greyed out for DSHOT, PROSHOT and DISABLED.",
         help_mincommand = "Pulse width sent while the motor is stopped, 50 to 2250 us.",
         help_min_throttle = "Pulse width at zero throttle, 50 to 2250 us.",

@@ -1366,7 +1366,7 @@ return {
         unsynced = "Nicht synchr. ESC-Update",
         help_title = "Gas-Hilfe",
         help_p1 = "Das Signal an den Drehzahlsteller und seine Pulsgrenzen; Speichern startet den Flight Controller neu, und das ? jeder Zeile erklärt ihre Einstellung.",
-        help_throttle_protocol = "Das Protokoll, mit dem der Flight Controller den ESC ansteuert; DISABLED schaltet den Motorausgang ab. CASTLE braucht MSP API 12.08, SRXL2 12.10.",
+        help_throttle_protocol = "Das Protokoll, mit dem der Flight Controller den ESC ansteuert; DISABLED schaltet den Motorausgang ab. CASTLE braucht API 12.08, SRXL2 12.10.",
         help_motor_pwm_rate = "Ausgaberate der nicht synchronisierten PWM-Protokolle, 50 bis 8000 Hz. Ausgegraut bei DSHOT, PROSHOT und DISABLED.",
         help_mincommand = "Pulsbreite, solange der Motor steht, 50 bis 2250 us.",
         help_min_throttle = "Pulsbreite bei null Gas, 50 bis 2250 us.",
