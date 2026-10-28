@@ -250,5 +250,52 @@ check(prefs.dashboard[PREFIX .. "theme_key_mdl"] == "flight_log", "the Keys page
 cfg = DashboardLib.getThemeConfig(prefs, "system/default", {}, nil)
 check(Keys.themeBindings(cfg, nil).mdl == "openTool:tools_flight_log_page", "the stored binding binds its action")
 
+-- 5. Per-Model Settings describes such a setting as the pages show it, not by its stored name.
+local Common = {
+  pageT = function() return function(_, _, fallback) return fallback end end,
+  saveFailureReason = function(_, reason) return reason end,
+  resetPageState = function() end,
+  createFormRuntime = function()
+    return { setRequestRebuild = function() end, markDirty = function() end }
+  end,
+}
+local commonChunk = function() return Common end
+local pageLoad = _G.loadScript
+_G.loadScript = function(path, mode)
+  if path == CORE .. "app/pages/settings/common.lua" then return commonChunk end
+  return pageLoad(path, mode)
+end
+_G.rfsuite.palette = { text = 1, border = 2 }
+_G.SMLSIZE = 0
+_G.lvgl = { UI_ELEMENT_HEIGHT = 32 }
+Controls.labelY = function(y) return y end
+Controls.appendSectionHeader = function() end
+local defaultTheme = { path = "system/default", name = "Default",
+  configurePath = CORE .. "widgets/dashboard/themes/default/configure.lua" }
+DashboardLib.listThemes = function() return { defaultTheme } end
+DashboardLib.getConfigurableThemes = function(themes) return themes end
+local postKey = postRows[1].key
+local modelDashboard = { overrides = true,
+  [PREFIX .. postKey] = "max_altitude", [PREFIX .. "theme_key_mdl"] = "flight_log" }
+local radio = { dashboard = { model_overrides = true, [PREFIX .. postKey] = postRows[1].default } }
+_G.rfsuite.preferences = radio
+_G.rfsuite.session = { mcu_id = "0123456789ABCDEF01234567", modelPreferences = { dashboard = modelDashboard } }
+local overrides = assert(loadfile(SRC .. "app/pages/settings/dashboard/overrides/page.lua"))()
+local children = {}
+overrides.build({ children = children, preferences = radio, x = 0, y = 0, w = 800 })
+local text = {}
+for _, child in ipairs(children) do
+  if type(child.text) == "string" then text[#text + 1] = child.text end
+end
+text = table.concat(text, "\n")
+local caption = postRows[1].title or postRows[1].defaultLabel
+check(string.find(text, "page_postflight)@: " .. caption, 1, true) ~= nil, "a tile setting names its page and caption")
+check(string.find(text, Fields.entry("max_altitude").label, 1, true) ~= nil, "a tile setting names the chosen value")
+check(string.find(text, Fields.entry(postRows[1].default).label, 1, true) ~= nil, "the standard is named by its value")
+check(string.find(text, "theme_key)@ MDL", 1, true) ~= nil, "a key setting names the key")
+check(string.find(text, "field_postflight_", 1, true) == nil and string.find(text, "theme_key_mdl", 1, true) == nil,
+  "no stored name is shown")
+overrides.onClose()
+
 print(string.format("%d assertions, %d failures", assertions, failures))
 os.exit(failures == 0 and 0 or 1)

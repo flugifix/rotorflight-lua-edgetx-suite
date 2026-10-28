@@ -218,17 +218,81 @@ local function offerResetAll(i18n)
   end
 end
 
+-- The settings a theme that declares boxes takes from the shared pages
+-- (app/pages/settings/dashboard/fields_form.lua) are stored under names made for the store --
+-- `field_postflight_5_7`, `theme_key_mdl` -- and hold catalogue ids. They are described as the
+-- pages show them: the page, the tile's caption or the key, and the chosen value's label. The
+-- modules that know those names are loaded only for a model that has such a setting, and the
+-- tile captions read a theme's phase module once per page visit.
+local PHASE_TITLES = {
+  preflight = "@i18n(app.pages.settings_dashboard_settings.page_preflight)@",
+  inflight = "@i18n(app.pages.settings_dashboard_settings.page_inflight)@",
+  postflight = "@i18n(app.pages.settings_dashboard_settings.page_postflight)@",
+}
+local KEY_NAMES = { pageDown = "PAGE >", pageUp = "PAGE <", mdl = "MDL", sys = "SYS", tele = "TELE" }
+local Fields, FieldsForm, Keys = nil, nil, nil
+
+local function tileCaption(theme, phase, setting)
+  local folder = type(theme) == "table" and type(theme.configurePath) == "string"
+    and string.match(theme.configurePath, "^(.*/)[^/]*$") or nil
+  if folder == nil then return nil end
+  ui.captions = ui.captions or {}
+  local cacheKey = folder .. phase
+  local captions = ui.captions[cacheKey]
+  if captions == nil then
+    if FieldsForm == nil then FieldsForm = loadModule("app/pages/settings/dashboard/fields_form.lua") end
+    captions = {}
+    local rows = FieldsForm.new(folder, { [phase] = phase .. ".lua" }).rowsFor(phase, {})
+    for i = 1, #rows do captions[rows[i].key] = rows[i].title or rows[i].defaultLabel end
+    ui.captions[cacheKey] = captions
+  end
+  return captions[setting]
+end
+
+-- The setting's name and a formatter for its values, for a shared-page setting; nil otherwise.
+local function sharedSetting(entry)
+  local setting = tostring(entry.setting)
+  local phase = string.match(setting, "^field_(%a+)_")
+  if phase and PHASE_TITLES[phase] then
+    if Fields == nil then Fields = loadModule("widgets/dashboard/fields.lua") end
+    local name = PHASE_TITLES[phase] .. ": " .. (tileCaption(entry.theme, phase, setting) or setting)
+    return name, function(value)
+      local chosen = Fields.entry(value)
+      return chosen and chosen.label or tostring(value)
+    end
+  end
+  if string.sub(setting, 1, 10) == "theme_key_" then
+    if Keys == nil then Keys = loadModule("widgets/dashboard/keys.lua") end
+    for i = 1, #Keys.THEME_KEYS do
+      local key = Keys.THEME_KEYS[i]
+      if key.pref == setting then
+        return "@i18n(app.pages.settings_dashboard_settings.theme_key)@ " .. KEY_NAMES[key.id], function(value)
+          for j = 1, #Keys.THEME_OPTIONS do
+            if Keys.THEME_OPTIONS[j].value == value then return Keys.THEME_OPTIONS[j].label end
+          end
+          return tostring(value)
+        end
+      end
+    end
+  end
+  return nil
+end
+
 -- One row per override: which theme and setting, the model's value, and what it replaces.
 local function describeOverride(i18n, entry)
   local themeName = entry.theme and entry.theme.name or t(i18n, "unknown_theme", "Theme not installed")
+  local setting, format = sharedSetting(entry)
+  if setting == nil then
+    setting = tostring(entry.setting)
+    format = function(value) return formatValue(i18n, value) end
+  end
   local standard
   if entry.standard ~= nil then
-    standard = t(i18n, "standard", "standard") .. " " .. formatValue(i18n, entry.standard)
+    standard = t(i18n, "standard", "standard") .. " " .. format(entry.standard)
   else
     standard = t(i18n, "theme_default", "theme default")
   end
-  return themeName .. " / " .. tostring(entry.setting) .. " = " .. formatValue(i18n, entry.value)
-    .. "  (" .. standard .. ")"
+  return themeName .. " / " .. setting .. " = " .. format(entry.value) .. "  (" .. standard .. ")"
 end
 
 local function appendButton(children, x, y, w, h, text, press)
@@ -390,6 +454,8 @@ function M.onClose()
   end
   ui.themes = nil
   ui.notice = nil
+  ui.captions = nil
+  Fields, FieldsForm, Keys = nil, nil, nil
   Common = nil
   Controls = nil
   DashboardLib = nil
