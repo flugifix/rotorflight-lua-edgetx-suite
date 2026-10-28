@@ -429,6 +429,7 @@ function M.onSave(ctx)
 end
 
 function M.onReload(ctx)
+  if SavePipeline and SavePipeline.isActive() then return end
   local session = getSession()
   if session then
     loadFromSession()

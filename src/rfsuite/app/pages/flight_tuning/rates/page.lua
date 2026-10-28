@@ -745,6 +745,7 @@ function M.getHeaderActions()
 end
 
 function M.onReload(ctx)
+  if SavePipeline and SavePipeline.isActive() then return end
   local session = getSession()
   if session then
     loadFromSession()
@@ -901,6 +902,24 @@ function M.closePage()
     -- We could implement auto-save here, but Ethos typically uses confirmation dialogs.
   end
   ui.loaded = false
+end
+
+function M.onClose()
+  if Common and type(Common.resetPageState) == "function" then
+    Common.resetPageState(ui, {
+      resetLoaded = true,
+      resetDirty = true
+    })
+  end
+  Controls = nil
+  Common = nil
+  MspRuntime = nil
+  RcTuningApi = nil
+  SavePipeline = nil
+  LoadingOverlay = nil
+  Sensors = nil
+  Profile = nil
+  t = nil
 end
 
 -- Asked before the page is left (ui/home.lua): true while an edit here is not saved.

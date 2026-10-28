@@ -25,7 +25,8 @@ local function newPage(spec)
   local modules = {
     ["app/pages/settings/common.lua"] = {
       pageT = function() return function(_, _, fallback) return fallback end end,
-      createProfileAwareRuntime = function() return {} end
+      createProfileAwareRuntime = function() return {} end,
+      resetPageState = assert(loadfile("src/rfsuite/app/pages/settings/common.lua"))().resetPageState
     },
     ["ui/controls.lua"] = {
       -- Only the Rate Table is built: retain its real type-selection callback.
@@ -248,6 +249,21 @@ end
 
 local scenarios = {
   { "ACCEPT", function(h, eq) accept(h, eq) end },
+  { "CLOSE", function(h, eq)
+    -- Leave the page the way app/pages/init.lua does: the first close hook the module has.
+    local close = h.page.onClose or h.page.close or h.page.closePage or h.page.destroy
+    assert(close, "page has no close hook")()
+    answer(h, h.queue.entries[2], {})
+    eq(#h.queue.entries, 3, "RC tuning reply after close queues only EEPROM")
+    local commit = assert(h.queue.entries[3], "EEPROM write missing after close")
+    eq(commit.command, h.eeprom.command, "EEPROM follows RC tuning write after close")
+    answer(h, commit, {})
+    expectOutcome(h, "done", true, eq)
+    eq(countCommand(h, h.api.writeCommand), 1, "close repeats no RC tuning write")
+    eq(countCommand(h, h.eeprom.command), 1, "close repeats no EEPROM write")
+    eq(countCommand(h, h.api.command), 1, "closed page queues no read-back")
+    eq(#h.queue.entries, 3, "successful save after close queues no further work")
+  end },
   { "REFUSE", function(h, eq)
     -- errorHandler is the queue's final refusal callback. Bound any newly queued
     -- RC tuning retries so a broken retry loop becomes an assertion failure.
