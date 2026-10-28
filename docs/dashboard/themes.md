@@ -153,6 +153,10 @@ time. After the flight, twelve numbers: flight time, highest throttle, capacity 
 highest current, fuel left, highest head speed, highest ESC temperature, lowest voltage per cell,
 highest power, link quality and voltage.
 
+Like Default, @RT-RC takes the full screen with the same layouts and the same controls, and
+its settings open the same five pages: **Look** (its voltage range), **Before flight**, **In
+flight**, **Statistics** and **Keys**, as described for [Default](#default).
+
 ![@RT-RC before, during and after the flight](../images/dashboard/themes/rt-rc.png)
 
 ### @RT-RC Nitro
@@ -164,6 +168,10 @@ the blackbox state. In flight: the BEC voltage and the throttle as gauges above 
 state, the link quality, the head speed and the flight time. After the flight: flight time,
 lowest and highest link quality, voltage, total time, lowest voltage per cell, lowest and highest
 head speed and highest throttle.
+
+Like Default, @RT-RC Nitro takes the full screen with the same layouts and the same controls, and
+its settings open the same five pages: **Look** (its voltage range), **Before flight**, **In
+flight**, **Statistics** and **Keys**, as described for [Default](#default).
 
 ![@RT-RC Nitro during and after the flight](../images/dashboard/themes/rt-rc-n.png)
 
