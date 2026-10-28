@@ -25,7 +25,7 @@ so it matches the code it was generated from.
   an entry (`id`, `title`, `menuId`, `icon`, `row`, `col`) are left out. What a condition
   does is not explained here.
 
-**120 entries, 99 of them open a page, 52 of those pages are documented.**
+**120 entries, 99 of them open a page, 56 of those pages are documented.**
 
 ## Configuration
 
@@ -41,9 +41,9 @@ Section `configuration`.
 | Flight Tuning &rsaquo; Advanced | `advanced` | `flight_tuning_advanced_menu` | menu, 8 entries | &mdash; | `enabled = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; Filters | `filters` | `flight_tuning_advanced_filters_page` | `flight_tuning/advanced/filters` | **none** | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; PID Controller | `pid_controller` | `flight_tuning_advanced_pid_controller_page` | `flight_tuning/advanced/pid_controller` | [flight_tuning/advanced/pid_controller.md](../pages/flight_tuning/advanced/pid_controller.md) | `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; PID Bandwidth | `pid_bandwidth` | `flight_tuning_advanced_pid_bandwidth_page` | `flight_tuning/advanced/pid_bandwidth` | **none** | `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Autolevel | `autolevel` | `flight_tuning_advanced_autolevel_page` | `flight_tuning/advanced/autolevel` | **none** | `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Main Rotor | `main_rotor` | `flight_tuning_advanced_main_rotor_page` | `flight_tuning/advanced/main_rotor` | **none** | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; PID Bandwidth | `pid_bandwidth` | `flight_tuning_advanced_pid_bandwidth_page` | `flight_tuning/advanced/pid_bandwidth` | [flight_tuning/advanced/pid_bandwidth.md](../pages/flight_tuning/advanced/pid_bandwidth.md) | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Autolevel | `autolevel` | `flight_tuning_advanced_autolevel_page` | `flight_tuning/advanced/autolevel` | [flight_tuning/advanced/autolevel.md](../pages/flight_tuning/advanced/autolevel.md) | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Main Rotor | `main_rotor` | `flight_tuning_advanced_main_rotor_page` | `flight_tuning/advanced/main_rotor` | [flight_tuning/advanced/main_rotor.md](../pages/flight_tuning/advanced/main_rotor.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; Tail Rotor | `tail_rotor` | `flight_tuning_advanced_tail_rotor_page` | `flight_tuning/advanced/tail_rotor` | [flight_tuning/advanced/tail_rotor.md](../pages/flight_tuning/advanced/tail_rotor.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; Rescue | `rescue` | `flight_tuning_advanced_rescue_page` | `flight_tuning/advanced/rescue` | **none** | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) | `rates_advanced` | `flight_tuning_advanced_rates_advanced_menu` | menu, 3 entries | &mdash; | &mdash; |
@@ -102,7 +102,7 @@ Section `configuration`.
 | Setup &rsaquo; ESC & Motors &rsaquo; Motor Override | `motor_override` | `setup_esc_motors_motor_override_page` | `setup/esc_motors/motor_override` | **none** | `minApiVersion = { 12, 0, 9 }`, `lockedWhileArmed = true` |
 | Setup &rsaquo; Governor | `governor` | `governor_menu` | menu, 4 entries | &mdash; | &mdash; |
 | Setup &rsaquo; Governor &rsaquo; General | `general` | `setup_governor_general_page` | `setup/governor/general` | [setup/governor/general.md](../pages/setup/governor/general.md) | `lockedWhileArmed = true` |
-| Setup &rsaquo; Governor &rsaquo; Ramp Time | `time` | `setup_governor_time_page` | `setup/governor/time` | **none** | `lockedWhileArmed = true` |
+| Setup &rsaquo; Governor &rsaquo; Ramp Time | `time` | `setup_governor_time_page` | `setup/governor/time` | [setup/governor/time.md](../pages/setup/governor/time.md) | `lockedWhileArmed = true` |
 | Setup &rsaquo; Governor &rsaquo; Filters | `filters` | `setup_governor_filters_page` | `setup/governor/filters` | **none** | `lockedWhileArmed = true` |
 | Setup &rsaquo; Governor &rsaquo; Bypass Curve | `curves` | `setup_governor_curves_page` | `setup/governor/curves` | **none** | `lockedWhileArmed = true` |
 | Setup &rsaquo; Model | `model` | `setup_model_page` | `setup/model` | [setup/model.md](../pages/setup/model.md) | `enabledWhen = "fblConnected"`, `lockedWhileArmed = true` |
