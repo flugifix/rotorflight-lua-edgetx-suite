@@ -61,6 +61,7 @@ local state = {
   consecutiveApiVersionFailures = 0,
   consecutiveUidFailures = 0,
   mspLastError = nil,
+  mspErrorKind = nil,
   mspLastErrorAt = 0,
   pendingVersionRead = true,
   pendingUidRead = true,
@@ -533,6 +534,7 @@ local function enqueueVersionReads(now)
         state.requestBackoffUntil = 0
         state.mspLastError = nil
         state.mspLastErrorAt = 0
+        state.mspErrorKind = nil
         state.values.apiVersion = parsed.version
         local fullySupported = isApiVersionSupported(parsed.version)
         local limitedCompatible = (not fullySupported) and isApiVersionLimitedCompatible(parsed.version)
@@ -696,7 +698,7 @@ local function doDisconnect(now, reason, keepLink)
     state.requestBackoffUntil = 0
   else
     if type(reason) == "string" and reason ~= "" then
-      setMspError(reason, now)
+      setMspError("Unsupported MSP API version " .. tostring(state.refusedApiVersion or "?"), now, "refused")
     end
   end
 
@@ -731,8 +733,6 @@ local function doDisconnect(now, reason, keepLink)
   state.consecutiveApiVersionFailures = 0
   state.consecutiveUidFailures = 0
   state.requestBackoffUntil = 0
-  state.mspLastError = nil
-  state.mspLastErrorAt = 0
   state.values.apiVersion = "0"
   state.values.fcVersion = "0"
   state.values.rfVersion = "0"
@@ -906,6 +906,7 @@ function Runtime.tick()
       state.unsupportedApiLogged = false
       state.mspLastError = nil
       state.mspLastErrorAt = 0
+      state.mspErrorKind = nil
       state.consecutiveApiVersionFailures = 0
       state.requestBackoffUntil = 0
       log("MSP link connected", "info")

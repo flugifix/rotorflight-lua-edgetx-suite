@@ -2443,6 +2443,7 @@ return {
         loading_message = "Reading live data",
         loading_failed = "Loading failed",
         loading_timeout = "Timeout while reading from FBL",
+        api_refused = "MSP API %s is not supported.",
         not_connected = "Telemetry / FBL not connected",
         link_lost = "Telemetry link lost"
       },
