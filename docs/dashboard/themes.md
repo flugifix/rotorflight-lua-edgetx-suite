@@ -184,6 +184,10 @@ in the same places. After the flight: flight time, highest current, capacity use
 highest ESC temperature, voltage at the end of the flight, flight count, lowest link quality and
 voltage per cell at the end of the flight (V/CELL).
 
+Like Default, @SRB-RC takes the full screen with the same layouts and the same controls, and
+its settings open the same five pages: **Look** (its BEC and ESC temperature warnings), **Before flight**, **In
+flight**, **Statistics** and **Keys**, as described for [Default](#default).
+
 ![@SRB-RC before, during and after the flight](../images/dashboard/themes/srb-rc.png)
 
 ### Urban

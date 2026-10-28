@@ -277,6 +277,8 @@ for _, folder in ipairs(BOX_THEMES) do
   local init = assert(loadfile(THEMES .. folder .. "/init.lua"))()
   if folder ~= "default" and type(init.pages) == "table" then MIGRATED[#MIGRATED + 1] = folder end
 end
+-- Every shipped box theme is on the shared pages now; one left behind would be listed here.
+check(#MIGRATED == #BOX_THEMES - 1, "every shipped box theme declares the shared pages (" .. #MIGRATED .. ")")
 for _, folder in ipairs(MIGRATED) do
   for _, phase in ipairs(PHASES) do
     local factory = assert(loadfile(THEMES .. folder .. "/configure.lua"))()
