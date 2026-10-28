@@ -161,6 +161,7 @@ check(bound ~= declared and bound.mdl == "openTool", "a chosen key binds the hos
 check(bound.sys == "none", "Nothing is a binding of its own")
 check(Keys.themeBindings({ theme_key_mdl = "none" }, { mdl = "openTool" }).mdl == "none",
   "Nothing silences a key the manifest binds")
+check(bound.sys == nil, "Nothing binds nothing")
 check(bound.exit == "exitFullscreen", "the manifest's bindings remain")
 check(declared.mdl == nil, "the manifest's table is not written to")
 check(Keys.themeBindings({}, declared) == declared, "no choice leaves the manifest's table")

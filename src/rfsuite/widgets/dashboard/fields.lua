@@ -67,6 +67,7 @@ M.LIVE = {
   -- Not a temperature to objects/text/telemetry.lua, which converts only the ESC and MCU ones to
   -- the pilot's scale, so it carries its unit itself.
   { id = "Tbec", source = "Tbec", unit = "°C", transform = "floor",
+  { id = "Tbec", source = "Tbec", transform = "floor",
     label = "@i18n(widgets.dashboard.fields.bec_temp)@", title = "@i18n(widgets.dashboard.fields.bec_temp_title)@" },
   { id = "Tspd", source = "Tspd", unit = "rpm", transform = "floor",
     label = "@i18n(widgets.dashboard.fields.tail_speed)@", title = "@i18n(widgets.dashboard.fields.tail_speed_title)@" },
@@ -168,6 +169,7 @@ for _, list in ipairs({ M.LIVE, M.STATS }) do
     entry.chars = (DIGITS[entry.id] or 4) + #(entry.unit or "") + (TEMPERATURES[entry.id] and 2 or 0)
   end
 end
+local LIVE_BY_ID, STATS_BY_ID = {}, {}
 for i = 1, #M.LIVE do LIVE_BY_ID[M.LIVE[i].id] = M.LIVE[i] end
 for i = 1, #M.STATS do STATS_BY_ID[M.STATS[i].id] = M.STATS[i] end
 
@@ -281,6 +283,8 @@ end
 --- has none), the catalogue id it shows by default and the catalogue it chooses from. A box whose
 --- value is not in the catalogue -- one a theme computes -- is not listed: its choice would have
 --- to start on a value it does not show.
+--- has none), the catalogue id it shows by default (nil where its value is not in the
+--- catalogue) and the catalogue it chooses from.
 function M.rows(boxes, phase)
   local rows = {}
   if type(boxes) ~= "table" then return rows end
@@ -290,6 +294,8 @@ function M.rows(boxes, phase)
     local id = kind and M.boxId(box) or nil
     local entry = id and M.defaultEntry(box) or nil
     if entry then
+    if id then
+      local entry = M.defaultEntry(box)
       local title = box.title
       if type(title) ~= "string" or title == "" then title = nil end
       rows[#rows + 1] = {
@@ -297,6 +303,8 @@ function M.rows(boxes, phase)
         title = title,
         default = entry.id,
         defaultLabel = entry.label,
+        default = entry and entry.id or nil,
+        defaultLabel = entry and entry.label or nil,
         list = kind.list,
       }
     end
