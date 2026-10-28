@@ -56,6 +56,13 @@ again for a fresh reading.
 A field the flight controller did not supply is left out rather than shown empty, so a
 connection that answered only part of the way still reads sensibly.
 
+A board that answers with an MSP API version the suite does not support is refused. That is
+different from a board that does not answer. The home screen's notice, the service widget and
+the dashboard's standby line name that version. The *Info* page's *Loading failed* notice
+names it too when loading times out; its *Supported MSP API* row lists the supported
+versions. When the board does not answer, the home screen and the *Info* page ask you to check
+`FEATURE_TELEMETRY` and the MSP serial port configuration.
+
 On a fast link the connect sequence can be through before the start screen leaves, so the menu
 opens straight on the connected state and the step count is never seen. That is not a fault:
 the step count is shown for as long as there is a step still to read.

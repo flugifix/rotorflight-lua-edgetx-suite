@@ -380,6 +380,43 @@ def build(root, manifest_text, registry_text, docs_exist, titles):
     return "\n".join(head + body + tail).rstrip("\n") + "\n"
 
 
+def menu_tree(root):
+    """The menus as nested entries, in the order the tool shows them, for the site navigation.
+
+    One dict per section and per entry: `title` in English, `menuId`, `page` -- the page
+    directory under `app/pages/` the entry opens, or None -- and `children`, the entries of
+    the menu it opens. The same reading as the page above, so the two cannot disagree.
+    """
+    titles = Titles(root)
+    sections, menus = read_manifest((root / MANIFEST).read_text(encoding="utf-8"))
+    pages = read_registry((root / REGISTRY).read_text(encoding="utf-8"))
+
+    def walk(entries, stack):
+        nodes = []
+        for entry in entries:
+            menu_id = entry["menuId"]
+            menu = menus.get(menu_id)
+            children = []
+            if menu and menu["entries"]:
+                if menu_id in stack:
+                    raise SourceError(f"{MANIFEST}:{entry['line']}: menu `{menu_id}` contains itself")
+                children = walk(menu["entries"], stack + [menu_id])
+            nodes.append({
+                "title": titles(entry["title"], f"{MANIFEST}:{entry['line']} ({entry['id']})"),
+                "menuId": menu_id,
+                "page": pages.get(menu_id),
+                "children": children,
+            })
+        return nodes
+
+    return [{
+        "title": titles(section["title"], f"{MANIFEST} (section `{section['id']}`)"),
+        "menuId": None,
+        "page": None,
+        "children": walk(section["entries"], []),
+    } for section in sections]
+
+
 def generate(root):
     def docs_exist(path):
         return (root / path).is_file()

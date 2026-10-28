@@ -49,7 +49,8 @@ reason is a good one.
   imports. A page written this way can be lifted to the Rotorflight website unchanged.
 - A YAML front matter with `title`, `sidebar_label` and `sidebar_position`, the position in
   multiples of 10 in the order of the tiles on the radio. The website orders a section by
-  `sidebar_position`; GitHub shows the front matter as a small table.
+  `sidebar_position`, except the page files under `pages/`, which it lists by the menu
+  definition itself; GitHub shows the front matter as a small table.
 - Relative links with the `.md` extension, for example `../reference/preview-features.md`.
 - Menu paths in the words the radio shows: *Configuration* → *Setup* → *Ports*.
 - Every page file ends with the release it was checked against, so a stale page can be told
