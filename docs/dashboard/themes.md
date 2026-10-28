@@ -104,6 +104,10 @@ voltage gauge and a battery gauge above the governor state, the link quality, th
 the timer. After the flight: the lowest and highest voltage and current, and the highest
 temperature of the flight controller and of the ESC.
 
+Like Default, RF Status takes the full screen with the same layouts and the same controls, and
+its settings open the same five pages: **Look** (its voltage range), **Before flight**, **In
+flight**, **Statistics** and **Keys**, as described for [Default](#default).
+
 ![RF Status before, during and after the flight](../images/dashboard/themes/rfstatus.png)
 
 ### @AERC
