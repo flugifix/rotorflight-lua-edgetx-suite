@@ -238,6 +238,12 @@ local function finish(widget, reason)
     root.savePreferences = host.savePreferences
   end
 
+  -- A dialog still on screen would otherwise keep its handlers, and through them
+  -- the closed tool, in the widget's Lua state. Clear directly without loading a module.
+  if root and root.confirmDialogSlot then
+    root.confirmDialogSlot.pending = {}
+  end
+
   dropToolModules()
 
   widget._job = nil
