@@ -159,8 +159,14 @@ local function endKeptFlight(session)
   state.lastArmed = false
 end
 
--- tick()'s shared reader retains armed while uncertain; armedReading() supplies fresh evidence.
--- Keep the flight only on a current armed reading; disarm or FLIGHT_CONFIRM_SECONDS ends it.
+-- Whether a flight kept across a link loss went on. A sensor can keep the state from before the
+-- loss until a decoder writes it again, so the armed state tick() reads cannot say; a reading
+-- the radio has received since the link came back can (MspRuntime.armedReading). Armed: the same
+-- flight, and nothing is done. Disarmed: endKeptFlight. No such reading within
+-- FLIGHT_CONFIRM_SECONDS: endKeptFlight as well, which is what a reconnect did before a flight
+-- was kept at all.
+-- The MSP runtime also holds its last armed state while uncertain, bounded by FLIGHT_CONFIRM_SECONDS
+-- of continuous uncertainty with the link up.
 local function settleFlightAfterGap(t)
   if state.flightPendingSince == nil then return end
   local armed, current = nil, false

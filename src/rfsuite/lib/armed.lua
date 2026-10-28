@@ -7,14 +7,16 @@
 -- second, weaker test with it.
 --
 -- tasks/msp/runtime.lua uses isArmed() for its queue and save gates, so they follow the same
--- sensor mapping as the screens. It treats an uncertain reading as disarmed and allows writes.
+-- sensor mapping as the screens. An uncertain reading counts as disarmed only for a craft never
+-- read armed; a craft last read armed stays armed until a current reading says disarmed or the
+-- reading stays uncertain for FLIGHT_CONFIRM_SECONDS (5 seconds) with the link up.
 -- widgets/dashboard/inflight/fcsetup.lua keeps a NAMED refusal ("no_sensors", no link, armed)
 -- because it has to tell the pilot which of the three it is.
 --
 -- isArmed() answers the question the screen needs -- "paint the warning?" -- and answers false
 -- for three different reasons: not armed, no sensor, no link. That is the right default for a
 -- warning, which must not stand permanently on a radio that cannot know. It is the wrong
--- default for a screen's WRITE confirmation, where "cannot tell" is not "safe to proceed".
+-- default in front of a WRITE, where "cannot tell" is not "safe to proceed".
 --
 -- isUncertain() is that remaining case, and it is deliberately narrow. A missing sensor module
 -- is a broken tool and not this question; a link that is down cannot carry the write either, so
@@ -46,8 +48,8 @@ end
 
 -- How often the answer to isArmed() has changed, as seen by any caller in this Lua state.
 --
--- The tool asks isArmed() at the top of every pass (ui/home.lua, isModelArmed), but it wakes a
--- page only while the craft is NOT armed. So work a page runs across passes -- the ELRS link
+-- The tool (ui/home.lua, isModelArmed) and MSP runtime ask isArmed() every pass, but the tool wakes
+-- a page only while the craft is NOT armed. So work a page runs across passes -- the ELRS link
 -- sync's parameter walk and its paced writes -- never runs during an armed period, and on the
 -- first pass after the disarm the craft reads as disarmed again: from inside that work, nothing
 -- happened. The count is the witness that something did. Work that must not outlive an arming
