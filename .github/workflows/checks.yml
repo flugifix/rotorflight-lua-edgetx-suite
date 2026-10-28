@@ -115,6 +115,29 @@ jobs:
   # to offer; it is a rule about what a change claims, not about what a tree
   # looks like.
 
+  menu-structure:
+    # docs/reference/menu-structure.md is generated from the menu definition, the page
+    # registry, the English titles and the files under docs/pages/. A change to any of them
+    # that does not regenerate the page turns this red; `python3 bin/docs/menu_structure.py`
+    # writes it.
+    name: Menu structure page
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Prove the check can go red
+        run: python3 bin/docs/menu_structure.py --self-test
+
+      - name: Check the page matches the menu definition
+        run: python3 bin/docs/menu_structure.py --check
+
   translation-coverage:
     name: Translation coverage
     runs-on: ubuntu-latest
