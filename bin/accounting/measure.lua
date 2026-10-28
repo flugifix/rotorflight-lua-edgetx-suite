@@ -801,6 +801,10 @@ end
 -- Read off the manifest the tool builds its menus from, breadth first, so a page reached from
 -- more than one menu is reached by the shortest way. The first press is a tile of the start menu,
 -- named by its section; every press after it is a tile of the menu the one before it opened.
+-- The theme and the page of it the theme settings page is priced on (openToolPageActual).
+local SETTINGS_THEME = "system/default"
+local SETTINGS_PAGE = "preflight"
+
 local function pathTo(manifest, menuId)
   local queue, seen = {}, {}
   for _, section in ipairs(manifest.sections or {}) do
@@ -977,12 +981,28 @@ local function openToolPageActual(theme, menuId, pagePath, pad, counted, fault, 
   end
 
   local presses, opens = pathTo(state.manifest, menuId)
+  -- The menu the press lands on. A page reached through a tile the tool builds at run time opens
+  -- under that tile's own id rather than its file's.
+  local landing = menuId
   if presses == nil and pagePath == "settings/dashboard/overrides/page.lua" then
     -- Entering Settings builds its dynamic tiles; the model's overview is the first one.
     presses, opens = pathTo(state.manifest, "settings_dashboard_settings_menu")
     if presses ~= nil then
       presses[#presses + 1] = "dashboard_overrides"
       opens[#opens + 1] = menuId
+    end
+  elseif presses == nil and pagePath == "settings/dashboard/settings/page.lua" then
+    -- The theme settings page opens from a theme's tile in Settings (app/lib/dashboard_builder.lua),
+    -- under an id carrying the theme's path in hex. Priced on the reference theme's Before flight
+    -- page: the theme's pages grid, then the page that reads a phase module and lists its tiles.
+    presses, opens = pathTo(state.manifest, "settings_dashboard_settings_menu")
+    if presses ~= nil then
+      local token = string.format(string.rep("%02x", #SETTINGS_THEME), string.byte(SETTINGS_THEME, 1, -1))
+      landing = "settings_dashboard_settings_" .. token .. "_" .. SETTINGS_PAGE .. "_page"
+      presses[#presses + 1] = "dashboard_settings_" .. token
+      opens[#opens + 1] = "settings_dashboard_settings_" .. token .. "_menu"
+      presses[#presses + 1] = "dashboard_settings_" .. token .. "_" .. SETTINGS_PAGE
+      opens[#opens + 1] = landing
     end
   end
   if presses == nil then
@@ -1056,8 +1076,8 @@ local function openToolPageActual(theme, menuId, pagePath, pad, counted, fault, 
   -- The controls. A page priced anywhere but on itself prices that other screen; a page whose
   -- replies never reached it prices the screen it shows while it waits; and a build that raised
   -- is priced up to the raise. Each would be a plausible number with nothing in the row to say so.
-  if here ~= menuId then
-    error("accounting: " .. menuId .. " did not open; the tool is on " .. tostring(here)
+  if here ~= landing then
+    error("accounting: " .. landing .. " did not open; the tool is on " .. tostring(here)
       .. ", and a row measured there would price that screen")
   end
   if builds.declared == false then
