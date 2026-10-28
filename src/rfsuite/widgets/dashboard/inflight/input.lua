@@ -75,6 +75,9 @@ function M.key(widget, event)
     M.dispatch(widget, drive and drive.valueMode and "function" or "group", -1, "key")
   elseif exit ~= nil and event == exit then
     M.dispatch(widget, "back", nil, "key")
+  elseif _G.EVT_VIRTUAL_ENTER ~= nil and event == _G.EVT_VIRTUAL_ENTER and drive and drive.groupPicker then
+    -- Before native focus enters a group button, ENTER keeps the current group.
+    M.dispatch(widget, "pick", nil, "encoder", drive.group)
   elseif _G.EVT_VIRTUAL_ENTER ~= nil and event == _G.EVT_VIRTUAL_ENTER and widget._inflightSensor then
     -- Before native focus enters a child, ENTER is delivered by the fullscreen widget.
     M.dispatch(widget, drive.valueMode and "leave" or "select", nil, "encoder", drive.entry)
@@ -92,7 +95,8 @@ function M.renderKey(snapshot)
   if snapshot.linkLost == true then return "link_lost" end
   if snapshot.phase == "live" then
     return tostring(snapshot.live) .. "|" .. tostring(snapshot.groups) .. "|" .. tostring(snapshot.group) .. "|"
-      .. tostring(snapshot.valueMode) .. "|" .. tostring(snapshot.profileRefusal) .. "|" .. tostring(snapshot.ladderEpoch)
+      .. tostring(snapshot.valueMode) .. "|" .. tostring(snapshot.groupPicker) .. "|" .. tostring(snapshot.profileRefusal)
+      .. "|" .. tostring(snapshot.ladderEpoch)
   end
   return tostring(snapshot.bank) .. "|" .. tostring(snapshot.row) .. "|" .. tostring(snapshot.epoch)
 end

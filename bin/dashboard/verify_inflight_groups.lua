@@ -995,21 +995,51 @@ for _, valueMode in ipairs({true, false}) do
   check(instance.entry == entry + 1, "control: the plain touch arrow changes the function")
   returned(epoch, key)
   local group = instance.group
+  -- The group picker is a scene of its own: no native popup, whose RTN calls nothing back and
+  -- left the encoder walking a focus list under it.
+  local function picker()
+    local buttons = 0
+    for _, object in ipairs(scene.focus) do
+      if object.node.press and object.parent == nil then buttons = buttons + 1 end
+    end
+    return buttons
+  end
+  instance.valueMode = valueMode; instance.valueEpoch = instance.valueEpoch + 1
+  ticks = ticks + 47; instance:fastTick(ticks); render()
   epoch, key = instance.ladderEpoch, Screen.renderKey(view.state.inflight)
-  ticks = ticks + 1; touch(instance.groups[group].name)
-  check(instance.group == group + 1, "control: the title without a menu changes the group")
+  ticks = ticks + 1; touch(instance.groups[instance.group].name)
+  check(instance.groupPicker and not instance.valueMode, "the title opens the group picker and leaves value mode")
   returned(epoch, key)
-  local menu
-  lvgl.menu = function(spec) menu = spec end
+  check(view._inflightSensor == nil and scene.sensor == nil and picker() == #instance.groups + 1,
+    "the picker draws one button per group and the title, and no ladder sensor: " .. picker())
+  ticks = ticks + 1; Input.key(view, EVT_VIRTUAL_EXIT)
+  check(not instance.groupPicker and instance.group == group, "RTN closes the picker and keeps the group")
+  render()
+  check(scene.sensor ~= nil and scene.at == 0, "the closed picker rebuilds the list with native root focus")
+  local entry2 = instance.entry
+  scene:rotate(1); scene:sweep()
+  ticks = ticks + 1; scene:rotate(1); scene:sweep()
+  check(instance.entry ~= entry2, "the encoder walks the functions again after RTN closed the picker")
+  -- The encoder chooses inside the picker: walk to the last group and press.
   epoch, key = instance.ladderEpoch, Screen.renderKey(view.state.inflight)
-  touch(instance.groups[instance.group].name)
-  check(menu ~= nil, "control: the title opens the group menu")
-  returned(epoch, key)
-  epoch, key = instance.ladderEpoch, Screen.renderKey(view.state.inflight)
-  ticks = ticks + 1; menu.set(group)
-  check(instance.group == group, "control: the menu choice changes the group")
-  returned(epoch, key)
-  lvgl.menu = nil
+  ticks = ticks + 1; touch(instance.groups[instance.group].name)
+  render()
+  for _ = 1, #instance.groups do scene:rotate(1) end
+  ticks = ticks + 1; scene:press()
+  check(not instance.groupPicker and instance.group == #instance.groups and instance.entry == 1,
+    "an encoder press in the picker jumps straight to that group")
+  render()
+  check(scene.sensor ~= nil, "the chosen group's list is drawn again")
+  -- The current group chosen again goes to its first function; a choice after landing does nothing.
+  ticks = ticks + 1; Input.dispatch(view, "function", 1, "touch"); render()
+  touch(instance.groups[instance.group].name); render()
+  ticks = ticks + 1; Input.dispatch(view, "pick", nil, "touch", instance.group)
+  check(instance.entry == 1 and not instance.groupPicker, "choosing the current group selects its first function")
+  render(); touch(instance.groups[instance.group].name)
+  local landed = instance.group
+  instance:setPhase("ground")
+  check(not instance.groupPicker and not Input.dispatch(view, "pick", nil, "touch", 1) and instance.group == landed,
+    "landing takes the picker down and a late choice does nothing")
   instance:cleanup(false)
 end
 
@@ -1248,24 +1278,25 @@ for _, size in ipairs({ { 480, 272 }, { 480, 320 }, { 800, 480 } }) do
     check(touchDrive.group == g0 and touchDrive.entry == e0, "the left arrow selects the previous function")
     ticks = ticks + 1; arrows["<"].press()
     check(touchDrive.entry == e0 and touchDrive.stepRefusedReason == "list_end", "the arrows stop at the first function")
-    local spec
-    lvgl.menu = function(s) spec = s end
     ticks = ticks + 1; arrows[">"].press()
     touchView._inflightSensor = touchView._inflightSensor or {}
     touchView._inflightSensor.index = 3
     ticks = ticks + 1; titleButton.press()
-    check(touchView._inflightSensor.index == nil, "opening the group menu fences the next sensor return")
-    ticks = ticks + 1; spec.set(g0)
-    check(touchDrive.group == g0 and touchDrive.entry == 1, "choosing the current group selects its first function")
-    check(spec and #spec.values == #touchDrive.groups and spec.values[g0] == groupName and spec.get() == g0,
-      "the group title opens the menu of every group")
-    ticks = ticks + 1; spec.set(#touchDrive.groups)
+    check(touchView._inflightSensor.index == nil, "opening the group picker fences the next sensor return")
+    check(touchDrive.groupPicker == true, "the group title opens the group picker")
+    Drive.sample(touchView)
+    local pickerNodes, cells = {}, 0
+    Screen.buildFullscreen(pickerNodes, touchView)
+    walk(pickerNodes, function(node)
+      if node.type == "button" and node.text ~= groupName and node.press then cells = cells + 1 end
+      if node.type == "button" then
+        check((node.y or 0) + (node.h or 0) <= size[2], "every picker button fits the screen")
+      end
+    end)
+    check(cells >= #touchDrive.groups - 1, "the picker offers every group: " .. cells)
+    ticks = ticks + 1; Input.dispatch(touchView, "pick", nil, "touch", #touchDrive.groups)
     check(#touchDrive.groups < 2 or (touchDrive.group == #touchDrive.groups and touchDrive.entry == 1),
-      "a menu choice jumps straight to that group")
-    touchDrive:setPhase("ground"); local before = touchDrive.group
-    spec.set(1)
-    check(touchDrive.group == before, "a menu choice made after landing does nothing")
-    lvgl.menu = nil
+      "a picker choice jumps straight to that group")
   end
   for _, node in ipairs(browse) do
     check((node.x or 0) >= 0 and (node.y or 0) >= 0 and (node.w or 1) > 0

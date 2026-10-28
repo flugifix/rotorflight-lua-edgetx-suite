@@ -168,6 +168,7 @@ end
 function Drive:fenceGroups()
   self.groups, self.groupCells = {}, {}
   self.valueMode = false
+  self.groupPicker = nil
 end
 
 --- The list that decides what is offered: the pilot's choice for this session where there is one,
@@ -358,6 +359,7 @@ function Drive:setPhase(phase)
   local was = self.phase
   self.phase = phase
   self.postActionsOpen = nil
+  self.groupPicker = nil
   self.valueEpoch = self.valueEpoch + 1
 
   if phase == M.PHASE_LIVE then
@@ -653,6 +655,40 @@ end
 function Drive:dispatch(action, direction, source, index, armed)
   local now = self.radio.now()
   if action == "release" then self:release(); return true end
+  -- The group picker is a scene of the live surface, not a native popup: a popup closed with RTN
+  -- calls nothing back, so the scene under it could neither return the encoder's focus nor know
+  -- the choice was abandoned. Opening it leaves value mode; RTN, or the title again, closes it.
+  if action == "picker" then
+    if self.live ~= true or self.phase ~= M.PHASE_LIVE then return false, "not_live" end
+    if #self.groups < 2 then return false, "groups" end
+    if self.groupPicker then
+      self.groupPicker = nil
+      self.valueEpoch = self.valueEpoch + 1
+      return true
+    end
+    if self.valueMode then
+      local ok, reason = self:dispatch("leave", nil, source, nil, armed)
+      if not ok then return ok, reason end
+    end
+    self.groupPicker = true
+    self.valueEpoch = self.valueEpoch + 1
+    return true
+  end
+  if self.groupPicker and (action == "back" or action == "leave" or action == "pick") then
+    self.groupPicker = nil
+    self.valueEpoch = self.valueEpoch + 1
+    if action ~= "pick" then return true end
+    local target = tonumber(index) or self.group or 1
+    -- The current group chosen again goes to its first function, as the title's menu did.
+    if target == self.group then return self:dispatch("function", nil, source, 1, armed) end
+    return self:dispatch("group", target - (self.group or 1), source, nil, armed)
+  end
+  if action == "pick" then return false, "stale" end
+  -- Any other input takes the picker down first; what it asked for is then decided as usual.
+  if self.groupPicker then
+    self.groupPicker = nil
+    self.valueEpoch = self.valueEpoch + 1
+  end
   -- Armed input cannot close the surface, including before a live phase is published.
   -- RTN can still leave value mode through the common leave action.
   if (action == "close" or (action == "back" and not self.valueMode))
@@ -1700,6 +1736,7 @@ local function publish(widget, drive)
     and snapshot.phase == drive.phase
     and snapshot.group == drive.group and snapshot.entry == drive.entry
     and snapshot.valueMode == drive.valueMode and snapshot.profilePaused == drive.profilePaused
+    and snapshot.groupPicker == (drive.groupPicker == true)
     and snapshot.primePhase == primePhase and snapshot.primeDone == primeDone
     and snapshot.stepRefusedReason == drive.stepRefusedReason then
     return
@@ -1801,6 +1838,7 @@ local function publish(widget, drive)
     groups = drive.groups,
     groupRows = groupRows,
     valueMode = drive.valueMode,
+    groupPicker = drive.groupPicker == true,
     -- Bumped by the encoder sensor before a ladder half runs out; part of the live scene key.
     ladderEpoch = drive.ladderEpoch,
     profilePaused = drive.profilePaused,
@@ -1960,6 +1998,7 @@ function M.pause(widget)
   drive:evaluateInterlock(drive.radio.now(), false)
   if drive.fcSurface then drive.fcSurface.close(widget, drive) end
   drive.valueMode = false
+  drive.groupPicker = nil
   drive.linkLost = true
   -- An adjustment report held from before the gap belongs to no step the resumed surface knows.
   drive.reportFence = true
@@ -1974,6 +2013,7 @@ function M.cleanup(widget)
   drive:evaluateInterlock(drive.radio.now(), false)
   if drive.fcSurface then drive.fcSurface.close(widget, drive) end
   drive.valueMode = false
+  drive.groupPicker = nil
   drive.linkLost = nil
   -- Observe landing even while closed. Reopening during this flight keeps PHASE_LIVE and
   -- its selection; entering it from ground/post on the next arming starts at the first entry.

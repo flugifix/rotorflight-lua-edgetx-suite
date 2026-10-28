@@ -414,35 +414,33 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
 
 end
 
--- The group title opens the radio's own menu of every group, so the pilot jumps straight to one
--- instead of paging through them. The arrows beside it walk the functions of the group. Without
--- a native menu the title steps to the next group, as before.
-local function openGroupMenu(widget, groups, t)
-  local drive = widget._inflight
-  if drive == nil then return end
-  -- The same fence every other touch action passes (Input.dispatch): the encoder's next sensor
-  -- return after the popup closes is not a detent.
-  local sensor = widget._inflightSensor
-  if sensor then sensor.index = nil end
-  if not (lvgl and type(lvgl.menu) == "function") or #groups < 2 then
-    Input.dispatch(widget, "group", 1, "touch")
-    return
+-- The group title opens the group picker in place of the list, so the pilot jumps straight to one
+-- group instead of paging through them. The arrows beside it walk the functions of the group.
+-- With a single group the title steps on, as before.
+local function openGroupPicker(widget)
+  local ok, reason = Input.dispatch(widget, "picker", nil, "touch")
+  if not ok and reason == "groups" then Input.dispatch(widget, "group", 1, "touch") end
+end
+
+-- Every group as a button, two to a row, sized to the room between the title and the footer.
+-- Plain buttons in creation order: the encoder walks them as the native focus list and a press
+-- chooses, so the picker needs no scroll sensor and no popup.
+local function appendGroupPicker(children, widget, groups, current, m, x, y, width, height, p)
+  local columns = 2
+  local rows = math.max(1, math.ceil(#groups / columns))
+  local gap = m.large and 6 or 3
+  local cellW = math.floor((width - gap) / columns)
+  local cellH = math.min(math.floor((height - gap * (rows - 1)) / rows), m.large and 64 or 44)
+  for i, group in ipairs(groups) do
+    local column, row = (i - 1) % columns, math.floor((i - 1) / columns)
+    local chosen = i == current
+    children[#children + 1] = {
+      type = "button", x = x + column * (cellW + gap), y = y + row * (cellH + gap), w = cellW, h = cellH,
+      color = chosen and p.accent or p.button, textColor = chosen and p.onAccent or p.text,
+      font = m.listFont, text = fitText(group.name, cellW - 12, m.listFont),
+      press = function() Input.dispatch(widget, "pick", nil, "touch", i) end
+    }
   end
-  Input.rebuild(widget)
-  local names = {}
-  for i, group in ipairs(groups) do names[i] = group.name end
-  lvgl.menu({
-    title = t("widgets.dashboard.inflight_choose_group", "Choose group"),
-    values = names,
-    get = function() return drive.group or 1 end,
-    set = function(index)
-      -- The menu can outlive the flight it was opened in; a choice made after landing does nothing.
-      if widget._inflight ~= drive or drive.phase ~= "live" then return end
-      local delta = (tonumber(index) or 0) - (drive.group or 1)
-      if delta ~= 0 then Input.dispatch(widget, "group", delta, "touch")
-      else Input.dispatch(widget, "function", nil, "touch", 1) end
-    end
-  })
 end
 
 -- The title is the only group selector. Rows retain full names and their hidden cell address;
@@ -471,14 +469,21 @@ local function appendFlight(children, widget, m, w, h, t, p)
   local titleX, titleW = m.pad + arrowW + 4, lineW - arrowW * 2 - 8
   local contentY = groupY + groupH + 4
   local paused = snapshot.profileRefusal ~= nil
-  local hint = snapshot.valueMode
-    and t("widgets.dashboard.inflight_value_controls", "Rotate +/- step / Press or RTN done")
-    or t("widgets.dashboard.inflight_browse_controls", "PAGE group / Rotate function / Press tune")
+  local picking = snapshot.groupPicker == true and not paused
+  local hint, shortHint
+  if picking then
+    hint = t("widgets.dashboard.inflight_picker_controls", "Tap or press a group / RTN back")
+    shortHint = t("widgets.dashboard.inflight_picker_controls_short", "Pick a group / RTN back")
+  elseif snapshot.valueMode then
+    hint = t("widgets.dashboard.inflight_value_controls", "Rotate +/- step / Press or RTN done")
+    shortHint = t("widgets.dashboard.inflight_value_controls_short", "Rotate +/- / Press or RTN done")
+  else
+    hint = t("widgets.dashboard.inflight_browse_controls", "PAGE group / Rotate function / Press tune")
+    shortHint = t("widgets.dashboard.inflight_browse_controls_short", "PAGE group / Rotate / Press tune")
+  end
   children[#children + 1] = {type = "rectangle", x = 0, y = footerY, w = w, h = m.footerH, color = p.header, filled = true}
   appendCentredLabel(children, m.pad, footerY, lineW, m.footerH,
-    pickText(hint, snapshot.valueMode
-      and t("widgets.dashboard.inflight_value_controls_short", "Rotate +/- / Press or RTN done")
-      or t("widgets.dashboard.inflight_browse_controls_short", "PAGE group / Rotate / Press tune"), lineW, m.small),
+    pickText(hint, shortHint, lineW, m.small),
     p.dim, m.small, CENTER, m)
 
   if paused then
@@ -521,6 +526,9 @@ local function appendFlight(children, widget, m, w, h, t, p)
       else line = candidate end
     end
     appendLabel(children, m.pad * 2, y, width, line, p.warn, m.small, LEFT)
+  elseif picking then
+    appendGroupPicker(children, widget, groups, snapshot.group or 1, m, m.pad, contentY, lineW,
+      footerY - contentY - 4, p)
   -- The viewport initially shows the selection; the first focus move scrolls to its neighbour.
   elseif snapshot.valueMode then
     local nameH = m.large and 48 or 32
@@ -766,8 +774,12 @@ local function appendFlight(children, widget, m, w, h, t, p)
       return snap and (snap.stepRefusedReason == "list_end" and endText or snap.stepRefusedReason == "cooling" and busyText) or ""
     end, p.warn, m.small, CENTER)
   end
+  if picking then
+    button(children, titleX, groupY, titleW, groupH, title, function() openGroupPicker(widget) end, p.accent)
+    return
+  end
   button(children, m.pad, groupY, arrowW, groupH, "<", action("function", -1), p.accent)
-  button(children, titleX, groupY, titleW, groupH, title, function() openGroupMenu(widget, groups, t) end)
+  button(children, titleX, groupY, titleW, groupH, title, function() openGroupPicker(widget) end)
   button(children, w - m.pad - arrowW, groupY, arrowW, groupH, ">", action("function", 1), p.accent)
 end
 

@@ -207,9 +207,11 @@ The overlay uses a Rotorflight dark palette with a blue accent. The historical
 [flight screenshot](../images/inflight/overlay-live.png) shows the former bank surface;
 the image is retained as a reference and does not depict this interface.
 
-The current group is the title, for example **Pitch**. Tapping it opens the radio's menu of
-every group, and choosing one jumps straight to its first function; on a radio without that
-menu the tap steps to the next group. The arrows beside the title select the previous/next
+The current group is the title, for example **Pitch**. Tapping it replaces the list with a
+picker of every group, two to a row, the current one highlighted. Tapping a group, or turning
+the encoder to it and pressing, jumps straight to its first function; RTN or the title again
+closes the picker and keeps the group. Opening the picker leaves value mode. It is part of the
+tuning screen rather than a radio menu, so the encoder returns to the list when it closes. The arrows beside the title select the previous/next
 function of the group, in browse and in value mode, and stop at its ends with the end tone.
 There is no permanent bank strip. The
 fixed order is **Cyclic, Roll, Pitch, Yaw, Governor, Rates, Filter, Cross Coupling, Rescue & Level,
