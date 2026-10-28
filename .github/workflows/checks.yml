@@ -276,7 +276,9 @@ jobs:
         run: |
           lua5.3 bin/smartfuel/verify_invalid_max.lua
           lua5.3 bin/smartfuel/verify_readers.lua
-          lua5.3 bin/smartfuel/verify_combined_source.lua
+
+      - name: Check the combined source
+        run: lua5.3 bin/smartfuel/verify_combined_source.lua
 
   flight-record-absent-sources:
     name: Flight record absent sources

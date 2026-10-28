@@ -1,2 +1,2 @@
 - **Local SmartFuel COMBINED uses the lower estimate (`tasks/events/telemetry_bg/smart.lua`)**:
-  - Compute both voltage and current estimates and use the lower available percentage, falling back to either when the other is unavailable; publish the voltage track's virtual consumption on SmCp in combined mode too (#705).
+  - Compute both voltage and current estimates and use the lower available percentage, falling back to either when the other is unavailable (#705).

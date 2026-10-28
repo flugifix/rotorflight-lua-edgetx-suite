@@ -729,8 +729,13 @@ function Smart.wakeup()
       fuelPercent, virtualConsumption = computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed, reserve)
     elseif sourceMode == 2 then
       local voltagePercent, currentPercent
-      voltagePercent, virtualConsumption = computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed, reserve)
-      currentPercent = computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized, reserve)
+      voltagePercent = computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed, reserve)
+      if voltagePercent == nil and state.virtualConsumption ~= nil then
+        voltagePercent = clamp(100 - state.virtualConsumption / usableCapacity * 100, 0, 100)
+      end
+      if tonumber(getSensor("consumption")) ~= nil then
+        currentPercent = computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized, reserve)
+      end
       if voltagePercent ~= nil and currentPercent ~= nil then
         fuelPercent = math.min(voltagePercent, currentPercent)
       else
@@ -749,8 +754,8 @@ function Smart.wakeup()
     end
   end
 
-  -- SmCp carries the voltage track's virtual consumption in voltage and combined modes. On the
-  -- other paths the value would be the consumption the flight controller already publishes, so the
+  -- SmCp carries the virtual consumption computed in voltage mode and nothing else. On the other
+  -- paths the value would be the consumption the flight controller already publishes, so the
   -- sensor would spend a second slot -- and one model write per push -- on a copy of it.
   local consumed = nil
   if type(virtualConsumption) == "number" and virtualConsumption >= 0 then
