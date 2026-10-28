@@ -1263,7 +1263,7 @@ return {
         value_voltage = "SPANNUNG",
         value_combined = "KOMBINIERT",
         help_model_type = "Akku oder Kraftstoff: das Wort der SmartFuel-Ansagen; die Schaetzung bleibt gleich. AUTO: Elektro, wenn der Flugcontroller Zellenzahl oder Kapazitaet hat, sonst Nitro. Elektro ohne beides: ELEKTRO.",
-        help_calcfuel_local = "Waehle die lokale SmartFuel-Quelle als Fallback, wenn Firmware-SmartFuel nicht verfuegbar ist.",
+        help_calcfuel_local = "Die Schaetzung des Senders, wenn der Flugcontroller keine rechnet; Kombiniert nimmt den niedrigeren Wert aus Spannung und Strom.",
         help_publish_sensors = "Sendet Restkapazitaet und geschaetzten Verbrauch als Telemetriesensoren SmFt und SmCp, fuer Logikschalter, Spezialfunktionen und die Telemetrieseiten. Dashboard und Ansagen brauchen sie nicht.",
         help_message = "Power-Einstellungen, auf dem Sender je Flugcontroller gespeichert; nichts davon wird zu ihm geschrieben.\nModelltyp: ob die SmartFuel-Ansagen Akku oder Kraftstoff sagen; AUTO ist Elektro, wenn im Flugcontroller Zellenzahl oder Kapazitaet gesetzt ist.\nLokale SmartFuel-Quelle: die Schaetzung des Senders, wenn der Flugcontroller keine rechnet.\nSmFt / SmCp senden: Restkapazitaet und Verbrauch als zwei Telemetriesensoren senden.\nESC-Strombegrenzung: die Grenze, von der die ESC-Last ein Prozentsatz ist; die Beschriftung zeigt die Herkunft.",
         saved_title = "Gespeichert",

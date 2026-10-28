@@ -1263,7 +1263,7 @@ return {
         value_voltage = "VOLTAGE",
         value_combined = "COMBINED",
         help_model_type = "Battery or fuel: the word SmartFuel announcements use; the estimate is unchanged. AUTO: electric if the flight controller has a cell count or capacity, else nitro. Electric with neither: ELECTRIC.",
-        help_calcfuel_local = "Select the local SmartFuel source fallback used when firmware SmartFuel mode is unavailable.",
+        help_calcfuel_local = "The estimate the radio computes when the flight controller computes none; Combined takes the lower of voltage and current.",
         help_publish_sensors = "Publish the remaining fuel and the estimated consumption as the SmFt and SmCp telemetry sensors, for logical switches, special functions and the telemetry screens. The dashboard and the announcements do not need them.",
         help_message = "Power settings kept on the radio per flight controller; nothing here is written to it.\nModel Type: whether the SmartFuel announcements say battery or fuel; AUTO is electric when the flight controller has a cell count or a capacity set.\nLocal SmartFuel Source: the estimate the radio computes when the flight controller computes none.\nPublish SmFt / SmCp: publish the remaining fuel and the consumption as two telemetry sensors.\nESC Current Limit: the limit the ESC load is a percentage of; the label says where it came from.",
         saved_title = "Saved",
