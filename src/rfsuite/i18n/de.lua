@@ -3084,6 +3084,7 @@ return {
         theme_key = "Taste",
         theme_key_global = "(global)",
         theme_key_help = "Wähle die Aktion dieser Taste im Vollbild dieses Themes; eine unter Einstellungen > Dashboard > Tasten belegte Taste ist ausgegraut und wird dort eingestellt.",
+        theme_key_help = "Wähle die Aktion dieser Taste im Vollbild dieses Designs; eine unter Einstellungen > Dashboard > Tasten belegte Taste ist ausgegraut und wird dort eingestellt.",
         field_tile = "Kachel",
         field_help_live = "Wähle einen anderen Live-Wert für diese Kachel; Beschriftung, Einheit und Nachkommastellen folgen der Auswahl.",
         field_help_stats = "Wähle eine andere Kennzahl des letzten Flugs für diese Statistik-Kachel.",
