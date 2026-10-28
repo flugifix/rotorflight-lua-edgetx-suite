@@ -121,6 +121,10 @@ the flight. After the flight, twelve numbers: flight time, highest power, capaci
 time, highest current, fuel left, flight count, highest ESC temperature, voltage, highest head
 speed, highest altitude and lowest link quality.
 
+Like Default, @AERC takes the full screen with the same layouts and the same controls, and
+its settings open the same five pages: **Look** (its head speed, BEC and ESC temperature ranges), **Before flight**, **In
+flight**, **Statistics** and **Keys**, as described for [Default](#default).
+
 ![@AERC before, during and after the flight](../images/dashboard/themes/aerc.png)
 
 ### @AERC Nitro
@@ -132,6 +136,10 @@ flight count and a vertical BEC voltage bar. In flight: the head speed and the t
 gauges either side of the flight time and the voltage bar. After the flight: flight time, lowest
 and highest head speed, voltage and lowest voltage, total time, flight count, highest throttle
 and highest altitude.
+
+Like Default, @AERC Nitro takes the full screen with the same layouts and the same controls, and
+its settings open the same five pages: **Look** (its head speed, BEC and ESC temperature ranges), **Before flight**, **In
+flight**, **Statistics** and **Keys**, as described for [Default](#default).
 
 ![@AERC Nitro during and after the flight](../images/dashboard/themes/aerc-n.png)
 

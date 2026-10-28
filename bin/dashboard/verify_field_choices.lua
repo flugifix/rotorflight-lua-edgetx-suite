@@ -277,6 +277,13 @@ for _, folder in ipairs(MIGRATED) do
   combos = {}
   module.build({ children = {}, x = 0, y = 0, w = 800, preferences = { dashboard = {} }, page = { id = "keys" } })
   check(#combos == #Keys.THEME_KEYS, folder .. " Keys page lists every key")
+  -- Look is the theme's own form, as before: it builds, and lists none of the shared rows.
+  factory = assert(loadfile(THEMES .. folder .. "/configure.lua"))()
+  module = factory({ theme = { path = "system/" .. folder,
+    configurePath = CORE .. "widgets/dashboard/themes/" .. folder .. "/configure.lua" }, page = { id = "look" } })
+  combos = {}
+  local built = pcall(module.build, { children = {}, x = 0, y = 0, w = 800, preferences = { dashboard = {} }, page = { id = "look" } })
+  check(built, folder .. " Look builds")
   local init = assert(loadfile(THEMES .. folder .. "/init.lua"))()
   check(init.fullscreen == "theme", folder .. " takes the full screen")
   check(type(init.pages) == "table" and #init.pages == 5, folder .. " declares its five pages")
