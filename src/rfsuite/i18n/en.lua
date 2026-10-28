@@ -2571,7 +2571,7 @@ return {
         differs_fmt = "%s (differs)",
         waiting = "Reading the telemetry sensors",
         no_words = "Neither System Status nor System Config is received. Both need MSP API 12.10 or later.",
-        help_message = "The flight controller's packed status sensors, decoded; read from the radio twice a second.\nSystem Status, System Config: Receiving, Not current, Not received or No sensor in this model.\nSensor: the radio sensor read. Raw value: the word as it arrived.\nShared fields: each value packed and from its own sensor (ARM, Gov, PID#, RTE#, BAT#); a mismatch shows (differs)."
+        help_message = "The flight controller's packed status sensors, decoded; read from the radio twice a second.\nSystem Status: Receiving, Not current, Not received or No sensor in this model.\nSystem Config: the same for the configuration sensor.\nSensor: the radio sensor read. Raw value: the word as it arrived.\nShared fields: each value packed and from its own sensor (ARM, Gov, PID#, RTE#, BAT#); a mismatch shows (differs)."
       },
       diagnostics_fblstatus = {
         date = "Date",
