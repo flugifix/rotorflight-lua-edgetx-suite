@@ -124,6 +124,12 @@ local function queueRcRead(isAutoReload)
             rcConfig[k] = v
           end
           loadFromSession()
+          ui.runtime.dynamicFilters = {
+            dyn_notch_count = parsed.dyn_notch_count,
+            dyn_notch_q = parsed.dyn_notch_q,
+            dyn_notch_min_hz = parsed.dyn_notch_min_hz,
+            dyn_notch_max_hz = parsed.dyn_notch_max_hz
+          }
           ui.runtime.readPending = false
           ui.loading = false
           ui.dirty = false
@@ -156,6 +162,12 @@ local function queueRcWrite()
 
   local session = getSession()
   local rcConfig = getRcConfig(session)
+  -- Dynamic notch settings are read only at boot; compare with the last FC read.
+  local dynamicFilters = ui.runtime.dynamicFilters or {}
+  local reboot = ui.config.dyn_notch_count ~= dynamicFilters.dyn_notch_count
+    or ui.config.dyn_notch_q ~= dynamicFilters.dyn_notch_q
+    or ui.config.dyn_notch_min_hz ~= dynamicFilters.dyn_notch_min_hz
+    or ui.config.dyn_notch_max_hz ~= dynamicFilters.dyn_notch_max_hz
   
   -- Update config values in session
   for k, v in pairs(ui.config) do
@@ -171,13 +183,14 @@ local function queueRcWrite()
         payload = FilterConfigApi.buildWritePayload(rcConfig)
       }
     },
-    reboot = false,
+    reboot = reboot,
     onSaved = function()
       ui.dirty = false
     end,
     onDone = function(result)
-      if not ui.runtime then return end
-      if result.saved then queueRcRead(true) end
+      if not ui.loaded or not ui.runtime then return end
+      -- Reboot saves leave reconnect and reload to the pipeline.
+      if result.saved and not result.reboot then queueRcRead(true) end
       if type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end

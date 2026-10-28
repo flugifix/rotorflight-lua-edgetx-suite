@@ -18,6 +18,8 @@ local function newPage(spec)
   local apiPath = "tasks/msp/api/" .. spec.api .. ".lua"
   local api = assert(loadfile("src/rfsuite/" .. apiPath))()
   local eeprom = assert(loadfile("src/rfsuite/tasks/msp/api/eeprom_write.lua"))()
+  local reboot = assert(loadfile("src/rfsuite/tasks/msp/api/reboot.lua"))()
+  local txInfo = assert(loadfile("src/rfsuite/tasks/msp/api/tx_info.lua"))()
   local queue = { entries = {} }
   function queue:add(entry) self.entries[#self.entries + 1] = entry end
   local mspState = { queue = queue, lastArmed = false }
@@ -36,8 +38,8 @@ local function newPage(spec)
     ["tasks/events/runtime.lua"] = {},
     [apiPath] = api,
     ["tasks/msp/api/eeprom_write.lua"] = eeprom,
-    ["tasks/msp/api/reboot.lua"] = {},
-    ["tasks/msp/api/tx_info.lua"] = {}
+    ["tasks/msp/api/reboot.lua"] = reboot,
+    ["tasks/msp/api/tx_info.lua"] = txInfo
   }
   function loadScript(path)
     local relative = string.match(path, "^/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
@@ -68,6 +70,7 @@ local function newPage(spec)
     pipeline.wakeup()
   end
   return { page = page, ui = ui, api = api, eeprom = eeprom, queue = queue,
+    reboot = reboot, txInfo = txInfo,
     pipeline = pipeline, ctx = ctx, reports = reports, wakeup = wakeup, spec = spec }
 end
 
@@ -84,7 +87,7 @@ local function countCommand(h, command)
   return count
 end
 
-local function prepare(h, eq)
+local function prepare(h, eq, field)
   eq(h.pipeline.isActive(), false, "fresh pipeline is idle")
   eq(h.pipeline.hasOutcome(), false, "fresh pipeline has no outcome")
   h.page.wakeup(h.ctx)
@@ -97,7 +100,7 @@ local function prepare(h, eq)
 
   -- Both pages' number-field setters store the raw value in ui.config and set ui.dirty.
   -- These fields have unit steps; no display scaling or switch state needs to be emulated.
-  local field = h.spec.field
+  field = field or h.spec.field
   local value = assert(h.ui.config[field], "initial field missing") + 1
   h.ui.config[field] = value
   h.ui.dirty = true
@@ -119,7 +122,7 @@ local function prepare(h, eq)
   eq(#h.reports, 0, "accepted save has no immediate reportSave dialog")
 end
 
-local function expectOutcome(h, status, saved, eq)
+local function expectOutcome(h, status, saved, eq, reboot)
   eq(h.pipeline.hasOutcome(), true, "pipeline exposes outcome")
   local progress = h.pipeline.getProgress() or {}
   eq(progress.phase, "outcome", "pipeline run ended")
@@ -129,11 +132,11 @@ local function expectOutcome(h, status, saved, eq)
   local result = progress.result or {}
   eq(result.status, status, "result status")
   eq(result.saved, saved, "result saved flag")
-  eq(result.reboot, false, "save requires no reboot")
+  eq(result.reboot, reboot == true, "result reboot flag")
   return result
 end
 
-local function accept(h, eq)
+local function commit(h, eq)
   answer(h, h.queue.entries[2], {})
   eq(#h.queue.entries, 3, "configuration reply queues only EEPROM next")
   local commit = assert(h.queue.entries[3], "EEPROM write missing")
@@ -145,12 +148,18 @@ local function accept(h, eq)
   eq(progress.phase, "commit", "pipeline awaits EEPROM")
   eq(progress.saved, false, "pending EEPROM is not saved")
   eq(countCommand(h, h.api.command), 1, "no read-back before EEPROM reply")
+  eq(countCommand(h, h.reboot.writeCommand), 0, "no reboot before EEPROM reply")
 
   answer(h, commit, {})
-  expectOutcome(h, "done", true, eq)
   eq(h.page.hasUnsavedChanges(), false, "EEPROM reply clears dirty")
   eq(countCommand(h, h.api.writeCommand), 1, "exactly one configuration write")
   eq(countCommand(h, h.eeprom.command), 1, "exactly one EEPROM write")
+end
+
+local function accept(h, eq)
+  commit(h, eq)
+  expectOutcome(h, "done", true, eq)
+  eq(countCommand(h, h.reboot.writeCommand), 0, "no reboot queued")
   eq(#h.queue.entries, 4, "successful save queues one read-back")
   eq(countCommand(h, h.api.command), 2, "initial read plus read-back")
   local readback = assert(h.queue.entries[4], "read-back missing")
@@ -163,6 +172,43 @@ local function accept(h, eq)
   eq(h.page.canSave(), true, "read-back permits save")
   eq(h.page.hasUnsavedChanges(), false, "read-back stays clean")
   eq(#h.queue.entries, 4, "read-back queues no further work")
+end
+
+local function acceptReboot(h, eq)
+  commit(h, eq)
+  eq(h.pipeline.hasOutcome(), false, "EEPROM reply waits for reboot")
+  local progress = h.pipeline.getProgress() or {}
+  eq(progress.phase, "preflight", "reboot save checks RTC before restarting")
+  eq(progress.saved, true, "reboot starts only after settings are stored")
+  eq(countCommand(h, h.api.command), 1, "no read-back before reconnect")
+  local preflight = assert(h.queue.entries[4], "preflight read missing")
+  eq(preflight.command, h.txInfo.command, "preflight reads TX_INFO")
+  answer(h, preflight, { 0, 1 })
+
+  local reboot = assert(h.queue.entries[5], "reboot missing")
+  eq(reboot.command, h.reboot.writeCommand, "MSP_REBOOT follows EEPROM and preflight")
+  eq(reboot.isWrite, true, "reboot classified as write")
+  eq(countCommand(h, h.reboot.writeCommand), 1, "exactly one reboot queued")
+  eq((h.pipeline.getProgress() or {}).phase, "reboot", "pipeline is restarting")
+  answer(h, reboot, {})
+  eq((h.pipeline.getProgress() or {}).phase, "probe", "pipeline waits for reconnect")
+  eq(countCommand(h, h.api.command), 1, "page does not read during reconnect")
+
+  local probe = assert(h.queue.entries[6], "reconnect probe missing")
+  eq(probe.command, h.txInfo.command, "reconnect reads TX_INFO")
+  answer(h, probe, { 0, 0 })
+  local verify = assert(h.queue.entries[7], "RTC verification missing")
+  eq(verify.command, h.txInfo.command, "connect completion verifies TX_INFO")
+  eq((h.pipeline.getProgress() or {}).phase, "verify", "pipeline verifies reconnect")
+  answer(h, verify, { 0, 1 })
+
+  local result = expectOutcome(h, "done", true, eq, true)
+  eq(result.rebootProven, true, "RTC reset proves restart")
+  eq(result.rtcVerified, true, "RTC restored after reconnect")
+  eq(h.page.hasUnsavedChanges(), false, "reboot completion stays clean")
+  eq(countCommand(h, h.api.command), 1, "onDone leaves reload to the pipeline")
+  eq(#h.queue.entries, 7, "reboot completion queues no page read-back")
+  eq(#h.reports, 0, "reboot completion opens no reportSave dialog")
 end
 
 local scenarios = {
@@ -202,24 +248,32 @@ local scenarios = {
   end }
 }
 
--- Each page always writes one complete record, followed by EEPROM, with no reboot.
+local function runScenario(spec, scenario)
+  local label = spec.name .. " " .. scenario[1]
+  local function eq(actual, expected, detail)
+    equal(actual, expected, label .. " " .. detail)
+  end
+  -- Missing entry points or callback errors count as failures without aborting other pages.
+  local ok, err = pcall(function()
+    local h = newPage(spec)
+    prepare(h, eq, scenario.field)
+    scenario[2](h, eq)
+  end)
+  eq(ok, true, "scenario completed" .. (ok and "" or ": " .. tostring(err)))
+end
+
+-- Each page writes one complete record followed by EEPROM; dynamic notch edits also reboot.
 -- Rescue's mode/altitude-hold rows and Filters' version-gated RPM rows do not add write steps.
 for _, spec in ipairs({
   { name = "rescue", api = "rescue_profile", field = "rescue_level_gain", step = "MSP_SET_RESCUE_PROFILE" },
   { name = "filters", api = "filter_config", field = "gyro_lpf1_static_hz", step = "MSP_SET_FILTER_CONFIG" }
 }) do
   for _, scenario in ipairs(scenarios) do
-    local label = spec.name .. " " .. scenario[1]
-    local function eq(actual, expected, detail)
-      equal(actual, expected, label .. " " .. detail)
-    end
-    -- Missing entry points or callback errors count as failures without aborting other pages.
-    local ok, err = pcall(function()
-      local h = newPage(spec)
-      prepare(h, eq)
-      scenario[2](h, eq)
-    end)
-    eq(ok, true, "scenario completed" .. (ok and "" or ": " .. tostring(err)))
+    runScenario(spec, scenario)
+  end
+  if spec.name == "filters" then
+    runScenario(spec, { "REBOOT", acceptReboot, field = "dyn_notch_count" })
+    runScenario(spec, { "NO-REBOOT", accept })
   end
 end
 
