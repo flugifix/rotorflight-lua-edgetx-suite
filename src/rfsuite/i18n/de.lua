@@ -649,12 +649,12 @@ return {
         loading_message = "Lese Heckrotoreinstellungen",
         save_error_title = "Fehler",
         help_title = "Heckrotor-Hilfe",
-        help_p1 = "Gier-Stopp-Verst.: CW und CCW bestimmen die Stopp-Verstärkung für Gierbewegungen im und gegen den Uhrzeigersinn.",
+        help_p1 = "Gier-Stopp-Verst.: Stopp-Verstärkung (PD) für CW- und CCW-Drehung, typisch 50-200; höher stoppt knackiger, zu hoch kann schwingen.",
         help_p2 = "Vorkomp. Grenzwert: Frequenzgrenze für alle Gier-Vorkompensationsaktionen.",
         help_p3 = "Zyklische FF: Heck-Vorkompensation für zyklische Eingaben.",
         help_p4 = "Kollektive FF: Heck-Vorkompensation für kollektive Eingaben.",
         help_p5 = "Kollektiv-Impuls-FF: Verst. bestimmt die Impuls-Vorkompensation bei plötzlichen kollektiven Eingaben und Abfall deren Abklingzeit.",
-        help_p6 = "Heck-Drehm.-Assist.: Verst. erhöht die Kopfdrehzahl zur Giersteuerung in negativer Richtung bei motorisierten Hecks; Limit begrenzt die Erhöhung über die volle Kopfdrehzahl.",
+        help_p6 = "Heck-Drehm.-Assist.: Verst. (meist 50-150) erhöht die Kopfdrehzahl für Gier in negativer Richtung bei motorisierten Hecks; Limit (meist 20-50 %) begrenzt die Erhöhung über die volle Kopfdrehzahl.",
         help_p7 = "Trägheits-Vorkomp.: Verst. erhöht die Gier-Vorkompensation für die Hauptrotorträgheit; ein höherer Ableitungs-Grenzw. wendet sie schärfer an."
       },
       flight_tuning_advanced_main_rotor = {

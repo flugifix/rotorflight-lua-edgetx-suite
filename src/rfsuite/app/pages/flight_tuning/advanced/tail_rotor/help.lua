@@ -13,7 +13,7 @@ return function(ctx)
   local ApiVersion = loadModule("lib/api_version.lua")
   local i18n = ctx.i18n
 
-  local help_p1 = t(i18n, "help_p1", "Yaw stop gain: CW and CCW set the stop gains for clockwise and counter-clockwise yaw.")
+  local help_p1 = t(i18n, "help_p1", "Yaw stop gain: Stop gain (PD) for CW and CCW rotation, typically 50-200; higher stops more crisply, too high may oscillate.")
   local help_p2 = t(i18n, "help_p2", "Precomp Cutoff: Frequency limit for all yaw precompensation actions.")
   local help_p3 = t(i18n, "help_p3", "Cyclic FF gain: Tail precompensation for cyclic inputs.")
   local help_p4 = t(i18n, "help_p4", "Collective FF gain: Tail precompensation for collective inputs.")
@@ -39,7 +39,7 @@ return function(ctx)
   end
 
   if isAtLeast12_0_9 then
-    parts[#parts + 1] = t(i18n, "help_p6", "Tail Torque Assist: Gain raises headspeed for negative-direction yaw on motorized tails; Limit caps the increase above full headspeed.")
+    parts[#parts + 1] = t(i18n, "help_p6", "Tail Torque Assist: Gain (usually 50-150) raises headspeed to drive a motorized tail in the negative direction; Limit (usually 20-50%) caps the increase above full headspeed.")
   end
 
   return {
