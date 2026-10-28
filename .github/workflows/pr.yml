@@ -451,6 +451,9 @@ jobs:
 
   flight-tuning-rates-saves:
     name: Flight Tuning saves (Rates)
+
+  flight-tuning-tail-rotor-saves:
+    name: Flight Tuning saves (Tail Rotor)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -483,3 +486,4 @@ jobs:
       - run: lua5.3 bin/flight_tuning/verify_save_pids_governor_pages.lua
       - run: lua5.3 bin/flight_tuning/verify_save_rescue_filters_pages.lua
       - run: lua5.3 bin/flight_tuning/verify_save_rates_pages.lua
+      - run: lua5.3 bin/flight_tuning/verify_save_tail_rotor_page.lua

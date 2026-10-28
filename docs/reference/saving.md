@@ -392,6 +392,12 @@ through the tool's shared save: each writes the active rate profile, then one EE
 page is marked clean only once the flight controller has stored the values; a refused write or
 one that receives no reply is shown as a failed save. A Save pressed while the save is still
 running is ignored. After a successful save, each page reads the values back if it is still open.
+Tail Rotor under Flight Tuning > Advanced sends its save through the tool's shared save: the PID
+profile write and, when available, the governor profile write, then one EEPROM commit. The page is
+marked clean only once the flight controller has stored the values; a refused or unanswered write
+or commit is shown as a failed save. A Save pressed while its save is still running is ignored.
+After a successful save, the page reads the values back from the flight controller if it is still
+open.
 
 ## ESC Configurator pages
 

@@ -647,13 +647,15 @@ return {
         tta_unavailable = "Heck-Drehmoment-Unterstützung nicht verfügbar — Governorprofil konnte nicht gelesen werden. PID-Einstellungen können weiterhin gespeichert werden.",
         loading_title = "Laden",
         loading_message = "Lese Heckrotoreinstellungen",
+        save_error_title = "Fehler",
         help_title = "Heckrotor-Hilfe",
-        help_p1 = "Gier-Stopp-Verstärkung: Eine höhere Stopp-Verstärkung führt zu aggressiveren Heckstopps, kann aber bei zu hohen Werten zu Oszillationen führen. Passen Sie CW oder CCW an, um gleichmäßige Gierstopps zu erzielen.",
-        help_p2 = "Vorkompensation Grenzwert: Frequenzgrenze für alle Gier-Vorkompensationsaktionen.",
-        help_p3 = "Zyklische FF-Verstärkung: Heck-Vorkompensation für zyklische Eingaben.",
-        help_p4 = "Kollektive FF-Verstärkung: Heck-Vorkompensation für kollektive Eingaben.",
-        help_p5 = "Kollektiv-Impuls-FF: Impulsartige Heck-Vorkompensation für kollektive Eingaben. Falls zusätzliche Heck-Vorkompensation zu Beginn einer kollektiven Eingabe erforderlich ist.",
-        help_p6 = "Heck-Drehmoment-Unterstützung: Für motorisierte Heckrotoren. Verstärkung und Begrenzung der Drehzahlerhöhung beim Gierausgleich durch das Hauptrotordrehmoment."
+        help_p1 = "Gier-Stopp-Verst.: Stopp-Verstärkung (PD) für CW- und CCW-Drehung, typisch 50-200; höher stoppt knackiger, zu hoch kann schwingen.",
+        help_p2 = "Vorkomp. Grenzwert: Frequenzgrenze für alle Gier-Vorkompensationsaktionen.",
+        help_p3 = "Zyklische FF: Heck-Vorkompensation für zyklische Eingaben.",
+        help_p4 = "Kollektive FF: Heck-Vorkompensation für kollektive Eingaben.",
+        help_p5 = "Kollektiv-Impuls-FF: Verst. bestimmt die Impuls-Vorkompensation bei plötzlichen kollektiven Eingaben und Abfall deren Abklingzeit.",
+        help_p6 = "Heck-Drehm.-Assist.: Verst. (meist 50-150) erhöht die Kopfdrehzahl für Gier in negativer Richtung bei motorisierten Hecks; Limit (meist 20-50 %) begrenzt die Erhöhung über die volle Kopfdrehzahl.",
+        help_p7 = "Trägheits-Vorkomp.: Verst. erhöht die Gier-Vorkompensation für die Hauptrotorträgheit; ein höherer Ableitungs-Grenzw. wendet sie schärfer an."
       },
       flight_tuning_advanced_main_rotor = {
         save_error_title = "Fehler",

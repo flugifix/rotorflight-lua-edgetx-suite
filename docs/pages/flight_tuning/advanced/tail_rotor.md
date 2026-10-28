@@ -28,7 +28,8 @@ Read-only while the model is armed.
 
 ## Notes
 
-- Editing Tail Torque Assist writes to the flight controller's governor profile (`MSP_SET_GOVERNOR_PROFILE`), while the remaining settings write to the active PID profile (`MSP_SET_PID_PROFILE`).
+- Save builds the writes from the values held when it is pressed: the active PID profile (`MSP_SET_PID_PROFILE`) first, then the governor profile (`MSP_SET_GOVERNOR_PROFILE`) on MSP API 12.09 and later if that profile was read successfully and its write payload can be built; Tail Torque Assist belongs to the governor profile.
+- The shared save shows progress and reports success only after the profile writes and one EEPROM commit are acknowledged; a refused or unanswered write or commit reports a failure. Save does not reboot the flight controller, and a successful save reads the page again if it is still open.
 - If the governor profile cannot be read from the flight controller during page load, the Tail Torque Assist controls are disabled to protect unread governor settings from being overwritten with default values.
 
 ## Related
