@@ -156,9 +156,10 @@ def get_theme_metadata(theme_dir, source_name):
     # theme scan (app/pages/settings/dashboard/lib.lua, appendTheme). An icon that is not there
     # is left out, which is what the lookup on the radio would have concluded.
     pages = parse_theme_pages(content)
-    for page in pages:
-        if page.get("icon") and not os.path.isfile(os.path.join(theme_dir, page["icon"])):
-            page["icon"] = None
+    if source_name == "system":
+        for page in pages:
+            if page.get("icon") and not os.path.isfile(os.path.join(theme_dir, page["icon"])):
+                page["icon"] = None
     return {
         "name": name_m.group(1),
         "source": source_name,
