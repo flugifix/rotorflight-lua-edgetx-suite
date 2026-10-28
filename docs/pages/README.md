@@ -17,6 +17,9 @@ titles the tool shows; the folders here follow the page sources instead.
 generated [menu structure](../reference/menu-structure.md), which CI keeps current. A page with
 an in-app help text behind the `?` in the header starts its file from that text; the others
 start from the page source.
+**Status:** 97 reachable pages, 56 written. 81 of them carry an in-app help text behind the
+`?` in the header, which is the text to start a page file from; the others start from the
+page source.
 
 The help text opens as a page of its own, titled with the page it belongs to. EXIT returns to
 that page, and so does the X at the top right of the header on a touch screen. A text taller
@@ -32,10 +35,10 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 
 | Page | File | In-app help | Conditions | Status |
 | --- | --- | --- | --- | --- |
-| PIDs | `flight_tuning/pids.md` | yes | read-only while armed | to write |
+| PIDs | [flight_tuning/pids.md](flight_tuning/pids.md) | yes | read-only while armed | written |
 | Rates | [flight_tuning/rates.md](flight_tuning/rates.md) | yes | read-only while armed | written |
 | Tune Advisor | [flight_tuning/tune_advisor.md](flight_tuning/tune_advisor.md) | yes | read-only while armed, needs MSP API 12.10 | written |
-| Governor | `flight_tuning/governor.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
+| Governor | [flight_tuning/governor.md](flight_tuning/governor.md) | yes | read-only while armed, needs MSP API 12.09 | written |
 | Advanced → Filters | `flight_tuning/advanced/filters.md` | yes | read-only while armed | to write |
 | Advanced → PID Controller | [flight_tuning/advanced/pid_controller.md](flight_tuning/advanced/pid_controller.md) | yes | read-only while armed | written |
 | Advanced → PID Bandwidth | [flight_tuning/advanced/pid_bandwidth.md](flight_tuning/advanced/pid_bandwidth.md) | yes | read-only while armed | written |

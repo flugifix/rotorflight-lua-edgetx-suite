@@ -1,0 +1,2 @@
+- **Confirm PIDs and Governor saves (`flight_tuning/pids`, `flight_tuning/governor`)**:
+  - PIDs and Governor no longer report Saved before the board has stored the values; the shared save pipeline confirms the write and EEPROM commit, reports failures, and keeps edits unsaved if saving fails (#594).

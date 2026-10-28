@@ -375,6 +375,11 @@ save: one write, built when Save is pressed, then one EEPROM write. The page is 
 once the flight controller has stored the values. A write the flight controller refuses or does
 not answer is shown as *Not saved*. Save pressed while their save is still running is ignored.
 After a save that worked, the page reads the values back from the flight controller if it is still
+PIDs and Governor under Flight Tuning send their save through the tool's shared save: each writes
+its profile settings, built when Save is pressed, then one EEPROM write. The page is marked clean
+only once the flight controller confirms that the values are stored; a refused write or a lost
+reply is shown as a failed save and leaves the edits unsaved. A Save pressed while their save is
+still running is ignored. After a successful save, each page reads the values back if it is still
 open; if it was closed, its next visit reads.
 
 ## ESC Configurator pages
