@@ -430,8 +430,8 @@ function M.build(ctx)
     children, x, cursorY, w,
     pageText(i18n, "mincommand", "Motor Stop PWM Value"),
     {
-      min = 50,
-      max = 2250,
+      min = MotorConfigApi.limits.mincommand.min,
+      max = MotorConfigApi.limits.mincommand.max,
       suffix = "us",
       active = function() return isMincommandEnabled(proto, hasCastle, hasSrxl2) end,
       get = function() return ui.config.mincommand end,
@@ -447,8 +447,8 @@ function M.build(ctx)
     children, x, cursorY, w,
     pageText(i18n, "min_throttle", "0% Throttle PWM Value"),
     {
-      min = 50,
-      max = 2250,
+      min = MotorConfigApi.limits.minthrottle.min,
+      max = MotorConfigApi.limits.minthrottle.max,
       suffix = "us",
       active = function() return isMinthrottleEnabled(proto, hasCastle, hasSrxl2) end,
       get = function() return ui.config.minthrottle end,
@@ -464,8 +464,8 @@ function M.build(ctx)
     children, x, cursorY, w,
     pageText(i18n, "max_throttle", "100% Throttle PWM Value"),
     {
-      min = 50,
-      max = 2250,
+      min = MotorConfigApi.limits.maxthrottle.min,
+      max = MotorConfigApi.limits.maxthrottle.max,
       suffix = "us",
       active = function() return isMaxthrottleEnabled(proto, hasCastle, hasSrxl2) end,
       get = function() return ui.config.maxthrottle end,

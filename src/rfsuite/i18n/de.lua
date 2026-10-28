@@ -1129,6 +1129,10 @@ return {
         help_message = "Sagt Beginn und Ende einer Rettung an, je einmal und ohne Vibration. Braucht den Sensor Rettungsstatus (92) oder Systemstatus (120), Setup > Telemetry.\nRettung aktiv: wird angesagt, sobald eine Rettung beginnt.\nRettung beendet: wird angesagt, wenn die Rettung vorbei ist."
       },
       setup_power_smartfuel = {
+        mode_off = "AUS (LOKAL)",
+        mode_voltage = "SPANNUNG",
+        mode_current = "STROM",
+        mode_combined = "KOMBINIERT",
         section_mode = "SmartFuel Modus",
         firmware_mode = "Firmware Quelle",
         section_tuning = "SmartFuel Tuning",

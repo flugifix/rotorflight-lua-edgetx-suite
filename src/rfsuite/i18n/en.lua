@@ -1129,6 +1129,10 @@ return {
         help_message = "Announces the start and the end of a rescue, once each and without vibration. Needs the Rescue State (92) or System Status (120) sensor, Setup > Telemetry.\nRescue Active: spoken as soon as a rescue starts.\nRescue Off: spoken when the rescue is over."
       },
       setup_power_smartfuel = {
+        mode_off = "OFF (LOCAL)",
+        mode_voltage = "VOLTAGE",
+        mode_current = "CURRENT",
+        mode_combined = "COMBINED",
         section_mode = "SmartFuel Mode",
         firmware_mode = "Firmware Source",
         section_tuning = "SmartFuel Tuning",
