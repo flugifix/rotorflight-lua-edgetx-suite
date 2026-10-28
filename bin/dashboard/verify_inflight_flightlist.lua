@@ -79,7 +79,7 @@ Page.onClose()
 -- otherwise, so the standalone tool keeps nothing of it after closing.
 do
   local key = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/inflight/setup.lua"
-  -- This harness has a minimal memoizer of its own; the suite's keeps its modules here.
+  -- This test has a minimal memoizer of its own; the suite's keeps its modules here.
   rfsuite.modules = rfsuite.modules or {}
   local saved = rfsuite.modules[key]
   local overlay = saved or Setup
