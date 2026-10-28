@@ -528,12 +528,71 @@ local function tickCardSink(self)
   pcall(LogSink.tick, armed)
 end
 
+-- lib/precompile.lua while the compile pass after an install holds the connection back, false
+-- once there is no such pass (Precompile.startIfStale). Asked on the first pass and loaded only
+-- then; a tree that is already compiled costs two small file reads, and the module is let go.
+local Compile = nil
+
+-- True while the pass runs. It takes one unit of the pass per call, so the dashboard and the
+-- service widget wait for it together and either of them alone still finishes it.
+local function compileHoldsConnect(self)
+  if Compile == false then return false end
+  if Compile == nil then
+    Compile = false
+    local developer = self.preferences and self.preferences.developer
+    if developer and developer.precompile == false then return false end
+    local Precompile = requireModule("lib/precompile.lua")
+    if type(Precompile) ~= "table" or type(Precompile.startIfStale) ~= "function" then return false end
+    local Version = requireModule("lib/version.lua")
+    if not Precompile.startIfStale(type(Version) == "table" and Version.VERSION or nil) then
+      if not Precompile.isRunning() and _G.rfsuite and type(_G.rfsuite.clearModule) == "function" then
+        _G.rfsuite.clearModule("lib/precompile.lua")
+      end
+      return false
+    end
+    Compile = Precompile
+    widgetLog(self, "compile pass after install: connection held until it finishes", "info")
+  end
+  Compile.stepShared()
+  if Compile.isRunning() then return true end
+  Compile = false
+  widgetLog(self, "compile pass finished", "info")
+  return false
+end
+
+-- The splash line while the pass runs. It names the work the way the tool's start screen does,
+-- and the count in it moves once a second at most: the splash is rebuilt whenever its line
+-- changes, and a count taken on every pass would turn every pass into a build.
+local function compileStatusLine(self, t)
+  local now = nowSeconds()
+  if self._compileLine == nil or (now - (self._compileLineAt or 0)) >= 1 then
+    local done, total = 0, 0
+    if Compile then done, total = Compile.getProgress() end
+    local headline = (t and t("app.preparing")) or "Preparing suite"
+    if total > 0 then
+      self._compileLine = headline .. " (" .. tostring(done) .. "/" .. tostring(total) .. ")"
+    else
+      self._compileLine = headline
+    end
+    self._compileLineAt = now
+  end
+  return self._compileLine
+end
+
 local function tickMspRuntime(self, carry)
   tickCardSink(self)
 
   if not MspRuntime then
     return
   end
+
+  -- Nothing is attached, ticked or queued until the pass is through: the connect chain would
+  -- load the same files the pass is compiling, and the dashboard waits on that chain anyway.
+  if compileHoldsConnect(self) then
+    self._compileHolding = true
+    return
+  end
+  self._compileHolding = nil
 
   if not self.mspAttached and type(MspRuntime.attach) == "function" then
     MspRuntime.attach("dashboard-widget")
@@ -2150,8 +2209,9 @@ local function updateConnectionState(self)
   -- splash stays up and says why, and the dashboard is not drawn for a board the suite does not
   -- talk to.
   local refused = type(runtimeState) == "table" and runtimeState.unsupportedApi == true
+  local compiling = self._compileHolding == true
   local rawReady = connected and batteryReady and rfReady and modelPrefsResolved and tasksDone
-    and not refused
+    and not refused and not compiling
   local now = nowSeconds()
 
   -- Not counted while refused, so a refusal that is lifted (a fresh connect re-reads the version)
@@ -2172,7 +2232,7 @@ local function updateConnectionState(self)
     self.readySince = nil
   end
 
-  local softTimeoutReady = connected and not refused and self.pendingSince ~= nil
+  local softTimeoutReady = connected and not refused and not compiling and self.pendingSince ~= nil
     and (now - self.pendingSince) >= SPLASH_SOFT_TIMEOUT_SECONDS
   -- The hold steadies a gate that flickers, and a flicker is a gate that has been open and has
   -- shut again. The FIRST time the conditions come true after the widget starts is not that:
@@ -2188,7 +2248,10 @@ local function updateConnectionState(self)
   local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
 
   local statusLine, standbyInfoKind = nil, nil
-  if not connected then
+  if compiling then
+    standbyInfoKind = "suite_loading"
+    statusLine = compileStatusLine(self, t)
+  elseif not connected then
     standbyInfoKind = "controller_missing"
     statusLine = (t and t("widgets.dashboard.waiting_for_msp_link")) or "Waiting for MSP link"
     self.batteryDialogState = "pending"

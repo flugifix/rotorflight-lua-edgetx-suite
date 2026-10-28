@@ -3421,19 +3421,27 @@ function M.init(opts)
   state.precompileDone = 0
   state.precompileTotal = 0
   ensureVersion()
-  -- Hosted, the walk is not this file's to make: lib/precompile.lua compiles through the
-  -- uncached loader that only the tool script installs (src/main.lua), and the host's state
-  -- has none. `developer.precompile = false` skips it too: every file is then compiled by the
-  -- loader when a page first needs it, and the start screen waits for the connection alone --
-  -- meant for automated runs on a card that starts without bytecode each time. Like the rest of
-  -- the developer section it is written by hand; an absent key keeps the pass. Either way,
-  -- without Precompile the start screen counts the compile as finished.
+  -- `developer.precompile = false` skips the pass: every file is then compiled by the loader
+  -- when a page first needs it, and the start screen waits for the connection alone -- meant for
+  -- automated runs on a card that starts without bytecode each time. Like the rest of the
+  -- developer section it is written by hand; an absent key keeps the pass. Without Precompile
+  -- the start screen counts the compile as finished.
+  --
+  -- Hosted, the tool shares the widget state, and with it the pass the widgets run after an
+  -- install (lib/precompile.lua, startIfStale): a pass still running is joined and its progress
+  -- shown here, and a tree the widgets have already compiled is not walked again on every open
+  -- from the dashboard. The whole walk stays with the tool's own start.
   local developer = prefs and prefs.developer
-  local skipPrecompile = state.hosted or (developer and developer.precompile == false)
+  local skipPrecompile = developer and developer.precompile == false
   if not skipPrecompile then
     ensurePrecompile()
     if Precompile then
-      Precompile.start(Version and Version.VERSION or nil)
+      local version = Version and Version.VERSION or nil
+      if state.hosted then
+        Precompile.startIfStale(version)
+      else
+        Precompile.start(version)
+      end
     end
   end
   state.landingMenuId = nil

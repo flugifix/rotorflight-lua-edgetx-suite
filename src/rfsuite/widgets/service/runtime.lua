@@ -252,6 +252,36 @@ local function refreshPreferences(self, force)
   return true
 end
 
+-- lib/precompile.lua while the compile pass after an install holds the connection back, false
+-- once there is no such pass -- the same gate as widgets/dashboard/runtime.lua's, because this
+-- widget attaches to the MSP runtime on its own and would otherwise start the connection the
+-- dashboard is holding back. Either widget alone still drives the pass to its end.
+local Compile = nil
+
+local function compileHoldsConnect(self)
+  if Compile == false then return false end
+  if Compile == nil then
+    Compile = false
+    local developer = self.preferences and self.preferences.developer
+    if developer and developer.precompile == false then return false end
+    local Precompile = requireModule("lib/precompile.lua")
+    if type(Precompile) ~= "table" or type(Precompile.startIfStale) ~= "function" then return false end
+    local Version = requireModule("lib/version.lua")
+    if not Precompile.startIfStale(type(Version) == "table" and Version.VERSION or nil) then
+      if not Precompile.isRunning() and _G.rfsuite and type(_G.rfsuite.clearModule) == "function" then
+        _G.rfsuite.clearModule("lib/precompile.lua")
+      end
+      return false
+    end
+    Compile = Precompile
+    log("compile pass after install: connection held until it finishes", "info")
+  end
+  Compile.stepShared()
+  if Compile.isRunning() then return true end
+  Compile = false
+  return false
+end
+
 -- One pass of the background work: the same two calls the dashboard makes, bracketed by the same
 -- event context, so tasks that behave differently in a widget see what they expect.
 local function tickRuntimes(self)
@@ -284,6 +314,8 @@ local function tickRuntimes(self)
   end
 
   if not MspRuntime then return end
+
+  if compileHoldsConnect(self) then return end
 
   if not self.mspAttached and type(MspRuntime.attach) == "function" then
     MspRuntime.attach("service-widget")

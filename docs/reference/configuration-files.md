@@ -97,13 +97,16 @@ by hand, and a save keeps whatever the section holds.
   },
 ```
 
-- **`precompile`** — whether the configuration tool compiles the installed suite while its
-  start screen is shown. Absent or `true` is the normal behaviour: after an install or an update
-  the start screen reads *Preparing suite* until every file has its compiled copy beside it, so
-  no page pays for that later. `false` skips this: the start screen waits for the connection
-  only, and each file is compiled the first time a page needs it, which makes that first opening
-  slower. It is meant for automated test runs on a card that starts without compiled files every
-  time; on a radio there is no reason to set it.
+- **`precompile`** — whether the suite compiles its installed files ahead of use. Absent or
+  `true` is the normal behaviour: after an install or an update the configuration tool's start
+  screen, or the dashboard's connection splash if the dashboard starts first, reads *Preparing
+  suite* until every file has its compiled copy beside it, so no page pays for that later. The
+  dashboard connects to the flight controller only once that has finished; when the tool is
+  opened from the dashboard meanwhile, its start screen shows the same pass rather than starting
+  another. `false` skips this in both places: the start screen and the splash wait for the
+  connection only, and each file is compiled the first time a page needs it, which makes that
+  first opening slower. It is meant for automated test runs on a card that starts without
+  compiled files every time; on a radio there is no reason to set it.
 - **`mspexpbytes`** — how many bytes the developer page *MSP Experiments* edits. Absent means
   16, which is also the most it handles. Like `precompile` it is only read, and set by hand.
 
@@ -149,9 +152,12 @@ finish. The tool and the background decoder are not stopped that way.
   the same `.ini.bak` left beside it. It is a file of its own rather than a section of
   `preferences.lua` because it is written while you fly, and every write to `preferences.lua`
   makes the dashboard re-read its settings.
-- `precompiled.txt` — which installed build the configuration tool last compiled, written when
-  *Preparing suite* finishes. A later start compiles everything again only when the installed
-  build differs from it, so deleting it costs one slower start and nothing else. On a fresh card
+- `precompiled.txt` — which installed build was last compiled, written when *Preparing suite*
+  finishes, whether the tool or the dashboard ran it. A later start compiles everything again only
+  when the installed build differs from it, so deleting it costs one slower start and nothing else.
+  The dashboard reads only this file and the build identity beside the core: on a build already
+  compiled it does no further work and connects at once, and a single source edited on the card
+  is compiled by the tool's next start. On a fresh card
   where nothing has been saved yet, the tool creates this folder to write it.
   The pass leaves out the `._` files macOS writes beside every file it copies onto a card,
   and a file that does not compile is named in the log, once per start.

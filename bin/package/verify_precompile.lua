@@ -366,6 +366,141 @@ do
     table.concat(first.warnings, "; "))
 end
 
+-- The widgets' side: a widget state where the dashboard, the service widget and the tool opened
+-- from the dashboard share one copy of the module. Returns the module, what the start recorded,
+-- a function that moves the radio's clock on by one tick, and one that puts the host back.
+local function widgetState(card, withLoader)
+  local record = installGlobals(card)
+  if not withLoader then
+    _G.rfsuite.utils = {}
+  end
+  local tick = 0
+  _G.getTime = function() return tick end
+  local chunk = assert(load(moduleSource, "=" .. modulePath, "t", _G))
+  local Precompile = chunk()
+  local hostPrint = print
+  _G.print = function() end
+  local function advance() tick = tick + 1 end
+  local function close()
+    _G.print = hostPrint
+    _G.io = hostIo
+    _G.getTime = nil
+  end
+  return Precompile, record, advance, close
+end
+
+local function hasWidgetApi(Precompile)
+  return type(Precompile.startIfStale) == "function" and type(Precompile.stepShared) == "function"
+    and type(Precompile.isRunning) == "function"
+end
+
+-- Drives a shared pass the way the widgets do, one unit per clock tick, until it ends.
+local function driveShared(Precompile, advance)
+  local steps = 0
+  while Precompile.isRunning() and steps < 10000 do
+    Precompile.stepShared()
+    advance()
+    steps = steps + 1
+  end
+end
+
+-- After an install the widgets run the whole pass, and it leaves the stamp the tool reads.
+do
+  local card = installedCard()
+  local Precompile, record, advance, close = widgetState(card, true)
+  local api = hasWidgetApi(Precompile)
+  local started = api and Precompile.startIfStale("0.2.0")
+  if started then driveShared(Precompile, advance) end
+  close()
+  check("widget after install: the module offers the shared entry points", api)
+  check("widget after install: a pass starts", started == true)
+  check("widget after install: both sources are compiled", #record.loads == 2, #record.loads .. " loads")
+  check("widget after install: the stamp is written", card.files[USER .. "/precompiled.txt"] ~= nil)
+  local second = launch(card)
+  check("widget after install: the tool's next start compiles nothing", #second.loads == 0,
+    #second.loads .. " loads")
+end
+
+-- A tree already compiled: no pass, no walk, nothing loaded, so the connection is not held.
+do
+  local card = compiledCard()
+  card.put(CORE .. "/added.lua", VALID, 200)
+  local Precompile, record, _, close = widgetState(card, true)
+  local api = hasWidgetApi(Precompile)
+  local started = api and Precompile.startIfStale("0.2.0")
+  local running = api and Precompile.isRunning()
+  close()
+  check("widget on a compiled tree: no pass starts", api and started == false and running == false)
+  check("widget on a compiled tree: nothing is loaded, a new source is left to the tool",
+    #record.loads == 0, table.concat(record.loads, ", "))
+end
+
+-- Without the uncached loader nothing could be compiled, so nothing starts and no stamp claims the
+-- tree compiled.
+do
+  local card = installedCard()
+  local Precompile, record, _, close = widgetState(card, false)
+  local api = hasWidgetApi(Precompile)
+  local started = api and Precompile.startIfStale("0.2.0")
+  close()
+  check("widget without a loader: no pass starts", api and started == false)
+  check("widget without a loader: no stamp is written", card.files[USER .. "/precompiled.txt"] == nil)
+  check("widget without a loader: nothing is loaded", #record.loads == 0, #record.loads .. " loads")
+end
+
+-- The tool opened from the dashboard while the pass runs joins it: what was compiled is not
+-- compiled again, and the pass still ends with the stamp.
+do
+  local card = installedCard()
+  local Precompile, record, advance, close = widgetState(card, true)
+  local api = hasWidgetApi(Precompile)
+  local joined = false
+  if api and Precompile.startIfStale("0.2.0") then
+    while Precompile.isRunning() and #record.loads < 1 do
+      Precompile.stepShared()
+      advance()
+    end
+    local doneBefore = Precompile.getProgress()
+    Precompile.start("0.2.0")
+    local doneAfter = Precompile.getProgress()
+    joined = doneBefore == 1 and doneAfter == 1
+    driveShared(Precompile, advance)
+  end
+  close()
+  check("tool joining a running pass: its progress is kept", joined)
+  check("tool joining a running pass: each source is compiled once", #record.loads == 2,
+    table.concat(record.loads, ", "))
+  check("tool joining a running pass: the stamp is written", card.files[USER .. "/precompiled.txt"] ~= nil)
+end
+
+-- Two callers in the same clock tick take one unit between them: the tool's step and a widget's
+-- shared step, then two shared steps.
+do
+  local card = installedCard()
+  local Precompile, record, advance, close = widgetState(card, true)
+  local api = hasWidgetApi(Precompile)
+  local afterStep, afterShared, nextTick = -1, -1, -1
+  if api and Precompile.startIfStale("0.2.0") then
+    -- Walk the tree first, so that every unit after it compiles exactly one file.
+    while select(2, Precompile.getProgress()) < 2 do
+      Precompile.step()
+      advance()
+    end
+    Precompile.step()
+    afterStep = #record.loads
+    Precompile.stepShared()
+    Precompile.stepShared()
+    afterShared = #record.loads
+    advance()
+    Precompile.stepShared()
+    nextTick = #record.loads
+  end
+  close()
+  check("callers sharing a tick: a shared step after the tool's step does nothing",
+    afterStep == 1 and afterShared == 1, afterStep .. " then " .. afterShared)
+  check("callers sharing a tick: the next tick takes the next unit", nextTick == 2, tostring(nextTick))
+end
+
 if failures > 0 then
   print(string.format("%d expectation(s) failed against %s", failures, modulePath))
   os.exit(1)
