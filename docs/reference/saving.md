@@ -370,6 +370,13 @@ a raise and logs it as a warning. On Stats the flight count kept for the flight 
 from the saved value also when the page was closed. In the EdgeTX simulator without a flight
 controller these three saves behave as on the other pages that use the shared save.
 
+Autolevel, Main Rotor, PID Bandwidth and PID Controller send their save through the tool's shared
+save: one write, built when Save is pressed, then one EEPROM write. The page is marked clean only
+once the flight controller has stored the values. A write the flight controller refuses or does
+not answer is shown as *Not saved*. Save pressed while their save is still running is ignored.
+After a save that worked, the page reads the values back from the flight controller if it is still
+open; if it was closed, its next visit reads.
+
 ## ESC Configurator pages
 
 *Setup* > *ESC & Motors* > *ESC Tools* opens one page per ESC firmware. These pages do not use

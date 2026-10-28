@@ -641,6 +641,7 @@ return {
         help_p6 = "Tail Torque Assist: For motorized tails. Gain and limit of headspeed increase when using main rotor torque for yaw assist."
       },
       flight_tuning_advanced_main_rotor = {
+        save_error_title = "Error",
         title = "Main Rotor",
         collective_pitch_comp = "Col. Pitch Compensation",
         collective_pitch_comp_short = "Col. Pitch Comp",
@@ -651,12 +652,13 @@ return {
         loading_title = "Loading",
         loading_message = "Reading Main Rotor Settings",
         help_title = "Main Rotor Help",
-        help_p1 = "Collective Pitch Compensation: Increasing will compensate for the pitching motion caused by tail drag when climbing.",
-        help_p2 = "Cross Coupling Gain: Removes roll coupling when only elevator is applied.",
-        help_p3 = "Cross Coupling Ratio: Amount of compensation (pitch vs roll) to apply.",
-        help_p4 = "Cross Coupling Freq. Limit: Frequency limit for the compensation, higher value will make the compensation action faster."
+        help_p1 = "Col. Pitch Comp: Compensates the nose-up tendency during collective pitch pumps.",
+        help_p2 = "Cyclic Cross coupling: Gain of the compensation that removes the roll wobble when only pitch (elevator) is applied.",
+        help_p3 = "Ratio: Sets roll-to-pitch compensation relative to pitch-to-roll compensation.",
+        help_p4 = "Cutoff: Higher frequencies make the cross-coupling compensation act faster."
       },
       flight_tuning_advanced_autolevel = {
+        save_error_title = "Error",
         title = "Autolevel",
         acro_trainer = "Acro trainer",
         angle_mode = "Angle mode",
@@ -666,11 +668,14 @@ return {
         loading_title = "Loading",
         loading_message = "Reading Autolevel Settings",
         help_title = "Autolevel Help",
-        help_p1 = "Acro Trainer: How aggressively the heli tilts back to level when flying in Acro Trainer Mode.",
-        help_p2 = "Angle Mode: How aggressively the heli tilts back to level when flying in Angle Mode.",
-        help_p3 = "Horizon Mode: How aggressively the heli tilts back to level when flying in Horizon Mode."
+        help_trainer_limit = "Acro trainer: Max limits the roll and pitch angle without self-leveling.",
+        help_angle_limit = "Angle mode: Max limits the roll and pitch angle.",
+        help_p1 = "Acro trainer: Gain sets how strongly the heli returns to the angle limit when exceeded.",
+        help_p2 = "Angle mode: Gain sets how strongly the heli returns to level.",
+        help_p3 = "Horizon mode: Gain sets how strongly the heli returns to level."
       },
       flight_tuning_advanced_pid_bandwidth = {
+        save_error_title = "Error",
         title = "PID Bandwidth",
         roll = "Roll",
         pitch = "Pitch",
@@ -683,9 +688,9 @@ return {
         saved_title = "Saved",
         saved_message = "PID Bandwidth settings saved",
         help_title = "PID Bandwidth Help",
-        help_p1 = "PID Bandwidth: Overall bandwidth in Hz used by the PID loop.",
-        help_p2 = "D-term cutoff: D-term cutoff frequency in Hz.",
-        help_p3 = "B-term cutoff: B-term cutoff frequency in Hz."
+        help_p1 = "PID Bandwidth: Sets the overall PID-loop bandwidth in Hz for Roll, Pitch and Yaw.",
+        help_p2 = "D-term cut-off: Sets the D-term cutoff frequency in Hz for Roll, Pitch and Yaw.",
+        help_p3 = "B-term cut-off: Sets the boost cutoff frequency in Hz for Roll, Pitch and Yaw."
       },
       flight_tuning_advanced_filters = {
         title = "Filters",
@@ -725,6 +730,7 @@ return {
         tbl_high = "HIGH"
       },
       flight_tuning_advanced_pid_controller = {
+        save_error_title = "Error",
         title = "PID Controller",
         roll = "Roll",
         pitch = "Pitch",
@@ -746,13 +752,15 @@ return {
         saved_title = "Saved",
         saved_message = "PID Controller settings saved",
         help_title = "PID Controller Help",
-        help_p1 = "Error decay ground: PID decay to help prevent heli from tipping over when on the ground.",
-        help_p2 = "Error limit: Angle limit for I-term.",
-        help_p3 = "Offset limit: Angle limit for High Speed Integral (O-term).",
-        help_p4 = "Error rotation: Allow errors to be shared between all axes.",
-        help_p5 = "I-term relax: Limit accumulation of I-term during fast movements - helps reduce bounce back after fast stick movements. Generally needs to be lower for large helis and can be higher for small helis. Best to only reduce as much as is needed for your flying style.",
+        help_inflight_decay = "Inflight Error Decay: Time sets the cyclic I-term decay time and Limit caps its decay rate.",
+        help_cutoff = "Cut-off point: I-term relax cutoff in Hz on R, P and Y; lower values suppress bounce-back after movements, higher values increase high-rate turn precision.",
+        help_p1 = "Ground Error Decay: Bleeds off accumulated error on the ground to help prevent tipping.",
+        help_p2 = "Error limit: Hard limit for the angle error, and thus the I-term, on R, P and Y.",
+        help_p3 = "HSI Offset limit: Hard limit for the High Speed Integral offset angle, and thus the O-term, on R and P.",
+        help_p4 = "Error rotation: Shares accumulated error between roll and pitch during pirouettes.",
+        help_p5 = "I-term relax: Selects the axes where fast movements limit I-term accumulation.",
         help_stick_gain = "Error Decay Stick Gain: the further the cyclic stick is deflected, the faster the cyclic I-term decays, on the ground and in flight; 0 = off.",
-        help_master_gain = "Master Gain: Cyclic scales the roll and pitch P, I, D and Offset gains together, Yaw the tail P, I and D gains, keeping their ratios. Feedforward, Boost and precomp are not scaled.",
+        help_master_gain = "Master Gain: Cyclic scales the roll and pitch P, I, D and Offset gains together, Yaw the tail P, I and D gains, keeping their ratios; Feedforward, Boost and precomp are not scaled.",
         tbl_off = "Off",
         tbl_on = "On",
         tbl_rp = "RP",
