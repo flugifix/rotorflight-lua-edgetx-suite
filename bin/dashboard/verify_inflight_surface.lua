@@ -169,6 +169,14 @@ for _, exit in ipairs({"firmware", "background", "radio_disabled", "preview_disa
   scenario(exit .. " clears before a pending job and stays closed", function()
     local widget, d, writes = fixture(true)
     energize(d, writes)
+    -- A value-mode scene leaves its encoder window and sensor on the widget.
+    local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+    widget.i18n = {t = function(_, fallback) return fallback end}
+    d.valueMode = true
+    Drive.sample(widget)
+    Screen.buildFullscreen({}, widget)
+    local views = setmetatable({widget._inflightReverseNode, widget._inflightSensor}, {__mode = "v"})
+    check(views[1] ~= nil and views[2] ~= nil, "positive control: the value scene holds its encoder view")
     local before, baseline, fired = #writes, d.baseline, d.fired
     job(widget)
     if exit == "firmware" then widget:refresh(nil, nil)
@@ -181,6 +189,9 @@ for _, exit in ipairs({"firmware", "background", "radio_disabled", "preview_disa
     cleared(d, writes, before)
     check(not widget.inflightFullscreen, "exit consumes the visit; recovery needs a quick-menu open")
     check(d.baseline == baseline and d.fired == fired, "pause retains session and comparison")
+    collectgarbage("collect"); collectgarbage("collect")
+    check(widget._inflightReverseNode == nil and widget._inflightSensor == nil and views[1] == nil and views[2] == nil,
+      "the closed encoder view is released with the visit")
     widget.preferences.inflight.enabled = true
     widget.preferences.general.preview_inflight_tuning = true
     widget.state.fblConnected = true

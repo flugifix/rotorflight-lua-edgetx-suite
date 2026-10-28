@@ -718,6 +718,9 @@ local function cleanupInflight(self)
   end
   if self._job and self._job.kind == "tuning_fs" then self._job = nil end
   self.inflightFullscreen = nil
+  -- The last scene's encoder window and sensor. A firmware fullscreen exit builds no other tuning
+  -- scene that would replace them, so without this the closed view stays reachable from the widget.
+  self._inflightReverseNode, self._inflightSensor = nil, nil
   if instance == nil then return end
   local drive = inflightDrive()
   if drive then drive.cleanup(self) end
