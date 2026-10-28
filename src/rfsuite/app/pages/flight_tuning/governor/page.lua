@@ -580,6 +580,7 @@ end
 
 
 function M.onReload()
+	if SavePipeline and SavePipeline.isActive() then return end
 	ensureDeps()
 	ui.loaded = false
 	ensureLoaded()

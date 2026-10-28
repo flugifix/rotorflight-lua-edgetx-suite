@@ -27,19 +27,19 @@ only in ELECTRO and NITRO modes.
 
 | Setting | What it does |
 | --- | --- |
-| Full headspeed (rpm) | Headspeed target at 100% throttle input. Range: 0 to 30000 rpm, in steps of 10. |
-| Min throttle (%) | Minimum throttle output the governor may use. Range: 10 to 100%; also shown in LIMIT and DIRECT. |
-| Max throttle (%) | Maximum throttle output the governor may use. Range: 10 to 100%; also shown in LIMIT and DIRECT. |
-| Master gain | Overall governor PID loop gain. Range: 0 to 255. |
-| Gains / P | Proportional gain for headspeed error. Range: 0 to 255. |
-| Gains / I | Integral gain for accumulated headspeed error. Range: 0 to 255. |
-| Gains / D | Derivative gain for damping headspeed changes. Range: 0 to 255. |
-| Gains / FF | Collective/cyclic feedforward gain. Range: 0 to 255; disabled when transmitter precompensation is enabled in the stored profile flags. |
-| Precomp / YAW | Yaw weight mixed into feedforward to anticipate load changes. Range: 0 to 255; disabled with transmitter precompensation. |
-| Precomp / CYC | Cyclic weight mixed into feedforward to anticipate load changes. Range: 0 to 255; disabled with transmitter precompensation. |
-| Precomp / COL | Collective weight mixed into feedforward to anticipate load changes. Range: 0 to 255; disabled with transmitter precompensation. |
-| Tail Torque Assist / MASTER GAIN | Raises headspeed to use main-rotor torque for yaw assistance on motorized tails. Range: 0 to 255. |
-| Tail Torque Assist / LIMIT | Caps the headspeed increase above Full headspeed. Page range: 0 to 255%, in steps of 1%. |
+| Full headspeed (rpm) | Target headspeed is the full headspeed times the throttle input. Page range: 0 to 30000 rpm, in steps of 10. |
+| Min throttle (%) | The minimum throttle output the governor may use. Page range: 10 to 100%; also shown in LIMIT and DIRECT. |
+| Max throttle (%) | The maximum throttle output the governor may use. Page range: 10 to 100%; also shown in LIMIT and DIRECT. |
+| Master gain | Master PID loop gain, usually 10..100. Page range: 0 to 255. |
+| Gains / P | PID loop P-term gain, usually 10..100. Page range: 0 to 255. |
+| Gains / I | PID loop I-term gain, usually 10..100. Page range: 0 to 255. |
+| Gains / D | PID loop D-term gain, usually 0..100. Page range: 0 to 255. |
+| Gains / FF | Collective/cyclic feedforward gain, usually 0..100. Page range: 0 to 255. |
+| Precomp / YAW | How much yaw is mixed into the feedforward, usually 20..100. Page range: 0 to 255. |
+| Precomp / CYC | How much cyclic is mixed into the feedforward, usually 20..100. Page range: 0 to 255. |
+| Precomp / COL | How much collective is mixed into the feedforward, usually 20..100. Page range: 0 to 255. |
+| Tail Torque Assist / MASTER GAIN | Tail Torque Assist gain; raises headspeed to control the tail in the negative direction, usually 50..150. Page range: 0 to 255. |
+| Tail Torque Assist / LIMIT | Maximum Tail Torque Assist headspeed increase over Full headspeed, usually 20..50%. Page range: 0 to 255%, in steps of 1%. |
 
 ## Notes
 

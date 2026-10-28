@@ -24,20 +24,20 @@ Every gain ranges from 0 to 1000. Values are read from the flight controller.
 | Roll / P | Corrects roll rate error; more gain tightens tracking, but too much causes fast oscillation. |
 | Roll / I | Corrects accumulated roll error and drift; raise gradually for stable piro pitch pumps, keeping Roll and Pitch equal. |
 | Roll / D | Damps roll overshoot and disturbances; too much amplifies gyro noise. |
-| Roll / FF | Adds roll response from stick input; start at 70 and increase for sharp stops without drift, keeping Roll and Pitch equal. |
-| Roll / O | Sets the offset-term gain for high-speed flight, compensating aerodynamic coupling with Pitch. |
-| Roll / B | Boosts the initial roll stick response. |
+| Roll / FF | Adds roll response from stick commands without reacting to model motion; higher gain sharpens response but risks overshoot or strikeback. |
+| Roll / O | Sets the High Speed Integral Offset gain, active at large collective angles to stabilize high-speed flight and large collective pitch changes. |
+| Roll / B | Boosts feedforward using the rate of change of the roll setpoint to sharpen response without the drawbacks of high P or FF gains. |
 | Pitch / P | Corrects pitch rate error; more gain tightens tracking, but too much causes fast oscillation. |
 | Pitch / I | Corrects accumulated pitch error and drift; match Roll, as too much gain causes slow oscillation at stops or under load. |
 | Pitch / D | Damps pitch overshoot and disturbances; too much amplifies gyro noise. |
-| Pitch / FF | Adds pitch response from stick input; start at 70 and increase with Roll for sharp stops without drift. |
-| Pitch / O | Sets the offset-term gain for high-speed flight, compensating aerodynamic coupling with Roll. |
-| Pitch / B | Boosts the initial pitch stick response. |
+| Pitch / FF | Adds pitch response from stick commands without reacting to model motion; higher gain sharpens response but risks overshoot or strikeback. |
+| Pitch / O | Sets the High Speed Integral Offset gain, active at large collective angles to stabilize high-speed flight and large collective pitch changes. |
+| Pitch / B | Boosts feedforward using the rate of change of the pitch setpoint to sharpen response without the drawbacks of high P or FF gains. |
 | Yaw / P | Corrects tail rate error; increase until slight wobble appears in funnels, then back off slightly. |
 | Yaw / I | Holds the tail against sustained disturbances; raise for firm hold in hard moves, as too much causes slow wag. |
 | Yaw / D | Damps tail overshoot for smooth stops; use more for slow servos and less for fast servos. |
-| Yaw / FF | Adds tail response directly from yaw stick input. |
-| Yaw / B | Boosts the initial yaw stick response. |
+| Yaw / FF | Adds yaw response from stick commands without reacting to model motion; higher gain sharpens response but risks overshoot or strikeback. |
+| Yaw / B | Boosts feedforward using the rate of change of the yaw setpoint to sharpen response without the drawbacks of high P or FF gains. |
 
 ## Notes
 
