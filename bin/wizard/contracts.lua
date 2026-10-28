@@ -4361,6 +4361,7 @@ return function(h)
     for _,entry in ipairs({
       {"setup/power/battery", "power_fields"}, {"setup/power/sources", "power_fields"},
       {"setup/power/smartfuel", "power_fields"},
+      {"flight_tuning/governor", "governor_fields"},
       {"setup/governor/time", "governor_fields", true}
     }) do
       local calls,shared=0,0
