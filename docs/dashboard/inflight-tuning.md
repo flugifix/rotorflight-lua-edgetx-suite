@@ -94,8 +94,7 @@ When the link and arm telemetry return, the same visit resumes automatically at 
 and parameter, subject to the existing flight-controller identity and session checks. A link
 that returns while the model is still armed resumes as soon as the radio receives a fresh armed
 reading, without waiting for landing: the flight controller is not identified again while armed,
-and a controller that rebooted would report disarmed. An adjustment report still held from before
-the interruption blocks steps until the controller reports idle. Disabling
+and a controller that rebooted would report disarmed. Disabling
 the feature closes the visit; enabling it again requires opening tuning from the quick menu.
 
 ### On the ground, before the flight

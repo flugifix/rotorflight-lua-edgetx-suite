@@ -2000,8 +2000,9 @@ function M.pause(widget)
   drive.valueMode = false
   drive.groupPicker = nil
   drive.linkLost = true
-  -- An adjustment report held from before the gap belongs to no step the resumed surface knows.
-  drive.reportFence = true
+  -- No report fence here. A report held across the gap belongs to the profile it was taken in, and
+  -- a profile that changed during the gap is fenced by watchProfiles on its own edge. A fence that
+  -- waits for AdjF to read 0 would refuse every step for as long as the board sends no fresh 0.
   publish(widget, drive)
 end
 

@@ -307,11 +307,12 @@ scenario("a link back in the air resumes on a current armed reading without an i
       Stubs.tick(); job(widget); widget:refresh(0, nil)
       check(not d.live and d.linkLost and #writes == paused, case[3] .. " does not resume")
     end
-    -- The board still reports the adjustment it held when the link went: it belongs to no step
-    -- the resumed surface knows, so it neither lands in the values nor lets a step through.
+    -- The board still reports the adjustment it held when the link went, and may send no fresh 0
+    -- for a while: that must not hold the continued flight's steps back.
     local sensor, held = d.radio.sensor, cell.id
+    local heldValue = d.values[held] or 100
     d.radio.sensor = function(name)
-      if name == "AdjF" then return held elseif name == "AdjV" then return 999 end
+      if name == "AdjF" then return held elseif name == "AdjV" then return heldValue end
       return sensor(name)
     end
     reading[1], reading[2] = true, true
@@ -320,11 +321,10 @@ scenario("a link back in the air resumes on a current armed reading without an i
       "a current armed reading resumes the same flight and selection")
     check(d:profileRefusal() == nil, "the unidentified board does not refuse the continued flight: "
       .. tostring(d:profileRefusal()))
-    check(d.reportFence == true and d.values[held] ~= 999, "an adjustment report from before the gap is fenced")
-    check(not d:dispatch("step", 1, "touch"), "no step while the held report stands")
-    held = 0
+    check(not d.reportFence, "a link gap alone sets no report fence")
     Stubs.tick(); d:fastTick(getTime())
-    check(d:dispatch("step", 1, "touch") and d.fired == fired + 1, "a fresh step is accepted on the continued flight")
+    local stepped, why = d:dispatch("step", 1, "touch")
+    check(stepped and d.fired == fired + 1, "a fresh step is accepted on the continued flight: " .. tostring(why))
     -- Without the continuation the same unidentified board is refused: the control for the check above.
     d.armedThrough = nil
     check(d:profileRefusal() == "board_unknown", "positive control: without the continuation the board is unknown")
