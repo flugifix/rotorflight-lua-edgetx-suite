@@ -91,7 +91,11 @@ or a page switch pauses tuning immediately: both variables go to zero. Reopen tu
 quick menu while still armed to continue at the same group and parameter. Link loss removes the
 release immediately but keeps the tuning visit open, showing **PAUSED** and **No FC link**.
 When the link and arm telemetry return, the same visit resumes automatically at the same group
-and parameter, subject to the existing flight-controller identity and session checks. Disabling
+and parameter, subject to the existing flight-controller identity and session checks. A link
+that returns while the model is still armed resumes as soon as the radio receives a fresh armed
+reading, without waiting for landing: the flight controller is not identified again while armed,
+and a controller that rebooted would report disarmed. An adjustment report still held from before
+the interruption blocks steps until the controller reports idle. Disabling
 the feature closes the visit; enabling it again requires opening tuning from the quick menu.
 
 ### On the ground, before the flight
@@ -387,7 +391,7 @@ An always-active adjustment slot on the tuning value channel can fire in every b
 
 Ground reads accept the firmware range of PID gains and rescue altitude P/I/D gains (0 to 1000) and of the governor head speed (0 to 50000), even when a value exceeds the Configurator's standard-slot range. Values outside the firmware range refuse the read with the function name and value. The standard-layout writer retains its Configurator limits.
 
-After a link interruption, tuning waits for the flight controller's UID to answer. The paused surface says *Waiting for FC identity*; a matching identity permits tuning again. Another identified controller ends the previous session. If a read or restore was suspended, its original-profile return is still owed to the disconnected controller and is logged; it does not block a new read on the connected controller.
+After a link interruption on the ground, tuning waits for the flight controller's UID to answer; in the air a fresh armed reading continues the same flight instead (see above). The paused surface says *Waiting for FC identity*; a matching identity permits tuning again. Another identified controller ends the previous session. If a read or restore was suspended, its original-profile return is still owed to the disconnected controller and is logged; it does not block a new read on the connected controller.
 
 Closing fullscreen or backgrounding the widget in flight pauses tuning, clears both variables,
 and retains the flight's steps for the post-flight list, including when the widget returns after

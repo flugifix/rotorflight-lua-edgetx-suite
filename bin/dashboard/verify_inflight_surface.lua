@@ -269,6 +269,63 @@ scenario("reconnect arm-latch reset cannot start a new flight", function()
   job(widget); widget:refresh(0, nil)
   check(d.live and d.group == 2 and d.entry == 3, "fresh armed telemetry automatically resumes the same flight")
 end)
+scenario("a link back in the air resumes on a current armed reading without an identified board", function()
+  local widget, d, writes = fixture(true)
+  d.group, d.entry = 2, 3
+  local cell = d.groups[2].entries[3]
+  d.bank, d.row = cell.bank, cell.row
+  energize(d, writes)
+  d.board = "12.10:board"
+  local fired = d.fired
+  local Msp = rfsuite.require("tasks/msp/runtime.lua")
+  local values = Msp.getState().values
+  local savedReading, savedMcu = Msp.armedReading, values.mcuId
+  local reading = {}
+  Msp.armedReading = function() return reading[1], reading[2] end
+  local ok, err = pcall(function()
+    -- The loss: the version read and the MCU id go with it and stay gone while armed.
+    widget.state.fblConnected, widget.state.rfConnected = false, false
+    values.mcuId = nil
+    job(widget); widget:refresh(0, nil)
+    check(d.linkLost and not d.live, "positive control: the loss pauses the surface")
+    local paused = #writes
+    widget.state.rfConnected = true
+    for _, case in ipairs({{true, false, "a reading from before the loss"}, {false, true, "a current disarmed reading"},
+        {nil, false, "no reading at all"}}) do
+      reading[1], reading[2] = case[1], case[2]
+      Stubs.tick(); job(widget); widget:refresh(0, nil)
+      check(not d.live and d.linkLost and #writes == paused, case[3] .. " does not resume")
+    end
+    -- The board still reports the adjustment it held when the link went: it belongs to no step
+    -- the resumed surface knows, so it neither lands in the values nor lets a step through.
+    local sensor, held = d.radio.sensor, cell.id
+    d.radio.sensor = function(name)
+      if name == "AdjF" then return held elseif name == "AdjV" then return 999 end
+      return sensor(name)
+    end
+    reading[1], reading[2] = true, true
+    Stubs.tick(); job(widget); widget:refresh(0, nil)
+    check(d.live and not d.linkLost and d.phase == "live" and d.group == 2 and d.entry == 3,
+      "a current armed reading resumes the same flight and selection")
+    check(d:profileRefusal() == nil, "the unidentified board does not refuse the continued flight: "
+      .. tostring(d:profileRefusal()))
+    check(d.reportFence == true and d.values[held] ~= 999, "an adjustment report from before the gap is fenced")
+    check(not d:dispatch("step", 1, "touch"), "no step while the held report stands")
+    held = 0
+    Stubs.tick(); d:fastTick(getTime())
+    check(d:dispatch("step", 1, "touch") and d.fired == fired + 1, "a fresh step is accepted on the continued flight")
+    -- Without the continuation the same unidentified board is refused: the control for the check above.
+    d.armedThrough = nil
+    check(d:profileRefusal() == "board_unknown", "positive control: without the continuation the board is unknown")
+    d.armedThrough = true
+    -- A second loss in the same flight: the reading turns old and the surface pauses again.
+    reading[2] = false
+    Stubs.tick(); job(widget); widget:refresh(0, nil)
+    check(not d.live and d.linkLost, "a second loss pauses again")
+  end)
+  Msp.armedReading, values.mcuId = savedReading, savedMcu
+  check(ok, tostring(err))
+end)
 for _, armed in ipairs({true, false}) do
   scenario("link-lost surface replaces the " .. (armed and "live" or "ground") .. " scene", function()
     local widget, d = fixture(armed)

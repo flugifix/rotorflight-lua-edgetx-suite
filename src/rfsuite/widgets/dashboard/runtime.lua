@@ -732,6 +732,29 @@ local function pauseInflight(self)
   if drive then drive.pause(self) end
 end
 
+-- Whether the overlay has a link to drive. A link that comes back in the air comes back without an
+-- identified board: tasks/msp/runtime.lua clears the version and MCU id on the loss and reads them
+-- again only while disarmed, so `fblConnected` stays false until landing. The live phase sends no
+-- MSP, so it does not need that identity -- it needs to know the craft is still in the same flight.
+-- An armed reading written since the link returned says so: a board that rebooted comes back
+-- disarmed. A reading from before the loss (getValue keeps the last value) says nothing, so a paused
+-- live session waits for a current one; a current disarmed reading is the landing path instead.
+-- Asked again on every pass until the board is identified, so a second loss pauses again.
+local function inflightLinkUp(self, instance)
+  if self.state.fblConnected == true then
+    if instance then instance.armedThrough = nil end
+    return true
+  end
+  if instance == nil or instance.phase ~= "live"
+      or (instance.linkLost ~= true and instance.armedThrough ~= true) then return false end
+  if self.state.rfConnected ~= true then return false end
+  if not (MspRuntime and type(MspRuntime.armedReading) == "function") then return false end
+  local ok, armed, current = pcall(MspRuntime.armedReading)
+  if not (ok and armed == true and current == true) then return false end
+  instance.armedThrough = true
+  return true
+end
+
 -- The overlay's ground half, loaded on the same terms and separately from the drive: it speaks
 -- MSP and the drive does not, and a widget whose pilot has the feature off loads neither.
 local InflightPrimeCache = {}
@@ -825,7 +848,7 @@ local function tickInflight(self)
     cleanupInflight(self)
     return
   end
-  if self.state.fblConnected ~= true or (self._inflight and self._inflight.linkLost == true
+  if not inflightLinkUp(self, self._inflight) or (self._inflight and self._inflight.linkLost == true
       and self.state.armedSeen ~= true) then pauseInflight(self); return end
   local drive = inflightDrive()
   if not drive then return end
@@ -871,7 +894,7 @@ local function updateInflightRelease(self)
     installInflightPanic(self)
     -- Reconnection resets the arm latch; missing arm data must not turn a paused flight into
     -- a landing and then reset its selection when armed telemetry arrives again.
-    if self.state.fblConnected ~= true or (instance.linkLost == true
+    if not inflightLinkUp(self, instance) or (instance.linkLost == true
         and self.state.armedSeen ~= true) then pauseInflight(self); return end
     if instance.linkLost then self._tuningKeyDirty = true; instance.linkLost = nil end
     instance.open = true

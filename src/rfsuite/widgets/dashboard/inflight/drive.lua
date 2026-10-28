@@ -377,6 +377,8 @@ function Drive:setPhase(phase)
     end
     self:speakSelection("group")
   elseif was == M.PHASE_LIVE then
+    -- The continuation across a link gap is a property of the flight it was taken in.
+    self.armedThrough = nil
     -- Landing clears the value. The bank may remain selected only while the surface is open;
     -- every exit clears both variables before changing the phase.
     self:cleanup(false, self.live == true)
@@ -999,9 +1001,12 @@ function Drive:profileRefusal()
   if self.profileBusy or self.restorePending then return "profile_reading" end
   if self.sessionProfiles == nil then return "session_unread" end
   if self.board then
-    if not boardIdentity then boardIdentity = requireModule("widgets/dashboard/inflight/prime.lua").boardOnLink end
-    local board = boardIdentity()
-    if board == nil then return "board_unknown" end
+    if not boardIdentity then boardIdentity = requireModule("widgets/dashboard/inflight/prime.lua") end
+    local board = boardIdentity.boardOnLink()
+    -- A link that came back in the air has no identified board until landing, and the widget
+    -- vouches for this flight with an armed reading taken since (armedThrough).
+    if board == nil and not (self.armedThrough and self.phase == M.PHASE_LIVE) then return "board_unknown" end
+    if board == nil then board = self.board end
     if board ~= self.board then return "session_unread" end
   end
   if self.profile == nil or self.rateProfile == nil then return "profile_unknown" end
@@ -1956,6 +1961,8 @@ function M.pause(widget)
   if drive.fcSurface then drive.fcSurface.close(widget, drive) end
   drive.valueMode = false
   drive.linkLost = true
+  -- An adjustment report held from before the gap belongs to no step the resumed surface knows.
+  drive.reportFence = true
   publish(widget, drive)
 end
 
