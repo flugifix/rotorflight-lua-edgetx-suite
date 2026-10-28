@@ -30,10 +30,10 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 
 | Page | File | In-app help | Conditions | Status |
 | --- | --- | --- | --- | --- |
-| PIDs | `flight_tuning/pids.md` | yes | read-only while armed | to write |
+| PIDs | [flight_tuning/pids.md](flight_tuning/pids.md) | yes | read-only while armed | written |
 | Rates | [flight_tuning/rates.md](flight_tuning/rates.md) | yes | read-only while armed | written |
 | Tune Advisor | [flight_tuning/tune_advisor.md](flight_tuning/tune_advisor.md) | yes | read-only while armed, needs MSP API 12.10 | written |
-| Governor | `flight_tuning/governor.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
+| Governor | [flight_tuning/governor.md](flight_tuning/governor.md) | yes | read-only while armed, needs MSP API 12.09 | written |
 | Advanced → Filters | `flight_tuning/advanced/filters.md` | yes | read-only while armed | to write |
 | Advanced → PID Controller | [flight_tuning/advanced/pid_controller.md](flight_tuning/advanced/pid_controller.md) | yes | read-only while armed | written |
 | Advanced → PID Bandwidth | `flight_tuning/advanced/pid_bandwidth.md` | yes | read-only while armed | to write |

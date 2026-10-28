@@ -443,3 +443,11 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y lua5.3
       - run: lua5.3 bin/msp/verify_esc_parameters_pack.lua
       - run: lua5.3 bin/msp/verify_esc_readback_after_save.lua
+
+  flight-tuning-pids-governor-saves:
+    name: Flight Tuning saves (PIDs, Governor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/flight_tuning/verify_save_pids_governor_pages.lua

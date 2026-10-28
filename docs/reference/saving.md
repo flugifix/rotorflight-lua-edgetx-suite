@@ -370,6 +370,13 @@ a raise and logs it as a warning. On Stats the flight count kept for the flight 
 from the saved value also when the page was closed. In the EdgeTX simulator without a flight
 controller these three saves behave as on the other pages that use the shared save.
 
+PIDs and Governor under Flight Tuning send their save through the tool's shared save: each writes
+its profile settings, built when Save is pressed, then one EEPROM write. The page is marked clean
+only once the flight controller confirms that the values are stored; a refused write or a lost
+reply is shown as a failed save and leaves the edits unsaved. A Save pressed while their save is
+still running is ignored. After a successful save, each page reads the values back if it is still
+open; if it was closed, its next visit reads.
+
 ## ESC Configurator pages
 
 *Setup* > *ESC & Motors* > *ESC Tools* opens one page per ESC firmware. These pages do not use
