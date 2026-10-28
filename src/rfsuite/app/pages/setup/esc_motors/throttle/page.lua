@@ -390,10 +390,17 @@ function M.build(ctx)
 
   local proto = ui.config.motor_pwm_protocol
 
+  -- A row's ? opens its line in the tool's help view, titled with the row's label.
+  local openHelp = ctx.openHelp
+  local function onRowHelp(text, label)
+    if type(openHelp) == "function" and type(text) == "string" and text ~= "" then openHelp(text, label) end
+  end
+
   -- 1. Throttle Protocol
+  local label = pageText(i18n, "throttle_protocol", "Throttle Protocol")
   cursorY = cursorY + Controls.appendComboSelect(
     children, x, cursorY, w,
-    pageText(i18n, "throttle_protocol", "Throttle Protocol"),
+    label,
     protocolOptions,
     proto,
     function(newVal)
@@ -405,14 +412,25 @@ function M.build(ctx)
           ui.runtime.requestRebuild()
         end
       end
-    end
+    end,
+    {
+      helpText = pageText(i18n, "help_throttle_protocol",
+        "The protocol the flight controller drives the ESC with; DISABLED stops the motor output. CASTLE needs API 12.08, SRXL2 12.10."),
+      helpTitle = label,
+      onHelp = onRowHelp
+    }
   )
 
   -- 2. Update frequency
+  label = pageText(i18n, "motor_pwm_rate", "Update frequency")
   cursorY = cursorY + Controls.appendNumberField(
     children, x, cursorY, w,
-    pageText(i18n, "motor_pwm_rate", "Update frequency"),
+    label,
     {
+      helpText = pageText(i18n, "help_motor_pwm_rate",
+        "Output rate of the unsynchronised PWM protocols, 50 to 8000 Hz. Greyed out for DSHOT, PROSHOT and DISABLED."),
+      helpTitle = label,
+      onHelp = onRowHelp,
       min = 50,
       max = 8000,
       suffix = "Hz",
@@ -426,12 +444,17 @@ function M.build(ctx)
   )
 
   -- 3. Motor Stop PWM Value
+  label = pageText(i18n, "mincommand", "Motor Stop PWM Value")
   cursorY = cursorY + Controls.appendNumberField(
     children, x, cursorY, w,
-    pageText(i18n, "mincommand", "Motor Stop PWM Value"),
+    label,
     {
-      min = 50,
-      max = 2250,
+      helpText = pageText(i18n, "help_mincommand",
+        "Pulse width sent while the motor is stopped, 50 to 2250 us."),
+      helpTitle = label,
+      onHelp = onRowHelp,
+      min = MotorConfigApi.limits.mincommand.min,
+      max = MotorConfigApi.limits.mincommand.max,
       suffix = "us",
       active = function() return isMincommandEnabled(proto, hasCastle, hasSrxl2) end,
       get = function() return ui.config.mincommand end,
@@ -443,12 +466,17 @@ function M.build(ctx)
   )
 
   -- 4. 0% Throttle PWM Value
+  label = pageText(i18n, "min_throttle", "0% Throttle PWM Value")
   cursorY = cursorY + Controls.appendNumberField(
     children, x, cursorY, w,
-    pageText(i18n, "min_throttle", "0% Throttle PWM Value"),
+    label,
     {
-      min = 50,
-      max = 2250,
+      helpText = pageText(i18n, "help_min_throttle",
+        "Pulse width at zero throttle, 50 to 2250 us."),
+      helpTitle = label,
+      onHelp = onRowHelp,
+      min = MotorConfigApi.limits.minthrottle.min,
+      max = MotorConfigApi.limits.minthrottle.max,
       suffix = "us",
       active = function() return isMinthrottleEnabled(proto, hasCastle, hasSrxl2) end,
       get = function() return ui.config.minthrottle end,
@@ -460,12 +488,17 @@ function M.build(ctx)
   )
 
   -- 5. 100% Throttle PWM Value
+  label = pageText(i18n, "max_throttle", "100% Throttle PWM Value")
   cursorY = cursorY + Controls.appendNumberField(
     children, x, cursorY, w,
-    pageText(i18n, "max_throttle", "100% Throttle PWM Value"),
+    label,
     {
-      min = 50,
-      max = 2250,
+      helpText = pageText(i18n, "help_max_throttle",
+        "Pulse width at full throttle, 50 to 2250 us."),
+      helpTitle = label,
+      onHelp = onRowHelp,
+      min = MotorConfigApi.limits.maxthrottle.min,
+      max = MotorConfigApi.limits.maxthrottle.max,
       suffix = "us",
       active = function() return isMaxthrottleEnabled(proto, hasCastle, hasSrxl2) end,
       get = function() return ui.config.maxthrottle end,
@@ -477,15 +510,22 @@ function M.build(ctx)
   )
 
   -- 6. Unsynced ESC Update
+  label = pageText(i18n, "unsynced", "Unsynced ESC Update")
   cursorY = cursorY + Controls.appendRadioSwitch(
     children, x, cursorY, w,
-    pageText(i18n, "unsynced", "Unsynced ESC Update"),
+    label,
     function() return ui.config.use_unsynced_pwm ~= 0 end,
     function(nextBool)
       ui.config.use_unsynced_pwm = nextBool and 1 or 0
       ui.dirty = true
     end,
-    function() return isUnsyncedEnabled(proto) end
+    function() return isUnsyncedEnabled(proto) end,
+    {
+      helpText = pageText(i18n, "help_unsynced",
+        "Sends the output at a fixed rate instead of with the control loop; for the ONESHOT, MULTISHOT and BRUSHED protocols."),
+      helpTitle = label,
+      onHelp = onRowHelp
+    }
   )
 
   if ui.dirty then
