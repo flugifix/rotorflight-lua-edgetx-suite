@@ -17,6 +17,7 @@ local SmartfuelApi = nil
 local Log = nil
 local LoadingOverlay = nil
 local t = nil
+local PowerFields = nil
 
 M.eepromWrite = true
 
@@ -70,6 +71,7 @@ local function clampInt(value, minValue, maxValue, fallback)
 end
 
 local function ensureDeps()
+	if not PowerFields then PowerFields = loadModule("lib/power_fields.lua") end
 	if not Common then Common = loadModule("app/pages/settings/common.lua") end
 	if not Controls then Controls = loadModule("ui/controls.lua") end
 	if not PowerModelPreferences then PowerModelPreferences = loadModule("app/pages/setup/power/model_preferences.lua") end
@@ -120,15 +122,6 @@ local function getInlineHelpHandler()
 		end
 	end
 	return ui.runtime.inlineHelpHandler
-end
-
-local function buildModeOptions()
-	return {
-		{ value = 0, label = "OFF (LOCAL)" },
-		{ value = 1, label = "VOLTAGE" },
-		{ value = 2, label = "CURRENT" },
-		{ value = 3, label = "COMBINED" }
-	}
 end
 
 local function getBatteryPrefs(session)
@@ -493,7 +486,7 @@ function M.build(ctx)
 	cursorY = cursorY + Controls.appendComboSelect(
 		children, x, cursorY, w,
 		pageText(i18n, "firmware_mode", "Firmware Source"),
-		buildModeOptions(),
+		PowerFields.modeOptions(i18n),
 		ui.config.firmware_mode,
 		getFirmwareModeSetter(),
 		{
@@ -583,6 +576,7 @@ function M.onClose()
 	Log = nil
 	LoadingOverlay = nil
 	t = nil
+	PowerFields = nil
 end
 
 -- Asked before the page is left (ui/home.lua): true while an edit here is not saved.

@@ -293,6 +293,9 @@ jobs:
       - name: Check per-model reset rollback
         run: lua5.3 bin/dashboard/verify_overrides_reset.lua
 
+      - name: Check dashboard tile choices and theme key pages
+        run: lua5.3 bin/dashboard/verify_field_choices.lua
+
       - name: Check dashboard standby geometry and formatting
         run: lua5.3 bin/dashboard/verify_standby.lua
 
@@ -340,6 +343,9 @@ jobs:
         run: |
           lua5.3 bin/smartfuel/verify_invalid_max.lua
           lua5.3 bin/smartfuel/verify_readers.lua
+
+      - name: Check the combined source
+        run: lua5.3 bin/smartfuel/verify_combined_source.lua
 
   flight-record-absent-sources:
     name: Flight record absent sources
@@ -405,6 +411,17 @@ jobs:
             --base '${{ github.event.pull_request.base.sha }}' \
             --body-file pr-body.txt
 
+  packed-system-state:
+    name: Live packed system state
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install Lua 5.3
+        run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - name: Check fields, freshness and negative control
+        run: lua5.3 bin/telemetry/verify_system_state.lua --self-test
+
   msp-override-payloads:
     name: MSP override payloads
     runs-on: ubuntu-latest
@@ -421,3 +438,11 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y lua5.3
       - run: lua5.3 bin/msp/verify_esc_parameters_pack.lua
       - run: lua5.3 bin/msp/verify_esc_readback_after_save.lua
+
+  esc-yge-flag-bit3:
+    name: YGE flags bit 3
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/esc/verify_yge_flag_bit3.lua
