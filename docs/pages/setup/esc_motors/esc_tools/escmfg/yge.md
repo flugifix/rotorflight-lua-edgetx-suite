@@ -31,7 +31,7 @@ Each setting has its own `?` for a short explanation.
 | --- | --- |
 | Governor Mode | The ESC's operating mode: *Mode Free*, *Mode Ext*, *Mode Heli*, *Mode Store*, *Mode Glider*, *Mode Air* or *Mode F3A*. |
 | Direction | Which way the motor turns, *Normal* or *Reverse*. |
-| BEC Voltage | The BEC output, 5.5 V to 8.4 V in 0.1 V steps. On an ESC model that has a 12 V BEC the range runs to 12.0 V, and setting exactly 12.0 V is what turns that BEC on. |
+| BEC Voltage | Sets the BEC output voltage, 5.5 V to 8.4 V in 0.1 V steps. On an ESC model that has a 12 V BEC the range runs to 12.0 V. |
 | Auto Restart Type | What the ESC does after a cutoff: *Off*, *Slowdown* or *Cutoff*. |
 | Cell Cutoff | The per-cell voltage the ESC cuts at, 2.9 V to 3.4 V. |
 | Current Limit | The ESC's current limit, 1 A to 655 A in 1 A steps. |
@@ -72,9 +72,9 @@ Each setting has its own `?` for a short explanation.
 - Saving writes the whole parameter block to the ESC, not only the settings that were changed.
   Every setting the page offers is written back as it was read unless it was edited, and so is
   everything in the block the page does not show. That includes the bits of the flags byte the
-  page does not set: it sets four of them -- *Direction*, *F3C Auto*, *Keep mAh*, and the 12 V
-  BEC flag, which follows *BEC Voltage* reaching 12.0 V -- and writes the rest back as the ESC
-  reported them.
+  page does not set: it sets only bits 0..2 -- *Direction*, *F3C Auto* and *Keep mAh* -- and
+  passes the rest through unchanged. Bit 3 is passed through unchanged; whether it is a 12 V
+  BEC capability or a switch is not documented.
 - After a save the page reads the ESC again on its own, and a further save is not
   accepted until that read has come back.
 - *Motor Timing* is stored in the ESC in an encoding of its own, which is not the order the

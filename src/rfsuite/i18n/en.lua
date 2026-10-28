@@ -1484,7 +1484,7 @@ return {
         help_esc_flrtr_governor_i = "Sets the ESC governor's I gain; it acts only in ESC Gov mode.",
         help_esc_yge_governor_mode = "Selects the ESC's operating mode: Mode Free, Mode Ext, Mode Heli, Mode Store, Mode Glider, Mode Air or Mode F3A.",
         help_esc_yge_direction = "Sets which way the motor turns: Normal or Reverse.",
-        help_esc_yge_bec_voltage = "Sets the BEC output voltage; on a model with a 12 V BEC, setting exactly 12.0 V turns that BEC on.",
+        help_esc_yge_bec_voltage = "Sets the BEC output voltage. The range depends on the ESC model.",
         help_esc_yge_auto_restart_type = "Selects what the ESC does after a cutoff: Off, Slowdown or Cutoff.",
         help_esc_yge_cell_cutoff = "Per-cell voltage at which the ESC cuts off.",
         help_esc_yge_current_limit = "Maximum current the ESC is set to allow, in amps.",

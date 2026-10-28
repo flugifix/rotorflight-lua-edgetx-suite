@@ -328,3 +328,11 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y lua5.3
       - run: lua5.3 bin/msp/verify_esc_parameters_pack.lua
       - run: lua5.3 bin/msp/verify_esc_readback_after_save.lua
+
+  esc-yge-flag-bit3:
+    name: YGE flags bit 3
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/esc/verify_yge_flag_bit3.lua
