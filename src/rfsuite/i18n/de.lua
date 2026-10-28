@@ -2435,6 +2435,7 @@ return {
         loading_message = "Live-Daten werden gelesen",
         loading_failed = "Laden fehlgeschlagen",
         loading_timeout = "Zeitueberschreitung beim Lesen vom FBL",
+        api_refused = "MSP-API %s wird nicht unterstuetzt.",
         not_connected = "Telemetrie / FBL nicht verbunden",
         link_lost = "Telemetrieverbindung unterbrochen"
       },

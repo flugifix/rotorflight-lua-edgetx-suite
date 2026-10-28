@@ -1,15 +1,17 @@
 ---
-title: Pages
-sidebar_label: Pages
+title: Menu
+sidebar_label: Menu
 ---
 
-# Configuration pages
+# Menu
 
 For the shared Save action, read [Saving configuration](../reference/saving.md).
 
 One file per page, at the path of the page under `src/rfsuite/app/pages/` with `.md`
 appended: the page `setup/power/smartfuel/page.lua` is documented in
 `docs/pages/setup/power/smartfuel.md`. Menu entries that only open a submenu have no file.
+On the website these files are listed under *Menu*, in the menus, the order and the
+titles the tool shows; the folders here follow the page sources instead.
 
 **Status:** which pages are reachable, and which of them have a file here, is listed in the
 generated [menu structure](../reference/menu-structure.md), which CI keeps current. A page with
