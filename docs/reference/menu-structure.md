@@ -25,7 +25,7 @@ so it matches the code it was generated from.
   an entry (`id`, `title`, `menuId`, `icon`, `row`, `col`) are left out. What a condition
   does is not explained here.
 
-**120 entries, 99 of them open a page, 52 of those pages are documented.**
+**120 entries, 99 of them open a page, 53 of those pages are documented.**
 
 ## Configuration
 
@@ -102,7 +102,7 @@ Section `configuration`.
 | Setup &rsaquo; ESC & Motors &rsaquo; Motor Override | `motor_override` | `setup_esc_motors_motor_override_page` | `setup/esc_motors/motor_override` | **none** | `minApiVersion = { 12, 0, 9 }`, `lockedWhileArmed = true` |
 | Setup &rsaquo; Governor | `governor` | `governor_menu` | menu, 4 entries | &mdash; | &mdash; |
 | Setup &rsaquo; Governor &rsaquo; General | `general` | `setup_governor_general_page` | `setup/governor/general` | [setup/governor/general.md](../pages/setup/governor/general.md) | `lockedWhileArmed = true` |
-| Setup &rsaquo; Governor &rsaquo; Ramp Time | `time` | `setup_governor_time_page` | `setup/governor/time` | **none** | `lockedWhileArmed = true` |
+| Setup &rsaquo; Governor &rsaquo; Ramp Time | `time` | `setup_governor_time_page` | `setup/governor/time` | [setup/governor/time.md](../pages/setup/governor/time.md) | `lockedWhileArmed = true` |
 | Setup &rsaquo; Governor &rsaquo; Filters | `filters` | `setup_governor_filters_page` | `setup/governor/filters` | **none** | `lockedWhileArmed = true` |
 | Setup &rsaquo; Governor &rsaquo; Bypass Curve | `curves` | `setup_governor_curves_page` | `setup/governor/curves` | **none** | `lockedWhileArmed = true` |
 | Setup &rsaquo; Model | `model` | `setup_model_page` | `setup/model` | [setup/model.md](../pages/setup/model.md) | `enabledWhen = "fblConnected"`, `lockedWhileArmed = true` |
