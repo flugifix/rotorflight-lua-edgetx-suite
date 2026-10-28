@@ -3758,7 +3758,9 @@ function Runtime.new(zone, options)
       wasArmed = false,
       fblConnected = false,
       connectionReady = false,
-      rpm = 0,
+      -- Fields that take raw readings are seeded with the float 0.0: EdgeTX's Lua floors a float
+      -- compared with an integer, so an integer 0 here would make setField drop readings below 1.
+      rpm = 0.0,
       profile = 1,
       rateProfile = 1,
       batteryProfile = nil,
@@ -3777,22 +3779,22 @@ function Runtime.new(zone, options)
       throttlePercent = 0,
       mcuTemp = 0,
       escTemp = 0,
-      bec_voltage = 0,
-      current = 0,
-      watts = 0,
-      altitude = 0,
-      consumedMah = 0,
+      bec_voltage = 0.0,
+      current = 0.0,
+      watts = 0.0,
+      altitude = 0.0,
+      consumedMah = 0.0,
       -- The per-flight extremes are not here any more: they are the record's, under
       -- rfsuite.session.flight, and `state.flight` below points at it. The four scalars that
       -- follow are read from the record once per pass and kept under the names they have
       -- always had, because lib/audio.lua and the time objects read them here.
       flight = nil,
       flights = 0,
-      lq = 0,
-      rss1 = 0,
-      rss2 = 0,
-      fuel = 0,
-      voltage = 0,
+      lq = 0.0,
+      rss1 = 0.0,
+      rss2 = 0.0,
+      fuel = 0.0,
+      voltage = 0.0,
       batteryCellCount = 0,
       flightSeconds = 0,
       lastFlightSeconds = 0,
@@ -4405,7 +4407,7 @@ function Runtime.new(zone, options)
       self.state.fuelTelemetrySeen = false
       self.state.packNotFull = nil
       self.state.previousSessionFuel = self.state.fuel
-      self.state.fuel = 0
+      self.state.fuel = 0.0
       if Sensors and type(Sensors.reset) == "function" then
         Sensors.reset()
       end

@@ -34,11 +34,7 @@ local entries = {
   settings_audio_events_link_page = definePage("settings/audio/events/link"),
   settings_audio_events_rescue_page = definePage("settings/audio/events/rescue"),
   settings_audio_volume_page = definePage("settings/audio/volume"),
-  setup_wizard_page = definePage("setup_wizard"),
-  -- The same page, entered under three names. Which name it was opened under is what bounds the
-  -- run to one section, and the page reads that off the menu rather than being told.
-  setup_wizard_radio_page = definePage("setup_wizard"),
-  setup_wizard_board_page = definePage("setup_wizard"),
+  setup_wizard_retired_page = definePage("setup_wizard_retired"),
   setup_configuration_page = definePage("setup/configuration"),
   setup_radio_config_page = definePage("setup/radio_config"),
   setup_model_page = definePage("setup/model"),

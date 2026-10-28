@@ -34,6 +34,8 @@ Only the themes this model draws are listed: its own theme for each phase, or th
 where it has none. A setting of any other theme would be stored and never shown. When none of
 them has settings, the page says so.
 
+Model and standard values retain up to two decimal places without trailing zeros (for example, 25.2 stays 25.2 and 18.0 appears as 18).
+
 With no setting to show, the page says the model uses the standard values.
 
 ## Notes
@@ -49,6 +51,7 @@ With no setting to show, the page says the model uses the standard values.
   page says *Save failed* with the reason: *the settings file could not be written to the SD
   card*, or *model settings store not available* where the part of the suite that writes the
   model's file could not be loaded.
+  A Reset whose save fails leaves the setting in place, so the row stays and can be reset again.
 - A reset does not turn per-model settings off: the model keeps *Own settings for this model* on, and its
   theme choice on *Theme* is not touched. Turning them off is done on *Theme*, and keeps
   the values.

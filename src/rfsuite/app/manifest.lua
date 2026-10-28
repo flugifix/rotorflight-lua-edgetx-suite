@@ -306,29 +306,13 @@ local manifest = {
     wizards_menu = {
       title = "@i18n(app.modules.wizards.name)@",
       pages = {
-        { id = "setup_wizard", title = "@i18n(app.modules.setup_wizard.name)@", menuId = "setup_wizard_menu", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true }
+        { id = "setup_wizard", title = "@i18n(app.modules.setup_wizard.name)@", menuId = "setup_wizard_retired_page", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true }
       }
     },
-    -- The whole run and its parts, side by side. The parts are not shortcuts into a walk: each
-    -- opens the same assistant bounded to one section, with the same criteria and the same list.
-    setup_wizard_menu = {
+    -- The setup assistant is being replaced; until its successor ships, its entry opens a page
+    -- that says so instead of the assistant.
+    setup_wizard_retired_page = {
       title = "@i18n(app.modules.setup_wizard.name)@",
-      pages = {
-        { id = "all", title = "@i18n(app.modules.setup_wizard.all)@", menuId = "setup_wizard_page", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
-        { id = "radio", title = "@i18n(app.modules.setup_wizard.radio)@", menuId = "setup_wizard_radio_page", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
-        { id = "board", title = "@i18n(app.modules.setup_wizard.board)@", menuId = "setup_wizard_board_page", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true }
-      }
-    },
-    setup_wizard_page = {
-      title = "@i18n(app.modules.setup_wizard.all)@",
-      pages = {}
-    },
-    setup_wizard_radio_page = {
-      title = "@i18n(app.modules.setup_wizard.radio)@",
-      pages = {}
-    },
-    setup_wizard_board_page = {
-      title = "@i18n(app.modules.setup_wizard.board)@",
       pages = {}
     },
     setup_configuration_page = {

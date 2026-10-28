@@ -62,7 +62,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Servos → BUS Output | `setup/servos/bus.md` | no | read-only while armed | to write |
 | Controls → Modes | [setup/controls/modes.md](setup/controls/modes.md) | yes | read-only while armed | written |
 | Controls → Adjustments | [setup/controls/adjustments.md](setup/controls/adjustments.md) | yes | read-only while armed | written |
-| Controls → Failsafe | `setup/controls/failsafe.md` | yes | read-only while armed | to write |
+| Controls → Failsafe | [setup/controls/failsafe.md](setup/controls/failsafe.md) | yes | read-only while armed | written |
 | Controls → Beepers → Configuration | `setup/controls/beepers/configuration.md` | yes | read-only while armed | to write |
 | Controls → Beepers → ESC Beacon | `setup/controls/beepers/dshot.md` | yes | read-only while armed | to write |
 | Controls → Blackbox → Configuration | `setup/controls/blackbox/configuration.md` | yes | read-only while armed | to write |
@@ -89,7 +89,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | ESC & Motors → ESC Tools → ZTW | [setup/esc_motors/esc_tools/escmfg/ztw.md](setup/esc_motors/esc_tools/escmfg/ztw.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
 | ESC & Motors → ESC Tools → ESC Configurator (the shared run page) | `setup/esc_motors/esc_tools/run.md` | no | read-only while armed | to write |
 | ESC & Motors → Motor Override | `setup/esc_motors/motor_override.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
-| Governor → General | `setup/governor/general.md` | yes | read-only while armed | to write |
+| Governor → General | [setup/governor/general.md](setup/governor/general.md) | yes | read-only while armed | written |
 | Governor → Ramp Time | `setup/governor/time.md` | yes | read-only while armed | to write |
 | Governor → Filters | `setup/governor/filters.md` | yes | read-only while armed | to write |
 | Governor → Bypass Curve | `setup/governor/curves.md` | yes | read-only while armed | to write |
@@ -100,7 +100,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 
 | Page | File | In-app help | Conditions | Status |
 | --- | --- | --- | --- | --- |
-| Full initial setup (Complete run / Radio / Flight controller) | [setup_wizard.md](setup_wizard.md) | yes | preview switch *Setup Assistant*, read-only while armed | written |
+| Full initial setup (notice: being replaced, not available) | [setup_wizard.md](setup_wizard.md) | no | preview switch *Setup Assistant*, locked while armed | written |
 
 ## System → Tools
 

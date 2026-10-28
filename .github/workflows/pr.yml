@@ -281,6 +281,9 @@ jobs:
           lua5.3 bin/themes/verify_voltage_save.lua
           lua5.3 bin/dashboard/verify_offline_theme_settings.lua
 
+      - name: Check per-model reset rollback
+        run: lua5.3 bin/dashboard/verify_overrides_reset.lua
+
       - name: Check dashboard standby geometry and formatting
         run: lua5.3 bin/dashboard/verify_standby.lua
 
@@ -408,3 +411,4 @@ jobs:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y lua5.3
       - run: lua5.3 bin/msp/verify_esc_parameters_pack.lua
+      - run: lua5.3 bin/msp/verify_esc_readback_after_save.lua

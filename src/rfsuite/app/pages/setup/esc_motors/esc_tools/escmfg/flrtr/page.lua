@@ -111,12 +111,31 @@ local function logMsg(msg, level)
   end
 end
 
-local function queueFlyrotorReadActual(queue)
+local function getInlineHelpHandler()
+  if ui.runtime.inlineHelpHandler then return ui.runtime.inlineHelpHandler end
+  ui.runtime.inlineHelpHandler = function(helpText, helpTitle)
+    if type(helpText) ~= "string" or helpText == "" then return end
+    local openHelp = ui.runtime.openHelp
+    if type(openHelp) == "function" then
+      openHelp(helpText, helpTitle)
+    end
+  end
+  return ui.runtime.inlineHelpHandler
+end
+
+-- `retryOnError` is set only for the read that FOLLOWS a write. The firmware invalidates
+-- its parameter cache on a successful commit and answers both the read and the next write
+-- with an error until a fresh readback from the ESC has been cached, so that first refusal
+-- is a wait rather than a failure. The queue already knows how to wait for one.
+local function queueFlyrotorReadActual(queue, retryOnError)
   queue:add({
     command = EscParametersFlyrotorApi.command,
     timeout = 15,
+    retryOnErrorReply = retryOnError or nil,
     simulatorResponse = EscParametersFlyrotorApi.simulatorResponse,
     processReply = function(self, buf)
+      -- A queued read may finish after the page has released its runtime.
+      if not ui.runtime then return end
       local parsed = EscParametersFlyrotorApi.parse(buf)
       if parsed then
         for k, v in pairs(ui.config) do
@@ -170,6 +189,8 @@ local function queueFlyrotorReadActual(queue)
       end
     end,
     errorHandler = function()
+      -- A queued read may finish after the page has released its runtime.
+      if not ui.runtime then return end
       ui.runtime.escReadComplete = false
       ui.runtime.readPending = false
       ui.loading = false
@@ -180,7 +201,7 @@ local function queueFlyrotorReadActual(queue)
   })
 end
 
-local function queueFlyrotorRead(isAutoReload)
+local function queueFlyrotorRead(isAutoReload, retryOnError)
   if not MspRuntime or not EscParametersFlyrotorApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -203,7 +224,7 @@ local function queueFlyrotorRead(isAutoReload)
     end
   end
 
-  queueFlyrotorReadActual(queue)
+  queueFlyrotorReadActual(queue, retryOnError)
   return true, nil
 end
 
@@ -282,6 +303,7 @@ local function queueFlyrotorWrite(requestRebuild)
       if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
+      queueFlyrotorRead(true, true)
     end,
     errorHandler = function()
       if not ui.runtime then return end
@@ -403,11 +425,10 @@ function M.onReload(ctx)
   return true
 end
 
--- The sheet names the rows of the section on screen, so it is told which section that is.
 function M.onHelp(ctx)
   local help = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/flrtr/help.lua")
   if type(help) ~= "function" then return nil end
-  return help({ i18n = ctx and ctx.i18n, section = ui.currentSection })
+  return help({ i18n = ctx and ctx.i18n })
 end
 
 function M.build(ctx)
@@ -415,6 +436,7 @@ function M.build(ctx)
   ensureLoaded()
 
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
+  ui.runtime.openHelp = ctx and ctx.openHelp or nil
   ui.i18n = ctx and ctx.i18n or nil
 
   local children = ctx.children
@@ -502,6 +524,9 @@ function M.build(ctx)
   if ui.currentSection == 1 then
     -- Basic Settings
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_cell_count", "Cell Count"), {
+      helpText = pageText(i18n, "help_esc_flrtr_cell_count", "Number of cells in the flight pack."),
+      helpTitle = pageText(i18n, "esc_cell_count", "Cell Count"),
+      onHelp = getInlineHelpHandler(),
       min = 4, max = 14, step = 1,
       get = function() return ui.config.cell_count end,
       set = function(val)
@@ -512,6 +537,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_low_voltage_protection", "Low Voltage Protection"), {
+      helpText = pageText(i18n, "help_esc_flrtr_low_voltage_protection", "Per-cell voltage at which low-voltage protection acts."),
+      helpTitle = pageText(i18n, "esc_low_voltage_protection", "Low Voltage Protection"),
+      onHelp = getInlineHelpHandler(),
       min = 28, max = 38, step = 1,
       display = function(val) return string.format("%.1fV", val / 10) end,
       get = function() return ui.config.low_voltage_protection end,
@@ -523,6 +551,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_temperature_protection", "Temperature Protection"), {
+      helpText = pageText(i18n, "help_esc_flrtr_temperature_protection", "ESC temperature at which temperature protection acts."),
+      helpTitle = pageText(i18n, "esc_temperature_protection", "Temperature Protection"),
+      onHelp = getInlineHelpHandler(),
       min = 50, max = 135, step = 5, suffix = "C",
       get = function() return ui.config.temperature_protection end,
       set = function(val)
@@ -543,7 +574,11 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, becVoltageLabel, becOpts, ui.config.bec_voltage, function(val)
       ui.config.bec_voltage = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_flrtr_bec_voltage", "Sets the ESC's BEC output voltage, or switches it off."),
+      helpTitle = becVoltageLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
     local angleOpts = {
@@ -563,7 +598,11 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, electricalAngleLabel, angleOpts, ui.config.electrical_angle, function(val)
       ui.config.electrical_angle = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_flrtr_electrical_angle", "Auto is recommended; a fixed angle can run more smoothly. Raise it if the motor runs hot."),
+      helpTitle = electricalAngleLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
     local dirOpts = {
@@ -574,10 +613,17 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, motorDirectionLabel, dirOpts, ui.config.motor_direction, function(val)
       ui.config.motor_direction = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_flrtr_motor_direction", "Sets which way the motor turns."),
+      helpTitle = motorDirectionLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_starting_torque", "Starting Torque"), {
+      helpText = pageText(i18n, "help_esc_flrtr_starting_torque", "Lower this if the tail kicks as the motor spools up."),
+      helpTitle = pageText(i18n, "esc_starting_torque", "Starting Torque"),
+      onHelp = getInlineHelpHandler(),
       min = 1, max = 15, step = 1,
       get = function() return ui.config.starting_torque end,
       set = function(val)
@@ -588,6 +634,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_response_speed", "Response Speed"), {
+      helpText = pageText(i18n, "help_esc_flrtr_response_speed", "Sets how directly the ESC follows the throttle."),
+      helpTitle = pageText(i18n, "esc_response_speed", "Response Speed"),
+      onHelp = getInlineHelpHandler(),
       min = 1, max = 15, step = 1,
       get = function() return ui.config.response_speed end,
       set = function(val)
@@ -598,6 +647,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_buzzer_volume", "Buzzer Volume"), {
+      helpText = pageText(i18n, "help_esc_flrtr_buzzer_volume", "Sets how loudly the ESC beeps."),
+      helpTitle = pageText(i18n, "esc_buzzer_volume", "Buzzer Volume"),
+      onHelp = getInlineHelpHandler(),
       min = 1, max = 5, step = 1,
       get = function() return ui.config.buzzer_volume end,
       set = function(val)
@@ -608,6 +660,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_current_gain", "Current Gain"), {
+      helpText = pageText(i18n, "help_esc_flrtr_current_gain", "Corrects the ESC's current reading."),
+      helpTitle = pageText(i18n, "esc_current_gain", "Current Gain"),
+      onHelp = getInlineHelpHandler(),
       min = 0, max = 40, step = 1,
       display = function(val) return tostring(val - 20) end,
       get = function() return ui.config.current_gain end,
@@ -627,12 +682,19 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, fanControlLabel, fanOpts, ui.config.fan_control, function(val)
       ui.config.fan_control = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_flrtr_fan_control", "Runs the cooling fan by temperature, or keeps it always on or off."),
+      helpTitle = fanControlLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
   elseif ui.currentSection == 2 then
     -- Advanced Settings
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_auto_restart_time", "Auto Restart Time"), {
+      helpText = pageText(i18n, "help_esc_flrtr_auto_restart_time", "Time after a throttle cut during which the ESC can restart the motor quickly (bailout)."),
+      helpTitle = pageText(i18n, "esc_auto_restart_time", "Auto Restart Time"),
+      onHelp = getInlineHelpHandler(),
       min = 0, max = 100, step = 1, suffix = "s",
       get = function() return ui.config.auto_restart_time end,
       set = function(val)
@@ -643,6 +705,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_restart_acc", "Restart Acc"), {
+      helpText = pageText(i18n, "help_esc_flrtr_restart_acc", "Sets how fast the motor spools back up during a bailout restart."),
+      helpTitle = pageText(i18n, "esc_restart_acc", "Restart Acc"),
+      onHelp = getInlineHelpHandler(),
       min = 1, max = 10, step = 1,
       get = function() return ui.config.restart_acc end,
       set = function(val)
@@ -663,10 +728,17 @@ function M.build(ctx)
     rowH = Controls.appendComboSelect(children, x, cursorY, w, modeLabel, modeOpts, ui.config.esc_mode, function(val)
       ui.config.esc_mode = val
       markDirty()
-    end)
+    end, {
+      helpText = pageText(i18n, "help_esc_flrtr_mode", "Selects ESC Gov for the ESC's governor, RF Gov for Rotorflight's governor, or Linear Throttle."),
+      helpTitle = modeLabel,
+      onHelp = getInlineHelpHandler()
+    })
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_soft_start", "Soft Start"), {
+      helpText = pageText(i18n, "help_esc_flrtr_soft_start", "Time the ESC takes to spool the motor up."),
+      helpTitle = pageText(i18n, "esc_soft_start", "Soft Start"),
+      onHelp = getInlineHelpHandler(),
       min = 5, max = 55, step = 1, suffix = "s",
       get = function() return ui.config.soft_start end,
       set = function(val)
@@ -677,6 +749,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_governor_p", "Governor P"), {
+      helpText = pageText(i18n, "help_esc_flrtr_governor_p", "Sets the ESC governor's P gain; it acts only in ESC Gov mode."),
+      helpTitle = pageText(i18n, "esc_governor_p", "Governor P"),
+      onHelp = getInlineHelpHandler(),
       min = 0, max = 100, step = 1,
       get = function() return ui.config.gov_p end,
       set = function(val)
@@ -687,6 +762,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_governor_i", "Governor I"), {
+      helpText = pageText(i18n, "help_esc_flrtr_governor_i", "Sets the ESC governor's I gain; it acts only in ESC Gov mode."),
+      helpTitle = pageText(i18n, "esc_governor_i", "Governor I"),
+      onHelp = getInlineHelpHandler(),
       min = 0, max = 100, step = 1,
       get = function() return ui.config.gov_i end,
       set = function(val)

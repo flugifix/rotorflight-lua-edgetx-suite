@@ -8,7 +8,7 @@ sidebar_position: 90
 
 Reads the parameter block out of a YGE ESC and writes it back, so the ESC can be set up from
 the radio instead of from a computer. The page opens on the ESC's own model name, firmware and
-version, and offers its settings in three groups.
+serial number (shown as S/N with plain digits), and offers its settings in three groups.
 
 ## Where to find it
 
@@ -18,6 +18,8 @@ Lit only while the flight controller reports the OpenYGE ESC telemetry protocol.
 while the model is armed.
 
 ## Settings
+
+Each setting has its own `?` for a short explanation.
 
 | Setting | What it does |
 | --- | --- |
@@ -73,6 +75,8 @@ while the model is armed.
   page does not set: it sets four of them -- *Direction*, *F3C Auto*, *Keep mAh*, and the 12 V
   BEC flag, which follows *BEC Voltage* reaching 12.0 V -- and writes the rest back as the ESC
   reported them.
+- After a save the page reads the ESC again on its own, and a further save is not
+  accepted until that read has come back.
 - *Motor Timing* is stored in the ESC in an encoding of its own, which is not the order the
   list is drawn in: the automatic modes and the fixed angles are separate ranges, and the ESC
   defines no value between them. The page translates in both directions, so what the row reads

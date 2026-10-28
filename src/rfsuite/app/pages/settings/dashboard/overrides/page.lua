@@ -107,8 +107,9 @@ local function formatValue(i18n, value)
     return t(i18n, "value_off", "Off")
   end
   if type(value) == "number" then
-    if value == math.floor(value) then
-      return string.format("%d", value)
+    -- Compare floats: the radio's Lua floors floats in mixed integer/float equality.
+    if value == math.floor(value) + 0.0 then
+      return string.format("%d", math.floor(value))
     end
     -- Two decimals without the trailing zeros: 18.5 rather than 18.50.
     local text = string.gsub(string.format("%.2f", value), "%.?0+$", "")
@@ -154,6 +155,7 @@ local function saveModel(i18n)
     ui.notice = t(i18n, "save_error_message", "Save failed") .. ": " .. Common.saveFailureReason(i18n, err, true)
   end
   ui.runtime.markDirty()
+  return ok
 end
 
 -- Removes one override, or all of them with `key` nil, and saves. A model whose switch was only
@@ -167,11 +169,30 @@ local function resetOverrides(i18n, key)
   end
   local modelPrefs = getSession().modelPreferences
   local modelDashboard = modelPrefs.dashboard
-  if type(modelDashboard) == "table" and modelDashboard.overrides == nil then
-    modelDashboard.overrides = DashboardLib.modelOverridesOn(modelDashboard)
+  -- Keep the removed values so a failed write leaves the session's model table unchanged.
+  local modelPrevious = {}
+  local overridesInferred = type(modelDashboard) == "table" and modelDashboard.overrides == nil
+  if type(modelDashboard) == "table" then
+    if key ~= nil then
+      modelPrevious[key] = modelDashboard[key]
+    else
+      for k, value in pairs(modelDashboard) do
+        if type(k) == "string" and string.sub(k, 1, 4) == "cfg_" then
+          modelPrevious[k] = value
+        end
+      end
+    end
+    if overridesInferred then
+      modelDashboard.overrides = DashboardLib.modelOverridesOn(modelDashboard)
+    end
   end
   DashboardLib.clearModelOverride(modelPrefs, key)
-  saveModel(i18n)
+  if not saveModel(i18n) and type(modelDashboard) == "table" then
+    for k, value in pairs(modelPrevious) do
+      modelDashboard[k] = value
+    end
+    if overridesInferred then modelDashboard.overrides = nil end
+  end
 end
 
 local function offerResetAll(i18n)

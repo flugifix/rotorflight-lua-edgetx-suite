@@ -21,6 +21,8 @@ Read-only while the model is armed.
 The line at the top shows how many of the 42 slots have a function (*Active ranges*), whether
 there are unsaved changes, and the *Current Output* the selected slot produces from the channels as they
 stand now (`-` while its enable channel is outside its range; a `*` marks an output that is live).
+Where the line is too narrow for all three, *Unsaved changes* moves to a second line and the
+settings below move down to make room.
 
 | Setting | What it does |
 | --- | --- |

@@ -846,7 +846,7 @@ end
 -- Answers { build, builds, worst, total, passes, served, empty } for a page that was priced, and
 -- { skipped = reason } for one that cannot be opened in this world. A page that should have opened
 -- and did not is an error, never a skip.
-local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
+local function openToolPageActual(theme, menuId, pagePath, pad, counted, fault, escPage)
   World.reset()
   Stubs.installTool()
   -- A link that never delivers what the flight controller answers, as a link left over from an
@@ -948,6 +948,14 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
     state.preferences.dashboard = state.preferences.dashboard or {}
     state.preferences.dashboard.standby_layout = "clock+date+tx_battery+model/"
       .. "timer1+timer2+timer3+uptime/tx_battery+model+timer1+timer2"
+  elseif pagePath == "settings/dashboard/overrides/page.lua" then
+    -- One model setting differs from the radio's standard, so the overview draws its list.
+    -- These tables belong to this world: World.reset replaces the session and module loader,
+    -- and the next ui/home.lua creates its own state and preferences, even after a failed open.
+    -- The card survives that reset; opening this page does not save these seeded values.
+    state.preferences.dashboard.model_overrides = true
+    state.preferences.dashboard.cfg_system_default_link_colors = false
+    session.modelPreferences.dashboard = { overrides = true, cfg_system_default_link_colors = true }
   end
 
   local function settled(want)
@@ -971,6 +979,14 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
   end
 
   local presses, opens = pathTo(state.manifest, menuId)
+  if presses == nil and pagePath == "settings/dashboard/overrides/page.lua" then
+    -- Entering Settings builds its dynamic tiles; the model's overview is the first one.
+    presses, opens = pathTo(state.manifest, "settings_dashboard_settings_menu")
+    if presses ~= nil then
+      presses[#presses + 1] = "dashboard_overrides"
+      opens[#opens + 1] = menuId
+    end
+  end
   if presses == nil then
     removeDeferredLink()
     return { skipped = "no menu leads to it" }
@@ -1003,9 +1019,24 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
   local unanswered = {}
   for cmd, n in pairs(FC.unanswered) do unanswered[cmd] = n end
   local worst, total, passes, quiet = 0, 0, 0, 0
+  local noticeAccepted = not escPage
   for i = 1, PAGE_PASSES do
     local before = builds.count
     local n = pass(counted)
+    -- The ESC settings are behind a safety notice. Press its real button so the row
+    -- includes the settings build rather than pricing only the notice.
+    if not noticeAccepted and builds.count > 0 then
+      local tree = Stubs.lvgl.trees[#Stubs.lvgl.trees]
+      local children = tree and tree[1] and tree[1].children or {}
+      for _, node in ipairs(children) do
+        if node.type == "button" and node.text == "OK" and type(node.press) == "function" then
+          node.press()
+          noticeAccepted = true
+          break
+        end
+      end
+      if not noticeAccepted then error("accounting: ESC safety notice has no acknowledgement button") end
+    end
     passes = i
     total = total + n
     if n > worst then worst = n end
@@ -1048,6 +1079,39 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
     build = builds.worst, builds = builds.count, worst = worst, total = total, passes = passes,
     served = served, empty = empty,
   }
+end
+
+local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
+  local protocol, apiName
+  if pagePath == "setup/esc_motors/esc_tools/escmfg/flrtr/page.lua" then
+    protocol, apiName = 10, "esc_parameters_flyrotor"
+  elseif pagePath == "setup/esc_motors/esc_tools/escmfg/yge/page.lua" then
+    protocol, apiName = 9, "esc_parameters_yge"
+  else
+    return openToolPageActual(theme, menuId, pagePath, pad, counted, fault)
+  end
+
+  -- The command is shared by ESC families, so its default reply is not this page's.
+  local sensorApi = assert(loadfile(API_DIR .. "/esc_sensor_config.lua"))()
+  local escApi = assert(loadfile(API_DIR .. "/" .. apiName .. ".lua"))()
+  local replies, cardRoot = FC.replies, Stubs.cardRoot
+  FC.replies = {}
+  for command, reply in pairs(replies) do FC.replies[command] = reply end
+  local sensorReply = { table.unpack(sensorApi.simulatorResponse) }
+  sensorReply[1] = protocol
+  FC.replies[sensorApi.command] = sensorReply
+  FC.replies[escApi.command] = escApi.simulatorResponse
+
+  -- A YGE read remembers its current limit in the model's preference file. Give these
+  -- worlds their own card so a later page cannot inherit that saved limit or origin.
+  Stubs.cardRoot = cardRoot .. "/esc-page"
+  local ok, page = pcall(openToolPageActual, theme, menuId, pagePath, pad, counted, fault, true)
+  -- Restore the shared replies and card even when opening the page fails.
+  FC.replies = replies
+  Stubs.releaseCard()
+  Stubs.cardRoot = cardRoot
+  if not ok then error(page, 0) end
+  return page
 end
 
 -- ---------------------------------------------------------------------------

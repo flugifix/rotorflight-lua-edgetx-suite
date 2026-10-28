@@ -117,7 +117,7 @@ $sourceRoot = Join-Path $workspaceRoot 'src'
 $sourceCore = Join-Path $sourceRoot 'rfsuite'
 $sourceAudioRoot = Join-Path $sourceCore 'audio'
 $sourceToolEntrypoint = Join-Path $sourceRoot 'main.lua'
-$sourceWidgetRoot = Join-Path $sourceRoot 'widgets\rfsuite'
+$sourceWidgetsRoot = Join-Path $sourceRoot 'widgets'
 $sourceFunctionRoot = Join-Path $sourceRoot 'functions'
 
 function Test-LikelyRadioRoot {
@@ -204,7 +204,6 @@ $soundsRoot = Join-Path $TargetRoot 'SOUNDS'
 $targetCore = Join-Path $toolsRoot 'rfsuite-core'
 $targetToolEntrypoint = Join-Path $toolsRoot 'rfsuite.lua'
 $targetUserRoot = Join-Path $toolsRoot 'rfsuite.user'
-$targetWidgetRoot = Join-Path $widgetsRoot 'rfsuite'
 $targetFunctionRoot = Join-Path $TargetRoot 'SCRIPTS\FUNCTIONS'
 $targetSoundsRoot = Join-Path $soundsRoot 'rf'
 
@@ -222,8 +221,8 @@ if (-not (Test-Path $sourceToolEntrypoint)) {
     throw "Tool entrypoint not found: $sourceToolEntrypoint"
 }
 
-if (-not (Test-Path $sourceWidgetRoot)) {
-    throw "Widget source folder not found: $sourceWidgetRoot"
+if (-not (Test-Path $sourceWidgetsRoot)) {
+    throw "Widget source folder not found: $sourceWidgetsRoot"
 }
 
 if (-not (Test-Path $sourceAudioRoot)) {
@@ -364,12 +363,17 @@ function Copy-LanguageAudioPack {
     }
 }
 
-if (Test-Path $targetWidgetRoot) {
-    Remove-Item -Path $targetWidgetRoot -Recurse -Force
+$targetWidgetRoots = @()
+foreach ($widget in (Get-ChildItem -Path $sourceWidgetsRoot -Directory -Force | Sort-Object -Property Name)) {
+    $targetWidgetRoot = Join-Path $widgetsRoot $widget.Name
+    if (Test-Path $targetWidgetRoot) {
+        Remove-Item -Path $targetWidgetRoot -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $targetWidgetRoot -Force | Out-Null
+    Copy-Item -Path (Join-Path $widget.FullName '*') -Destination $targetWidgetRoot -Recurse -Force
+    Get-ChildItem -Path $targetWidgetRoot -Filter '*.luac' -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    $targetWidgetRoots += $targetWidgetRoot
 }
-New-Item -ItemType Directory -Path $targetWidgetRoot -Force | Out-Null
-Copy-Item -Path (Join-Path $sourceWidgetRoot '*') -Destination $targetWidgetRoot -Recurse -Force
-Get-ChildItem -Path $targetWidgetRoot -Filter '*.luac' -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
 # Special-function scripts. EdgeTX offers every lua file directly under SCRIPTS\FUNCTIONS to a
 # "Play Script" special function, so the folder is flat -- and it is not emptied first, because
@@ -431,16 +435,20 @@ if (-not $pythonCmd) { throw "No working Python found (the Microsoft Store alias
 
 & $pythonCmd (Join-Path $workspaceRoot '.vscode\scripts\precompile_i18n.py') --root $toolsRoot
 if ($LASTEXITCODE -ne 0) { throw "precompile_i18n failed on $toolsRoot (exit $LASTEXITCODE); the demo was not deployed." }
-& $pythonCmd (Join-Path $workspaceRoot '.vscode\scripts\precompile_i18n.py') --root $targetWidgetRoot
-if ($LASTEXITCODE -ne 0) { throw "precompile_i18n failed on $targetWidgetRoot (exit $LASTEXITCODE); the demo was not deployed." }
+foreach ($targetWidgetRoot in $targetWidgetRoots) {
+    & $pythonCmd (Join-Path $workspaceRoot '.vscode\scripts\precompile_i18n.py') --root $targetWidgetRoot
+    if ($LASTEXITCODE -ne 0) { throw "precompile_i18n failed on $targetWidgetRoot (exit $LASTEXITCODE); the demo was not deployed." }
+}
 
 # The resolver exits non-zero on an unresolved key or a file it could not write, so
 # its verdict has to be read here. Ignoring it is how a demo reaches a radio with
 # every marker still standing while the script says it deployed.
 & $pythonCmd (Join-Path $workspaceRoot '.vscode\scripts\resolve_i18n_tags.py') --json (Join-Path $sourceCore "i18n\$Language.lua") --root $toolsRoot
 if ($LASTEXITCODE -ne 0) { throw "resolve_i18n_tags failed on $toolsRoot (exit $LASTEXITCODE); the demo was not deployed." }
-& $pythonCmd (Join-Path $workspaceRoot '.vscode\scripts\resolve_i18n_tags.py') --json (Join-Path $sourceCore "i18n\$Language.lua") --root $targetWidgetRoot
-if ($LASTEXITCODE -ne 0) { throw "resolve_i18n_tags failed on $targetWidgetRoot (exit $LASTEXITCODE); the demo was not deployed." }
+foreach ($targetWidgetRoot in $targetWidgetRoots) {
+    & $pythonCmd (Join-Path $workspaceRoot '.vscode\scripts\resolve_i18n_tags.py') --json (Join-Path $sourceCore "i18n\$Language.lua") --root $targetWidgetRoot
+    if ($LASTEXITCODE -ne 0) { throw "resolve_i18n_tags failed on $targetWidgetRoot (exit $LASTEXITCODE); the demo was not deployed." }
+}
 
 Write-Host "RFSuite demo deployed to:"
 Write-Host "  Target mode:     $Target"
@@ -449,5 +457,7 @@ Write-Host "  Language:        $Language ($languageSource)"
 Write-Host "  Tool entrypoint: $targetToolEntrypoint"
 Write-Host "  Core package:    $targetCore"
 Write-Host "  User data:       $targetUserRoot"
-Write-Host "  Widget package:  $targetWidgetRoot"
+foreach ($targetWidgetRoot in $targetWidgetRoots) {
+    Write-Host "  Widget package:  $targetWidgetRoot"
+}
 Write-Host "  Function scripts:$targetFunctionRoot"
