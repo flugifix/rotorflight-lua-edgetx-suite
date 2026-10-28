@@ -15,12 +15,11 @@ local Controls = nil
 local Common = nil
 local MspRuntime = nil
 local RcTuningApi = nil
+local SavePipeline = nil
 local LoadingOverlay = nil
 local Sensors = nil
 local Profile = nil
 local t = nil
-
-M.eepromWrite = true
 
 -- Every cell carries the limits of its own rate type, in the RAW units the MSP field uses.
 -- Two sources, because the two disagree and each is binding somewhere:
@@ -275,23 +274,27 @@ local function ensureDeps()
   if not Sensors then Sensors = loadModule("lib/sensors.lua") end
   if not Profile then Profile = loadModule("lib/profile.lua") end
   if not t then t = Common and Common.pageT("flight_tuning_rates") or nil end
-  if Common and not ui.runtimeBase then
-    ui.runtimeBase = Common.createProfileAwareRuntime({ profileType = "rate" })
+  if Common then
+    if not ui.runtimeBase then
+      ui.runtimeBase = Common.createProfileAwareRuntime({ profileType = "rate" })
+    end
     if type(ui.runtime) ~= "table" then
       ui.runtime = newRuntime()
     end
-    setmetatable(ui.runtime, { __index = ui.runtimeBase })
+    if getmetatable(ui.runtime) == nil then
+      setmetatable(ui.runtime, { __index = ui.runtimeBase })
+    end
   end
 end
 
-local function pageText(i18n, key)
+local function pageText(i18n, key, fallback)
   if t then
     local translated = t(i18n, key)
     if translated ~= nil and translated ~= "" and translated ~= key then
       return translated
     end
   end
-  return key
+  return fallback or key
 end
 
 local function getRcConfig(session)
@@ -481,14 +484,9 @@ local function ensureLoaded()
 end
 
 local function queueRcWrite(session)
-  if not RcTuningApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not RcTuningApi then
     return false, "msp_runtime_unavailable"
-  end
-
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
   end
 
   local rcConfig = getRcConfig(session)
@@ -496,16 +494,28 @@ local function queueRcWrite(session)
     return false, "rc_config_unavailable"
   end
 
-  queue:add({
-    command = RcTuningApi.writeCommand,
-    payload = RcTuningApi.buildWritePayload(rcConfig),
-    timeout = 5.0,
-    isWrite = true,
-    processReply = function() end,
-    errorHandler = function() end
+  return SavePipeline.start({
+    pageId = "flight_tuning_rates",
+    steps = {
+      {
+        label = "MSP_SET_RC_TUNING",
+        command = RcTuningApi.writeCommand,
+        payload = RcTuningApi.buildWritePayload(rcConfig)
+      }
+    },
+    reboot = false,
+    onSaved = function()
+      -- Cleared only here: the pipeline calls onSaved once the flight controller has acknowledged the write and the EEPROM commit.
+      ui.dirty = false
+    end,
+    onDone = function(result)
+      if not ui.runtime then return end
+      if result.saved then queueRcRead(true) end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
   })
-
-  return true, nil
 end
 
 local function applyConfigToSession(session)
@@ -740,6 +750,7 @@ function M.getHeaderActions()
 end
 
 function M.onReload(ctx)
+  if SavePipeline and SavePipeline.isActive() then return end
   local session = getSession()
   if session then
     loadFromSession()
@@ -762,24 +773,21 @@ end
 
 function M.onSave(ctx)
   if not M.canSave() then return false, "loaded_data_missing" end
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if SavePipeline and SavePipeline.isActive() then return false end
   local session = getSession()
   if session then
     applyConfigToSession(session)
-    queueRcWrite(session)
-    ui.dirty = false
-    
-    local mspState = MspRuntime and type(MspRuntime.getState) == "function" and MspRuntime.getState()
-    if mspState and mspState.queue then
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        mspState.queue:add({
-          command = eepromApi.command,
-          payload = {},
-          isWrite = true,
-          processReply = function() end
-        })
-      end
+  end
+  local ok, err = queueRcWrite(session)
+  if not ok then
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
+        title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
+        message = tostring(err or "MSP write failed")
+      })
     end
+    return false
   end
   return true
 end
@@ -899,6 +907,24 @@ function M.closePage()
     -- We could implement auto-save here, but Ethos typically uses confirmation dialogs.
   end
   ui.loaded = false
+end
+
+function M.onClose()
+  if Common and type(Common.resetPageState) == "function" then
+    Common.resetPageState(ui, {
+      resetLoaded = true,
+      resetDirty = true
+    })
+  end
+  Controls = nil
+  Common = nil
+  MspRuntime = nil
+  RcTuningApi = nil
+  SavePipeline = nil
+  LoadingOverlay = nil
+  Sensors = nil
+  Profile = nil
+  t = nil
 end
 
 -- Asked before the page is left (ui/home.lua): true while an edit here is not saved.

@@ -449,13 +449,14 @@ return {
         profile_reloading = "Switch detected. Reloading profile...",
       },
       flight_tuning_rates = {
+        save_error_title = "Error",
         title = "Rates",
         rates_type = "Rates Type",
         rate_table = "Rate Table",
         msg_reset_to_defaults = "Rate type changed. Values will be reset to defaults.",
         warning_title = "Warning",
-        table_help_p1 = "Rates type: Choose the rate type you prefer flying with. Raceflight and Actual are the most straightforward.",
-        table_help_p2 = "Dynamics: Applied regardless of rates type. Typically left on defaults but can be adjusted to smooth heli movements, like with scale helis.",
+        table_help_p1 = "Select the rate system for the active rate profile.",
+        table_help_p2 = "Selects the rate curve; saving a changed type resets its values to defaults after confirmation.",
         roll = "Roll",
         pitch = "Pitch",
         yaw = "Yaw",
@@ -556,6 +557,7 @@ return {
         help_message = "Fly in rate mode; read each axis, apply once, then fly again.\n#n (heading): the rate profile the advice is for.\nAxis: Roll, Pitch or Yaw; all lines are for this axis.\nFlight data: rate flight measured and whether collecting now.\nResponse: heli turn rate compared with the stick.\nStops: bounce-back after centring the stick.\nSuggested changes: what to change, by page and setting.\nWhy: reason for each change.\n*: clears collected data after asking.\nSave (header): writes suggested changes for this axis after you confirm."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
+        save_error_title = "Error",
         title = "Cyclic Behaviour",
         cyclic_polarity = "Polar coordinates",
         cyclic_ring = "Cyclic ring",
@@ -563,10 +565,13 @@ return {
         loading_title = "Loading",
         loading_message = "Reading Cyclic Behaviour",
         help_title = "Cyclic Behaviour",
-        help_p1 = "Polar coordinates: Defines cyclic rates using polar (magnitude and angle) coordinates instead of independent Roll and Pitch rates.",
-        help_p2 = "Cyclic ring: Limits the total cyclic stick deflection to a circular shape, preventing excessive combined roll and pitch deflection."
+        help_intro = "Set how combined roll and pitch stick inputs are processed in the active rate profile.",
+        help_p1 = "Applies cyclic rates to the combined direction and magnitude instead of each axis separately.",
+        help_p2 = "Limits combined roll and pitch input to a circular range to prevent excessive diagonal rates.",
+        help_p3 = "At 100% the limit is circular; higher values allow more diagonal input."
       },
       flight_tuning_rates_advanced_advanced = {
+        save_error_title = "Error",
         title = "Dynamics",
         response_time = "Response Time",
         acc_limit = "Accelerometer Limit",
@@ -582,10 +587,13 @@ return {
         loading_title = "Loading",
         loading_message = "Reading Dynamics",
         help_title = "Dynamics Help",
-        help_p1 = "Response Time: Defines how quickly the control system responds to stick inputs on each axis.",
-        help_p2 = "Accelerometer Limit: Limits the maximum acceleration allowed to smooth cyclic and yaw movements.",
-        help_p3 = "Setpoint Boost: Boosts the setpoint temporarily when moving the sticks quickly to enhance stick feel. Gain sets the boost strength, and Cutoff sets the frequency range limit.",
-        help_p4 = "Dynamic Deadband: Automatically filters stick noise or minor movements around the center stick on the Yaw axis. Ceiling gain, Deadband gain, and Deadband filter control this feature."
+        help_p1 = "Response Time: Larger values smooth stick inputs more strongly.",
+        help_p2 = "Accelerometer Limit: Limits acceleration on each axis.",
+        help_p3 = "Setpoint boost gain: Boosts stick inputs for a snappier response.",
+        help_p4 = "Setpoint boost cutoff: Higher values make the boost decay faster.",
+        help_ceiling = "Dynamic ceiling gain: Reduces stick travel to maximum yaw setpoint during rapid outward input.",
+        help_deadband = "Dynamic deadband gain: Increases yaw deadband during rapid return to center.",
+        help_deadband_filter = "Dynamic deadband filter: Sets the dynamic yaw deadband filter frequency."
       },
       flight_tuning_advanced_rescue = {
         title = "Rescue",

@@ -448,6 +448,9 @@ jobs:
 
   flight-tuning-rescue-filters-saves:
     name: Flight Tuning saves (Rescue, Filters)
+
+  flight-tuning-rates-saves:
+    name: Flight Tuning saves (Rates)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -479,3 +482,4 @@ jobs:
       - run: lua5.3 bin/msp/verify_msp_armed_state.lua
       - run: lua5.3 bin/flight_tuning/verify_save_pids_governor_pages.lua
       - run: lua5.3 bin/flight_tuning/verify_save_rescue_filters_pages.lua
+      - run: lua5.3 bin/flight_tuning/verify_save_rates_pages.lua

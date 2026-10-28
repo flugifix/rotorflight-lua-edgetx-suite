@@ -387,6 +387,11 @@ marked clean only once the flight controller has stored the values; a refused wr
 gets no reply is reported. Save pressed while their save is still running is ignored. After a
 successful save, each page reads its values back from the flight controller if it is still open;
 otherwise its next visit reads them.
+Rates and the Table, Dynamics and Cyclic Behaviour pages under Rates (Advanced) send their save
+through the tool's shared save: each writes the active rate profile, then one EEPROM write. The
+page is marked clean only once the flight controller has stored the values; a refused write or
+one that receives no reply is shown as a failed save. A Save pressed while the save is still
+running is ignored. After a successful save, each page reads the values back if it is still open.
 
 ## ESC Configurator pages
 

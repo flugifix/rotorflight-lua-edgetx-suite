@@ -19,6 +19,7 @@ an in-app help text behind the `?` in the header starts its file from that text;
 start from the page source.
 **Status:** 97 reachable pages, 56 written. 81 of them carry an in-app help text behind the
 **Status:** 97 reachable pages, 42 written. 81 of them carry an in-app help text behind the
+**Status:** 97 reachable pages, 43 written. 81 of them carry an in-app help text behind the
 `?` in the header, which is the text to start a page file from; the others start from the
 page source.
 
@@ -52,6 +53,10 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Advanced → Rates (Advanced) → Advanced | `flight_tuning/advanced/rates_advanced/advanced.md` | yes | read-only while armed | to write |
 | Advanced → Rates (Advanced) → Cyclic Behaviour | `flight_tuning/advanced/rates_advanced/cyclic_behaviour.md` | yes | read-only while armed | to write |
 | Advanced → Rates (Advanced) → Rate Table | `flight_tuning/advanced/rates_advanced/table.md` | yes | read-only while armed | to write |
+| Advanced → Rescue | `flight_tuning/advanced/rescue.md` | yes | read-only while armed | to write |
+| Advanced → Rates (Advanced) → Advanced | [flight_tuning/advanced/rates_advanced/advanced.md](flight_tuning/advanced/rates_advanced/advanced.md) | yes | read-only while armed | written |
+| Advanced → Rates (Advanced) → Cyclic Behaviour | [flight_tuning/advanced/rates_advanced/cyclic_behaviour.md](flight_tuning/advanced/rates_advanced/cyclic_behaviour.md) | yes | read-only while armed | written |
+| Advanced → Rates (Advanced) → Rate Table | [flight_tuning/advanced/rates_advanced/table.md](flight_tuning/advanced/rates_advanced/table.md) | yes | read-only while armed | written |
 
 ## Configuration → Setup
 

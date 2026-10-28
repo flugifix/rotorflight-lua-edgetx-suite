@@ -449,13 +449,14 @@ return {
         profile_reloading = "Schalter erkannt. Lade Profil neu...",
       },
       flight_tuning_rates = {
+        save_error_title = "Fehler",
         title = "Drehraten",
         rates_type = "Drehraten-Type",
         rate_table = "Rate-Tabelle",
         msg_reset_to_defaults = "Rate-Typ geändert. Werte werden auf Standardwerte zurückgesetzt.",
         warning_title = "Warnung",
-        table_help_p1 = "Raten-Typ: Wählen Sie den Rate-Typ aus, mit dem Sie fliegen möchten. Raceflight und Actual sind die einfachsten.",
-        table_help_p2 = "Dynamik: Wird unabhängig vom Rate-Typ angewendet. Anpassen, um Heli-Bewegungen weicher zu machen, z. B. für Scale-Helis.",
+        table_help_p1 = "Wählt das Ratensystem für das aktive Ratenprofil.",
+        table_help_p2 = "Wählt die Ratenkurve; Speichern eines geänderten Typs setzt dessen Werte nach Bestätigung auf Standardwerte zurück.",
         roll = "Roll",
         pitch = "Nick",
         yaw = "Gier",
@@ -556,6 +557,7 @@ return {
         help_message = "Im Rate-Modus fliegen; jede Achse lesen, einmal ändern, erneut fliegen.\n#n oben: Raten-Profil, für das der Rat gilt.\nAchse: Roll, Nick oder Gier; alle Zeilen gelten für diese Achse.\nFlugdaten: gemessener Rate-Flug und ob gerade erfasst wird.\nAnsprechen: Helidrehrate im Vergleich zum Knüppel.\nStopps: Rückprall nach Zentrieren des Knüppels.\nVorgeschlagene Änderungen: nach Seite und Einstellung.\nWarum: Grund jeder Änderung.\n*: löscht gesammelte Daten nach Rückfrage.\nSpeichern (Kopfzeile): schreibt Vorschläge dieser Achse nach Bestätigung."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
+        save_error_title = "Fehler",
         title = "Zyklisches Verhalten",
         cyclic_polarity = "Polarkoordinaten",
         cyclic_ring = "Zyklik-Ring",
@@ -563,10 +565,13 @@ return {
         loading_title = "Laden",
         loading_message = "Lese zyklisches Verhalten",
         help_title = "Zyklisches Verhalten",
-        help_p1 = "Polarkoordinaten: Definiert zyklische Raten mithilfe von Polarkoordinaten (Größe und Winkel) anstelle von unabhängigen Roll- und Nick-Raten.",
-        help_p2 = "Zyklik-Ring: Begrenzt den gesamten zyklischen Knüppelausschlag auf eine Kreisform, um übermäßige kombinierte Roll- und Nick-Ausschläge zu verhindern."
+        help_intro = "Legt fest, wie kombinierte Roll- und Nick-Eingaben im aktiven Ratenprofil verarbeitet werden.",
+        help_p1 = "Wendet zyklische Raten auf die gemeinsame Richtung und Stärke statt auf jede Achse einzeln an.",
+        help_p2 = "Begrenzt kombinierte Roll- und Nick-Eingaben auf einen Kreisbereich, um überhöhte diagonale Raten zu verhindern.",
+        help_p3 = "Bei 100% ist die Grenze kreisförmig; höhere Werte erlauben mehr diagonalen Ausschlag."
       },
       flight_tuning_rates_advanced_advanced = {
+        save_error_title = "Fehler",
         title = "Dynamik",
         response_time = "Ansprechzeit",
         acc_limit = "Beschl. Limit",
@@ -582,10 +587,13 @@ return {
         loading_title = "Laden",
         loading_message = "Lese Dynamik",
         help_title = "Dynamik-Hilfe",
-        help_p1 = "Ansprechzeit: Definiert, wie schnell das Regelsystem auf Knüppeleingaben auf den jeweiligen Achsen reagiert.",
-        help_p2 = "Beschleunigungslimit: Begrenzt die maximal zulässige Beschleunigung, um zyklische und Gier-Bewegungen zu dämpfen.",
-        help_p3 = "Sollwert-Boost: Erhöht den Sollwert vorübergehend, wenn die Knüppel schnell bewegt werden, um das Steuergefühl zu verbessern. Verstärkung bestimmt die Stärke, Grenzfrequenz begrenzt den Frequenzbereich.",
-        help_p4 = "Dynamisches Totband: Filtert automatisch Knüppelrauschen oder geringfügige Bewegungen um die Knüppelmitte auf der Gier-Achse. Dynamische Maximalverstärkung, Totbandverstärkung und Totbandfilter steuern diese Funktion."
+        help_p1 = "Ansprechzeit: Größere Werte glätten Knüppeleingaben stärker.",
+        help_p2 = "Beschl. Limit: Begrenzt die Beschleunigung der jeweiligen Achse.",
+        help_p3 = "Sollwert-Boost Verst.: Verstärkt Knüppeleingaben für direkteres Ansprechen.",
+        help_p4 = "Sollwert-Boost Grenzf.: Höhere Werte lassen den Boost schneller abklingen.",
+        help_ceiling = "Dyn. Max. Verst.: Verkürzt bei schnellem Ausschlag den Weg zum maximalen Gier-Sollwert.",
+        help_deadband = "Dyn. Totband Verst.: Vergrößert das Gier-Totband bei schneller Rückkehr zur Mitte.",
+        help_deadband_filter = "Dyn. Totband Filter: Filterfrequenz des dynamischen Gier-Totbands."
       },
       flight_tuning_advanced_rescue = {
         title = "Rettung",
