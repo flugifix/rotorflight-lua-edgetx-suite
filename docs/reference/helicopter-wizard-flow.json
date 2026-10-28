@@ -47,7 +47,7 @@
     "src/rfsuite/app/pages/setup/power/battery/page.lua": "2638ce09dd191b4003982664ee48587da70625de9d8be2195033d3ab9c46f958",
     "src/rfsuite/app/pages/setup/power/smartfuel/page.lua": "74863d65af8394ac42d56081612dd190395ab0a4edb6a8af2a245f507edc3c95",
     "src/rfsuite/app/pages/setup/power/sources/page.lua": "6dde30b05c017650a36d5ae73524aaf4a4c72e92699aba616d43b16304b0b16c",
-    "src/rfsuite/i18n/en.lua": "2c74a0b3e24b5e866bd9f67e5d887dc2c1029ff5bb1ccfd25d3d8dcba844b0c0",
+    "src/rfsuite/i18n/en.lua": "043afe02c88d5d35b0ed5df9ada55761aedd3f417d9a67bfce8dfa08216718d8",
     "src/rfsuite/lib/esc_params.lua": "2a9f2fb0fd6f762ef396ed20da5a48081a5583687bb2803b870a34ca2635eeaf",
     "src/rfsuite/lib/governor_fields.lua": "2c7407a6d75e7b00de9002dbb4be49696a6a3468b2d76013e1998549a2932a3c",
     "src/rfsuite/lib/power_fields.lua": "2204f3bd87281732a784d9aacd45a432d91cd3ab99a7a649c5976192c345c41e",

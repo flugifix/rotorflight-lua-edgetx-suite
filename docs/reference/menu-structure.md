@@ -25,7 +25,7 @@ so it matches the code it was generated from.
   an entry (`id`, `title`, `menuId`, `icon`, `row`, `col`) are left out. What a condition
   does is not explained here.
 
-**141 entries, 119 of them open a page, 74 of those pages are documented.**
+**141 entries, 119 of them open a page, 76 of those pages are documented.**
 
 ## Configuration
 
@@ -34,10 +34,10 @@ Section `configuration`.
 | Menu path | Entry id | Menu id | Opens | Documentation | Conditions |
 | --- | --- | --- | --- | --- | --- |
 | Flight Tuning | `flight_tuning` | `flight_tuning_menu` | menu, 5 entries | &mdash; | `enabledWhen = "fblConnected"`, `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; PIDs | `pids` | `flight_tuning_pids_page` | `flight_tuning/pids` | **none** | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; PIDs | `pids` | `flight_tuning_pids_page` | `flight_tuning/pids` | [flight_tuning/pids.md](../pages/flight_tuning/pids.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Rates | `rates` | `flight_tuning_rates_page` | `flight_tuning/rates` | [flight_tuning/rates.md](../pages/flight_tuning/rates.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Tune Advisor | `tune_advisor` | `flight_tuning_tune_advisor_page` | `flight_tuning/tune_advisor` | [flight_tuning/tune_advisor.md](../pages/flight_tuning/tune_advisor.md) | `minApiVersion = { 12, 0, 10 }`, `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Governor | `governor` | `flight_tuning_governor_page` | `flight_tuning/governor` | **none** | `minApiVersion = { 12, 0, 9 }`, `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Governor | `governor` | `flight_tuning_governor_page` | `flight_tuning/governor` | [flight_tuning/governor.md](../pages/flight_tuning/governor.md) | `minApiVersion = { 12, 0, 9 }`, `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced | `advanced` | `flight_tuning_advanced_menu` | menu, 8 entries | &mdash; | `enabled = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; Filters | `filters` | `flight_tuning_advanced_filters_page` | `flight_tuning/advanced/filters` | **none** | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; PID Controller | `pid_controller` | `flight_tuning_advanced_pid_controller_page` | `flight_tuning/advanced/pid_controller` | [flight_tuning/advanced/pid_controller.md](../pages/flight_tuning/advanced/pid_controller.md) | `lockedWhileArmed = true` |
