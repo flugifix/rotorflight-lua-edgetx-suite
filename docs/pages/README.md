@@ -11,9 +11,10 @@ One file per page, at the path of the page under `src/rfsuite/app/pages/` with `
 appended: the page `setup/power/smartfuel/page.lua` is documented in
 `docs/pages/setup/power/smartfuel.md`. Menu entries that only open a submenu have no file.
 
-**Status:** 97 reachable pages, 40 written. 81 of them carry an in-app help text behind the
-`?` in the header, which is the text to start a page file from; the others start from the
-page source.
+**Status:** which pages are reachable, and which of them have a file here, is listed in the
+generated [menu structure](../reference/menu-structure.md), which CI keeps current. A page with
+an in-app help text behind the `?` in the header starts its file from that text; the others
+start from the page source.
 
 The help text opens as a page of its own, titled with the page it belongs to. EXIT returns to
 that page, and so does the X at the top right of the header on a touch screen. A text taller
