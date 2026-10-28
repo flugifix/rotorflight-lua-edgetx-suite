@@ -142,6 +142,24 @@ if sized then
   check(resized and resized.max_chars_lowres == sized.max_chars_lowres, "a resized box keeps its room")
 end
 
+-- A box that sizes its font to a width is sized for the value it now shows; its room is kept.
+local sized
+for _, box in ipairs(pre) do
+  if Fields.catalogue(box) and type(box.autosize_chars) == "number" then sized = box end
+end
+check(sized ~= nil, "Default has a reassignable box that sizes its font")
+if sized then
+  local key = Fields.settingKey("preflight", Fields.boxId(sized))
+  local wide = (sized.source == "voltage") and "current" or "voltage"
+  local resized
+  for _, box in ipairs(Fields.apply(pre, "preflight", { [key] = wide })) do
+    if Fields.settingKey("preflight", Fields.boxId(box)) == key then resized = box end
+  end
+  check(resized and resized.autosize_chars == Fields.entry(wide).chars and resized.autosize_chars > sized.autosize_chars,
+    "a resized box takes the width of its new value")
+  check(resized and resized.max_chars_lowres == sized.max_chars_lowres, "a resized box keeps its room")
+end
+
 local post = phaseBoxes("default", "postflight.lua")
 local statRow = Fields.rows(post, "postflight")[1]
 check(statRow ~= nil and statRow.list == Fields.STATS, "a statistics tile chooses from the statistics")
@@ -161,6 +179,7 @@ check(bound ~= declared and bound.mdl == "openTool", "a chosen key binds the hos
 check(bound.sys == "none", "Nothing is a binding of its own")
 check(Keys.themeBindings({ theme_key_mdl = "none" }, { mdl = "openTool" }).mdl == "none",
   "Nothing silences a key the manifest binds")
+check(bound.sys == nil, "Nothing binds nothing")
 check(bound.exit == "exitFullscreen", "the manifest's bindings remain")
 check(declared.mdl == nil, "the manifest's table is not written to")
 check(Keys.themeBindings({}, declared) == declared, "no choice leaves the manifest's table")
@@ -249,6 +268,47 @@ save(keysPage, prefs)
 check(prefs.dashboard[PREFIX .. "theme_key_mdl"] == "flight_log", "the Keys page stores the binding")
 cfg = DashboardLib.getThemeConfig(prefs, "system/default", {}, nil)
 check(Keys.themeBindings(cfg, nil).mdl == "openTool:tools_flight_log_page", "the stored binding binds its action")
+
+-- 4b. Every other box theme that declares the shared pages: each phase page lists exactly its
+--     phase's reassignable tiles, and its Keys page every key, through the theme's own configure
+--     module. A theme declaring the pages has to take the full screen as well.
+local MIGRATED = {}
+for _, folder in ipairs(BOX_THEMES) do
+  local init = assert(loadfile(THEMES .. folder .. "/init.lua"))()
+  if folder ~= "default" and type(init.pages) == "table" then MIGRATED[#MIGRATED + 1] = folder end
+end
+-- Every shipped box theme is on the shared pages now; one left behind would be listed here.
+check(#MIGRATED == #BOX_THEMES - 1, "every shipped box theme declares the shared pages (" .. #MIGRATED .. ")")
+for _, folder in ipairs(MIGRATED) do
+  for _, phase in ipairs(PHASES) do
+    local factory = assert(loadfile(THEMES .. folder .. "/configure.lua"))()
+    local module = factory({ theme = { path = "system/" .. folder,
+      configurePath = CORE .. "widgets/dashboard/themes/" .. folder .. "/configure.lua" }, page = { id = phase } })
+    combos = {}
+    module.build({ children = {}, x = 0, y = 0, w = 800, preferences = { dashboard = {} }, page = { id = phase } })
+    local expected = Fields.rows(phaseBoxes(folder, phase .. ".lua"), phase)
+    check(#combos == #expected, folder .. " " .. phase .. " page lists its " .. #expected .. " tiles (" .. #combos .. ")")
+    for i, combo in ipairs(combos) do
+      check(expected[i] and combo.selected == expected[i].default, folder .. " " .. phase .. " row " .. i .. " starts on the theme's value")
+    end
+  end
+  local factory = assert(loadfile(THEMES .. folder .. "/configure.lua"))()
+  local module = factory({ theme = { path = "system/" .. folder,
+    configurePath = CORE .. "widgets/dashboard/themes/" .. folder .. "/configure.lua" }, page = { id = "keys" } })
+  combos = {}
+  module.build({ children = {}, x = 0, y = 0, w = 800, preferences = { dashboard = {} }, page = { id = "keys" } })
+  check(#combos == #Keys.THEME_KEYS, folder .. " Keys page lists every key")
+  -- Look is the theme's own form, as before: it builds, and lists none of the shared rows.
+  factory = assert(loadfile(THEMES .. folder .. "/configure.lua"))()
+  module = factory({ theme = { path = "system/" .. folder,
+    configurePath = CORE .. "widgets/dashboard/themes/" .. folder .. "/configure.lua" }, page = { id = "look" } })
+  combos = {}
+  local built = pcall(module.build, { children = {}, x = 0, y = 0, w = 800, preferences = { dashboard = {} }, page = { id = "look" } })
+  check(built, folder .. " Look builds")
+  local init = assert(loadfile(THEMES .. folder .. "/init.lua"))()
+  check(init.fullscreen == "theme", folder .. " takes the full screen")
+  check(type(init.pages) == "table" and #init.pages == 5, folder .. " declares its five pages")
+end
 
 -- 5. Per-Model Settings describes such a setting as the pages show it, not by its stored name.
 local Common = {

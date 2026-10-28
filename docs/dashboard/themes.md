@@ -104,6 +104,10 @@ voltage gauge and a battery gauge above the governor state, the link quality, th
 the timer. After the flight: the lowest and highest voltage and current, and the highest
 temperature of the flight controller and of the ESC.
 
+Like Default, RF Status takes the full screen with the same layouts and the same controls, and
+its settings open the same five pages: **Look** (its voltage range), **Before flight**, **In
+flight**, **Statistics** and **Keys**, as described for [Default](#default).
+
 ![RF Status before, during and after the flight](../images/dashboard/themes/rfstatus.png)
 
 ### @AERC
@@ -117,6 +121,10 @@ the flight. After the flight, twelve numbers: flight time, highest power, capaci
 time, highest current, fuel left, flight count, highest ESC temperature, voltage, highest head
 speed, highest altitude and lowest link quality.
 
+Like Default, @AERC takes the full screen with the same layouts and the same controls, and
+its settings open the same five pages: **Look** (its head speed, BEC and ESC temperature ranges), **Before flight**, **In
+flight**, **Statistics** and **Keys**, as described for [Default](#default).
+
 ![@AERC before, during and after the flight](../images/dashboard/themes/aerc.png)
 
 ### @AERC Nitro
@@ -128,6 +136,10 @@ flight count and a vertical BEC voltage bar. In flight: the head speed and the t
 gauges either side of the flight time and the voltage bar. After the flight: flight time, lowest
 and highest head speed, voltage and lowest voltage, total time, flight count, highest throttle
 and highest altitude.
+
+Like Default, @AERC Nitro takes the full screen with the same layouts and the same controls, and
+its settings open the same five pages: **Look** (its head speed, BEC and ESC temperature ranges), **Before flight**, **In
+flight**, **Statistics** and **Keys**, as described for [Default](#default).
 
 ![@AERC Nitro during and after the flight](../images/dashboard/themes/aerc-n.png)
 
@@ -141,6 +153,10 @@ time. After the flight, twelve numbers: flight time, highest throttle, capacity 
 highest current, fuel left, highest head speed, highest ESC temperature, lowest voltage per cell,
 highest power, link quality and voltage.
 
+Like Default, @RT-RC takes the full screen with the same layouts and the same controls, and
+its settings open the same five pages: **Look** (its voltage range), **Before flight**, **In
+flight**, **Statistics** and **Keys**, as described for [Default](#default).
+
 ![@RT-RC before, during and after the flight](../images/dashboard/themes/rt-rc.png)
 
 ### @RT-RC Nitro
@@ -153,6 +169,10 @@ state, the link quality, the head speed and the flight time. After the flight: f
 lowest and highest link quality, voltage, total time, lowest voltage per cell, lowest and highest
 head speed and highest throttle.
 
+Like Default, @RT-RC Nitro takes the full screen with the same layouts and the same controls, and
+its settings open the same five pages: **Look** (its voltage range), **Before flight**, **In
+flight**, **Statistics** and **Keys**, as described for [Default](#default).
+
 ![@RT-RC Nitro during and after the flight](../images/dashboard/themes/rt-rc-n.png)
 
 ### @SRB-RC
@@ -163,6 +183,10 @@ current and the timer. In flight the craft name gives way to the governor state,
 in the same places. After the flight: flight time, highest current, capacity used, fuel left,
 highest ESC temperature, voltage at the end of the flight, flight count, lowest link quality and
 voltage per cell at the end of the flight (V/CELL).
+
+Like Default, @SRB-RC takes the full screen with the same layouts and the same controls, and
+its settings open the same five pages: **Look** (its BEC and ESC temperature warnings), **Before flight**, **In
+flight**, **Statistics** and **Keys**, as described for [Default](#default).
 
 ![@SRB-RC before, during and after the flight](../images/dashboard/themes/srb-rc.png)
 

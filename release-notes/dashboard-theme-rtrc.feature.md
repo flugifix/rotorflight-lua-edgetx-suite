@@ -1,0 +1,2 @@
+- **@RT-RC and @RT-RC Nitro themes in full screen, with tile choices and keys (`widgets/dashboard/themes/@rt-rc`, `widgets/dashboard/themes/@rt-rc-n`)**:
+  - Both take the full screen like Default, and their settings open Look, Before flight, In flight, Statistics and Keys: choose what each plain value tile shows and bind the full-screen keys.

@@ -59,7 +59,9 @@ page fits the screen. Themes that do not split show their settings directly.
 ### Shared phase and Keys pages
 
 Themes that declare boxes can offer shared **Before flight**, **In flight**, **Statistics**
-and **Keys** pages; Default is the first shipped theme to use them. Each phase page lists one
+and **Keys** pages; every shipped theme that declares boxes uses them -- Default, RF Status,
+@AERC, @AERC Nitro, @RT-RC, @RT-RC Nitro and @SRB-RC, each with its own settings on Look. Each
+phase page lists one
 dropdown per reassignable plain value tile, labelled with its own caption. Before flight and
 In flight choose live readings; Statistics chooses figures from the last flight. The choice
 starts on the theme's own value, and the caption, unit and decimals follow a different choice.

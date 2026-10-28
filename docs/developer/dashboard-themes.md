@@ -857,6 +857,8 @@ The theme continues to declare each box's original value. The dropdown starts on
 catalogue entry matching that source and, for stats, its stattype; recognised aliases match
 too. A box whose source is computed or absent from the catalogue gets no row: its choice would have
 to start on a value it does not show, so it keeps its declaration. Missing or unknown saved choices, and
+too. A computed source or a value absent from the catalogue has no initial selection and
+keeps its declaration until a valid choice is saved. Missing or unknown saved choices, and
 choices matching the original value, leave the box unchanged.
 
 At theme load, `applyFieldChoices` in `widgets/dashboard/runtime.lua` applies the resolved

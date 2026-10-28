@@ -70,6 +70,7 @@ M.THEME_OPTIONS = {
 -- The bindings such a theme's configuration holds, laid over its manifest's `keys`: a table in
 -- the shape `resolve` reads as declared keys, or `declared` itself where the pilot bound nothing.
 -- A stored Nothing is a binding too: it silences a key the manifest binds.
+-- "none" is no binding, as on the page it is the first choice of.
 function M.themeBindings(config, declared)
   if type(config) ~= "table" then return declared end
   local out = nil
@@ -77,6 +78,7 @@ function M.themeBindings(config, declared)
     local entry = M.THEME_KEYS[i]
     local action = ACTIONS[config[entry.pref]]
     if action ~= nil then
+    if action ~= nil and action ~= "none" then
       if out == nil then
         out = {}
         if type(declared) == "table" then

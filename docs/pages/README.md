@@ -1,15 +1,17 @@
 ---
-title: Pages
-sidebar_label: Pages
+title: Menu
+sidebar_label: Menu
 ---
 
-# Configuration pages
+# Menu
 
 For the shared Save action, read [Saving configuration](../reference/saving.md).
 
 One file per page, at the path of the page under `src/rfsuite/app/pages/` with `.md`
 appended: the page `setup/power/smartfuel/page.lua` is documented in
 `docs/pages/setup/power/smartfuel.md`. Menu entries that only open a submenu have no file.
+On the website these files are listed under *Menu*, in the menus, the order and the
+titles the tool shows; the folders here follow the page sources instead.
 
 **Status:** which pages are reachable, and which of them have a file here, is listed in the
 generated [menu structure](../reference/menu-structure.md), which CI keeps current. A page with
@@ -36,9 +38,9 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Governor | `flight_tuning/governor.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
 | Advanced → Filters | `flight_tuning/advanced/filters.md` | yes | read-only while armed | to write |
 | Advanced → PID Controller | [flight_tuning/advanced/pid_controller.md](flight_tuning/advanced/pid_controller.md) | yes | read-only while armed | written |
-| Advanced → PID Bandwidth | `flight_tuning/advanced/pid_bandwidth.md` | yes | read-only while armed | to write |
-| Advanced → Autolevel | `flight_tuning/advanced/autolevel.md` | yes | read-only while armed | to write |
-| Advanced → Main Rotor | `flight_tuning/advanced/main_rotor.md` | yes | read-only while armed | to write |
+| Advanced → PID Bandwidth | [flight_tuning/advanced/pid_bandwidth.md](flight_tuning/advanced/pid_bandwidth.md) | yes | read-only while armed | written |
+| Advanced → Autolevel | [flight_tuning/advanced/autolevel.md](flight_tuning/advanced/autolevel.md) | yes | read-only while armed | written |
+| Advanced → Main Rotor | [flight_tuning/advanced/main_rotor.md](flight_tuning/advanced/main_rotor.md) | yes | read-only while armed | written |
 | Advanced → Tail Rotor | [flight_tuning/advanced/tail_rotor.md](flight_tuning/advanced/tail_rotor.md) | yes | read-only while armed | written |
 | Advanced → Rescue | `flight_tuning/advanced/rescue.md` | yes | read-only while armed | to write |
 | Advanced → Rates (Advanced) → Advanced | `flight_tuning/advanced/rates_advanced/advanced.md` | yes | read-only while armed | to write |

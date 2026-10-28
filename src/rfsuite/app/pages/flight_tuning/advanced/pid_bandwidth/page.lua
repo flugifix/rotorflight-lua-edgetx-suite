@@ -15,6 +15,7 @@ local Controls = nil
 local Common = nil
 local MspRuntime = nil
 local PidProfileApi = nil
+local SavePipeline = nil
 local LoadingOverlay = nil
 local Sensors = nil
 local Profile = nil
@@ -157,14 +158,9 @@ local function queueRcRead(isAutoReload)
 end
 
 local function queueRcWrite()
-  if not PidProfileApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not PidProfileApi then
     return false, "msp_runtime_unavailable"
-  end
-
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
   end
 
   local session = getSession()
@@ -175,31 +171,28 @@ local function queueRcWrite()
     rcConfig[k] = v
   end
 
-  queue:add({
-    command = PidProfileApi.writeCommand,
-    payload = PidProfileApi.buildWritePayload(rcConfig),
-    isWrite = true,
-    processReply = function() 
+  return SavePipeline.start({
+    pageId = "flight_tuning_advanced_pid_bandwidth",
+    steps = {
+      {
+        label = "MSP_SET_PID_PROFILE",
+        command = PidProfileApi.writeCommand,
+        payload = PidProfileApi.buildWritePayload(rcConfig)
+      }
+    },
+    reboot = false,
+    onSaved = function()
+      -- Cleared only here: the pipeline calls onSaved once the flight controller has acknowledged the write and the EEPROM commit.
       ui.dirty = false
-      
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.command,
-          payload = {},
-          isWrite = true,
-          processReply = function()
-            queueRcRead(true)
-          end
-        })
-      else
-        queueRcRead(true)
-      end
     end,
-    errorHandler = function() end
+    onDone = function(result)
+      if not ui.runtime then return end
+      if result.saved then queueRcRead(true) end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
   })
-
-  return true, nil
 end
 
 local function getLiveProfile()
@@ -437,7 +430,18 @@ end
 
 function M.onSave(ctx)
   if not M.canSave() then return false, "loaded_data_missing" end
-  queueRcWrite()
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if SavePipeline and SavePipeline.isActive() then return false end
+  local ok, err = queueRcWrite()
+  if not ok then
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
+        title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
+        message = tostring(err or "MSP write failed")
+      })
+    end
+    return false
+  end
   return true
 end
 
@@ -472,6 +476,7 @@ function M.onClose()
   Common = nil
   MspRuntime = nil
   PidProfileApi = nil
+  SavePipeline = nil
   LoadingOverlay = nil
   Sensors = nil
   t = nil

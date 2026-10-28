@@ -641,6 +641,7 @@ return {
         help_p6 = "Heck-Drehmoment-Unterstützung: Für motorisierte Heckrotoren. Verstärkung und Begrenzung der Drehzahlerhöhung beim Gierausgleich durch das Hauptrotordrehmoment."
       },
       flight_tuning_advanced_main_rotor = {
+        save_error_title = "Fehler",
         title = "Hauptrotor",
         collective_pitch_comp = "Kol. Pitch-Kompensation",
         collective_pitch_comp_short = "Kol. Pitch-Komp.",
@@ -651,12 +652,13 @@ return {
         loading_title = "Laden",
         loading_message = "Lese Hauptrotoreinstellungen",
         help_title = "Hauptrotor-Hilfe",
-        help_p1 = "Kollektive Pitch-Kompensation: Erhöhen Sie diesen Wert, um das Kippmoment durch den Heckrotorzug beim Steigen auszugleichen.",
-        help_p2 = "Kreuzkopplungs-Verstärkung: Entfernt Roll-Kopplung, wenn nur Höhenruder (Elevator) angewendet wird.",
-        help_p3 = "Kreuzkopplungs-Verhältnis: Menge der angewandten Kompensation (Nick vs. Roll).",
-        help_p4 = "Kreuzkopplungs-Frequenzgrenze: Frequenzgrenze für die Kompensation – ein höherer Wert führt zu einer schnelleren Kompensationsreaktion."
+        help_p1 = "Kol. Pitch-Komp.: Gleicht das Aufnicken bei kollektiven Pitchstößen aus.",
+        help_p2 = "Zyklische Kreuzkopplung: Verstärkung der Kompensation, die Rollschwingungen bei reiner Nicksteuerung (Höhenruder) beseitigt.",
+        help_p3 = "Verhältnis: Bestimmt die Kompensation von Roll auf Nick relativ zu Nick auf Roll.",
+        help_p4 = "Grenzwert: Höhere Frequenzen lassen die Kreuzkopplungskompensation schneller wirken."
       },
       flight_tuning_advanced_autolevel = {
+        save_error_title = "Fehler",
         title = "Autolevel",
         acro_trainer = "Acro-Trainer",
         angle_mode = "Winkelmodus",
@@ -666,11 +668,14 @@ return {
         loading_title = "Laden",
         loading_message = "Lese Autolevel-Einstellungen",
         help_title = "Autolevel-Hilfe",
-        help_p1 = "Acro-Trainer: Rückstellkraft des Helikopters zurück zur Waagerechten im Acro-Trainer-Modus.",
-        help_p2 = "Winkelmodus: Rückstellkraft des Helikopters zurück zur Waagerechten im Winkelmodus.",
-        help_p3 = "Horizontmodus: Rückstellkraft des Helikopters zurück zur Waagerechten im Horizontmodus."
+        help_trainer_limit = "Acro-Trainer: Max begrenzt den Roll- und Nickwinkel ohne Selbstausrichtung.",
+        help_angle_limit = "Winkelmodus: Max begrenzt den Roll- und Nickwinkel.",
+        help_p1 = "Acro-Trainer: Verst. bestimmt, wie stark der Heli beim Überschreiten zur Winkelgrenze zurückkehrt.",
+        help_p2 = "Winkelmodus: Verst. bestimmt, wie stark sich der Heli waagerecht ausrichtet.",
+        help_p3 = "Horizontmodus: Verst. bestimmt, wie stark sich der Heli waagerecht ausrichtet."
       },
       flight_tuning_advanced_pid_bandwidth = {
+        save_error_title = "Fehler",
         title = "PID-Bandbreite",
         roll = "Roll",
         pitch = "Pitch",
@@ -683,9 +688,9 @@ return {
         saved_title = "Gespeichert",
         saved_message = "PID-Bandbreiteneinstellungen gespeichert",
         help_title = "PID-Bandbreiten-Hilfe",
-        help_p1 = "PID-Bandbreite: Gesamtbandbreite in Hz, die vom PID-Regler verwendet wird.",
-        help_p2 = "D-Term Grenzfrequenz: Grenzfrequenz des D-Terms in Hz.",
-        help_p3 = "B-Term Grenzfrequenz: Grenzfrequenz des B-Terms in Hz."
+        help_p1 = "PID-Bandbreite: Bestimmt die Gesamtbandbreite des PID-Reglers in Hz für Roll, Pitch und Yaw.",
+        help_p2 = "D-Term Grenzfrequenz: Bestimmt die Grenzfrequenz des D-Terms in Hz für Roll, Pitch und Yaw.",
+        help_p3 = "B-Term Grenzfrequenz: Bestimmt die Grenzfrequenz des Boosts in Hz für Roll, Pitch und Yaw."
       },
       flight_tuning_advanced_filters = {
         title = "Filter",
@@ -725,6 +730,7 @@ return {
         tbl_high = "Hoch"
       },
       flight_tuning_advanced_pid_controller = {
+        save_error_title = "Fehler",
         title = "PID-Regler",
         roll = "Roll",
         pitch = "Pitch",
@@ -746,13 +752,15 @@ return {
         saved_title = "Gespeichert",
         saved_message = "PID-Reglereinstellungen gespeichert",
         help_title = "PID-Regler-Hilfe",
-        help_p1 = "Fehlerrückgang am Boden: PID-Abfall zur Vermeidung eines Kippens des Helis am Boden.",
-        help_p2 = "Fehlergrenze: Winkelbegrenzung für den I-Term.",
-        help_p3 = "Offset-Grenze: Winkelbegrenzung für High Speed Integral (O-Term).",
-        help_p4 = "Fehlerrotation: Ermöglicht das Teilen von Fehlern zwischen allen Achsen.",
-        help_p5 = "I-Term-Entspannung: Begrenzung der I-Term-Akkumulation bei schnellen Bewegungen – hilft, das Nachschwingen nach schnellen Steuerbewegungen zu reduzieren. Sollte für große Helis niedriger und für kleine Helis höher sein. Am besten nur so weit reduzieren, wie es für den eigenen Flugstil erforderlich ist.",
+        help_inflight_decay = "Fehlerrückgang im Flug: Zeit bestimmt die Abbauzeit des zyklischen I-Terms und Grenze dessen maximale Abbaurate.",
+        help_cutoff = "Grenzpunkt: I-Term-Entspannungsfrequenz in Hz für R, P und Y; niedrige Werte mindern Nachschwingen nach Bewegungen, hohe erhöhen die Präzision schneller Drehungen.",
+        help_p1 = "Fehlerrückgang am Boden: Baut den angesammelten Fehler am Boden ab, um ein Umkippen zu vermeiden.",
+        help_p2 = "Fehlergrenze: Harte Grenze für den Winkelfehler und damit den I-Term für R, P und Y.",
+        help_p3 = "HSI-Offset-Grenze: Harte Grenze für den High Speed Integral-Offsetwinkel und damit den O-Term für R und P.",
+        help_p4 = "Fehlerrotation: Überträgt den angesammelten Fehler bei Pirouetten zwischen Roll und Nick.",
+        help_p5 = "I-Term-Entspannung: Wählt die Achsen, auf denen schnelle Bewegungen den Aufbau des I-Terms begrenzen.",
         help_stick_gain = "Knüppel-Fehlerrückgang: je weiter der Zyklik-Knüppel ausgelenkt ist, desto schneller baut sich der zyklische I-Term ab, am Boden und im Flug; 0 = aus.",
-        help_master_gain = "Master-Gain: Zyklisch skaliert P, I, D und Offset von Roll und Pitch gemeinsam, Yaw P, I und D des Hecks; die Verhältnisse bleiben. Feedforward, Boost und Precomp nicht.",
+        help_master_gain = "Master-Gain: Zyklisch skaliert P, I, D und Offset von Roll und Pitch gemeinsam, Yaw P, I und D des Hecks; die Verhältnisse bleiben, Feedforward, Boost und Precomp werden nicht skaliert.",
         tbl_off = "Aus",
         tbl_on = "Ein",
         tbl_rp = "RP",
@@ -3076,6 +3084,7 @@ return {
         theme_key = "Taste",
         theme_key_global = "(global)",
         theme_key_help = "Wähle die Aktion dieser Taste im Vollbild dieses Themes; eine unter Einstellungen > Dashboard > Tasten belegte Taste ist ausgegraut und wird dort eingestellt.",
+        theme_key_help = "Wähle die Aktion dieser Taste im Vollbild dieses Designs; eine unter Einstellungen > Dashboard > Tasten belegte Taste ist ausgegraut und wird dort eingestellt.",
         field_tile = "Kachel",
         field_help_live = "Wähle einen anderen Live-Wert für diese Kachel; Beschriftung, Einheit und Nachkommastellen folgen der Auswahl.",
         field_help_stats = "Wähle eine andere Kennzahl des letzten Flugs für diese Statistik-Kachel.",
