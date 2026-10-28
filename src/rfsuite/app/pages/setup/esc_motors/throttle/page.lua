@@ -415,7 +415,8 @@ function M.build(ctx)
     end,
     {
       helpText = pageText(i18n, "help_throttle_protocol",
-        "The protocol the flight controller drives the ESC with; DISABLED stops the motor output. CASTLE needs MSP API 12.08, SRXL2 12.10."),
+        "The protocol the flight controller drives the ESC with; DISABLED stops the motor output. CASTLE needs MSP API 12.08, SRXL2 12.10."
+      ),
       helpTitle = label,
       onHelp = onRowHelp
     }
