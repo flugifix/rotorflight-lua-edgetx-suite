@@ -250,6 +250,38 @@ check(prefs.dashboard[PREFIX .. "theme_key_mdl"] == "flight_log", "the Keys page
 cfg = DashboardLib.getThemeConfig(prefs, "system/default", {}, nil)
 check(Keys.themeBindings(cfg, nil).mdl == "openTool:tools_flight_log_page", "the stored binding binds its action")
 
+-- 4b. Every other box theme that declares the shared pages: each phase page lists exactly its
+--     phase's reassignable tiles, and its Keys page every key, through the theme's own configure
+--     module. A theme declaring the pages has to take the full screen as well.
+local MIGRATED = {}
+for _, folder in ipairs(BOX_THEMES) do
+  local init = assert(loadfile(THEMES .. folder .. "/init.lua"))()
+  if folder ~= "default" and type(init.pages) == "table" then MIGRATED[#MIGRATED + 1] = folder end
+end
+for _, folder in ipairs(MIGRATED) do
+  for _, phase in ipairs(PHASES) do
+    local factory = assert(loadfile(THEMES .. folder .. "/configure.lua"))()
+    local module = factory({ theme = { path = "system/" .. folder,
+      configurePath = CORE .. "widgets/dashboard/themes/" .. folder .. "/configure.lua" }, page = { id = phase } })
+    combos = {}
+    module.build({ children = {}, x = 0, y = 0, w = 800, preferences = { dashboard = {} }, page = { id = phase } })
+    local expected = Fields.rows(phaseBoxes(folder, phase .. ".lua"), phase)
+    check(#combos == #expected, folder .. " " .. phase .. " page lists its " .. #expected .. " tiles (" .. #combos .. ")")
+    for i, combo in ipairs(combos) do
+      check(expected[i] and combo.selected == expected[i].default, folder .. " " .. phase .. " row " .. i .. " starts on the theme's value")
+    end
+  end
+  local factory = assert(loadfile(THEMES .. folder .. "/configure.lua"))()
+  local module = factory({ theme = { path = "system/" .. folder,
+    configurePath = CORE .. "widgets/dashboard/themes/" .. folder .. "/configure.lua" }, page = { id = "keys" } })
+  combos = {}
+  module.build({ children = {}, x = 0, y = 0, w = 800, preferences = { dashboard = {} }, page = { id = "keys" } })
+  check(#combos == #Keys.THEME_KEYS, folder .. " Keys page lists every key")
+  local init = assert(loadfile(THEMES .. folder .. "/init.lua"))()
+  check(init.fullscreen == "theme", folder .. " takes the full screen")
+  check(type(init.pages) == "table" and #init.pages == 5, folder .. " declares its five pages")
+end
+
 -- 5. Per-Model Settings describes such a setting as the pages show it, not by its stored name.
 local Common = {
   pageT = function() return function(_, _, fallback) return fallback end end,
