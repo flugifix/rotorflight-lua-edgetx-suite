@@ -727,6 +727,20 @@ function Smart.wakeup()
   else
     if sourceMode == 1 then
       fuelPercent, virtualConsumption = computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed, reserve)
+    elseif sourceMode == 2 then
+      local voltagePercent, currentPercent
+      voltagePercent = computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed, reserve)
+      if voltagePercent == nil and state.virtualConsumption ~= nil then
+        voltagePercent = clamp(100 - state.virtualConsumption / usableCapacity * 100, 0, 100)
+      end
+      if tonumber(getSensor("consumption")) ~= nil then
+        currentPercent = computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized, reserve)
+      end
+      if voltagePercent ~= nil and currentPercent ~= nil then
+        fuelPercent = math.min(voltagePercent, currentPercent)
+      else
+        fuelPercent = voltagePercent or currentPercent
+      end
     else
       fuelPercent = computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized, reserve)
     end

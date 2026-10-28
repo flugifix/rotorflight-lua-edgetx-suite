@@ -96,6 +96,8 @@ SmFt / SmCp* — worth doing on a machine whose sensors nothing reads.
 | `SmFt` | remaining fuel in percent, **with the reserve already taken off** |
 | `SmCp` | the consumption the suite estimates, in mAh — published only where the suite estimates it from the pack voltage, because on the other paths the flight controller's own `Capa` already says it |
 
+Local COMBINED reports the lower of the voltage and current estimates on `SmFt`, or the one that exists.
+
 **`SmFt` is not the same number as `Bat%`.** The reserve is applied on the way to `SmFt` and not
 on the way to `Bat%`, so `SmFt` reaches 0 while the pack still holds the reserve. That is what makes it worth building a logical switch,
 a special function or a warning on, and it is why `Bat%` is not a substitute for one.
@@ -143,6 +145,22 @@ the suite depends on them. When the decoding moves between the background functi
 dashboard and the tool, `*Skp` continues from the value on the radio rather than jumping, and the
 dashboard or the tool starts it over at 0 after a lost link (see
 [Audio events](../audio/events.md#telemetry-dropouts)).
+
+## System Status and System Config in the model template
+
+The Rotorflight model template (`src/templates/5.Rotorflight/Rotorflight.yml`) carries the two
+packed status sensors as raw integer sensors: `STAT` (System Status, CRSF ID `0x1230`) and `SCFG`
+(System Config, `0x1231`), no decimals, logging on. They keep every packed bit, for the
+[System Status page](../pages/tools/diagnostics/system_status.md) and for whatever reads them
+from the log. With them the template defines 51 sensors, inside the 60 a model holds on the
+colour radios (75 on STM32H7 radios in EdgeTX 2.12).
+
+Only a model created from the template gets the two rows. An existing model is not changed by a
+suite update: discover the sensors on its telemetry screen, or add them there. The flight
+controller sends them only when *System Status* and *System Config* are selected on its
+[Telemetry page](../pages/setup/telemetry.md) (MSP API 12.10 and later); a row in the model does
+not mean a value has arrived. Firmware without the packed sensors goes on using the individual
+sensors.
 
 ## Related
 

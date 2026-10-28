@@ -34,6 +34,10 @@ Only the themes this model draws are listed: its own theme for each phase, or th
 where it has none. A setting of any other theme would be stored and never shown. When none of
 them has settings, the page says so.
 
+A setting from a theme's shared pages reads as those pages show it: the page and the tile's
+caption, or *Key* and the key, then the chosen value by its name — for example
+*Default / Statistics: MAX ESC TEMP = Max altitude* — rather than the name it is stored under.
+
 Model and standard values retain up to two decimal places without trailing zeros (for example, 25.2 stays 25.2 and 18.0 appears as 18).
 
 With no setting to show, the page says the model uses the standard values.

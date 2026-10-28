@@ -44,6 +44,10 @@ A radio without one of these keys never sends it; its saved choice still remains
   is bound there, PAGE > and PAGE < on the theme base included.
   Default binds none, so on Default a key put on **Theme**, PAGE > and PAGE < included, does
   nothing while the dashboard itself is showing.
+  This describes Default's initial bindings; its shared **Keys** settings page now lets the
+  pilot assign those keys too, with the same *(global)* marker and greyed rows for keys held
+  here, and its bindings can be overridden through **Per-Model Settings** while this
+  radio-wide page still takes priority.
 - On the connection screen, global actions already work, and so do manifest bindings to the
   host's actions and to its own views, such as the quick menu. A manifest binding to one of the
   theme's own views takes effect once the connection is ready, when those views are registered;

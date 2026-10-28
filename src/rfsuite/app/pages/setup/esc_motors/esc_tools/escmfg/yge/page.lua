@@ -121,16 +121,13 @@ local function unpackFlags(flagsVal)
   ui.config.flags_bec12v = (flagsVal >> 3) & 1
 end
 
--- The four bits below are the ones this page sets; whatever else the ESC keeps in this byte
--- is neither shown nor the page's to decide. So they are written into the byte that was read:
--- building it from the four alone would write everything else back as zero, on a save that
--- changed none of them.
+-- Only bits 0..2 belong to this page's controls. Preserve the other bits as read, including
+-- bit 3: whether it is a 12 V BEC capability or a switch is not documented.
 local function packFlags(readFlags)
-  local f = (readFlags or 0) & ~0x0F
+  local f = (readFlags or 0) & ~0x07
   if ui.config.flags_direction == 1 then f = f | (1 << 0) end
   if ui.config.flags_f3cauto == 1 then f = f | (1 << 1) end
   if ui.config.flags_keepmah == 1 then f = f | (1 << 2) end
-  if ui.config.flags_bec12v == 1 then f = f | (1 << 3) end
   return f
 end
 
@@ -584,7 +581,7 @@ function M.build(ctx)
     end
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_bec_voltage", "BEC Voltage"), {
-      helpText = pageText(i18n, "help_esc_yge_bec_voltage", "Sets the BEC output voltage; on a model with a 12 V BEC, setting exactly 12.0 V turns that BEC on."),
+      helpText = pageText(i18n, "help_esc_yge_bec_voltage", "Sets the BEC output voltage. The range depends on the ESC model."),
       helpTitle = pageText(i18n, "esc_bec_voltage", "BEC Voltage"),
       onHelp = getInlineHelpHandler(),
       min = 55, max = maxVal, step = 1,
@@ -592,11 +589,6 @@ function M.build(ctx)
       get = function() return ui.config.lv_bec_voltage end,
       set = function(val)
         ui.config.lv_bec_voltage = val
-        if val == 120 then
-          ui.config.flags_bec12v = 1
-        else
-          ui.config.flags_bec12v = 0
-        end
         markDirty()
       end
     })
