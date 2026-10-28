@@ -66,7 +66,6 @@ M.LIVE = {
   -- telemetry pass, and only while it is shown.
   -- Not a temperature to objects/text/telemetry.lua, which converts only the ESC and MCU ones to
   -- the pilot's scale, so it carries its unit itself.
-  { id = "Tbec", source = "Tbec", unit = "°C", transform = "floor",
   { id = "Tbec", source = "Tbec", transform = "floor",
     label = "@i18n(widgets.dashboard.fields.bec_temp)@", title = "@i18n(widgets.dashboard.fields.bec_temp_title)@" },
   { id = "Tspd", source = "Tspd", unit = "rpm", transform = "floor",
@@ -292,27 +291,22 @@ end
 --- value is not in the catalogue -- one a theme computes -- is not listed: its choice would have
 --- to start on a value it does not show.
 --- has none), the catalogue id it shows by default (nil where its value is not in the
---- catalogue) and the catalogue it chooses from.
 function M.rows(boxes, phase)
   local rows = {}
-  if type(boxes) ~= "table" then return rows end
+  if type(boxes) ~= 'table' then return rows end
   for i = 1, #boxes do
     local box = boxes[i]
     local kind = kindOf(box)
     local id = kind and M.boxId(box) or nil
     local entry = id and M.defaultEntry(box) or nil
     if entry then
-    if id then
-      local entry = M.defaultEntry(box)
       local title = box.title
-      if type(title) ~= "string" or title == "" then title = nil end
+      if type(title) ~= 'string' or title == '' then title = nil end
       rows[#rows + 1] = {
         key = M.settingKey(phase, id),
         title = title,
         default = entry.id,
         defaultLabel = entry.label,
-        default = entry and entry.id or nil,
-        defaultLabel = entry and entry.label or nil,
         list = kind.list,
       }
     end
@@ -320,10 +314,5 @@ function M.rows(boxes, phase)
   return rows
 end
 
---- The catalogue entry a stored choice names, in either catalogue, for a caller that has only
---- the stored value (the Per-Model Settings page describing an override).
-function M.entry(id)
-  return LIVE_BY_ID[id] or STATS_BY_ID[id]
-end
 
 return M
