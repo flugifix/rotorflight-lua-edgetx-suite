@@ -28,6 +28,8 @@ Read-only while the model is armed.
 
 ## Notes
 
+- Each row has a `?` of its own that explains its setting in one line; the page's `?` says what
+  the page is for.
 - **The protocol list is the flight controller's own, and which entries it has depends on the
   MSP API version the board reports.** The value written is the position in that list, so an
   entry the board does not have would not merely be unusable — it would shift every protocol
@@ -49,4 +51,4 @@ Read-only while the model is armed.
   controller, and what a different flight controller does to an open page.
 - [Rotorflight documentation](https://doc.rotorflight.org/)
 
-*Documented against RFSuite 0.1.7.*
+*Documented against RFSuite 0.2.2.*

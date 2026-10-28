@@ -27,3 +27,4 @@ contributor needs them.
 | `preview-features.md` | The five-step recipe for putting an unfinished feature behind its own switch, and why the tile uses `visibleWhen` rather than `hideWhenDisabled`. | the comment in `settings/general/page.lua` | to write |
 | `releases-and-versioning.md` | The `Releases.md` header grammar the release-notes extractor depends on, the `version.lua` bump, and the tag flows. | DEVELOPMENT.md, Continuous integration | to write |
 | `background-tasks.md` | The `tasks/events/` runner: task module shape, the ordered manifests, the tool/widget context gate, and the arm and disarm edges. | source | to write |
+| [`packed-system-state.md`](packed-system-state.md) | How to read the two packed status sensors (System Status, System Config): the shared field decoder, the strict live sensor read and what "current" does and does not prove. | source, `bin/telemetry/verify_system_state.lua` | written |

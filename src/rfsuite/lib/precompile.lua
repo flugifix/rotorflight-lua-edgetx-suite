@@ -192,7 +192,9 @@ local function writeStamp(identity)
 
   if readStampFile(STAMP_PATH, STAMP_LIMIT) ~= identity then
     warn("could not write rfsuite.user/precompiled.txt, every start compiles everything")
+    return false
   end
+  return true
 end
 
 local function beginDirectory(path)
@@ -310,11 +312,22 @@ end
 -- of its own; without either the pass still fills in missing and outdated bytecode but never
 -- forces a rebuild.
 function Precompile.start(version)
-  local identity = readStampFile(IDENTITY_PATH, STAMP_LIMIT) or version
+  local built = readStampFile(IDENTITY_PATH, STAMP_LIMIT)
+  local identity = built or version
+
+  -- The widget state is one Lua state for the dashboard, the service widget and the tool opened
+  -- from the dashboard, and they share this module. A pass one of them started is joined rather
+  -- than begun again: starting over would throw away the walk so far, and a forced pass would
+  -- compile from the beginning everything it had already compiled.
+  if state ~= nil and not state.finished and state.identity == identity then
+    return
+  end
+
   local stamp = readStampFile(STAMP_PATH, STAMP_LIMIT)
 
   state = {
     identity = identity,
+    packaged = built ~= nil,
     force = identity ~= nil and stamp ~= identity,
     dirs = {},
     cursor = nil,
@@ -324,12 +337,17 @@ function Precompile.start(version)
     firstFailure = nil,
     firstError = nil,
     walking = true,
-    finished = false
+    finished = false,
+    lastStepAt = nil
   }
 
   for i = #ROOTS, 1, -1 do
     state.dirs[#state.dirs + 1] = ROOTS[i]
   end
+end
+
+local function clockTick()
+  return type(getTime) == "function" and getTime() or nil
 end
 
 -- One unit of work: a few directories while the tree is still being read, one file after
@@ -338,6 +356,7 @@ function Precompile.step()
   if state == nil or state.finished then
     return
   end
+  state.lastStepAt = clockTick()
 
   if state.walking then
     walk()
@@ -363,8 +382,73 @@ function Precompile.step()
       state.firstError)
   end
   if state.force and state.identity ~= nil then
-    writeStamp(state.identity)
+    state.stampWritten = writeStamp(state.identity)
   end
+end
+
+-- The widgets' way in. They run the pass only where the tree is not the one last compiled -- an
+-- install, an update, the other locale -- and hold their connection back until it has finished,
+-- so the compile does not compete with the connect chain and every page is ready when the
+-- flight controller is. A tree that is already compiled costs two small file reads here and no
+-- walk at all; filling in a single edited source is left to the tool's own start.
+--
+-- version is the fallback identity, as for start(); the widgets pass none, so a tree without the
+-- packager's build identity starts nothing from them.
+--
+-- Returns true while such a pass runs, whether this call started it or another caller did.
+-- Without the uncached loader nothing would actually be compiled, yet the pass would finish and
+-- write the stamp, and the tool would then believe the tree compiled; so nothing starts.
+function Precompile.startIfStale(version)
+  if state ~= nil and not state.finished and state.force then
+    return true
+  end
+
+  local utils = _G.rfsuite and _G.rfsuite.utils
+  if not utils or type(utils.loadScriptUncached) ~= "function" then
+    return false
+  end
+  -- The same for the listing: without dir() the walk finds nothing, and a pass that compiled
+  -- nothing would still record the build as compiled and ask for a restart.
+  if type(dir) ~= "function" then
+    return false
+  end
+
+  local identity = readStampFile(IDENTITY_PATH, STAMP_LIMIT) or version
+  if identity == nil or readStampFile(STAMP_PATH, STAMP_LIMIT) == identity then
+    return false
+  end
+
+  Precompile.start(version)
+  return state ~= nil and not state.finished
+end
+
+-- step() for a caller that shares the pass with others: the two widgets and the tool opened from
+-- the dashboard all drive it from the same state, and a unit already taken in this clock tick is
+-- not taken again, so a run cycle carries one unit however many of them call.
+function Precompile.stepShared()
+  if state == nil or state.finished then
+    return
+  end
+  local now = clockTick()
+  if now ~= nil and state.lastStepAt == now then
+    return
+  end
+  Precompile.step()
+end
+
+-- True once a pass that rebuilt the whole tree has finished and recorded it. Whatever was loaded
+-- before or during that pass in a Lua state that outlives it -- the widgets', above all -- is
+-- still the previous build's code, and only a restart of the radio replaces it. Never true when
+-- the stamp did not land: the next start would then compile everything again and ask again, for
+-- ever. And only for a tree the packager stamped: a source tree copied by hand, compiled against
+-- the version number, is a developer's, and is not held up for a restart.
+function Precompile.needsRestart()
+  return state ~= nil and state.finished and state.force and state.packaged
+    and state.stampWritten == true
+end
+
+function Precompile.isRunning()
+  return state ~= nil and not state.finished
 end
 
 function Precompile.getProgress()
