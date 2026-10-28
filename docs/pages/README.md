@@ -91,7 +91,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | ESC & Motors → ESC Tools → ESC Configurator (the shared run page) | `setup/esc_motors/esc_tools/run.md` | no | read-only while armed | to write |
 | ESC & Motors → Motor Override | `setup/esc_motors/motor_override.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
 | Governor → General | [setup/governor/general.md](setup/governor/general.md) | yes | read-only while armed | written |
-| Governor → Ramp Time | `setup/governor/time.md` | yes | read-only while armed | to write |
+| Governor → Ramp Time | [setup/governor/time.md](setup/governor/time.md) | yes | read-only while armed | written |
 | Governor → Filters | `setup/governor/filters.md` | yes | read-only while armed | to write |
 | Governor → Bypass Curve | `setup/governor/curves.md` | yes | read-only while armed | to write |
 | Model | [setup/model.md](setup/model.md) | yes | needs the flight controller, read-only while armed | written |

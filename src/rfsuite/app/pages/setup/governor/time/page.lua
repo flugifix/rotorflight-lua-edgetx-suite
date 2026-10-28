@@ -338,6 +338,12 @@ function M.build(ctx)
     ui.runtime.syncHeaderTitle(title, M.getHeaderActions())
   end
 
+  -- A row's ? opens its line in the tool's help view, titled with the row's label.
+  local openHelp = ctx.openHelp
+  local function onRowHelp(text, label)
+    if type(openHelp) == "function" and type(text) == "string" and text ~= "" then openHelp(text, label) end
+  end
+
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
@@ -345,10 +351,15 @@ function M.build(ctx)
   end
 
   -- 1. Startup time (stored in 0.1s, e.g. 200 = 20.0s)
+  local label = pageText(i18n, "startup_time", "Startup time")
   cursorY = cursorY + Controls.appendNumberField(
     children, x, cursorY, w,
-    pageText(i18n, "startup_time", "Startup time"),
+    label,
     {
+      helpText = pageText(i18n, "help_startup_time",
+        "The ramp for throttle changes below handover, at idle, such as starting the motor."),
+      helpTitle = label,
+      onHelp = onRowHelp,
       min = 0,
       max = 600,
       step = 1,
@@ -364,10 +375,15 @@ function M.build(ctx)
   )
 
   -- 2. Spoolup time (stored in 0.1s, e.g. 100 = 10.0s)
+  label = pageText(i18n, "spoolup_time", "Spoolup time")
   cursorY = cursorY + Controls.appendNumberField(
     children, x, cursorY, w,
-    pageText(i18n, "spoolup_time", "Spoolup time"),
+    label,
     {
+      helpText = pageText(i18n, "help_spoolup_time",
+        "The ramp from idle up to the target headspeed; long enough to be gentle on the drivetrain, about 10 s."),
+      helpTitle = label,
+      onHelp = onRowHelp,
       min = GovernorFields.gov_spoolup_time.min,
       max = GovernorFields.gov_spoolup_time.max,
       step = GovernorFields.gov_spoolup_time.step,
@@ -381,10 +397,15 @@ function M.build(ctx)
   )
 
   -- 3. Spooldown time (stored in 0.1s, e.g. 30 = 3.0s)
+  label = pageText(i18n, "spooldown_time", "Spooldown time")
   cursorY = cursorY + Controls.appendNumberField(
     children, x, cursorY, w,
-    pageText(i18n, "spooldown_time", "Spooldown time"),
+    label,
     {
+      helpText = pageText(i18n, "help_spooldown_time",
+        "The ramp for throttle reductions at idle."),
+      helpTitle = label,
+      onHelp = onRowHelp,
       min = GovernorFields.gov_spooldown_time.min,
       max = GovernorFields.gov_spooldown_time.max,
       step = GovernorFields.gov_spooldown_time.step,
@@ -398,10 +419,15 @@ function M.build(ctx)
   )
 
   -- 4. Tracking time (stored in 0.1s, e.g. 20 = 2.0s)
+  label = pageText(i18n, "tracking_time", "Tracking time")
   cursorY = cursorY + Controls.appendNumberField(
     children, x, cursorY, w,
-    pageText(i18n, "tracking_time", "Tracking time"),
+    label,
     {
+      helpText = pageText(i18n, "help_tracking_time",
+        "The ramp for changes of the target headspeed in flight, such as a profile switch."),
+      helpTitle = label,
+      onHelp = onRowHelp,
       min = 0,
       max = 100,
       step = 1,
@@ -415,10 +441,15 @@ function M.build(ctx)
   )
 
   -- 5. Recovery time (stored in 0.1s, e.g. 20 = 2.0s)
+  label = pageText(i18n, "recovery_time", "Recovery time")
   cursorY = cursorY + Controls.appendNumberField(
     children, x, cursorY, w,
-    pageText(i18n, "recovery_time", "Recovery time"),
+    label,
     {
+      helpText = pageText(i18n, "help_recovery_time",
+        "The ramp for fast spool-ups in flight: recovery after throttle hold or a fallback, and autorotation bailout."),
+      helpTitle = label,
+      onHelp = onRowHelp,
       min = GovernorFields.gov_recovery_time.min,
       max = GovernorFields.gov_recovery_time.max,
       step = GovernorFields.gov_recovery_time.step,
