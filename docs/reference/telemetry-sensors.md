@@ -144,6 +144,22 @@ dashboard and the tool, `*Skp` continues from the value on the radio rather than
 dashboard or the tool starts it over at 0 after a lost link (see
 [Audio events](../audio/events.md#telemetry-dropouts)).
 
+## System Status and System Config in the model template
+
+The Rotorflight model template (`src/templates/5.Rotorflight/Rotorflight.yml`) carries the two
+packed status sensors as raw integer sensors: `STAT` (System Status, CRSF ID `0x1230`) and `SCFG`
+(System Config, `0x1231`), no decimals, logging on. They keep every packed bit, for the
+[System Status page](../pages/tools/diagnostics/system_status.md) and for whatever reads them
+from the log. With them the template defines 51 sensors, inside the 60 a model holds on the
+colour radios (75 on STM32H7 radios in EdgeTX 2.12).
+
+Only a model created from the template gets the two rows. An existing model is not changed by a
+suite update: discover the sensors on its telemetry screen, or add them there. The flight
+controller sends them only when *System Status* and *System Config* are selected on its
+[Telemetry page](../pages/setup/telemetry.md) (MSP API 12.10 and later); a row in the model does
+not mean a value has arrived. Firmware without the packed sensors goes on using the individual
+sensors.
+
 ## Related
 
 - [SmartFuel page](../pages/setup/power/smartfuel.md) — where `SmFt` and `SmCp` are configured
