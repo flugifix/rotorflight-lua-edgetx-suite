@@ -146,7 +146,26 @@ M.STATS = {
     label = "@i18n(widgets.dashboard.fields.min_cell)@", title = "@i18n(widgets.dashboard.fields.min_cell_title)@" },
 }
 
+-- How many characters a value of each entry needs at most, its unit included, for a box that
+-- sizes its font to a width (`autosize_chars`): the theme sized that box for the value it drew, so
+-- a reassigned box is sized for the new one. Digits by entry, four where none is named; a
+-- temperature's unit is the two characters the object writes itself.
+local DIGITS = {
+  current = 5, altitude = 5, smartfuel = 3, throttle_percent = 3, link = 3, esc_load = 3,
+  pid_profile = 1, rate_profile = 1, battery_profile = 1, model_name = 10, Tbec = 3, TQly = 3,
+  RSNR = 3, EscV = 5, EscI = 5, EscR = 5, Sats = 2, GAlt = 5, ["CPU%"] = 3,
+  max_throttle = 3, max_current = 5, min_current = 5, max_altitude = 5, max_esc_temp = 3,
+  max_mcu_temp = 3, min_fuel = 3, max_link = 3, min_link = 3, min_cell = 7,
+}
+local TEMPERATURES = { esc_temp = true, mcu_temp = true, Tbec = true, max_esc_temp = true, max_mcu_temp = true }
+
 local LIVE_BY_ID, STATS_BY_ID = {}, {}
+for _, list in ipairs({ M.LIVE, M.STATS }) do
+  for i = 1, #list do
+    local entry = list[i]
+    entry.chars = (DIGITS[entry.id] or 4) + #(entry.unit or "") + (TEMPERATURES[entry.id] and 2 or 0)
+  end
+end
 for i = 1, #M.LIVE do LIVE_BY_ID[M.LIVE[i].id] = M.LIVE[i] end
 for i = 1, #M.STATS do STATS_BY_ID[M.STATS[i].id] = M.STATS[i] end
 
@@ -220,6 +239,9 @@ local function reassigned(box, entry, hadTitle)
     out.title_lowres = nil
   end
   for i = 1, #DROPPED do out[DROPPED[i]] = nil end
+  -- The width the box's font is sized to belongs to the value too. The box's room does not, so
+  -- its low-resolution character limits stay.
+  if type(box.autosize_chars) == "number" then out.autosize_chars = entry.chars end
   return out
 end
 

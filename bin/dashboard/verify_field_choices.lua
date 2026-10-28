@@ -122,6 +122,24 @@ check(Fields.apply(pre, "preflight", { [first.key] = "no_such_value" }) == pre, 
 check(Fields.apply(pre, "inflight", { [first.key] = chosen }) == pre, "a choice of another phase changes nothing")
 check(Fields.apply(pre, "preflight", { [first.key] = "max_current" }) == pre, "a statistic is not offered to a live tile")
 
+-- A box that sizes its font to a width is sized for the value it now shows; its room is kept.
+local sized
+for _, box in ipairs(pre) do
+  if Fields.catalogue(box) and type(box.autosize_chars) == "number" then sized = box end
+end
+check(sized ~= nil, "Default has a reassignable box that sizes its font")
+if sized then
+  local key = Fields.settingKey("preflight", Fields.boxId(sized))
+  local wide = (sized.source == "voltage") and "current" or "voltage"
+  local resized
+  for _, box in ipairs(Fields.apply(pre, "preflight", { [key] = wide })) do
+    if Fields.settingKey("preflight", Fields.boxId(box)) == key then resized = box end
+  end
+  check(resized and resized.autosize_chars == Fields.entry(wide).chars and resized.autosize_chars > sized.autosize_chars,
+    "a resized box takes the width of its new value")
+  check(resized and resized.max_chars_lowres == sized.max_chars_lowres, "a resized box keeps its room")
+end
+
 local post = phaseBoxes("default", "postflight.lua")
 local statRow = Fields.rows(post, "postflight")[1]
 check(statRow ~= nil and statRow.list == Fields.STATS, "a statistics tile chooses from the statistics")
