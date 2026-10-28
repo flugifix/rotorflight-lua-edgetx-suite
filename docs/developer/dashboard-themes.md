@@ -88,12 +88,18 @@ state, the throttle percentage, and — with the governor off — headspeed and 
 
 The arm flag is the spine. It comes from the `armflags` sensor, and the widget keeps the
 previous pass's value beside it, so an arm and a disarm are edges rather than states.
+The MSP runtime uses the shared arming reader and sensor mapping for its queue clear and save
+refusal. An uncertain reading counts as disarmed only for a craft never read armed; a craft last
+read armed stays armed until a current reading says disarmed or the reading stays uncertain
+continuously for `FLIGHT_CONFIRM_SECONDS` (5 seconds) with the link up. A link loss resets that
+timer, so reconnecting in flight leaves time for the arming flags to arrive.
 
 A reading that says *disarmed* is not taken while the MSP runtime still reads the model as armed.
 The runtime reads the same sensor at the top of the same pass, ahead of the custom-telemetry
-drain, so a disagreement means the sensor changed between the two reads of one pass -- and a
-real disarm is taken by the first read after the runtime has seen it too. A reading that says
-*armed* is always taken. Both `armed` and the raw `armFlags` a theme can read follow this rule.
+drain, so a disagreement between two current readings means the sensor changed between the
+two reads of one pass -- and a real disarm is taken by the first read after the runtime has seen
+it too. A reading that says *armed* is always taken. Both `armed` and the raw `armFlags` a theme
+can read follow this rule.
 
 | Phase | Reached when |
 | --- | --- |
