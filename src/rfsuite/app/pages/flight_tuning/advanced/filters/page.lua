@@ -15,6 +15,7 @@ local Controls = nil
 local Common = nil
 local MspRuntime = nil
 local FilterConfigApi = nil
+local SavePipeline = nil
 local LoadingOverlay = nil
 local Sensors = nil
 local ApiVersion = nil
@@ -123,6 +124,12 @@ local function queueRcRead(isAutoReload)
             rcConfig[k] = v
           end
           loadFromSession()
+          ui.runtime.dynamicFilters = {
+            dyn_notch_count = parsed.dyn_notch_count,
+            dyn_notch_q = parsed.dyn_notch_q,
+            dyn_notch_min_hz = parsed.dyn_notch_min_hz,
+            dyn_notch_max_hz = parsed.dyn_notch_max_hz
+          }
           ui.runtime.readPending = false
           ui.loading = false
           ui.dirty = false
@@ -148,49 +155,47 @@ local function queueRcRead(isAutoReload)
 end
 
 local function queueRcWrite()
-  if not FilterConfigApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not FilterConfigApi then
     return false, "msp_runtime_unavailable"
-  end
-
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
   end
 
   local session = getSession()
   local rcConfig = getRcConfig(session)
+  -- Dynamic notch settings are read only at boot; compare with the last FC read.
+  local dynamicFilters = ui.runtime.dynamicFilters or {}
+  local reboot = ui.config.dyn_notch_count ~= dynamicFilters.dyn_notch_count
+    or ui.config.dyn_notch_q ~= dynamicFilters.dyn_notch_q
+    or ui.config.dyn_notch_min_hz ~= dynamicFilters.dyn_notch_min_hz
+    or ui.config.dyn_notch_max_hz ~= dynamicFilters.dyn_notch_max_hz
   
   -- Update config values in session
   for k, v in pairs(ui.config) do
     rcConfig[k] = v
   end
 
-  queue:add({
-    command = FilterConfigApi.writeCommand,
-    payload = FilterConfigApi.buildWritePayload(rcConfig),
-    isWrite = true,
-    processReply = function() 
+  return SavePipeline.start({
+    pageId = "flight_tuning_advanced_filters",
+    steps = {
+      {
+        label = "MSP_SET_FILTER_CONFIG",
+        command = FilterConfigApi.writeCommand,
+        payload = FilterConfigApi.buildWritePayload(rcConfig)
+      }
+    },
+    reboot = reboot,
+    onSaved = function()
       ui.dirty = false
-      
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.command,
-          payload = {},
-          isWrite = true,
-          processReply = function()
-            queueRcRead(true)
-          end
-        })
-      else
-        queueRcRead(true)
-      end
     end,
-    errorHandler = function() end
+    onDone = function(result)
+      if not ui.loaded or not ui.runtime then return end
+      -- Reboot saves leave reconnect and reload to the pipeline.
+      if result.saved and not result.reboot then queueRcRead(true) end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
   })
-
-  return true, nil
 end
 
 local function buildSessionSignature()
@@ -656,7 +661,18 @@ end
 
 function M.onSave(ctx)
   if not M.canSave() then return false, "loaded_data_missing" end
-  queueRcWrite()
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if SavePipeline and SavePipeline.isActive() then return false end
+  local ok, err = queueRcWrite()
+  if not ok then
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
+        title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
+        message = tostring(err or "MSP write failed")
+      })
+    end
+    return false
+  end
   return true
 end
 
@@ -690,6 +706,7 @@ function M.onClose()
   Common = nil
   MspRuntime = nil
   FilterConfigApi = nil
+  SavePipeline = nil
   LoadingOverlay = nil
   Sensors = nil
   ApiVersion = nil

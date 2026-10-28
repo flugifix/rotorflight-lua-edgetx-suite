@@ -18,6 +18,7 @@ generated [menu structure](../reference/menu-structure.md), which CI keeps curre
 an in-app help text behind the `?` in the header starts its file from that text; the others
 start from the page source.
 **Status:** 97 reachable pages, 56 written. 81 of them carry an in-app help text behind the
+**Status:** 97 reachable pages, 42 written. 81 of them carry an in-app help text behind the
 `?` in the header, which is the text to start a page file from; the others start from the
 page source.
 
@@ -40,12 +41,14 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Tune Advisor | [flight_tuning/tune_advisor.md](flight_tuning/tune_advisor.md) | yes | read-only while armed, needs MSP API 12.10 | written |
 | Governor | [flight_tuning/governor.md](flight_tuning/governor.md) | yes | read-only while armed, needs MSP API 12.09 | written |
 | Advanced → Filters | `flight_tuning/advanced/filters.md` | yes | read-only while armed | to write |
+| Governor | `flight_tuning/governor.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
+| Advanced → Filters | [flight_tuning/advanced/filters.md](flight_tuning/advanced/filters.md) | yes | read-only while armed | written |
 | Advanced → PID Controller | [flight_tuning/advanced/pid_controller.md](flight_tuning/advanced/pid_controller.md) | yes | read-only while armed | written |
 | Advanced → PID Bandwidth | [flight_tuning/advanced/pid_bandwidth.md](flight_tuning/advanced/pid_bandwidth.md) | yes | read-only while armed | written |
 | Advanced → Autolevel | [flight_tuning/advanced/autolevel.md](flight_tuning/advanced/autolevel.md) | yes | read-only while armed | written |
 | Advanced → Main Rotor | [flight_tuning/advanced/main_rotor.md](flight_tuning/advanced/main_rotor.md) | yes | read-only while armed | written |
 | Advanced → Tail Rotor | [flight_tuning/advanced/tail_rotor.md](flight_tuning/advanced/tail_rotor.md) | yes | read-only while armed | written |
-| Advanced → Rescue | `flight_tuning/advanced/rescue.md` | yes | read-only while armed | to write |
+| Advanced → Rescue | [flight_tuning/advanced/rescue.md](flight_tuning/advanced/rescue.md) | yes | read-only while armed | written |
 | Advanced → Rates (Advanced) → Advanced | `flight_tuning/advanced/rates_advanced/advanced.md` | yes | read-only while armed | to write |
 | Advanced → Rates (Advanced) → Cyclic Behaviour | `flight_tuning/advanced/rates_advanced/cyclic_behaviour.md` | yes | read-only while armed | to write |
 | Advanced → Rates (Advanced) → Rate Table | `flight_tuning/advanced/rates_advanced/table.md` | yes | read-only while armed | to write |

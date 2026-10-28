@@ -381,6 +381,12 @@ only once the flight controller confirms that the values are stored; a refused w
 reply is shown as a failed save and leaves the edits unsaved. A Save pressed while their save is
 still running is ignored. After a successful save, each page reads the values back if it is still
 open; if it was closed, its next visit reads.
+Rescue and Filters under Flight Tuning > Advanced save through the tool's shared save: Rescue
+writes the rescue profile, Filters the filter configuration, then one EEPROM commit. The page is
+marked clean only once the flight controller has stored the values; a refused write or one that
+gets no reply is reported. Save pressed while their save is still running is ignored. After a
+successful save, each page reads its values back from the flight controller if it is still open;
+otherwise its next visit reads them.
 
 ## ESC Configurator pages
 

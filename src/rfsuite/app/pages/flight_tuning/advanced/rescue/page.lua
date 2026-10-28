@@ -15,10 +15,22 @@ local Controls = nil
 local Common = nil
 local MspRuntime = nil
 local RescueProfileApi = nil
+local SavePipeline = nil
 local LoadingOverlay = nil
 local Sensors = nil
 local Profile = nil
 local t = nil
+
+-- Reuse option tables; translated help is refreshed on every build.
+local modeOptions = {}
+local altHoldOptions = {}
+local flipUpOptions = {}
+
+local specCollective = { scale=10, mult=1, min=0, max=1000, step=10, suffix="%", decimals=0 }
+local specTime       = { scale=10, mult=1, min=0, max=250, suffix="s", decimals=1 }
+local specGain       = { scale=1, mult=1, min=0, max=250, suffix="", decimals=0 }
+local specRate       = { scale=1, mult=1, min=5, max=1000, suffix="°/s", decimals=0 }
+local specAccel      = { scale=1, mult=1, min=0, max=10000, suffix="°/s^2", decimals=0 }
 
 local function newRuntime()
   return {
@@ -92,8 +104,8 @@ local function loadFromSession()
   end
   -- The mode as read, kept apart from the session record, which a save overwrites before the
   -- board has taken it; and the altitude-hold choice, kept while rescue is switched off and on.
-  -- boardMode is deliberately NOT refreshed when a write fails: the write's errorHandler leaves
-  -- ui.dirty set, so no read reply loads over it and the Altitude hold row stays. Open and Reload
+  -- boardMode is deliberately NOT refreshed when a save fails: only onSaved clears
+  -- ui.dirty, so no read reply loads over it and the Altitude hold row stays. Open and Reload
   -- run this from the session record and then read the board, whose reply sets its own mode.
   ui.boardMode = tonumber(ui.config.rescue_mode) or 0
   ui.altHold = ui.boardMode > 1
@@ -164,14 +176,9 @@ local function queueRcRead(isAutoReload)
 end
 
 local function queueRcWrite()
-  if not RescueProfileApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not RescueProfileApi then
     return false, "msp_runtime_unavailable"
-  end
-
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
   end
 
   local session = getSession()
@@ -182,32 +189,27 @@ local function queueRcWrite()
     rcConfig[k] = v
   end
 
-  queue:add({
-    command = RescueProfileApi.writeCommand,
-    payload = RescueProfileApi.buildWritePayload(rcConfig),
-    isWrite = true,
-    processReply = function() 
+  return SavePipeline.start({
+    pageId = "flight_tuning_advanced_rescue",
+    steps = {
+      {
+        label = "MSP_SET_RESCUE_PROFILE",
+        command = RescueProfileApi.writeCommand,
+        payload = RescueProfileApi.buildWritePayload(rcConfig)
+      }
+    },
+    reboot = false,
+    onSaved = function()
       ui.dirty = false
-      
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.command,
-          payload = {},
-          isWrite = true,
-          processReply = function()
-            queueRcRead(true)
-          end
-        })
-      else
-        queueRcRead(true)
-      end
     end,
-    -- Leaves ui.dirty set on purpose; see loadFromSession, which keeps ui.boardMode through it.
-    errorHandler = function() end
+    onDone = function(result)
+      if not ui.runtime then return end
+      if result.saved then queueRcRead(true) end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
   })
-
-  return true, nil
 end
 
 local function getLiveProfile()
@@ -434,64 +436,69 @@ function M.build(ctx)
   -- any mode above 0, and the mode written is composed from both switches as the Configurator
   -- does, so an altitude-hold profile is never turned into a climbing one by the enable switch.
   local modeVal = (tonumber(ui.config.rescue_mode) or 0) > 0
-  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "mode_enable", "Rescue mode enable"), modeVal, function(nextBool)
+  local modeLabel = pageText(i18n, "mode_enable", "Rescue mode enable")
+  modeOptions.helpText = pageText(i18n, "help_p1", "Enables or disables rescue in this profile.")
+  modeOptions.helpTitle = modeLabel
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, modeLabel, modeVal, function(nextBool)
     ui.config.rescue_mode = nextBool and (ui.altHold and 2 or 1) or 0
     ui.dirty = true
     if type(ui.runtime.requestRebuild) == "function" then
       ui.runtime.requestRebuild()
     end
-  end)
+  end, modeOptions)
 
   -- Altitude hold is offered only to a profile that already uses it, as in the Configurator;
   -- its own settings are not on this page.
   if modeVal and (ui.boardMode or 0) > 1 then
     local altHoldLabel = pageText(i18n, "alt_hold", "Altitude hold")
+    altHoldOptions.helpText = pageText(i18n, "help_alt_hold", "Keeps altitude hold enabled; switching it off makes rescue climb instead.")
+    altHoldOptions.helpTitle = altHoldLabel
     cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, altHoldLabel, ui.altHold == true, function(nextBool)
       ui.altHold = nextBool == true
       ui.config.rescue_mode = ui.altHold and 2 or 1
       ui.dirty = true
-    end)
+    end, altHoldOptions)
   end
 
   if modeVal then
     -- 2) Flip to upright (Switch)
     local flipUpVal = (tonumber(ui.config.rescue_flip_mode) or 0) == 1
-    cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "flip_upright", "Flip to upright"), flipUpVal, function(nextBool)
+    local flipUpLabel = pageText(i18n, "flip_upright", "Flip to upright")
+    flipUpOptions.helpText = pageText(i18n, "help_p2", "Flips upright if rescue is activated while inverted.")
+    flipUpOptions.helpTitle = flipUpLabel
+    cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, flipUpLabel, flipUpVal, function(nextBool)
       ui.config.rescue_flip_mode = nextBool and 1 or 0
       ui.dirty = true
-    end)
+    end, flipUpOptions)
 
-    -- Specs
-    local specCollective = { scale=10, mult=1, min=0, max=1000, step=10, suffix="%", decimals=0 }
-    local specTime       = { scale=10, mult=1, min=0, max=250, suffix="s", decimals=1 }
-    local specGain       = { scale=1, mult=1, min=0, max=250, suffix="", decimals=0 }
-    local specRate       = { scale=1, mult=1, min=5, max=1000, suffix="°/s", decimals=0 }
-    local specAccel      = { scale=1, mult=1, min=0, max=10000, suffix="°/s^2", decimals=0 }
+    local collectiveLabel = pageText(i18n, "collective", "Collective")
+    local timeLabel = pageText(i18n, "time", "Time")
+    local flipLabel = pageText(i18n, "flip", "Flip")
 
     -- 3) Pull-up (Collective & Time)
     cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
       pageText(i18n, "pull_up", "Pull-up"), 
-      pageText(i18n, "collective", "Collective"), "rescue_pull_up_collective", specCollective, 
-      pageText(i18n, "time", "Time"), "rescue_pull_up_time", specTime
+      collectiveLabel, "rescue_pull_up_collective", specCollective,
+      timeLabel, "rescue_pull_up_time", specTime
     )
 
     -- 4) Climb (Collective & Time)
     cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
       pageText(i18n, "climb", "Climb"), 
-      pageText(i18n, "collective", "Collective"), "rescue_climb_collective", specCollective, 
-      pageText(i18n, "time", "Time"), "rescue_climb_time", specTime
+      collectiveLabel, "rescue_climb_collective", specCollective,
+      timeLabel, "rescue_climb_time", specTime
     )
 
     -- 5) Hover (Collective)
     cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
       pageText(i18n, "hover", "Hover"), 
-      pageText(i18n, "collective", "Collective"), "rescue_hover_collective", specCollective, 
+      collectiveLabel, "rescue_hover_collective", specCollective,
       nil, nil, nil
     )
 
     -- 6) Flip (Fail time & Exit time)
     cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
-      pageText(i18n, "flip", "Flip"), 
+      flipLabel,
       pageText(i18n, "fail_time", "Fail time"), "rescue_flip_time", specTime, 
       pageText(i18n, "exit_time", "Exit time"), "rescue_exit_time", specTime
     )
@@ -500,7 +507,7 @@ function M.build(ctx)
     cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
       pageText(i18n, "gains", "Gains"), 
       pageText(i18n, "level_gain", "Level"), "rescue_level_gain", specGain, 
-      pageText(i18n, "flip", "Flip"), "rescue_flip_gain", specGain
+      flipLabel, "rescue_flip_gain", specGain
     )
 
     -- 8) Dynamics (Rate & Accel)
@@ -524,7 +531,18 @@ end
 
 function M.onSave(ctx)
   if not M.canSave() then return false, "loaded_data_missing" end
-  queueRcWrite()
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if SavePipeline and SavePipeline.isActive() then return false end
+  local ok, err = queueRcWrite()
+  if not ok then
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
+        title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
+        message = tostring(err or "MSP write failed")
+      })
+    end
+    return false
+  end
   return true
 end
 
@@ -551,6 +569,7 @@ function M.onClose()
   Common = nil
   MspRuntime = nil
   RescueProfileApi = nil
+  SavePipeline = nil
   LoadingOverlay = nil
   Sensors = nil
   t = nil
