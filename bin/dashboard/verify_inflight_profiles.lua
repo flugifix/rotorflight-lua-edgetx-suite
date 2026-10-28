@@ -284,10 +284,21 @@ do
     "aborting after write before promotion leaves no recoverable start values")
   files[path] = savedFile
   work = assert(Store.begin(fc.uid, data))
-  while work.phase ~= "promote" do Store.step(work) end
+  local verified
+  while work.phase ~= "promote" do
+    Store.step(work)
+    if work.phase == "verify" then verified = work.check end
+  end
+  -- The verified temporary copy is released before the promoted file is read back beside it.
+  check(verified ~= nil and work.check == nil, "the verified temporary copy is not held into the promotion")
   files[bytecode] = "stale compiled temporary"
   local done, why
-  repeat done, why = Store.step(work) until done
+  local promotedCheck
+  repeat
+    done, why = Store.step(work)
+    if work.promoted and work.check then promotedCheck = work.check end
+  until done
+  check(promotedCheck ~= nil and promotedCheck ~= verified, "the promoted file is read back on its own")
   check(not why and files[bytecode] == nil and Store.load(fc.uid, fc.identity) ~= nil,
     "control: promoted baseline loads and leaves no compiled temporary")
   files[path] = savedFile

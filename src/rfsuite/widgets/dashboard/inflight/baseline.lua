@@ -119,6 +119,9 @@ function M.step(work)
         local section = next(work.data, work.lastSection)
         if not section then
           if work.promoted then return true end
+          -- The temporary file is verified; its copy is not needed through the promotion and must
+          -- not still be held while the promoted file is read back beside it.
+          work.check = nil
           work.phase = "promote"; return false
         end
         if type(work.check[section]) ~= "table" then return true, "baseline_io" end
