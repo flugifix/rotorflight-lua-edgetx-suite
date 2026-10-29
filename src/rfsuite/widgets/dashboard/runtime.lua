@@ -155,7 +155,7 @@ local Sensors = requireModule("lib/sensors.lua")
 local DerivedSnapshot = requireModule("widgets/dashboard/derived.lua")
 local LogSink = requireModule("lib/log_sink.lua")
 if LogSink and type(LogSink.configure) == "function" then
-  LogSink.configure("widget")
+  LogSink.configure("dashboard")
 end
 
 local RSS1_SOURCES = { "1RSS", "RSS1", "rssi1" }
@@ -421,11 +421,14 @@ local function traceInstructionUsage(self)
 
   self._shmOn = Log and type(Log.wanted) == "function" and Log.wanted("debug") or false
 
-  if Log and type(Log.emitf) == "function" then
-    Log.emitf("rfsuite.widget", "trace",
-      "instruction budget %d%% now, %d%% peak/%ds, %d%% peak since load, %d objects, theme=%s",
+  -- The state line: this state's budget and memory and the radio's, every interval, at INFO so a
+  -- log taken for a report carries it. Built only while somebody is recording -- with the log off
+  -- it would push the Session Logs list's entries out one by one for nobody.
+  if Log and type(Log.recording) == "function" and Log.recording() then
+    Log.emitf("rfsuite.widget", "info",
+      "state: instruction budget %d%% now, %d%% peak/%ds, %d%% peak since load, %d objects, %s, theme=%s",
       percent, self._usageWindowPeak, USAGE_REPORT_INTERVAL, self._usagePeak,
-      self._lastChildCount, tostring(self.themePath))
+      self._lastChildCount, Log.resources(), tostring(self.themePath))
   end
 
   self._usageWindowPeak = -1

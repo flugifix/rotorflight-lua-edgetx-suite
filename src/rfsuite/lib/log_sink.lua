@@ -31,16 +31,35 @@
 -- overruns its instruction budget is not called again, so it cannot write down that it stopped;
 -- the script state is yielded rather than cut off, and its step file's timestamp is what says
 -- how far a radio got.
+--
+-- Every file of one RUN -- one power-up of the radio -- carries the same prefix, the moment the
+-- radio was switched on: `2026-10-29_10-15-03_dashboard.log`, `..._tool.log`, `..._function.log`
+-- and a `.step` beside each. Read side by side they are one story, and all three keep time from
+-- the same getTime() clock, so their lines interleave by their first column. No state has to ask
+-- another for the prefix: each one works it out as the wall clock minus the time since power-up,
+-- which comes out the same in all of them, and `current.run` keeps the first answer so a second
+-- of rounding cannot split one run across two prefixes. The tool started again later in the
+-- same run appends to the same file, under a header line of its own.
 
 local Sink = {}
 
 local ROOT = "/SCRIPTS/TOOLS/rfsuite.user"
 local DIR = ROOT .. "/logs"
+local RUN_FILE = DIR .. "/current.run"
+local BUILD_FILE = "/SCRIPTS/TOOLS/rfsuite-core/build.txt"
 
 -- Bounds, and what each one bounds.
-local MAX_SESSIONS = 10      -- card space: slots are reused round robin
-local MAX_FILE_LINES = 5000  -- growth of a single session file
-local STEP_MIN_INTERVAL = 0.25 -- seconds between step writes, unless the caller forces one
+local DEFAULT_RUNS = 10      -- card space: how many runs' files are kept, unless the pilot says
+local MIN_RUNS = 1
+local MAX_RUNS = 50
+local MAX_FILE_LINES = 5000  -- growth of one session -- one start of the state -- in its file
+local STEP_MIN_INTERVAL = 0.25 -- seconds between step writes of one kind, unless forced
+local STEP_KEYS_MAX = 16     -- how many kinds of step the throttle remembers before it forgets all
+
+-- Two prefixes worked out within this many seconds of each other are the same power-up. The two
+-- clocks are read a few instructions apart and each has a resolution of a second, so the answers
+-- of two states differ by a second or two at most; two power-ups this close do not happen.
+local RUN_TOLERANCE_SECONDS = 5
 
 -- How long the pending lines may sit in the ring before they are written out. Longer while the
 -- model is armed: appends are small, but a flight is the worst moment to ask the card for
@@ -120,21 +139,155 @@ local function ensureDir()
   pcall(mkdir, DIR)
 end
 
--- The next slot, from a counter file rather than a directory scan: a scan costs a read of every
--- entry to answer a question one number already answers.
-local function nextSlot(name)
-  local text = readFile(DIR .. "/" .. name .. "_seq.txt")
-  local previous = tonumber(text) or 0
-  local slot = previous + 1
-  if slot > MAX_SESSIONS or slot < 1 then slot = 1 end
-  writeFile(DIR .. "/" .. name .. "_seq.txt", "w", tostring(slot))
-  return slot
+local function integer(value)
+  if type(value) ~= "number" then return nil end
+  return math.tointeger(math.floor(value))
 end
 
--- Which radio and which screen wrote the file. A layout or a memory question is unanswerable
--- without it, and a log without it cannot be told from one written on a different transmitter.
-local function headerLine(name, slot)
-  local parts = { "-- rfsuite diagnostics log", "state=" .. tostring(name), "slot=" .. tostring(slot) }
+-- The wall clock as seconds since 1970, or nil where the radio cannot say. getRtcTime() answers
+-- that directly; the fallback is lib/change_journal.lua's days-from-civil over getDateTime().
+-- Integer arithmetic throughout: on a radio a float holds seconds at today's dates only to the
+-- nearest few minutes.
+local function wallSeconds()
+  if type(getRtcTime) == "function" then
+    local ok, value = pcall(getRtcTime)
+    local seconds = ok and integer(value) or nil
+    if seconds and seconds > 0 then return seconds end
+  end
+  if type(getDateTime) ~= "function" then return nil end
+  local ok, dt = pcall(getDateTime)
+  if not ok or type(dt) ~= "table" then return nil end
+  local y, m, d = integer(dt.year), integer(dt.mon), integer(dt.day)
+  local h, mi, s = integer(dt.hour), integer(dt.min), integer(dt.sec)
+  if not (y and m and d and h and mi and s) or y < 1970 or y > 2037 or m < 1 or m > 12 then return nil end
+  if m <= 2 then y = y - 1 end
+  local era = y // 400
+  local yoe = y - era * 400
+  local doy = (153 * (m + (m > 2 and -3 or 9)) + 2) // 5 + d - 1
+  local days = era * 146097 + yoe * 365 + yoe // 4 - yoe // 100 + doy - 719468
+  return days * 86400 + h * 3600 + mi * 60 + s
+end
+
+-- Seconds since 1970 back to `YYYY-MM-DD_HH-MM-SS` (civil-from-days), the shape a file manager
+-- sorts in time order.
+local function stampText(seconds)
+  local days = seconds // 86400
+  local rest = seconds - days * 86400
+  local z = days + 719468
+  local era = z // 146097
+  local doe = z - era * 146097
+  local yoe = (doe - doe // 1460 + doe // 36524 - doe // 146096) // 365
+  local doy = doe - (365 * yoe + yoe // 4 - yoe // 100)
+  local mp = (5 * doy + 2) // 153
+  local d = doy - (153 * mp + 2) // 5 + 1
+  local m = mp + (mp < 10 and 3 or -9)
+  local y = yoe + era * 400 + (m <= 2 and 1 or 0)
+  return string.format("%04d-%02d-%02d_%02d-%02d-%02d",
+    y, m, d, rest // 3600, (rest % 3600) // 60, rest % 60)
+end
+
+-- When this power-up began, in seconds since 1970: the wall clock less the time the radio has
+-- been on. getTime() counts 10 ms ticks from power-up and is the clock every line is stamped with.
+local function runStart()
+  local wall = wallSeconds()
+  if not wall or type(getTime) ~= "function" then return nil end
+  local ok, ticks = pcall(getTime)
+  ticks = ok and integer(ticks) or nil
+  if not ticks then return nil end
+  return wall - ticks // 100
+end
+
+local function runsToKeep()
+  local general = preferences()
+  local value = type(general) == "table" and integer(tonumber(general.log_runs)) or nil
+  if not value then return DEFAULT_RUNS end
+  if value < MIN_RUNS then return MIN_RUNS end
+  if value > MAX_RUNS then return MAX_RUNS end
+  return value
+end
+
+-- Delete the files of every run but the newest `keep`, the current one included. Only names in
+-- this sink's own scheme are touched -- `<prefix>_<state>.log` and `.step` -- so a file the pilot
+-- or an older release put into the folder stays where it is. Runs once per power-up, by whichever
+-- state starts the run, and walks one directory of a few dozen names. `current` counts as one of
+-- the kept runs although nothing of it is on the card yet: its first file is written after this.
+local function pruneRuns(keep, current)
+  if type(dir) ~= "function" or type(del) ~= "function" then return end
+  local okDir, iterator = pcall(dir, DIR)
+  if not okDir or type(iterator) ~= "function" then return end
+
+  local files, prefixes, seen = {}, { current }, { [current] = true }
+  for name in iterator do
+    local prefix = type(name) == "string"
+      and string.match(name, "^(%d%d%d%d%-%d%d%-%d%d_%d%d%-%d%d%-%d%d)_%a+%.%a+$") or nil
+    if prefix then
+      files[#files + 1] = { name = name, prefix = prefix }
+      if not seen[prefix] then
+        seen[prefix] = true
+        prefixes[#prefixes + 1] = prefix
+      end
+    end
+  end
+  if #prefixes <= keep then return end
+
+  table.sort(prefixes)
+  local drop = {}
+  for i = 1, #prefixes - keep do drop[prefixes[i]] = true end
+  for i = 1, #files do
+    if drop[files[i].prefix] then pcall(del, DIR .. "/" .. files[i].name) end
+  end
+end
+
+-- The prefix of this power-up's files. The first state to ask writes it down; a state asking
+-- later in the same run finds it and takes it as it stands, so two states never disagree about a
+-- second. A radio that cannot tell the time gets the prefix of the clock's zero, which still
+-- keeps the run's files together and still sorts.
+local function resolveRun()
+  local start = runStart()
+  local text = readFile(RUN_FILE)
+  if type(text) == "string" then
+    local storedStart, storedPrefix = string.match(text, "^(%-?%d+) (%S+)")
+    storedStart = tonumber(storedStart)
+    if start and storedStart and math.abs(start - storedStart) <= RUN_TOLERANCE_SECONDS then
+      return storedPrefix
+    end
+  end
+
+  local prefix = stampText(start or 0)
+  writeFile(RUN_FILE, "w", tostring(start or 0) .. " " .. prefix .. "\n")
+  pruneRuns(runsToKeep(), prefix)
+  return prefix
+end
+
+local function buildIdentity()
+  local text = readFile(BUILD_FILE)
+  return type(text) == "string" and string.match(text, "^(%S+)") or nil
+end
+
+local function languageName()
+  local i18n = type(_G.rfsuite) == "table" and _G.rfsuite.i18n or nil
+  if type(i18n) == "table" and type(i18n.getLocale) == "function" then
+    local ok, lang = pcall(i18n.getLocale)
+    if ok and type(lang) == "string" and lang ~= "" then return lang end
+  end
+  local general = preferences()
+  local lang = type(general) == "table" and general.language or nil
+  return type(lang) == "string" and lang ~= "" and lang or nil
+end
+
+-- Which radio, which build and which run wrote the file. A layout or a memory question is
+-- unanswerable without it, and a log without it cannot be told from one written on a different
+-- transmitter or by a different build. Written at the start of every session, so a file the tool
+-- appended to twice in one run carries the line twice, each where its session begins.
+local function headerLine(name, run)
+  local parts = { "-- rfsuite diagnostics log", "state=" .. tostring(name), "run=" .. tostring(run) }
+
+  local wall = wallSeconds()
+  if wall then parts[#parts + 1] = "started=" .. stampText(wall) end
+  if type(getTime) == "function" then
+    local ok, ticks = pcall(getTime)
+    if ok and type(ticks) == "number" then parts[#parts + 1] = string.format("uptime=%.1f", ticks / 100) end
+  end
 
   local w = tonumber(LCD_W)
   local h = tonumber(LCD_H)
@@ -159,6 +312,15 @@ local function headerLine(name, slot)
       parts[#parts + 1] = "suite=" .. Version.VERSION
     end
   end
+
+  -- The version is too coarse to name a build: every development build between two releases
+  -- carries the same one. The packager's identity (bin/package/build_package.py,
+  -- write_build_identity) is a digest of the packaged sources, so it differs whenever they do.
+  local build = buildIdentity()
+  if build then parts[#parts + 1] = "build=" .. build end
+
+  local lang = languageName()
+  if lang then parts[#parts + 1] = "lang=" .. lang end
 
   return table.concat(parts, " ") .. "\n"
 end
@@ -189,17 +351,18 @@ local function startSession()
 
   ensureDir()
   local name = Sink.name or "state"
-  local slot = nextSlot(name)
-  local path = DIR .. "/" .. name .. "_" .. tostring(slot) .. ".log"
+  local run = resolveRun()
+  local base = DIR .. "/" .. run .. "_" .. name
 
   state = {
-    path = path,
+    path = base .. ".log",
     -- The header is HELD rather than written. A Lua state that has nothing to say should leave
-    -- no file behind: an empty one is noise on the card, it costs a rotation slot, and it makes
-    -- a pilot ask why a state they did not think was running has a log of its own. The first
-    -- thing that actually has to be written opens the file and puts this at the top of it.
-    pendingHeader = headerLine(name, slot),
-    stepPath = DIR .. "/" .. name .. "_step.txt",
+    -- no file behind: an empty one is noise on the card, and it makes a pilot ask why a state
+    -- they did not think was running has a log of its own. The first thing that actually has to
+    -- be written appends it to the file -- at its top for the first session of the run, as the
+    -- start of the next one for a tool opened again.
+    pendingHeader = headerLine(name, run),
+    stepPath = base .. ".step",
     lines = 0,
     capped = false,
     lastFlush = nowSeconds(),
@@ -210,7 +373,11 @@ local function startSession()
     -- True while a backlog longer than one batch is being written out, one batch per tick. Only
     -- a write that reached the card sets it, so a card that refuses is asked once an interval.
     draining = false,
-    lastStep = 0,
+    -- When each kind of step was last written. One remembered kind was not enough: two callers
+    -- with different kinds that alternate -- the event runner and the dashboard's job pass during
+    -- the connect sequence -- each found the other's kind and rewrote the file on every call.
+    stepAt = {},
+    stepKeys = 0,
     stepCount = 0
   }
   return true
@@ -289,11 +456,12 @@ local function commit(written)
   _G.rfsuite.log_sink_lost = 0
 end
 
--- Create the file, with the held header at its top, the first time anything has to go into it.
--- `w` truncates, which is what a reused rotation slot needs.
+-- Put the held header into the file the first time anything has to go into it. `a` creates the
+-- file for the first session of a run and appends to it for a later one, so a tool opened twice
+-- in one run leaves one file with two sessions in it rather than overwriting the first.
 local function openIfNeeded()
   if not state.pendingHeader then return true end
-  if not writeFile(state.path, "w", state.pendingHeader) then
+  if not writeFile(state.path, "a", state.pendingHeader) then
     return false
   end
   state.pendingHeader = nil
@@ -352,9 +520,16 @@ local function ensureSession()
   return startSession()
 end
 
---- Name this state's pair of files. Called once, before the first tick.
+--- Name this state's files. The first name given in a Lua state is the one it keeps.
+--
+-- The module is one instance per state, and more than one caller in a state names it: the
+-- dashboard and the service widget, and the configuration tool when it is opened from the
+-- dashboard and runs in the dashboard's state. A later name used to win, so a tool opened from
+-- the dashboard turned the dashboard's files into `tool` files for the rest of the run.
 function Sink.configure(name)
-  Sink.name = tostring(name or "state")
+  if Sink.name == nil then
+    Sink.name = tostring(name or "state")
+  end
 end
 
 --- Advance the sink. Cheap and silent while the option is off, which is its shipped state.
@@ -400,12 +575,22 @@ function Sink.step(label, force, key)
   local text = tostring(label)
   local group = tostring(key or text)
   local now = nowSeconds()
-  -- The interval throttles a caller repeating itself, not the arrival of a new KIND of step.
-  if not force and group == state.lastKey and (now - state.lastStep) < STEP_MIN_INTERVAL then
+  -- The interval throttles each kind of step on its own clock, so a caller repeating itself is
+  -- held back however many other kinds arrive in between, and a new kind is written at once.
+  local last = state.stepAt[group]
+  if not force and last and (now - last) < STEP_MIN_INTERVAL then
     return
   end
-  state.lastStep = now
-  state.lastKey = group
+  if not last then
+    -- A caller whose labels are all new keys would grow this table for the whole session; past a
+    -- handful of kinds it starts over, which costs at most one extra write per kind.
+    if state.stepKeys >= STEP_KEYS_MAX then
+      state.stepAt = {}
+      state.stepKeys = 0
+    end
+    state.stepKeys = state.stepKeys + 1
+  end
+  state.stepAt[group] = now
   state.stepCount = state.stepCount + 1
 
   local memKb = 0

@@ -52,6 +52,10 @@ local Precompile = nil
 
 local MEM_LOG_INTERVAL_TICKS = 100
 
+-- How often the standalone tool writes its state line (lib/log.lua, Log.resources): the same
+-- five seconds as the dashboard's, so the files of one run can be read against each other.
+local STATE_LINE_INTERVAL_TICKS = 500
+
 -- Below this much free heap the next page build is the one that may not come back. The number
 -- is a first cut and not a measurement: it is the order of magnitude a full page rebuild
 -- allocates on a colour radio, and it is one constant to move when a radio says otherwise.
@@ -590,7 +594,7 @@ state = {
   lastBackTick = 0,
   memBucket    = nil,
   memLastTick  = 0,
-  memPeakKb    = 0,
+  stateLineTick = 0,
   memLowWarned = false,
   lastInputTick = 0,
   initialLoadStartTick = 0,
@@ -740,11 +744,6 @@ local function performSave()
   return savePreferencesSafe(state.preferences)
 end
 
-local function isContinuousMemoryLogEnabled()
-  local general = state.preferences and state.preferences.general
-  return type(general) == "table" and general.continuous_memory_log == true
-end
-
 local function isSerialMemoryLogEnabled()
   local general = state.preferences and state.preferences.general
   return type(general) == "table" and general.enable_serial_debug == true and type(serialWrite) == "function"
@@ -784,8 +783,7 @@ local function logMemoryUsage(now)
 
   local freeKb = readFreeHeapKb()
 
-  -- Deliberately not behind the continuous-log preference. That option writes a line every
-  -- interval and is off in every shipped configuration; this one writes a line once per
+  -- Deliberately not behind the log level or the card switch: this writes a line once per
   -- crossing, and the run it has to survive is the one where nobody switched anything on.
   if freeKb then
     if freeKb < MEM_LOW_FREE_KB and not state.memLowWarned then
@@ -796,24 +794,18 @@ local function logMemoryUsage(now)
     end
   end
 
-  if not isContinuousMemoryLogEnabled() then
+  -- The state line, every STATE_LINE_INTERVAL_TICKS, the same shape the dashboard writes. Hosted,
+  -- this file runs in the dashboard's Lua state and the dashboard's own line already reports it,
+  -- so a second one here would only say the same thing twice.
+  if state.hosted or not (Log and type(Log.recording) == "function" and Log.recording()) then
     return
   end
-
-  if type(collectgarbage) ~= "function" then
+  if tickNow > 0 and state.stateLineTick > 0 and (tickNow - state.stateLineTick) < STATE_LINE_INTERVAL_TICKS then
     return
   end
-
-  local memKb = math.floor((collectgarbage("count") or 0) + 0.5)
-  if memKb > (state.memPeakKb or 0) then
-    state.memPeakKb = memKb
-  end
-
-  local msg = "lua_kb=" .. tostring(memKb) .. " peak_kb=" .. tostring(state.memPeakKb or memKb)
-  if freeKb then
-    msg = msg .. " free_kb=" .. tostring(freeKb)
-  end
-  pcall(Log.emit, "mem", msg, "info")
+  state.stateLineTick = tickNow
+  pcall(Log.emitf, "rfsuite.ui", "info", "state: page %s, %s",
+    tostring(state.activePageMenuId or "-"), Log.resources())
 end
 
 local function resolveLocaleFromSystem()
@@ -910,7 +902,12 @@ local function syncActivePageModule()
     end
   end
 
-  logf("debug", "page %s -> %s", tostring(state.activePageMenuId), tostring(currentMenuId))
+  -- With what is left at that moment, read after the previous page was released: the line
+  -- before and the line after a visit say what the visit kept. Only built at a level that
+  -- writes the line.
+  if Log and type(Log.wanted) == "function" and Log.wanted("debug") and type(Log.resources) == "function" then
+    logf("debug", "page %s -> %s, %s", tostring(state.activePageMenuId), tostring(currentMenuId), Log.resources())
+  end
   state.activePageMenuId = currentMenuId
   -- The page the tool was opened on (see openLanding) is that only until another one is up.
   if state.landingMenuId ~= nil and currentMenuId ~= state.landingMenuId then
@@ -3407,7 +3404,7 @@ function M.init(opts)
   })
   state.memBucket  = nil
   state.memLastTick = 0
-  state.memPeakKb = 0
+  state.stateLineTick = 0
   state.memLowWarned = false
   state.lastInputTick = getTime and getTime() or 0
   state.initialLoadStartTick = getTime and getTime() or 0
@@ -3606,13 +3603,6 @@ function M.run(event, touchState)
 
     local armed = isModelArmed()
 
-    -- The card sink advances here and nowhere else in this state: it is the one place per pass
-    -- that runs whatever is on screen. It decides for itself whether anything is written, and
-    -- the armed state only lengthens its interval.
-    local cardSink = sink()
-    if cardSink and type(cardSink.tick) == "function" then
-      pcall(cardSink.tick, armed)
-    end
 
     if armed ~= state.lastModelArmedState then
       state.lastModelArmedState = armed
@@ -3844,6 +3834,18 @@ function M.run(event, touchState)
       deferBackground = not state.backgroundDeferred and not state.initialLoad
     end
     state.backgroundDeferred = deferBackground
+
+    -- The card sink advances here and nowhere else in this state, once per pass whatever is on
+    -- screen. It decides for itself whether anything is written, and the armed state only
+    -- lengthens its interval. A write formats up to a batch of held lines, so it steps aside on a
+    -- pass that has just built a page, like the MSP and audio ticks below; its interval is not
+    -- advanced, so it writes on the next pass instead.
+    if not deferBackground then
+      local cardSink = sink()
+      if cardSink and type(cardSink.tick) == "function" then
+        pcall(cardSink.tick, armed)
+      end
+    end
 
     if state.pendingSaveAction and state.saveOverlayVisible and not state.isClosing then
       local action = state.pendingSaveAction

@@ -79,6 +79,17 @@ local function hostLog(msg, level)
   end
 end
 
+-- A transition, with what this state and the radio have left at that moment: the tool runs in
+-- the dashboard's Lua state, so the line before it opens and the line after it closes are the
+-- two readings that say what the visit left behind.
+local function hostLogTransition(msg)
+  if Log and type(Log.resources) == "function" then
+    local ok, text = pcall(Log.resources)
+    if ok and type(text) == "string" then msg = msg .. ", " .. text end
+  end
+  hostLog(msg)
+end
+
 local function isCpuLimit(err)
   local fn = _G.rfsuite and _G.rfsuite.isCpuLimitError
   if type(fn) == "function" then return fn(err) == true end
@@ -251,7 +262,7 @@ local function finish(widget, reason)
   widget.renderKey = nil
   widget._cachedFullscreenKey = nil
   if collectgarbage then collectgarbage("collect") end
-  hostLog("tool closed (" .. tostring(reason) .. ")")
+  hostLogTransition("tool closed (" .. tostring(reason) .. ")")
 end
 
 --- Ask for the tool to be opened. The work is done by the next pass of the widget, not by the
@@ -266,6 +277,7 @@ function M.request(widget, landing)
     hostLog("tool not opened: the model is armed", "warn")
     return false
   end
+  hostLogTransition("tool requested")
   widget._toolHost = { phase = "load", cpuHits = 0, landing = landing }
   widget.built = false
   widget.renderKey = nil
@@ -330,7 +342,7 @@ local function initStep(widget, host)
   if not ok then return stopped(widget, host, err, "init") end
   host.phase = "run"
   host.cpuHits = 0
-  hostLog("tool opened")
+  hostLogTransition("tool opened")
 end
 
 local function runStep(widget, host, event, touchState)

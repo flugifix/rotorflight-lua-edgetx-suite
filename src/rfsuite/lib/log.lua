@@ -5,7 +5,7 @@ local function isTruthy(value)
 end
 
 -- The severity ladder, ordered from quietest to most verbose. This table is the single
--- definition of it: the rank comparison below and the Debug Level selector on the developer
+-- definition of it: the rank comparison below and the Log Level selector on the developer
 -- settings page both derive from it, so a level is added in one place instead of several.
 --
 -- The names are the ones GEMINI.md documents for Log.emit and the ones
@@ -204,7 +204,7 @@ function Log.emit(tag, msg, level, enabled)
   end
 end
 
--- Exported so the Debug Level selector on the developer settings page can offer exactly the
+-- Exported so the Log Level selector on the developer settings page can offer exactly the
 -- levels this module understands, instead of carrying a second list that drifts away from it.
 Log.LEVELS = LEVELS
 
@@ -272,6 +272,62 @@ function Log.hex(buf, limit)
   for i = 1, take do parts[i] = string.format("%02X", string.byte(buf, i)) end
   local text = table.concat(parts, " ")
   if take < n then text = text .. string.format(" ...(%d more)", n - take) end
+  return text
+end
+
+--- Is anybody going to read an informational line right now?
+--
+-- True while the level lets `info` through, or while a card sink is taking lines -- the sink
+-- takes info lines at every level. A periodic line asks this first, so that with the log off
+-- it neither builds its text nor pushes the ring's last sixty entries out one by one.
+function Log.recording()
+  if shouldEmitByLevel("info") then return true end
+  return type(_G.rfsuite) == "table" and type(_G.rfsuite.log_sink) == "table"
+end
+
+--- What this Lua state and the radio have left, as one fragment of a log line.
+--
+-- `lua` is collectgarbage("count") of THIS state only -- the dashboard and the service widget
+-- share one state, the tool started from the Tools menu and the background script each have
+-- their own. `free` is getAvailableMemory(): the radio's general heap, which every Lua state and
+-- most native allocations draw from, but not LVGL's own pool, which no Lua call can read. The
+-- simulator answers that call with a constant 1000 bytes, so a figure under MEM_FREE_FLOOR_KB is
+-- printed as "-" rather than as a measurement. `cpu` and `ui` exist from EdgeTX 2.12.5 on:
+-- getCpuLoad() is the share of time the radio was not idle (nil in the simulator), and
+-- lvgl.getPerf() the LVGL frame rate and the share of time spent rendering. A radio without
+-- them gets a line without them.
+local MEM_FREE_FLOOR_KB = 4
+
+function Log.resources()
+  local luaKb = 0
+  if type(collectgarbage) == "function" then
+    local ok, value = pcall(collectgarbage, "count")
+    if ok and type(value) == "number" then luaKb = math.floor(value + 0.5) end
+  end
+
+  local free = "-"
+  if type(getAvailableMemory) == "function" then
+    local ok, bytes = pcall(getAvailableMemory)
+    local kb = ok and type(bytes) == "number" and math.floor(bytes / 1024 + 0.5) or nil
+    if kb and kb >= MEM_FREE_FLOOR_KB then free = tostring(kb) end
+  end
+
+  local text = string.format("lua %d kB, free %s kB", luaKb, free)
+
+  if type(getCpuLoad) == "function" then
+    local ok, load = pcall(getCpuLoad)
+    if ok and type(load) == "number" then
+      text = text .. string.format(", cpu %d%%", math.floor(load + 0.5))
+    end
+  end
+
+  if type(lvgl) == "table" and type(lvgl.getPerf) == "function" then
+    local ok, fps, load = pcall(lvgl.getPerf)
+    if ok and type(fps) == "number" and type(load) == "number" then
+      text = text .. string.format(", ui %d fps / %d%%", math.floor(fps + 0.5), math.floor(load + 0.5))
+    end
+  end
+
   return text
 end
 
