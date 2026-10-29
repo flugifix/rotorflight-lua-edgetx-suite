@@ -90,8 +90,8 @@ In the air there is no X, and RTN only leaves value mode. A firmware fullscreen 
 or a page switch pauses tuning immediately: both variables go to zero. Reopen tuning from the
 quick menu while still armed to continue at the same group and parameter. Link loss removes the
 release immediately but keeps the tuning visit open, showing **PAUSED** and **No FC link**
-while tuning. After landing, the post-flight comparison stays visible even after the pack is
-unplugged: it records the flight's history. A fresh read after reconnect recomputes the comparison.
+while tuning. After landing, the post-flight comparison stays visible while the pack is
+unplugged; when the link comes back after a battery change a new session begins (see *Sessions*).
 When the link and arm telemetry return, the same visit resumes automatically at the same group
 and parameter, subject to the existing flight-controller identity and session checks. A link
 that returns while the model is still armed resumes as soon as the radio receives a fresh armed
@@ -104,24 +104,42 @@ An armed continuation defers that read until the model is disarmed and connected
 succeeds, the ground surface marks the retained readings as unread and refuses tuning steps;
 a different identified FC starts its own read and cannot reuse the previous FC's values.
 
+### Sessions
+
+A session is one power cycle of the flight controller. It begins with the ground read after the
+board comes up: the values read are the session's **start values**, stored on the SD card. The
+change displays (the difference beside each row, the post-flight list) count from them, and
+**Restore all** and the profile restores write them back. A session ends when the link has been
+gone for five seconds while the model is on the ground (a battery change), when another flight
+controller answers, or when the radio restarts. The next read then begins a new session: its
+start values replace the earlier ones on the card and every count starts at zero. In the air a
+session never ends, and a shorter link gap on the ground continues it. With tuning open, the
+session ends when the link comes back, so a post-flight list stays readable while the pack is out.
+Nothing ends while a profile job, a pending return to the original profiles or a save is outstanding.
+
 ### On the ground, before the flight
 
-![The ground surface: model check, FC slots, session, and the actions](../images/inflight/overlay-ground.png)
+![The ground surface: model check, FC slots, session, and the actions (an earlier layout)](../images/inflight/overlay-ground.png)
+
+The picture shows an earlier layout of the same contents; the text below describes the current one.
 
 One filled status panel shows **Model** (the setup verdict), **FC slots** (the number of parameters
-read from the board, plus skipped slots), and **Session** (continued or new, with the stored
-start-values date and time, or a not-read/refused status). Dim labels sit beside values, each
-with two reserved text lines on 480x272, 480x320 and 800x480 displays. The model verdict is
-green when setup passes, amber while unchecked or checking, and red for a setup fault.
-Warnings about FC bounds and an unsaved model default stay in the panel. Secondary actions
-use equal-height cells in two columns, in the same encoder order, above **Restore all**. The
-full-width primary action is taller than the secondary cells on every size. On 800x480, status
-rows and secondary captions use the standard font, with a larger primary caption when it fits.
+read from the board, plus skipped slots), and **Session** (the time this session's start values
+were read, for example **Start values 14:32**, or a not-read/refused status). Dim labels sit
+beside values. Each status takes one line on 480x272, 480x320 and 800x480 displays, and a second
+one only where its text needs it; the rows are placed by the standard font's measured line, so a
+long status never runs into the actions. The model verdict is green when setup passes, amber while
+unchecked or checking, and red for a setup fault. Warnings about FC bounds and an unsaved model
+default stay in the panel. Secondary actions sit two to a row where both captions fit half the
+width and one to a row otherwise, in the same encoder order, above **Restore all**. The space down
+to the footer is shared out; the full-width primary action is a little taller where there is room
+(on 480x272 with every warning shown it can equal the others). On 800x480, status rows and
+secondary captions use the standard font, with a larger primary caption when it fits.
 
 When **Adjustment Announcements** is off, the footer warns that adjustment announcements
 are off and **Turn on announcements** enables and saves the existing radio-wide preference.
 Opening tuning changes nothing. A failed save leaves the switch off, shows **Announcements
-were not saved**, and allows another press. The hint and button are ground-only; model audio
+were not saved** in the footer in place of the hint, and allows another press. The hint and button are ground-only; model audio
 overrides do not control this switch, and its default remains off. When announcements are on,
 the footer shows **Rotate select / Press open**, or **Rotate / Press** where space is limited.
 
@@ -130,7 +148,7 @@ picker and is visible and active only after the board supplies at least one usab
 The picker lists everything the board carries, six rows a page; the arrows turn the pages through
 the groups, and a tap chooses or drops a parameter, at least one staying chosen. It starts from
 what is offered now: the session's choice, else the model's flight list, else everything.
-**Apply** keeps the choice for this session only; it lasts until **Reset start values** and is
+**Apply** keeps the choice for this session only (see *Sessions*) and is
 never written to the model by itself. **Save default** also stores it as this
 model's flight list on the next pass; the ground surface says if that write failed. **Cancel**
 changes nothing. The picker closes when the model is armed.
@@ -173,23 +191,25 @@ some writes requires another ground read; it does not undo slots already written
 loss or a different board cancel the job without another request. Setup is ground-only and
 never sends MSP while armed.
 
-Below it, **Read again** refreshes the same session profiles without changing the stored start
-values. **Reset start values** first asks for confirmation: it replaces the stored start values
-with the current ones, and **Restore all** will then return to those new values. Confirmation
-starts a ground read of the reachable profiles; the baseline is replaced only after the whole
-read and return to the original pair succeed. Cancel leaves the stored start values untouched.
+Below it, **Read again** refreshes the session's profiles without changing its start values.
 **Restore all** is set apart at the bottom in the destructive-action colour and opens the
-existing confirmation naming its targets. No spare FC profile is reserved; old stored
-spare-slot settings are ignored.
+confirmation naming its targets; it writes back the session's start values. No spare FC profile
+is reserved; old stored spare-slot settings are ignored. There is no separate action to replace
+the start values: every session reads its own.
 
-![Reading the profiles: the same surface in the widget zone and, with Cancel, full screen](../images/inflight/overlay-reading.png)
+A read or restore on the ground runs inside the ground surface. The **Session** row shows
+**Reading** or **Restoring** with **Step x of y**, a bar and the current operation follow in the
+panel, and the other actions stay on screen, disabled, until it ends. In the place of the primary
+action, **Cancel** is offered only during a read, before the return to the original profiles (a
+restore must finish its writes and return), and **Read again** while that return is held. Within a
+session, its stored start values are checked on the SD card before the first profile is read
+(*Checking the saved session*).
 
-A read or restore shows a progress surface with a **Reading** or **Restoring** title, a bar,
-**Step x of y**, and the current operation. The widget zone shows the same surface without the
-buttons. Before the first profile is read, a saved session is checked on the SD card
-(*Checking the saved session*); then the active profiles are read. **Cancel** is offered only
-during a read, before the return to the original profiles; a restore must finish its writes and
-return.
+![The progress screen used after landing; on the ground the same progress runs inside the ground surface](../images/inflight/overlay-reading.png)
+
+A read or restore started from the post-flight screen takes its own progress screen with a
+**Reading** or **Restoring** title, so the change list it was started from is still there when it
+ends. The picture predates the current layout and also shows the former widget-zone surface.
 
 The reachable set is the union of `adjMin..adjMax` from all PID-profile (function 2)
 and rate-profile (function 1) adjustment slots, capped to 1..6 and the FC-reported counts,
@@ -213,14 +233,14 @@ Snapshots live beside the suite's MCU-keyed model preferences, under
 `rfsuite.user/<model-id>.inflight.lua`. They contain a version, UID/FC signature, craft name,
 clock timestamp, a profile manifest and tunable values per scope. A complete temporary Lua-data
 file is verified in slices before promotion with the suite's FAT delete/rename convention.
-Session starts and newly reachable profiles write the baseline; adjustment reports do not write
-the card. Reconnects read the union of currently reachable profiles and profiles held in a matching
-saved baseline. Existing start values and the session timestamp stay unchanged; a newly reachable
-profile gets its start values from the fresh read and is added to the same SD baseline after the
-read and return succeed. Restore still targets only profiles held in that baseline. A stored
-profile above the FC's current profile count refuses the transaction.
-Missing/incomplete/foreign baselines refuse restoration. The baseline is an undo for tracked
-parameters, not a full FC configuration backup.
+A session's start writes its start values, replacing the previous session's; adjustment reports
+do not write the card. A read within the session, after a short link gap, reads the union of
+currently reachable profiles and profiles held in the session's start values. Existing start values
+and the session time stay unchanged; a newly reachable profile gets its start values from that read
+and is added to the stored start values after the read and return succeed. Restore targets only
+profiles held in the start values. A stored profile above the FC's current profile count refuses the
+transaction. Missing/incomplete/foreign start values refuse restoration. They are an undo for the
+session's tracked parameters, not a full FC configuration backup.
 
 ### In the air
 
@@ -255,7 +275,7 @@ minus and plus targets send steps. Tapping the parameter name leaves value mode.
 starts one pulse. A held touch target retains the existing pulse/gap repetition and the
 five-second maximum hold; a lost release is bounded by that maximum. Values are the last
 FC reports, never predicted changes. Under the value, **Start N / +/-difference** compares
-against the SD session baseline of the active PID/rate/global scope. An unknown start value
+against the session's start value of the active PID/rate/global scope. An unknown start value
 leaves that line empty. The value is drawn in the largest font the radio has, on the left.
 Plus and minus are stacked in one column on the right, as large as the surface allows: plus on
 top in the accent blue, minus below in orange, so the two can be told apart without reading the
@@ -334,7 +354,8 @@ changes the value and clears the tie.
 
 An unread PID/rate profile or unknown PID#/RTE# refuses steps with a clear reason and
 `inflight/paused.wav`. Returning to read profiles resumes without closing and reopening tuning; the held
-report fence still applies. Add another profile with **Reset start values** on the ground.
+report fence still applies. A profile that was not reachable when the session began is read
+after the next short link gap on the ground, or with the next session.
 
 **Speech uses the existing Adjustments announcer and its audio setting.** A selected group
 or highlighted function waits **700 ms**; every newer selection replaces the pending name.
@@ -354,26 +375,26 @@ clears the filtered list; at least one parameter must remain selected in a filte
 **Apply** changes this session's list; **Save default** also stores it for this model with the
 same FC connected. The picker sends no MSP. Native acceptance of the controls remains pending.
 
-In the widget zone the surface is a read-out; a long press opens the touch controls fullscreen.
-
 ### After landing
 
 The complete change list is grouped by **PID profile**, **rate profile**, then **Global**;
 each profile contains the same function groups as the flying list. Rows show SD start value,
-last reported value and signed difference. The count is since the SD session baseline, which
-can span flights. Each page repeats its profile/group heading and stays within one profile.
-Blue Previous/Next controls (or PAGE/the walk trim) page the list. **Restore / read values**
+last reported value and signed difference. The count is since the session start, so it covers
+every flight of the session. Each page repeats its profile/group heading and stays within one profile.
+Blue Previous/Next controls (or PAGE/the walk trim) page the list. **Continue tuning** returns to
+the ground surface in the same session, to choose other parameters or fly again. **Restore...**
 opens the action menu with **Restore all**, **Read again**, the displayed profile/global restore,
-and **Back to changes**. Opening or leaving this menu sends no MSP. Rate-profile pages state
-that a PID-profile restore does not cover their values; their own restore and Restore all do.
+and **Back to changes**. Neither sends MSP. Rate-profile pages state that a PID-profile restore
+does not cover their values; their own restore and Restore all do.
 **Read again** selects and rereads all session profiles while disarmed, returning to the original
-pair, to replace reported values with exact FC records. It preserves the SD baseline.
+pair, to replace reported values with exact FC records. It keeps the session's start values.
 
 **Restore profile PID N**, **Restore profile RTE N**, and **Restore global** refer to the profile
-on the displayed page. **Restore all** covers every baseline profile and the global values.
+on the displayed page. **Restore all** covers every profile of the session's start values and the
+global values; both write back the values from the session start.
 A confirmation names the target profiles before any restoration starts. Restoration is refused
 while armed, without a known disarmed/rotor-stopped state, while another transaction is pending,
-or with a foreign/incomplete baseline.
+or with foreign/incomplete start values.
 
 For each target, the job selects it, reads the affected current MSP records, changes only tracked
 fields with the matching set commands, and compares the RAM read-back. Untracked fields retain
@@ -390,21 +411,19 @@ already have written some fields: this is not an atomic FC rollback. An uncertai
 repeated automatically. Return recovery remains deferred while armed, disconnected, or tuning
 is closed. Reopen tuning on the ground to let an outstanding original-profile return continue.
 
-Read and restore jobs show their current target instead of the change list; restore/read actions
-are unavailable until the job finishes. Temporary profile selections and the final return are
+A read or restore started here shows its current target on its own progress screen instead of the
+change list; restore/read actions are unavailable until the job finishes. Temporary profile selections and the final return are
 silent in both the overlay and the general profile announcer, including while tuning is closed.
 Ordinary in-flight profile announcements remain enabled.
 
-Closing tuning on the ground or in the air retains the in-memory session and the completed
-SD baseline. Closed on the ground, the surface's own code is unloaded and loads again on the next
-opening, which takes a few passes; closed in the air it stays loaded until the landing, so reopening
-during the flight is immediate. The session ends on an explicit session reset, on another model or
-identified flight controller, or after five minutes on the ground without a link to the flight
-controller. All of tuning then leaves memory, the per-flight step history with it; the next opening
-continues from the start values on the SD card after the full ground read, and the post-flight
-comparison is recomputed from them. Nothing is unloaded while armed, while a profile return or a
-save is still outstanding, or while the suite's tool is open. A link interruption to the same flight controller keeps the session and
-the fullscreen visit, resuming automatically once the link and arm state are known. Closing,
+Closing tuning on the ground or in the air keeps the session. Closed on the ground, the surface's
+own code is unloaded and loads again on the next opening, which takes a few passes; closed in the
+air it stays loaded until the landing, so reopening during the flight is immediate. When the
+session ends (see *Sessions*) while tuning is closed, the session and all of tuning's code leave
+memory at once; the next opening reads the board and begins a new session. Nothing is unloaded
+while armed, while a profile return or a save is still outstanding, or while the suite's tool is
+open. A link interruption shorter than a session's end keeps the session and the fullscreen visit,
+resuming automatically once the link and arm state are known. Closing,
 backgrounding, link loss and profile edges clear
 pulse/hold ownership and GVAR output in the flight mode where it was written. MSP never runs
 while armed. Existing setup, collision, range, trim, pulse and input ownership refusals remain.
@@ -420,13 +439,13 @@ An always-active adjustment slot on the tuning value channel can fire in every b
 
 Ground reads accept the firmware range of PID gains and rescue altitude P/I/D gains (0 to 1000) and of the governor head speed (0 to 50000), even when a value exceeds the Configurator's standard-slot range. Values outside the firmware range refuse the read with the function name and value. The standard-layout writer retains its Configurator limits.
 
-After a link interruption on the ground, tuning waits for the flight controller's UID to answer; in the air a fresh armed reading continues the same flight instead (see above). A matching identity allows the required full ground read before tuning can resume; the post-flight history remains visible while waiting. Another identified controller ends the previous session. If a read or restore was suspended, its original-profile return is still owed to the disconnected controller and is logged; it does not block a new read on the connected controller.
+After a link interruption on the ground, tuning waits for the flight controller's UID to answer; in the air a fresh armed reading continues the same flight instead (see above). A matching identity allows the required full ground read before tuning can resume; the post-flight history remains visible while waiting. Another identified controller ends the previous session, and so does a gap of five seconds or more on the ground (see *Sessions*). If a read or restore was suspended, its original-profile return is still owed to the disconnected controller and is logged; it does not block a new read on the connected controller.
 
 Closing fullscreen or backgrounding the widget in flight pauses tuning, clears both variables,
 and retains the flight's steps for the post-flight list, including when the widget returns after
 landing. Reopening during the same flight continues at the same group and parameter. Ground MSP
 work runs only while tuning is open. The ground model-status sentence updates as setup faults are
-repaired. Session timestamps are displayed as `YYYY-MM-DD HH:MM`; existing SD snapshots remain compatible.
+repaired. The session row shows the time its start values were read; the SD snapshot keeps the full date and time, and existing snapshots remain compatible.
 
 ## Related
 

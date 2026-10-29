@@ -902,8 +902,8 @@ function Drive:forgetVerdict()
   self._checkResult = nil
 end
 
--- An explicit new session drops session caches and requests a new read.
--- The SD baseline remains available across restarts; a pending transaction retains its return pair.
+-- Ending a session (another board, a battery change) drops its caches and requests a new read,
+-- whose start values then replace these on the SD card; a pending transaction retains its return pair.
 function Drive:endSession()
   if self.profileJob then self.profileJob.cancelled = true end
   if _G.rfsuite and _G.rfsuite.inflightProfileJob == self.profileJob then _G.rfsuite.inflightProfileJob = nil end

@@ -889,7 +889,7 @@ end
 -- The flight session: the drive object -- start values, profile values, the profile to return to,
 -- pending saves -- and every module above. A session is one power cycle of the board: it ends after
 -- INFLIGHT_SESSION_GAP_SECONDS without a link on the ground (a battery change), on another board,
--- or when no session is held any more (never read, or New session). The next opening reads the
+-- or when no session is held any more (never read). The next opening reads the
 -- board again and starts a new session. In the air a session never ends.
 --
 -- The view: screen.lua and input.lua. They leave when the overlay is closed on the ground. Closed in

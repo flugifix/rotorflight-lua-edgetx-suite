@@ -156,9 +156,18 @@ and multi-profile session membership. A busy detent is spent, never queued.
 Selection plays `inflight/selected.wav` before name and value. Profile changes play
 `evt/profile.wav` plus the number. Unread/unknown profiles play `inflight/paused.wav`; returning
 to a read profile plays `inflight/resumed.wav` without closing and reopening tuning. A held report still
-waits for AdjF idle. Ground sessions back up every reachable PID/rate profile on SD; see the dashboard guide.
+waits for AdjF idle. Each session stores the start values of every reachable PID/rate profile on SD;
+a session is one power cycle of the flight controller. See the dashboard guide.
 Rates, Rescue & Level, Acc Trim and Other use the new group clips; the other groups use `adj/`.
 The Adjustments audio setting and critical-alarm suppression apply throughout.
+
+The flying overlay shows the selected function as a filled, outlined row with neighbouring
+values. Value mode compares the active profile value with its session start; an unknown
+start stays blank. After landing, **Continue tuning** returns to the ground screen in the same
+session, and **Restore...** opens the confirmed restore actions and Read again. Paging repeats the profile/group identity.
+Ground jobs show their current target and silence temporary profile announcements. Restores
+verify targets in RAM, save once after returning to the original pair, then reread each target
+without another write. The dashboard guide describes the verification stages and recovery.
 
 ## Related
 
@@ -168,11 +177,3 @@ The Adjustments audio setting and critical-alarm suppression apply throughout.
   adjustment functions, which are what this drives.
 
 *Checked against the RFSuite 0.2.1 development tree; native encoder acceptance is pending.*
-
-The flying overlay shows the selected function as a filled, outlined row with neighbouring
-values. Value mode compares the active profile value with its session start; an unknown
-start stays blank. After landing, use **Restore / read values** for the confirmed restore
-actions and Read again. Paging repeats the profile/group identity.
-Ground jobs show their current target and silence temporary profile announcements. Restores
-verify targets in RAM, save once after returning to the original pair, then reread each target
-without another write. The dashboard guide describes the verification stages and recovery.
