@@ -637,49 +637,38 @@ for _, locale in ipairs({"en", "de"}) do
   end
 end
 
-scenario("ground label columns use native text widths", function()
+scenario("ground label column is as wide as its widest caption", function()
   local widget = fixture(false)
   local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
-  local translations = assert(loadfile("src/rfsuite/i18n/de.lua"))().widgets.dashboard
-  local modelCaption = translations.inflight_ground_controls
+  local caption = "Model with a long caption"
   widget.zone = {w = 800, h = 480}
   widget.i18n = {t = function(key, fallback)
-    return key == "widgets.dashboard.inflight_model_status" and modelCaption or fallback
+    return key == "widgets.dashboard.inflight_model_status" and caption or fallback
   end}
   widget.state.inflight = {phase = "ground", setupVerdict = "ok", setSource = "board", cellCount = 36}
-  local savedMeasure, measured = lcd.sizeText, 0
-  local widths = {[modelCaption] = 93, ["FC slots"] = 41, Session = 57}
-  lcd.sizeText = function(text, font)
-    if widths[text] then measured = measured + 1; return widths[text] end
-    return savedMeasure(text, font)
-  end
   local nodes = {}; Screen.buildFullscreen(nodes, widget)
-  local caption, value
+  local label, value, slots
   for index, node in ipairs(nodes) do
-    if node.text == modelCaption then caption, value = node, nodes[index + 1] end
-    if type(node.text) == "function" then node.text(); node.text() end
+    if node.text == caption then label, value = node, nodes[index + 1] end
+    if node.text == "FC slots" then slots = node end
   end
-  lcd.sizeText = savedMeasure
-  check(caption and value and caption.w == 93 and value.x == caption.x + 93 + 4,
-    "native caption widths place the value column independently of UTF-8 byte counts")
-  check(measured == 3, "each caption is measured once at build time and never by cached text callbacks")
+  check(label and value and slots and slots.w == label.w and value.x >= label.x + label.w,
+    "every value starts right of the widest caption")
 end)
 scenario("ground primary caption falls back to the standard font when needed", function()
   local widget = fixture(false)
   local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+  local long = "Choose the parameters for this session from every group"
   widget.zone = {w = 800, h = 480}
+  widget.i18n = {t = function(key, fallback)
+    return key == "widgets.dashboard.inflight_choose_parameters" and long or fallback
+  end}
   widget.state.inflight = {phase = "ground", setupVerdict = "ok", setSource = "board", cellCount = 36}
-  local savedMeasure = lcd.sizeText
-  lcd.sizeText = function(text, font)
-    if text == "Choose parameters" and font == MIDSIZE then return 1000 end
-    return savedMeasure(text, font)
-  end
   local nodes = {}; Screen.buildFullscreen(nodes, widget)
-  lcd.sizeText = savedMeasure
   local button, caption
   for _, node in ipairs(nodes) do
     if node.type == "button" then button = node end
-    if node.text == "Choose parameters" then caption = node; break end
+    if node.text == long then caption = node; break end
   end
   check(caption and caption.font == 0 and button.h >= 48,
     "a wide primary caption keeps its complete text and prominence in the standard font")
@@ -687,21 +676,21 @@ end)
 scenario("ground footer uses the short controls hint when the long hint does not fit", function()
   local widget = fixture(false)
   local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
-  local savedPrefs, savedMeasure = rfsuite.preferences, lcd.sizeText
+  local savedPrefs = rfsuite.preferences
+  local long = "Rotate the encoder to select an action, then press it to open that action"
   rfsuite.preferences = {audio_events = {adjustment_events = true}}
+  widget.i18n = {t = function(key, fallback)
+    return key == "widgets.dashboard.inflight_ground_controls" and long or fallback
+  end}
   widget.state.inflight = {phase = "ground", setupVerdict = "ok", setSource = "board", cellCount = 36}
-  lcd.sizeText = function(text, font)
-    if text == "Rotate select / Press open" then return 1000 end
-    return savedMeasure(text, font)
-  end
   local nodes = {}; Screen.buildFullscreen(nodes, widget)
-  rfsuite.preferences, lcd.sizeText = savedPrefs, savedMeasure
-  local short, long
+  rfsuite.preferences = savedPrefs
+  local short, shown
   for _, node in ipairs(nodes) do
     if node.text == "Rotate / Press" then short = node end
-    if node.text == "Rotate select / Press open" then long = node end
+    if node.text == long then shown = node end
   end
-  check(short and not long, "the ground footer selects the complete short controls hint")
+  check(short and not shown, "the ground footer selects the complete short controls hint")
 end)
 
 scenario("ground link loss invalidates readings before a pending build", function()

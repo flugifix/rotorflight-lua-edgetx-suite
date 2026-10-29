@@ -2159,9 +2159,10 @@ do
       if node.type == "button" then buttons = buttons + 1 end
       if type(node.text) == "function" then reactive = reactive + 1 end
     end
-    -- The close box plus choose parameters, read again, reset start values and restore all; and
-    -- the three lines that move while a run is on without anything rebuilding to move them.
-    if buttons ~= 5 then error("accounting: the ground surface built " .. buttons .. " buttons, not 5") end
+    -- The close box plus choose parameters, read again, reset start values, turn on announcements
+    -- (adjustment announcements are off by default, so the priced surface carries the button) and
+    -- restore all; and the three lines that move while a run is on without anything rebuilding.
+    if buttons ~= 6 then error("accounting: the ground surface built " .. buttons .. " buttons, not 6") end
     if reactive < 3 then error("accounting: the ground surface built " .. reactive .. " reactive lines") end
   end
 

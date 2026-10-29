@@ -215,24 +215,9 @@ local function appendCentredLabel(children, x, y, w, boxH, text, color, font, al
     w, text, color, font, align)
 end
 
-
--- Fitting and column layout share the firmware's measurement, with a UTF-8 fallback.
-local function textWidth(text, font)
-  if lcd and type(lcd.sizeText) == "function" then
-    local width = lcd.sizeText(text, font)
-    if type(width) == "number" then return width end
-  end
-  local count = 0
-  for index = 1, #text do
-    local byte = string.byte(text, index)
-    if byte < 128 or byte >= 192 then count = count + 1 end
-  end
-  return count * charWidth(font)
-end
-
 local function textFits(text, width, font)
   if type(text) ~= "string" then return true end
-  return textWidth(text, font) <= width
+  return (#text * charWidth(font)) <= width
 end
 
 -- At most `n` bytes of `text`, never ending inside a UTF-8 character: the Configurator's German
@@ -394,11 +379,15 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
   -- dim text beside a title that said "TUNING - set: standard"; the set moved to the ground
   -- surface, which is where it can be acted on, and the profile took the room.
   local titleW = w - closeW - m.pad * 4 - 84
-  local unreadTitle = t("widgets.dashboard.inflight_title", "TUNING")
+  -- Looked up only once a read is owed; the live surface is rebuilt often and never needs it.
+  local unreadTitle
   appendCentredLabel(children, m.pad, 0, titleW, m.headerH,
     function()
       local snap = widget.state.inflight
-      if snap and snap.readRequired and snap.phase ~= "live" then return unreadTitle end
+      if snap and snap.readRequired and snap.phase ~= "live" then
+        unreadTitle = unreadTitle or t("widgets.dashboard.inflight_title", "TUNING")
+        return unreadTitle
+      end
       return snap and snap.profileText or ""
     end,
     p.text, m.large and MIDSIZE or 0, LEFT, m)
@@ -956,7 +945,8 @@ function M.buildGround(children, widget, m, w, h, t, p)
   local modelLabel = t("widgets.dashboard.inflight_model_status", "Model")
   local slotsLabel = t("widgets.dashboard.inflight_slots_status", "FC slots")
   local sessionLabel = t("widgets.dashboard.inflight_session_status", "Session")
-  local labelW = math.max(textWidth(modelLabel, lineFont), textWidth(slotsLabel, lineFont), textWidth(sessionLabel, lineFont))
+  -- The byte-count estimate textFits uses: a multibyte caption only widens the column.
+  local labelW = math.max(#modelLabel, #slotsLabel, #sessionLabel) * charWidth(lineFont)
   local labelX, valueX = m.pad + inset, m.pad + inset + labelW + 4
   local valueW = lineW - inset * 2 - labelW - 4
   children[#children + 1] = {type = "rectangle", x = m.pad, y = y, w = lineW, h = 0, color = p.header, filled = true}
