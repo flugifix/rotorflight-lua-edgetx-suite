@@ -25,7 +25,372 @@ so it matches the code it was generated from.
   an entry (`id`, `title`, `menuId`, `icon`, `row`, `col`) are left out. What a condition
   does is not explained here.
 
-**120 entries, 99 of them open a page, 56 of those pages are documented.**
+**120 entries, 99 of them open a page, 63 of those pages are documented.**
+
+## Diagrams
+
+The same tree drawn as charts, generated with the tables below. The border says what
+an entry is: blue a menu, green a page that is documented, orange and dashed a page
+with no documentation yet, grey and dotted an entry that opens neither a page file
+nor a menu with entries. A page that also opens a menu is drawn as a page.
+
+### Overview
+
+The sections and every menu in them; the pages of each menu are in the charts that
+follow.
+
+```mermaid
+flowchart LR
+  n0["Configuration"]:::section
+  n1["Flight Tuning"]:::menu
+  n0 --> n1
+  n2["Advanced"]:::menu
+  n1 --> n2
+  n3["Rates (Advanced)"]:::menu
+  n2 --> n3
+  n4["Setup"]:::menu
+  n0 --> n4
+  n5["Mixer"]:::menu
+  n4 --> n5
+  n6["Servos"]:::menu
+  n4 --> n6
+  n7["Controls"]:::menu
+  n4 --> n7
+  n8["Beepers"]:::menu
+  n7 --> n8
+  n9["Blackbox"]:::menu
+  n7 --> n9
+  n10["Power"]:::menu
+  n4 --> n10
+  n11["ESC #amp; Motors"]:::menu
+  n4 --> n11
+  n12["ESC Tools"]:::menu
+  n11 --> n12
+  n13["Governor"]:::menu
+  n4 --> n13
+  n14["Wizards"]:::menu
+  n0 --> n14
+  n15["System"]:::section
+  n16["Tools"]:::menu
+  n15 --> n16
+  n17["Diagnostics"]:::menu
+  n16 --> n17
+  n18["Logs"]:::documented
+  n15 --> n18
+  n19["Settings"]:::menu
+  n15 --> n19
+  n20["Dashboard"]:::menu
+  n19 --> n20
+  n21["Audio"]:::undocumented
+  n19 --> n21
+  n22["Events"]:::undocumented
+  n21 --> n22
+  n23["Developer"]:::menu
+  n15 --> n23
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
+### Flight Tuning
+
+```mermaid
+flowchart LR
+  n0["Flight Tuning"]:::menu
+  n1["PIDs"]:::documented
+  n0 --> n1
+  n2["Rates"]:::documented
+  n0 --> n2
+  n3["Tune Advisor"]:::documented
+  n0 --> n3
+  n4["Governor"]:::documented
+  n0 --> n4
+  n5["Advanced"]:::menu
+  n0 --> n5
+  n6["Filters"]:::documented
+  n5 --> n6
+  n7["PID Controller"]:::documented
+  n5 --> n7
+  n8["PID Bandwidth"]:::documented
+  n5 --> n8
+  n9["Autolevel"]:::documented
+  n5 --> n9
+  n10["Main Rotor"]:::documented
+  n5 --> n10
+  n11["Tail Rotor"]:::documented
+  n5 --> n11
+  n12["Rescue"]:::documented
+  n5 --> n12
+  n13["Rates (Advanced)"]:::menu
+  n5 --> n13
+  n14["Advanced"]:::documented
+  n13 --> n14
+  n15["Cyclic Behaviour"]:::documented
+  n13 --> n15
+  n16["Rate Table"]:::documented
+  n13 --> n16
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
+### Setup
+
+```mermaid
+flowchart LR
+  n0["Setup"]:::menu
+  n1["Configuration"]:::undocumented
+  n0 --> n1
+  n2["Radio Config"]:::undocumented
+  n0 --> n2
+  n3["Telemetry"]:::documented
+  n0 --> n3
+  n4["Accelerometer"]:::documented
+  n0 --> n4
+  n5["Alignment"]:::documented
+  n0 --> n5
+  n6["Ports"]:::documented
+  n0 --> n6
+  n7["Mixer"]:::menu
+  n0 --> n7
+  n8["Swash"]:::undocumented
+  n7 --> n8
+  n9["Geometry"]:::undocumented
+  n7 --> n9
+  n10["Tail"]:::undocumented
+  n7 --> n10
+  n11["Trims"]:::undocumented
+  n7 --> n11
+  n12["Servos"]:::menu
+  n0 --> n12
+  n13["PWM Output"]:::undocumented
+  n12 --> n13
+  n14["BUS Output"]:::undocumented
+  n12 --> n14
+  n15["Controls"]:::menu
+  n0 --> n15
+  n16["Modes"]:::documented
+  n15 --> n16
+  n17["Adjustments"]:::documented
+  n15 --> n17
+  n18["Failsafe"]:::documented
+  n15 --> n18
+  n19["Beepers"]:::menu
+  n15 --> n19
+  n20["Configuration"]:::undocumented
+  n19 --> n20
+  n21["ESC Beacon"]:::undocumented
+  n19 --> n21
+  n22["Blackbox"]:::menu
+  n15 --> n22
+  n23["Configuration"]:::undocumented
+  n22 --> n23
+  n24["Logging"]:::undocumented
+  n22 --> n24
+  n25["Status"]:::documented
+  n22 --> n25
+  n26["Stats"]:::undocumented
+  n15 --> n26
+  n27["In-Flight Tuning"]:::documented
+  n15 --> n27
+  n28["Power"]:::menu
+  n0 --> n28
+  n29["Battery"]:::documented
+  n28 --> n29
+  n30["Alerts"]:::undocumented
+  n28 --> n30
+  n31["Sources"]:::documented
+  n28 --> n31
+  n32["SmartFuel"]:::documented
+  n28 --> n32
+  n33["Preferences"]:::documented
+  n28 --> n33
+  n34["ESC #amp; Motors"]:::menu
+  n0 --> n34
+  n35["Throttle"]:::documented
+  n34 --> n35
+  n36["Telemetry"]:::documented
+  n34 --> n36
+  n37["RPM"]:::undocumented
+  n34 --> n37
+  n38["ESC Tools"]:::menu
+  n34 --> n38
+  n39["AM32"]:::documented
+  n38 --> n39
+  n40["BLHeli_S"]:::documented
+  n38 --> n40
+  n41["Bluejay"]:::documented
+  n38 --> n41
+  n42["Flyrotor"]:::documented
+  n38 --> n42
+  n43["Hobbywing V5"]:::documented
+  n38 --> n43
+  n44["OMP"]:::documented
+  n38 --> n44
+  n45["Scorpion"]:::documented
+  n38 --> n45
+  n46["XDFly"]:::documented
+  n38 --> n46
+  n47["YGE"]:::documented
+  n38 --> n47
+  n48["ZTW"]:::documented
+  n38 --> n48
+  n49["Motor Override"]:::undocumented
+  n34 --> n49
+  n50["Governor"]:::menu
+  n0 --> n50
+  n51["General"]:::documented
+  n50 --> n51
+  n52["Ramp Time"]:::documented
+  n50 --> n52
+  n53["Filters"]:::undocumented
+  n50 --> n53
+  n54["Bypass Curve"]:::undocumented
+  n50 --> n54
+  n55["Model"]:::documented
+  n0 --> n55
+  n56["GPS"]:::undocumented
+  n0 --> n56
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
+### Wizards
+
+```mermaid
+flowchart LR
+  n0["Wizards"]:::menu
+  n1["Full initial setup"]:::undocumented
+  n0 --> n1
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
+### Tools
+
+```mermaid
+flowchart LR
+  n0["Tools"]:::menu
+  n1["Copy Profiles"]:::documented
+  n0 --> n1
+  n2["Select Profile"]:::documented
+  n0 --> n2
+  n3["Flight Log"]:::documented
+  n0 --> n3
+  n4["Diagnostics"]:::menu
+  n0 --> n4
+  n5["FBL Status"]:::undocumented
+  n4 --> n5
+  n6["Rotorflight Status"]:::undocumented
+  n4 --> n6
+  n7["ELRS Link"]:::documented
+  n4 --> n7
+  n8["Validate Sensors"]:::documented
+  n4 --> n8
+  n9["SmartFuel"]:::documented
+  n4 --> n9
+  n10["CRSF Sensors"]:::documented
+  n4 --> n10
+  n11["System Status"]:::documented
+  n4 --> n11
+  n12["Session Logs"]:::documented
+  n4 --> n12
+  n13["Info"]:::documented
+  n4 --> n13
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
+### Settings
+
+```mermaid
+flowchart LR
+  n0["Settings"]:::menu
+  n1["General"]:::undocumented
+  n0 --> n1
+  n2["Dashboard"]:::menu
+  n0 --> n2
+  n3["Theme"]:::documented
+  n2 --> n3
+  n4["Settings"]:::empty
+  n2 --> n4
+  n5["Quick Settings"]:::documented
+  n2 --> n5
+  n6["Keys"]:::documented
+  n2 --> n6
+  n7["Standby screen"]:::documented
+  n2 --> n7
+  n8["In-Flight Tuning"]:::documented
+  n2 --> n8
+  n9["Localization"]:::documented
+  n0 --> n9
+  n10["Audio"]:::undocumented
+  n0 --> n10
+  n11["Volume"]:::documented
+  n10 --> n11
+  n12["Events"]:::undocumented
+  n10 --> n12
+  n13["On Connect"]:::undocumented
+  n12 --> n13
+  n14["Arming"]:::undocumented
+  n12 --> n14
+  n15["Governor"]:::undocumented
+  n12 --> n15
+  n16["Voltage"]:::undocumented
+  n12 --> n16
+  n17["Profiles"]:::undocumented
+  n12 --> n17
+  n18["ESC"]:::undocumented
+  n12 --> n18
+  n19["Adjustments"]:::undocumented
+  n12 --> n19
+  n20["SmartFuel"]:::undocumented
+  n12 --> n20
+  n21["Link"]:::undocumented
+  n12 --> n21
+  n22["Rescue"]:::documented
+  n12 --> n22
+  n23["Shortcuts"]:::empty
+  n0 --> n23
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
+### Developer
+
+```mermaid
+flowchart LR
+  n0["Developer"]:::menu
+  n1["MSP Speed"]:::documented
+  n0 --> n1
+  n2["API Tester"]:::undocumented
+  n0 --> n2
+  n3["MSP Experiments"]:::undocumented
+  n0 --> n3
+  n4["Settings"]:::documented
+  n0 --> n4
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
 
 ## Configuration
 
@@ -34,22 +399,22 @@ Section `configuration`.
 | Menu path | Entry id | Menu id | Opens | Documentation | Conditions |
 | --- | --- | --- | --- | --- | --- |
 | Flight Tuning | `flight_tuning` | `flight_tuning_menu` | menu, 5 entries | &mdash; | `enabledWhen = "fblConnected"`, `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; PIDs | `pids` | `flight_tuning_pids_page` | `flight_tuning/pids` | **none** | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; PIDs | `pids` | `flight_tuning_pids_page` | `flight_tuning/pids` | [flight_tuning/pids.md](../pages/flight_tuning/pids.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Rates | `rates` | `flight_tuning_rates_page` | `flight_tuning/rates` | [flight_tuning/rates.md](../pages/flight_tuning/rates.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Tune Advisor | `tune_advisor` | `flight_tuning_tune_advisor_page` | `flight_tuning/tune_advisor` | [flight_tuning/tune_advisor.md](../pages/flight_tuning/tune_advisor.md) | `minApiVersion = { 12, 0, 10 }`, `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Governor | `governor` | `flight_tuning_governor_page` | `flight_tuning/governor` | **none** | `minApiVersion = { 12, 0, 9 }`, `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Governor | `governor` | `flight_tuning_governor_page` | `flight_tuning/governor` | [flight_tuning/governor.md](../pages/flight_tuning/governor.md) | `minApiVersion = { 12, 0, 9 }`, `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced | `advanced` | `flight_tuning_advanced_menu` | menu, 8 entries | &mdash; | `enabled = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Filters | `filters` | `flight_tuning_advanced_filters_page` | `flight_tuning/advanced/filters` | **none** | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Filters | `filters` | `flight_tuning_advanced_filters_page` | `flight_tuning/advanced/filters` | [flight_tuning/advanced/filters.md](../pages/flight_tuning/advanced/filters.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; PID Controller | `pid_controller` | `flight_tuning_advanced_pid_controller_page` | `flight_tuning/advanced/pid_controller` | [flight_tuning/advanced/pid_controller.md](../pages/flight_tuning/advanced/pid_controller.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; PID Bandwidth | `pid_bandwidth` | `flight_tuning_advanced_pid_bandwidth_page` | `flight_tuning/advanced/pid_bandwidth` | [flight_tuning/advanced/pid_bandwidth.md](../pages/flight_tuning/advanced/pid_bandwidth.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; Autolevel | `autolevel` | `flight_tuning_advanced_autolevel_page` | `flight_tuning/advanced/autolevel` | [flight_tuning/advanced/autolevel.md](../pages/flight_tuning/advanced/autolevel.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; Main Rotor | `main_rotor` | `flight_tuning_advanced_main_rotor_page` | `flight_tuning/advanced/main_rotor` | [flight_tuning/advanced/main_rotor.md](../pages/flight_tuning/advanced/main_rotor.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; Tail Rotor | `tail_rotor` | `flight_tuning_advanced_tail_rotor_page` | `flight_tuning/advanced/tail_rotor` | [flight_tuning/advanced/tail_rotor.md](../pages/flight_tuning/advanced/tail_rotor.md) | `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Rescue | `rescue` | `flight_tuning_advanced_rescue_page` | `flight_tuning/advanced/rescue` | **none** | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Rescue | `rescue` | `flight_tuning_advanced_rescue_page` | `flight_tuning/advanced/rescue` | [flight_tuning/advanced/rescue.md](../pages/flight_tuning/advanced/rescue.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) | `rates_advanced` | `flight_tuning_advanced_rates_advanced_menu` | menu, 3 entries | &mdash; | &mdash; |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) &rsaquo; Advanced | `advanced` | `flight_tuning_advanced_rates_advanced_advanced_page` | `flight_tuning/advanced/rates_advanced/advanced` | **none** | `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) &rsaquo; Cyclic Behaviour | `cyclic_behaviour` | `flight_tuning_advanced_rates_advanced_cyclic_behaviour_page` | `flight_tuning/advanced/rates_advanced/cyclic_behaviour` | **none** | `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) &rsaquo; Rate Table | `table` | `flight_tuning_advanced_rates_advanced_table_page` | `flight_tuning/advanced/rates_advanced/table` | **none** | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) &rsaquo; Advanced | `advanced` | `flight_tuning_advanced_rates_advanced_advanced_page` | `flight_tuning/advanced/rates_advanced/advanced` | [flight_tuning/advanced/rates_advanced/advanced.md](../pages/flight_tuning/advanced/rates_advanced/advanced.md) | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) &rsaquo; Cyclic Behaviour | `cyclic_behaviour` | `flight_tuning_advanced_rates_advanced_cyclic_behaviour_page` | `flight_tuning/advanced/rates_advanced/cyclic_behaviour` | [flight_tuning/advanced/rates_advanced/cyclic_behaviour.md](../pages/flight_tuning/advanced/rates_advanced/cyclic_behaviour.md) | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) &rsaquo; Rate Table | `table` | `flight_tuning_advanced_rates_advanced_table_page` | `flight_tuning/advanced/rates_advanced/table` | [flight_tuning/advanced/rates_advanced/table.md](../pages/flight_tuning/advanced/rates_advanced/table.md) | `lockedWhileArmed = true` |
 | Setup | `setup` | `setup_menu` | menu, 14 entries | &mdash; | `enabledWhen = "fblConnected"`, `lockedWhileArmed = true` |
 | Setup &rsaquo; Configuration | `configuration` | `setup_configuration_page` | `setup/configuration` | **none** | `lockedWhileArmed = true` |
 | Setup &rsaquo; Radio Config | `radio_config` | `setup_radio_config_page` | `setup/radio_config` | **none** | `lockedWhileArmed = true` |
