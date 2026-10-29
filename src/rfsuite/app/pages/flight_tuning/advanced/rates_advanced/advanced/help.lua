@@ -16,11 +16,14 @@ return function(ctx)
     t(i18n, "help_p1"),
     t(i18n, "help_p2"),
     t(i18n, "help_p3"),
-    t(i18n, "help_p4")
+    t(i18n, "help_p4"),
+    t(i18n, "help_ceiling"),
+    t(i18n, "help_deadband"),
+    t(i18n, "help_deadband_filter")
   }
 
   return {
     title = t(i18n, "help_title"),
-    message = table.concat(parts, "\n\n")
+    message = table.concat(parts, "\n")
   }
 end

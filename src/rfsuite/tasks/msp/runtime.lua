@@ -34,6 +34,10 @@ local Log = nil
 local Version = nil
 local ApiVersion = nil
 local ModelPreferences = nil
+local Armed = nil
+local armedLoadFailureLogged = false
+local armedLoadBackoffUntil = 0
+local consecutiveArmedLoadFailures = 0
 
 local state = {
   initialized = false,
@@ -61,6 +65,7 @@ local state = {
   consecutiveApiVersionFailures = 0,
   consecutiveUidFailures = 0,
   mspLastError = nil,
+  mspErrorKind = nil,
   mspLastErrorAt = 0,
   pendingVersionRead = true,
   pendingUidRead = true,
@@ -423,31 +428,72 @@ local function armedFromValue(value)
   return nil
 end
 
-local function readArmedState()
-  if type(getValue) ~= "function" then
+-- Match FLIGHT_CONFIRM_SECONDS in tasks/events/runtime.lua, which confirms a flight after a gap.
+local FLIGHT_CONFIRM_SECONDS = 5.0
+local armedUncertainSinceTicks = nil
+
+local function holdArmedWhileUncertain(now)
+  if state.lastArmed ~= true then
+    armedUncertainSinceTicks = nil
     return false
   end
+  -- Compare in getTime() ticks so rounding seconds cannot delay the boundary by one tick.
+  local ticks = math.floor(now * 100 + 0.5)
+  if armedUncertainSinceTicks == nil then
+    armedUncertainSinceTicks = ticks
+  end
+  return (ticks - armedUncertainSinceTicks) < FLIGHT_CONFIRM_SECONDS * 100
+end
 
-  for i = 1, #ARM_SOURCES do
-    local ok, value = pcall(getValue, ARM_SOURCES[i])
-    if ok and value ~= nil then
-      local armed = armedFromValue(value)
-      if armed ~= nil then return armed end
+local function readArmedState(now)
+  if not Armed then
+    if now < armedLoadBackoffUntil then
+      return holdArmedWhileUncertain(now)
+    end
+    Armed = loadModule("lib/armed.lua")
+  end
+  if type(Armed) ~= "table" or type(Armed.isArmed) ~= "function" then
+    Armed = nil
+    -- As for a failed UID module load, leave the read owed without hitting the card every tick.
+    consecutiveArmedLoadFailures = consecutiveArmedLoadFailures + 1
+    armedLoadBackoffUntil = now + math.min(30, 2 + consecutiveArmedLoadFailures * 2)
+    if not armedLoadFailureLogged then
+      armedLoadFailureLogged = true
+      log("Armed reader unavailable; retrying after backoff", "warn")
+    end
+    return holdArmedWhileUncertain(now)
+  end
+  consecutiveArmedLoadFailures = 0
+
+  local ok, armed = pcall(Armed.isArmed)
+  if not ok then
+    return holdArmedWhileUncertain(now)
+  end
+  if armed == true then
+    armedUncertainSinceTicks = nil
+    return true
+  end
+  if state.lastArmed == true then
+    local okUncertain, uncertain = pcall(Armed.isUncertain)
+    if not okUncertain or uncertain == true then
+      return holdArmedWhileUncertain(now)
     end
   end
-
+  armedUncertainSinceTicks = nil
   return false
 end
 
---- The armed state off the same sources tick() reads, and whether it was written since the link
---- last came back.
+--- The armed state off named radio sources, and whether it was written since the link last
+--- came back.
 --
 -- getValue() answers a sensor that has stopped arriving with its last value, so once a lost link
--- returns, tick() reads the armed state the craft had BEFORE the loss until a decoder writes the
--- sensor again. getSourceValue()'s second result tells the two apart: EdgeTX marks every sensor
--- old once the link stops streaming, and the next value written clears the mark. Answers
--- `armed, current`, `current` true only for a reading written since; nil where no source
+-- returns, a reading can still be the armed state the craft had BEFORE the loss until a decoder
+-- writes the sensor again. getSourceValue()'s second result tells the two apart: EdgeTX marks
+-- every sensor old once the link stops streaming, and the next value written clears the mark.
+-- Answers `armed, current`, `current` true only for a reading written since; nil where no source
 -- answers or the radio has no getSourceValue().
+-- tick() instead reads armflags through lib/armed.lua and holds its last armed state while
+-- uncertain, until disarm is current or uncertainty lasts FLIGHT_CONFIRM_SECONDS with the link up.
 function Runtime.armedReading()
   local getSrcV = _G.getSourceValue
   if type(getSrcV) ~= "function" then return nil end
@@ -533,6 +579,7 @@ local function enqueueVersionReads(now)
         state.requestBackoffUntil = 0
         state.mspLastError = nil
         state.mspLastErrorAt = 0
+        state.mspErrorKind = nil
         state.values.apiVersion = parsed.version
         local fullySupported = isApiVersionSupported(parsed.version)
         local limitedCompatible = (not fullySupported) and isApiVersionLimitedCompatible(parsed.version)
@@ -696,7 +743,7 @@ local function doDisconnect(now, reason, keepLink)
     state.requestBackoffUntil = 0
   else
     if type(reason) == "string" and reason ~= "" then
-      setMspError(reason, now)
+      setMspError("Unsupported MSP API version " .. tostring(state.refusedApiVersion or "?"), now, "refused")
     end
   end
 
@@ -731,8 +778,6 @@ local function doDisconnect(now, reason, keepLink)
   state.consecutiveApiVersionFailures = 0
   state.consecutiveUidFailures = 0
   state.requestBackoffUntil = 0
-  state.mspLastError = nil
-  state.mspLastErrorAt = 0
   state.values.apiVersion = "0"
   state.values.fcVersion = "0"
   state.values.rfVersion = "0"
@@ -906,6 +951,7 @@ function Runtime.tick()
       state.unsupportedApiLogged = false
       state.mspLastError = nil
       state.mspLastErrorAt = 0
+      state.mspErrorKind = nil
       state.consecutiveApiVersionFailures = 0
       state.requestBackoffUntil = 0
       log("MSP link connected", "info")
@@ -920,10 +966,12 @@ function Runtime.tick()
   end
 
   if not connected then
+    -- Only continuous uncertainty with the link up spends the hold; a reconnect starts afresh.
+    armedUncertainSinceTicks = nil
     return false
   end
 
-  local armed = readArmedState()
+  local armed = readArmedState(now)
   if armed then
     if state.lastArmed ~= true then
       state.lastArmed = true

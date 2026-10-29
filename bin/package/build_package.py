@@ -141,13 +141,33 @@ def get_theme_metadata(theme_dir, source_name):
         return None
     config_m = re.search(r'configure\s*=\s*"([^"]+)"', content)
     stand_m = re.search(r"standalone\s*=\s*(true|false)", content)
+    # A shipped theme's icons are checked here, against the staged tree, and the row says so:
+    # the radio then takes them as named instead of opening each one in its theme scan
+    # (app/pages/settings/dashboard/lib.lua, appendTheme). An icon that is not there is left out,
+    # which is what the lookup on the radio would have concluded. A theme of the pilot's own can
+    # gain an icon after the build, so its rows keep what they declare and the radio looks.
+    pages = parse_theme_pages(content)
+    if source_name == "system":
+        for page in pages:
+            if page.get("icon") and not os.path.isfile(os.path.join(theme_dir, page["icon"])):
+                page["icon"] = None
+    # Every icon the row names is checked here, against the staged tree, and the row says so:
+    # the radio then takes a shipped theme's icons as named instead of opening each one in its
+    # theme scan (app/pages/settings/dashboard/lib.lua, appendTheme). An icon that is not there
+    # is left out, which is what the lookup on the radio would have concluded.
+    pages = parse_theme_pages(content)
+    if source_name == "system":
+        for page in pages:
+            if page.get("icon") and not os.path.isfile(os.path.join(theme_dir, page["icon"])):
+                page["icon"] = None
     return {
         "name": name_m.group(1),
         "source": source_name,
         "folder": os.path.basename(theme_dir),
         "configure": config_m.group(1) if config_m else None,
         "standalone": stand_m.group(1) == "true" if stand_m else False,
-        "pages": parse_theme_pages(content)
+        "icon": "icon.png" if os.path.isfile(os.path.join(theme_dir, "icon.png")) else None,
+        "pages": pages
     }
 
 
@@ -195,8 +215,9 @@ def generate_theme_index(target_core_dir, target_user_dir):
         cfg_val = f'"{e["configure"]}"' if e["configure"] else "nil"
         stand_val = "true" if e["standalone"] else "false"
         pages_val = lua_pages_table(e.get("pages"))
+        icon_val = f', icon = "{lua_escape(e["icon"])}"' if e.get("icon") else ""
         lines.append(f'  {{ name = "{safe_name}", source = "{e["source"]}", folder = "{safe_folder}", '
-                     f'configure = {cfg_val}, standalone = {stand_val}{pages_val} }},')
+                     f'configure = {cfg_val}, standalone = {stand_val}, checked = true{icon_val}{pages_val} }},')
     lines.append("}\n")
     with open(out_file, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))

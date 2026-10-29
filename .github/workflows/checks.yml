@@ -262,6 +262,9 @@ jobs:
       - name: Check per-model reset rollback
         run: lua5.3 bin/dashboard/verify_overrides_reset.lua
 
+      - name: Check dashboard tile choices and theme key pages
+        run: lua5.3 bin/dashboard/verify_field_choices.lua
+
       - name: Check dashboard standby geometry and formatting
         run: lua5.3 bin/dashboard/verify_standby.lua
 
@@ -310,6 +313,9 @@ jobs:
         run: |
           lua5.3 bin/smartfuel/verify_invalid_max.lua
           lua5.3 bin/smartfuel/verify_readers.lua
+
+      - name: Check the combined source
+        run: lua5.3 bin/smartfuel/verify_combined_source.lua
 
   flight-record-absent-sources:
     name: Flight record absent sources
@@ -373,11 +379,52 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y lua5.3
       - run: lua5.3 bin/msp/verify_esc_parameters_pack.lua
       - run: lua5.3 bin/msp/verify_esc_readback_after_save.lua
+      - run: lua5.3 bin/ui/verify_confirm_dialog_no_retain.lua
+
+  esc-yge-flag-bit3:
+    name: YGE flags bit 3
 
   flight-tuning-pids-governor-saves:
     name: Flight Tuning saves (PIDs, Governor)
+
+  flight-tuning-rescue-filters-saves:
+    name: Flight Tuning saves (Rescue, Filters)
+
+  flight-tuning-rates-saves:
+    name: Flight Tuning saves (Rates)
+
+  flight-tuning-tail-rotor-saves:
+    name: Flight Tuning saves (Tail Rotor)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/esc/verify_yge_flag_bit3.lua
+
+  msp-refused-error:
+    name: MSP refused and silent boards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/msp/verify_msp_refused_error.lua
+
+  flight-tuning-saves:
+    name: Flight Tuning saves
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/flight_tuning/verify_save_pid_profile_pages.lua
+
+  msp-armed-state:
+    name: MSP armed state
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/msp/verify_msp_armed_state.lua
       - run: lua5.3 bin/flight_tuning/verify_save_pids_governor_pages.lua
+      - run: lua5.3 bin/flight_tuning/verify_save_rescue_filters_pages.lua
+      - run: lua5.3 bin/flight_tuning/verify_save_rates_pages.lua
+      - run: lua5.3 bin/flight_tuning/verify_save_tail_rotor_page.lua

@@ -13,6 +13,7 @@ local Controls = nil
 local Common = nil
 local MspRuntime = nil
 local RcTuningApi = nil
+local SavePipeline = nil
 local LoadingOverlay = nil
 local Sensors = nil
 local Profile = nil
@@ -60,19 +61,21 @@ local function ensureDeps()
     end
     if type(ui.runtime) ~= "table" then
       ui.runtime = newRuntime()
+    end
+    if getmetatable(ui.runtime) == nil then
       setmetatable(ui.runtime, { __index = ui.runtimeBase })
     end
   end
 end
 
-local function pageText(i18n, key)
+local function pageText(i18n, key, fallback)
   if t then
     local translated = t(i18n, key)
     if translated ~= nil and translated ~= "" and translated ~= key then
       return translated
     end
   end
-  return key
+  return fallback or key
 end
 
 local function getRcConfig(session)
@@ -158,14 +161,9 @@ local function queueRcRead(isAutoReload)
 end
 
 local function queueRcWrite()
-  if not RcTuningApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not RcTuningApi then
     return false, "msp_runtime_unavailable"
-  end
-
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
   end
 
   local session = getSession()
@@ -175,31 +173,27 @@ local function queueRcWrite()
   rcConfig.cyclic_polarity = ui.config.cyclic_polarity
   rcConfig.cyclic_ring = ui.config.cyclic_ring
 
-  queue:add({
-    command = RcTuningApi.writeCommand,
-    payload = RcTuningApi.buildWritePayload(rcConfig),
-    isWrite = true,
-    processReply = function() 
+  return SavePipeline.start({
+    pageId = "flight_tuning_advanced_rates_advanced_cyclic_behaviour",
+    steps = {
+      {
+        label = "MSP_SET_RC_TUNING",
+        command = RcTuningApi.writeCommand,
+        payload = RcTuningApi.buildWritePayload(rcConfig)
+      }
+    },
+    reboot = false,
+    onSaved = function()
       ui.dirty = false
-      
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.command,
-          payload = {},
-          isWrite = true,
-          processReply = function()
-            queueRcRead(true)
-          end
-        })
-      else
-        queueRcRead(true)
-      end
     end,
-    errorHandler = function() end
+    onDone = function(result)
+      if not ui.runtime then return end
+      if result.saved then queueRcRead(true) end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
   })
-
-  return true, nil
 end
 
 local function getLiveProfile()
@@ -292,7 +286,7 @@ function M.build(ctx)
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "cyclic_polarity"), polarValue, function(nextBool)
     ui.config.cyclic_polarity = nextBool and 1 or 0
     ui.dirty = true
-  end)
+  end, { helpText = pageText(i18n, "help_p1") })
 
   -- 2) Cyclic Ring Switch
   local ringValue = tonumber(ui.config.cyclic_ring) or 0
@@ -309,11 +303,12 @@ function M.build(ctx)
     if type(ui.runtime.requestRebuild) == "function" then
       ui.runtime.requestRebuild()
     end
-  end)
+  end, { helpText = pageText(i18n, "help_p2") })
 
   -- 3) Cyclic Ring % Number Field (only if Ring is enabled)
   if ringEnabled then
     cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "cyclic_ring_value"), {
+      helpText = pageText(i18n, "help_p3"),
       min = 50,
       max = 250,
       step = 1,
@@ -341,11 +336,23 @@ end
 
 function M.onSave(ctx)
   if not M.canSave() then return false, "loaded_data_missing" end
-  queueRcWrite()
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if SavePipeline and SavePipeline.isActive() then return false end
+  local ok, err = queueRcWrite()
+  if not ok then
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
+        title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
+        message = tostring(err or "MSP write failed")
+      })
+    end
+    return false
+  end
   return true
 end
 
 function M.onReload(ctx)
+  if SavePipeline and SavePipeline.isActive() then return end
   local session = getSession()
   if session then
     loadFromSession()
@@ -368,6 +375,7 @@ function M.onClose()
   Common = nil
   MspRuntime = nil
   RcTuningApi = nil
+  SavePipeline = nil
   LoadingOverlay = nil
   Sensors = nil
   t = nil

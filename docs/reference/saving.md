@@ -370,12 +370,34 @@ a raise and logs it as a warning. On Stats the flight count kept for the flight 
 from the saved value also when the page was closed. In the EdgeTX simulator without a flight
 controller these three saves behave as on the other pages that use the shared save.
 
+Autolevel, Main Rotor, PID Bandwidth and PID Controller send their save through the tool's shared
+save: one write, built when Save is pressed, then one EEPROM write. The page is marked clean only
+once the flight controller has stored the values. A write the flight controller refuses or does
+not answer is shown as *Not saved*. Save pressed while their save is still running is ignored.
+After a save that worked, the page reads the values back from the flight controller if it is still
 PIDs and Governor under Flight Tuning send their save through the tool's shared save: each writes
 its profile settings, built when Save is pressed, then one EEPROM write. The page is marked clean
 only once the flight controller confirms that the values are stored; a refused write or a lost
 reply is shown as a failed save and leaves the edits unsaved. A Save pressed while their save is
 still running is ignored. After a successful save, each page reads the values back if it is still
 open; if it was closed, its next visit reads.
+Rescue and Filters under Flight Tuning > Advanced save through the tool's shared save: Rescue
+writes the rescue profile, Filters the filter configuration, then one EEPROM commit. The page is
+marked clean only once the flight controller has stored the values; a refused write or one that
+gets no reply is reported. Save pressed while their save is still running is ignored. After a
+successful save, each page reads its values back from the flight controller if it is still open;
+otherwise its next visit reads them.
+Rates and the Table, Dynamics and Cyclic Behaviour pages under Rates (Advanced) send their save
+through the tool's shared save: each writes the active rate profile, then one EEPROM write. The
+page is marked clean only once the flight controller has stored the values; a refused write or
+one that receives no reply is shown as a failed save. A Save pressed while the save is still
+running is ignored. After a successful save, each page reads the values back if it is still open.
+Tail Rotor under Flight Tuning > Advanced sends its save through the tool's shared save: the PID
+profile write and, when available, the governor profile write, then one EEPROM commit. The page is
+marked clean only once the flight controller has stored the values; a refused or unanswered write
+or commit is shown as a failed save. A Save pressed while its save is still running is ignored.
+After a successful save, the page reads the values back from the flight controller if it is still
+open.
 
 ## ESC Configurator pages
 
@@ -408,7 +430,7 @@ instead of writing it to the ESC.
 A save the page is left during still reaches the ESC: its write is already queued and is sent.
 The answer then changes nothing on the page that was left. On AM32, BLHeli_S and Bluejay it no
 longer starts the reset that follows a save on a page that stays open, so the next visit runs the
-full connection sequence; on Hobbywing V5 and Scorpion it does not send the read that follows a
+full connection sequence; on FlyRotor, Hobbywing V5, Scorpion and YGE it does not send the read that follows a
 save. Before, the answer ran against the closed page and stopped with an error in the log, and on
 AM32, BLHeli_S and Bluejay the next visit ran that post-save reset in place of its connection
 sequence. The same holds when the page is left while that post-save reset is still out: its answer,

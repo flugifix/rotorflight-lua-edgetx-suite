@@ -13,6 +13,9 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
       - 'bin/docs/**'
+      - 'src/rfsuite/app/manifest.lua'
+      - 'src/rfsuite/app/pages/init.lua'
+      - 'src/rfsuite/i18n/en.lua'
       - '.github/workflows/docs.yml'
   push:
     branches: [master]
@@ -20,6 +23,9 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
       - 'bin/docs/**'
+      - 'src/rfsuite/app/manifest.lua'
+      - 'src/rfsuite/app/pages/init.lua'
+      - 'src/rfsuite/i18n/en.lua'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 

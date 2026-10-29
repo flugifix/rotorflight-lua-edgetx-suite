@@ -25,7 +25,7 @@ so it matches the code it was generated from.
   an entry (`id`, `title`, `menuId`, `icon`, `row`, `col`) are left out. What a condition
   does is not explained here.
 
-**141 entries, 119 of them open a page, 76 of those pages are documented.**
+**141 entries, 119 of them open a page, 84 of those pages are documented.**
 
 ## Configuration
 
@@ -39,17 +39,17 @@ Section `configuration`.
 | Flight Tuning &rsaquo; Tune Advisor | `tune_advisor` | `flight_tuning_tune_advisor_page` | `flight_tuning/tune_advisor` | [flight_tuning/tune_advisor.md](../pages/flight_tuning/tune_advisor.md) | `minApiVersion = { 12, 0, 10 }`, `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Governor | `governor` | `flight_tuning_governor_page` | `flight_tuning/governor` | [flight_tuning/governor.md](../pages/flight_tuning/governor.md) | `minApiVersion = { 12, 0, 9 }`, `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced | `advanced` | `flight_tuning_advanced_menu` | menu, 8 entries | &mdash; | `enabled = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Filters | `filters` | `flight_tuning_advanced_filters_page` | `flight_tuning/advanced/filters` | **none** | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Filters | `filters` | `flight_tuning_advanced_filters_page` | `flight_tuning/advanced/filters` | [flight_tuning/advanced/filters.md](../pages/flight_tuning/advanced/filters.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; PID Controller | `pid_controller` | `flight_tuning_advanced_pid_controller_page` | `flight_tuning/advanced/pid_controller` | [flight_tuning/advanced/pid_controller.md](../pages/flight_tuning/advanced/pid_controller.md) | `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; PID Bandwidth | `pid_bandwidth` | `flight_tuning_advanced_pid_bandwidth_page` | `flight_tuning/advanced/pid_bandwidth` | **none** | `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Autolevel | `autolevel` | `flight_tuning_advanced_autolevel_page` | `flight_tuning/advanced/autolevel` | **none** | `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Main Rotor | `main_rotor` | `flight_tuning_advanced_main_rotor_page` | `flight_tuning/advanced/main_rotor` | **none** | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; PID Bandwidth | `pid_bandwidth` | `flight_tuning_advanced_pid_bandwidth_page` | `flight_tuning/advanced/pid_bandwidth` | [flight_tuning/advanced/pid_bandwidth.md](../pages/flight_tuning/advanced/pid_bandwidth.md) | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Autolevel | `autolevel` | `flight_tuning_advanced_autolevel_page` | `flight_tuning/advanced/autolevel` | [flight_tuning/advanced/autolevel.md](../pages/flight_tuning/advanced/autolevel.md) | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Main Rotor | `main_rotor` | `flight_tuning_advanced_main_rotor_page` | `flight_tuning/advanced/main_rotor` | [flight_tuning/advanced/main_rotor.md](../pages/flight_tuning/advanced/main_rotor.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; Tail Rotor | `tail_rotor` | `flight_tuning_advanced_tail_rotor_page` | `flight_tuning/advanced/tail_rotor` | [flight_tuning/advanced/tail_rotor.md](../pages/flight_tuning/advanced/tail_rotor.md) | `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Rescue | `rescue` | `flight_tuning_advanced_rescue_page` | `flight_tuning/advanced/rescue` | **none** | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Rescue | `rescue` | `flight_tuning_advanced_rescue_page` | `flight_tuning/advanced/rescue` | [flight_tuning/advanced/rescue.md](../pages/flight_tuning/advanced/rescue.md) | `lockedWhileArmed = true` |
 | Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) | `rates_advanced` | `flight_tuning_advanced_rates_advanced_menu` | menu, 3 entries | &mdash; | &mdash; |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) &rsaquo; Advanced | `advanced` | `flight_tuning_advanced_rates_advanced_advanced_page` | `flight_tuning/advanced/rates_advanced/advanced` | **none** | `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) &rsaquo; Cyclic Behaviour | `cyclic_behaviour` | `flight_tuning_advanced_rates_advanced_cyclic_behaviour_page` | `flight_tuning/advanced/rates_advanced/cyclic_behaviour` | **none** | `lockedWhileArmed = true` |
-| Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) &rsaquo; Rate Table | `table` | `flight_tuning_advanced_rates_advanced_table_page` | `flight_tuning/advanced/rates_advanced/table` | **none** | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) &rsaquo; Advanced | `advanced` | `flight_tuning_advanced_rates_advanced_advanced_page` | `flight_tuning/advanced/rates_advanced/advanced` | [flight_tuning/advanced/rates_advanced/advanced.md](../pages/flight_tuning/advanced/rates_advanced/advanced.md) | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) &rsaquo; Cyclic Behaviour | `cyclic_behaviour` | `flight_tuning_advanced_rates_advanced_cyclic_behaviour_page` | `flight_tuning/advanced/rates_advanced/cyclic_behaviour` | [flight_tuning/advanced/rates_advanced/cyclic_behaviour.md](../pages/flight_tuning/advanced/rates_advanced/cyclic_behaviour.md) | `lockedWhileArmed = true` |
+| Flight Tuning &rsaquo; Advanced &rsaquo; Rates (Advanced) &rsaquo; Rate Table | `table` | `flight_tuning_advanced_rates_advanced_table_page` | `flight_tuning/advanced/rates_advanced/table` | [flight_tuning/advanced/rates_advanced/table.md](../pages/flight_tuning/advanced/rates_advanced/table.md) | `lockedWhileArmed = true` |
 | Setup | `setup` | `setup_menu` | menu, 14 entries | &mdash; | `enabledWhen = "fblConnected"`, `lockedWhileArmed = true` |
 | Setup &rsaquo; Configuration | `configuration` | `setup_configuration_page` | `setup/configuration` | **none** | `lockedWhileArmed = true` |
 | Setup &rsaquo; Radio Config | `radio_config` | `setup_radio_config_page` | `setup/radio_config` | **none** | `lockedWhileArmed = true` |

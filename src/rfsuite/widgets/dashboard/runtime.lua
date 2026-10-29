@@ -528,12 +528,86 @@ local function tickCardSink(self)
   pcall(LogSink.tick, armed)
 end
 
+-- lib/precompile.lua while the compile pass after an install holds the connection back, false
+-- once there is no such pass (Precompile.startIfStale). Asked on the first pass and loaded only
+-- then; a tree that is already compiled costs two small file reads, and the module is let go.
+local Compile = nil
+
+-- True while the pass runs, and after it for as long as the radio has not been restarted: the
+-- modules this state loaded at start are the previous build's, so the dashboard does not connect
+-- on them and asks for the restart instead. It takes one unit of the pass per call, so the
+-- dashboard and the service widget wait for it together and either of them alone still finishes
+-- it.
+local function compileHoldsConnect(self)
+  if Compile == false then return false end
+  if Compile == nil then
+    Compile = false
+    local developer = self.preferences and self.preferences.developer
+    if developer and developer.precompile == false then return false end
+    local Precompile = requireModule("lib/precompile.lua")
+    if type(Precompile) ~= "table" or type(Precompile.startIfStale) ~= "function" then return false end
+    -- No version to fall back on: the widgets act only on a tree the packager stamped with its
+    -- build identity, so a source tree copied by hand never holds the connection back.
+    if not Precompile.startIfStale(nil) then
+      if not Precompile.isRunning() and _G.rfsuite and type(_G.rfsuite.clearModule) == "function" then
+        _G.rfsuite.clearModule("lib/precompile.lua")
+      end
+      return false
+    end
+    Compile = Precompile
+    widgetLog(self, "compile pass after install: connection held until it finishes", "info")
+  end
+  Compile.stepShared()
+  if Compile.isRunning() then return true end
+  if Compile.needsRestart() then
+    if not self._compileRestartLogged then
+      self._compileRestartLogged = true
+      widgetLog(self, "compile pass finished: waiting for a restart of the radio", "info")
+    end
+    return true
+  end
+  Compile = false
+  widgetLog(self, "compile pass finished", "info")
+  return false
+end
+
+-- The splash line while the pass runs, and the request to restart once it has finished. It names
+-- the work the way the tool's start screen does, and the count in it moves once a second at most:
+-- the splash is rebuilt whenever its line changes, and a count taken on every pass would turn every
+-- pass into a build.
+local function compileStatusLine(self, t)
+  if Compile and Compile.needsRestart() then
+    return (t and t("app.restart_radio.splash")) or "Suite updated. Please restart the radio."
+  end
+  local now = nowSeconds()
+  if self._compileLine == nil or (now - (self._compileLineAt or 0)) >= 1 then
+    local done, total = 0, 0
+    if Compile then done, total = Compile.getProgress() end
+    local headline = (t and t("app.preparing")) or "Preparing suite"
+    if total > 0 then
+      self._compileLine = headline .. " (" .. tostring(done) .. "/" .. tostring(total) .. ")"
+    else
+      self._compileLine = headline
+    end
+    self._compileLineAt = now
+  end
+  return self._compileLine
+end
+
 local function tickMspRuntime(self, carry)
   tickCardSink(self)
 
   if not MspRuntime then
     return
   end
+
+  -- Nothing is attached, ticked or queued until the pass is through: the connect chain would
+  -- load the same files the pass is compiling, and the dashboard waits on that chain anyway.
+  if compileHoldsConnect(self) then
+    self._compileHolding = true
+    return
+  end
+  self._compileHolding = nil
 
   if not self.mspAttached and type(MspRuntime.attach) == "function" then
     MspRuntime.attach("dashboard-widget")
@@ -2150,8 +2224,9 @@ local function updateConnectionState(self)
   -- splash stays up and says why, and the dashboard is not drawn for a board the suite does not
   -- talk to.
   local refused = type(runtimeState) == "table" and runtimeState.unsupportedApi == true
+  local compiling = self._compileHolding == true
   local rawReady = connected and batteryReady and rfReady and modelPrefsResolved and tasksDone
-    and not refused
+    and not refused and not compiling
   local now = nowSeconds()
 
   -- Not counted while refused, so a refusal that is lifted (a fresh connect re-reads the version)
@@ -2172,7 +2247,7 @@ local function updateConnectionState(self)
     self.readySince = nil
   end
 
-  local softTimeoutReady = connected and not refused and self.pendingSince ~= nil
+  local softTimeoutReady = connected and not refused and not compiling and self.pendingSince ~= nil
     and (now - self.pendingSince) >= SPLASH_SOFT_TIMEOUT_SECONDS
   -- The hold steadies a gate that flickers, and a flicker is a gate that has been open and has
   -- shut again. The FIRST time the conditions come true after the widget starts is not that:
@@ -2188,7 +2263,10 @@ local function updateConnectionState(self)
   local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
 
   local statusLine, standbyInfoKind = nil, nil
-  if not connected then
+  if compiling then
+    standbyInfoKind = "suite_loading"
+    statusLine = compileStatusLine(self, t)
+  elseif not connected then
     standbyInfoKind = "controller_missing"
     statusLine = (t and t("widgets.dashboard.waiting_for_msp_link")) or "Waiting for MSP link"
     self.batteryDialogState = "pending"
@@ -2574,6 +2652,34 @@ local function themeStateKeys(declared)
   return keys
 end
 
+-- The pilot's choice of what a box theme's tiles show (widgets/dashboard/fields.lua), put on the
+-- phase module just loaded. The module is a fresh table on every load, so its `boxes` can be
+-- replaced; the boxes themselves are not written to. A theme whose configuration holds no choice
+-- for this phase -- every theme until the pilot makes one -- costs one walk of that small table
+-- and never loads the catalogue. A `boxes` function is wrapped, so the choices are applied on
+-- each build, where the engine calls it, and never per frame.
+local Fields = nil
+local function applyFieldChoices(theme, phase, config)
+  if type(theme) ~= "table" or type(config) ~= "table" or type(phase) ~= "string" then return end
+  local boxes = theme.boxes
+  if type(boxes) ~= "table" and type(boxes) ~= "function" then return end
+  local prefix = "field_" .. phase .. "_"
+  local any = false
+  for k in pairs(config) do
+    if type(k) == "string" and string.sub(k, 1, #prefix) == prefix then any = true; break end
+  end
+  if not any then return end
+  if Fields == nil then Fields = requireModule("widgets/dashboard/fields.lua") or false end
+  if not Fields then return end
+  if type(boxes) == "table" then
+    theme.boxes = Fields.apply(boxes, phase, config)
+  else
+    theme.boxes = function(zone, state)
+      return Fields.apply(boxes(zone, state), phase, config)
+    end
+  end
+end
+
 -- Returns the theme module, the phase key it was resolved for, and the theme's own init table.
 -- The caller keeps the last two so that a phase change can be told from a MODULE change without
 -- reading init.lua off the card again: a phase that falls back to the module already on screen
@@ -2705,6 +2811,14 @@ local function takeFullscreenMode(self)
   local themeMode = type(initTable) == "table" and initTable.fullscreen == "theme"
   self._viewBase = themeMode and "theme" or nil
   self._declaredKeys = type(initTable) == "table" and initTable.keys or nil
+  -- A theme that declares boxes has no build of its own to fill `ctx.keys` from, so the bindings
+  -- the pilot chose on its Keys page are read here, with the manifest's, once per theme load.
+  if themeMode and type(self.theme) == "table" and type(self.theme.build) ~= "function" then
+    local KeyBindings = requireModule("widgets/dashboard/keys.lua")
+    if KeyBindings and type(KeyBindings.themeBindings) == "function" then
+      self._declaredKeys = KeyBindings.themeBindings(self.state and self.state.themeConfig, self._declaredKeys)
+    end
+  end
   local ready = self.connectionReady == true or self.flightMode == "postflight" or self.flightMode == "offline"
   holder.ready = ready
   self._viewCtx = nil
@@ -3226,20 +3340,23 @@ end
 -- Whether this read's arm flags are left untaken, because the MSP runtime still reads the model
 -- as armed.
 --
--- While the link is up the runtime reads the same ARM sensor on every logic tick and keeps the
--- answer in `lastArmed`, and this widget ticks it at the top of the very pass that reads below --
--- ahead of the event runtimes, whose custom-telemetry drain publishes that sensor. So when the
--- runtime holds armed and this read finds bit 0 clear, the sensor changed between two reads of
--- one pass: a frame the drain published in between, possibly one queued long before, or a sensor
--- that read 0 for that moment. (While the link is down the runtime does not read at all and keeps
--- its last answer; a disarmed reading taken then is a reading from a link that is not there.)
+-- While the link is up the runtime reads armflags through lib/armed.lua on every logic tick and
+-- keeps the answer in `lastArmed`, and this widget ticks it at the top of the very pass that reads
+-- below -- ahead of the event runtimes, whose custom-telemetry drain publishes that sensor. So
+-- when the runtime's current reading is armed and this read finds bit 0 clear, the sensor changed
+-- between two reads of one pass: a frame the drain published in between, possibly one queued long
+-- before, or a sensor that read 0 for that moment. (While the link is down the runtime does not
+-- read at all and keeps its last answer; a disarmed reading taken then is a reading from a link
+-- that is not there.)
 -- Taking it would end the flight on this screen -- the phase drops to postflight and back, the
 -- disarm is announced, the landing voltage and `lastDisarmAt` are stamped -- for a model that is
 -- still flying. Left untaken, a real disarm is taken by the first read after the runtime's next
 -- tick, which has read it by then.
+-- The runtime also holds its last armed state while uncertain, until disarm is current or
+-- uncertainty lasts FLIGHT_CONFIRM_SECONDS (5 seconds) with the link up.
 --
 -- One direction only. A reading of ARMED is always taken: the runtime's `false` is also what it
--- holds when no arm source answers at all -- a simulator with no flight controller behind it is
+-- holds when no arm source has ever answered -- a simulator with no flight controller behind it is
 -- one such case -- so it cannot overrule a reading that says the model is armed, and erring
 -- towards armed is the safe side of that question.
 --
@@ -4011,6 +4128,7 @@ function Runtime.new(zone, options)
     local declares
     self.theme, self.themeStateKey, declares = loadThemeModuleForState(selectedTheme, self.flightMode)
     self.themeStateKeys = themeStateKeys(declares)
+    applyFieldChoices(self.theme, self.themeStateKey or self.flightMode, nextConfig)
 
     -- A theme of the pilot's own may read the flight record under the names it carried before it
     -- moved to the session table. The mapping goes on HERE -- with the theme, in the same call,
