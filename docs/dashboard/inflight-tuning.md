@@ -74,8 +74,8 @@ list and no press, trim or hold steps anything in it; its slots are counted as *
 the **FC slots** status line. An empty or wholly unusable read shows **No usable slots on the
 board** and clears the old row names. Before the read the line says **Not read yet**.
 
-**Set up suggested functions** on the ground screen writes the suggested 36-cell layout (see
-*The suggested functions* below for which function goes where), with each parameter's
+**Set up suggested functions** on the ground screen writes the suggested set (see *The
+suggested functions* and *Your own adjustment functions* below), with each parameter's
 full range as its slot minimum and maximum. The overlay still derives its set from the next
 ground read. A cell whose current value lies outside its slot's minimum and maximum refuses
 its step until the flight controller is set up again; the **FC slots** warning counts these
@@ -128,8 +128,9 @@ One filled status panel shows **Model** (the setup verdict), **FC slots** (the n
 read from the board, plus skipped slots), and **Session** (the time this session's start values
 were read, for example **Start values 14:32**, or a not-read/refused status). Dim labels sit
 beside values. Each status takes one line on 480x272, 480x320 and 800x480 displays, and a second
-one only where its text needs it; the rows are placed by the standard font's measured line, so a
-long status never runs into the actions. The model verdict is green when setup passes, amber while
+one only where its text needs it and the actions keep their room; where they would not, the status
+is cut to one line, the slot count first, then the session, the model verdict last. The rows are
+placed by the standard font's measured line, so a long status never runs into the actions. The model verdict is green when setup passes, amber while
 unchecked or checking, and red for a setup fault. Warnings about FC bounds and an unsaved model
 default stay in the panel. Secondary actions sit two to a row where both captions fit half the
 width and one to a row otherwise, in the same encoder order, above **Restore all**. The space down
@@ -194,43 +195,52 @@ never sends MSP while armed.
 
 #### The suggested functions
 
-**Set up suggested functions** writes 36 adjustment slots, numbered as on the Adjustments page:
-slots 1 and 2 (the profile selection) stay as they are, slots 3 to 38 are replaced. Every slot
-gets one function, enabled while the bank channel sits in that slot's band, stepped by the value
-channel's increment and decrement windows, limited to the function's full Configurator range, and
-stepped by the chosen **Step size** (default 5) or, for the head speed, by the **Head speed step**
-(default 50). The table shows where each function sits: a column is a bank (the bank channel's
-band), a row is a pair of step windows on the value channel; the slot number is in brackets.
+**Set up suggested functions** replaces adjustment slots 3 to 38, numbered as on the Adjustments
+page, with the functions below; slots 1 and 2 (the profile selection) stay. They use the two
+channels set under *System* → *Settings* → *Dashboard* → *In-Flight Tuning*. Each one is limited to the
+function's full range and steps by the chosen **Step size** (default 5); the head speed steps by the
+**Head speed step** (default 50). On the tuning screen they appear in these groups, in this order:
 
-| Row (increment / decrement window) | Bank 1 (900–1100 µs) | Bank 2 (1100–1300 µs) | Bank 3 (1300–1400 µs) | Bank 4 (1550–1700 µs) | Bank 5 (1750–1900 µs) | Bank 6 (1950–2100 µs) |
-|---|---|---|---|---|---|---|
-| 1 (1925–1975 / 1025–1075 µs) | Pitch P-gain (3) | Pitch I-gain (9) | Pitch D-gain (15) | Pitch F-gain (21) | Pitch O-gain (25) | Pitch B-gain (29) |
-| 2 (1850–1900 / 1100–1150 µs) | Roll P-gain (4) | Roll I-gain (10) | Roll D-gain (16) | Roll F-gain (22) | Roll O-gain (26) | Roll B-gain (30) |
-| 3 (1775–1825 / 1175–1225 µs) | Yaw P-gain (5) | Yaw I-gain (11) | Yaw D-gain (17) | Yaw F-gain (23) | Governor Cyclic Precomp (27) | Yaw B-gain (31) |
-| 4 (1700–1750 / 1250–1300 µs) | Governor P-gain (6) | Governor I-gain (12) | Governor D-gain (18) | Governor F-gain (24) | Governor Collective Precomp (28) | Governor PID-gain (32) |
-| 5 (1625–1675 / 1325–1375 µs) | Yaw CCW Stop Gain (7) | Yaw Cyclic Precomp (13) | Rescue Climb Collective (19) | Yaw Inertia Precomp Gain (33) | Cross Coupling Gain (35) | Governor Headspeed (37) |
-| 6 (1550–1600 / 1400–1450 µs) | Yaw CW Stop Gain (8) | Yaw Collective Precomp (14) | Rescue Hover Collective (20) | Yaw Precomp Cutoff (34) | Cross Coupling Cutoff (36) | Governor TTA-gain (38) |
+| Group | Functions, in the order shown | Range |
+|---|---|---|
+| Roll | P, I, D, F, B and O gain | 0 to 250 |
+| Pitch | P, I, D, F, B and O gain | 0 to 250 |
+| Yaw | P, I, D, F and B gain; CW and CCW stop gain; cyclic and collective precomp; inertia precomp gain; precomp cutoff | 0 to 250, stop gains 25 to 250 |
+| Governor | P, I, D and F gain; PID gain; TTA gain; cyclic and collective precomp; head speed | 0 to 250, head speed 0 to 10000 |
+| Cross Coupling | gain, cutoff | 0 to 250 |
+| Rescue & Level | rescue climb collective, rescue hover collective | 0 to 1000 |
 
-Ranges: the gains, precomps, cutoffs and cross coupling 0 to 250; the yaw stop gains 25 to 250;
-the rescue climb and hover collective 0 to 1000; the governor head speed 0 to 10000. Slots 3 to 32
-hold the first thirty in bank order; the six cells of rows 5 and 6 in banks 4 to 6 follow on slots
-33 to 38.
+Cyclic master gain, rates, filters and accelerometer trim are not part of this set; they can be
+tuned when the board carries slots of your own for them.
 
-The tuning screen does not show the slots in this order. It groups the functions by axis and
-subsystem and shows each name without its group's word; with this layout the groups and their
-order are:
+#### Your own adjustment functions
 
-| Group | Functions, in the order shown (slot) |
-|---|---|
-| Roll | P-gain (4), I-gain (10), D-gain (16), F-gain (22), B-gain (30), O-gain (26) |
-| Pitch | P-gain (3), I-gain (9), D-gain (15), F-gain (21), B-gain (29), O-gain (25) |
-| Yaw | P-gain (5), I-gain (11), D-gain (17), F-gain (23), B-gain (31), CW Stop Gain (8), CCW Stop Gain (7), Cyclic Precomp (13), Collective Precomp (14), Inertia Precomp Gain (33), Precomp Cutoff (34) |
-| Governor | P-gain (6), I-gain (12), D-gain (18), F-gain (24), PID-gain (32), TTA-gain (38), Cyclic Precomp (27), Collective Precomp (28), Headspeed (37) |
-| Cross Coupling | Gain (35), Cutoff (36) |
-| Rescue & Level | Rescue Climb Collective (19), Rescue Hover Collective (20) |
+Tuning does not need the suggested set. Every session reads the board's own adjustment slots on the
+ground and offers what it can step, so a layout made in the Configurator works as it is. A slot is
+used when:
 
-**Choose parameters** narrows this to the groups and functions a session flies; the slots on the
-board stay as written.
+- its enable channel is the bank channel and its value channel the value channel set under
+  *System* → *Settings* → *Dashboard* → *In-Flight Tuning* (by default channels 11 and 12). Slots on other
+  channels, such as your own profile switches, are left alone and are not shown;
+- it steps. A continuous slot on these two channels is not offered;
+- the bank channel can be parked in its enable window without enabling another slot's window on
+  the same channels. Otherwise the whole window is refused, with every slot in it;
+- its window is among the first six enable windows (lowest first) and the first six increment
+  windows (furthest from centre first); further windows are not used.
+
+Slots that are left out this way are counted as skipped on the **FC slots** line. A step direction
+whose window would also fire a second slot, including a slot whose enable is always on, is refused;
+the function stays listed when its other direction is safe.
+
+Your functions get the Configurator's names and are grouped and ordered as above; a function the
+suite does not know is listed under **Other** as *Function* and its number. Profile selection
+functions (rate, PID, LED, OSD and battery profile) are never offered. Each one steps by the slot's
+own step and stays within the slot's own minimum and maximum; while its current value lies outside
+them its step is refused and the ground screen warns how many such values there are.
+
+**Set up suggested functions** replaces slots 3 to 38 whatever they hold, so do not use it on a
+board whose own layout you want to keep. **Choose parameters** narrows either set to what a session
+flies, without changing the board.
 
 Below it, **Read again** refreshes the session's profiles without changing its start values.
 **Restore all** is set apart at the bottom in the destructive-action colour and opens the
@@ -461,7 +471,8 @@ Closing tuning on the ground or in the air keeps the session. Closed on the grou
 own code is unloaded and loads again on the next opening, which takes a few passes; closed in the
 air it stays loaded until the landing, so reopening during the flight is immediate. When the
 session ends (see *Sessions*) while tuning is closed, the session and all of tuning's code leave
-memory at once; the next opening reads the board and begins a new session. Nothing is unloaded
+memory at once, unless another dashboard on the radio still shows tuning, holds a session or has
+the configuration tool open; the next opening reads the board and begins a new session. Nothing is unloaded
 while armed, while a profile return or a save is still outstanding, or while the suite's tool is
 open. A link interruption shorter than a session's end keeps the session and the fullscreen visit,
 resuming automatically once the link and arm state are known. Closing,
