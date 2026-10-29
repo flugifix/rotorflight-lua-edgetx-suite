@@ -2099,15 +2099,18 @@ do
         if string.find(node.text, "/", 1, true) and #node.text <= 5 then paged = true end
       end
     end
-    -- Close, restore and both touch paging controls; a list that runs beyond one screen;
-    -- and the page counter that says so.
-    if buttons ~= 4 then error("accounting: the postflight surface built " .. buttons .. " buttons, not 4") end
+    -- Close, continue tuning, the restore menu and both touch paging controls; a list that runs
+    -- beyond one screen; and the page counter that says so.
+    if buttons ~= 5 then error("accounting: the postflight surface built " .. buttons .. " buttons, not 5") end
     if deltaRows < 4 then error("accounting: the delta list built only " .. deltaRows .. " rows") end
     if not paged then error("accounting: the delta list was not measured over more than one page") end
-    local entry
+    -- The restore menu's button, found by its caption: Continue tuning comes first.
+    local entry, last
     for _, node in ipairs(tree) do
-      if node.type == "button" and not entry then entry = node end
+      if node.type == "button" then last = node end
+      if node.text == "Restore..." then entry = last end
     end
+    if not entry then error("accounting: the postflight surface has no restore menu") end
     entry.press()
     if not drive.postActionsOpen then error("accounting: postflight restore entry did not open its actions") end
     for i = 1, 30 do
@@ -2159,9 +2162,10 @@ do
       if node.type == "button" then buttons = buttons + 1 end
       if type(node.text) == "function" then reactive = reactive + 1 end
     end
-    -- The close box plus choose parameters, read again, reset start values, turn on announcements
-    -- (adjustment announcements are off by default, so the priced surface carries the button) and
-    -- restore all; and the three lines that move while a run is on without anything rebuilding.
+    -- The close box plus choose parameters, set up suggested functions, read again, turn on
+    -- announcements (adjustment announcements are off by default, so the priced surface carries the
+    -- button) and restore all, the secondaries shown disabled while the run is on; and the three
+    -- lines that move while it runs without anything rebuilding.
     if buttons ~= 6 then error("accounting: the ground surface built " .. buttons .. " buttons, not 6") end
     if reactive < 3 then error("accounting: the ground surface built " .. reactive .. " reactive lines") end
   end
