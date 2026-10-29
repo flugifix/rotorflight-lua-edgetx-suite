@@ -1,0 +1,247 @@
+-- How long the tuning overlay keeps its session and its code once it is closed
+-- (widgets/dashboard/runtime.lua, releaseInflight). Every check drives the real dashboard entry
+-- points and reads the result from weak references to the module tables, after full collections.
+local Stubs = dofile("bin/accounting/stubs/edgetx.lua")
+local FC = dofile("bin/accounting/stubs/fc.lua")
+Stubs.install(arg[1] or ".")
+FC.install(Stubs)
+Stubs.reset()
+FC.reset()
+local Runtime = rfsuite.require("widgets/dashboard/runtime.lua")
+
+local ROOT = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/inflight/"
+local ALL = {"setup.lua", "functions.lua", "baseline.lua", "profiles.lua", "drive.lua", "input.lua",
+  "prime.lua", "screen.lua"}
+local VIEW = {["screen.lua"] = true, ["input.lua"] = true}
+
+local passed, failed, checks = 0, {}, 0
+local function check(value, message)
+  checks = checks + 1
+  assert(value, message)
+end
+local function scenario(name, run)
+  local ok, err = pcall(run)
+  if ok then passed = passed + 1; print("PASS " .. name)
+  else failed[#failed + 1] = name .. ": " .. tostring(err); print("FAIL " .. failed[#failed]) end
+end
+
+local realGetTime, offset = getTime, 0
+_G.getTime = function() return realGetTime() + offset end
+
+local function collect()
+  collectgarbage("collect")
+  collectgarbage("collect")
+end
+local function weakModules()
+  local weak = setmetatable({}, {__mode = "v"})
+  for _, name in ipairs(ALL) do weak[name] = rfsuite.modules[ROOT .. name] end
+  return weak
+end
+local function loaded(name) return rfsuite.modules[ROOT .. name] ~= nil end
+
+-- Opens tuning through the real path and passes until the surface's modules are loaded and a
+-- drive exists, so a reopening after a release is measured the same way as a first opening.
+local function open(widget)
+  widget.inflightFullscreen = true
+  for _ = 1, 30 do
+    widget._job = {kind = "control", oneShot = true, step = function() return true end}
+    Stubs.tick(); widget:refresh(0, nil)
+    if widget._inflight and loaded("screen.lua") and loaded("input.lua") then return end
+  end
+  error("the overlay did not finish loading")
+end
+local function newWidget()
+  local widget = Runtime.new({x = 0, y = 0, w = 480, h = 320}, {})
+  widget.preferences.general = {preview_inflight_tuning = true}
+  widget.preferences.inflight = {enabled = true}
+  widget.state.armed, widget.state.armedSeen, widget.state.fblConnected = false, true, true
+  widget._foreground = true
+  return widget
+end
+-- A session the pilot would keep: start values read and profiles known.
+local function withSession(widget, board)
+  local d = widget._inflight
+  d.baseline, d.sessionProfiles = {identity = "kept"}, {pid = {[1] = true}, rate = {[1] = true}}
+  d.board, d.phase = board, "ground"
+  return d
+end
+-- A closed pass: the firmware's fullscreen exit, then dashboard passes that rebuild its own scene.
+local function close(widget)
+  widget.inflightFullscreen = nil
+  Stubs.tick(); widget:refresh(nil, nil)
+  for _ = 1, 3 do Stubs.tick(); widget:refresh(0, nil) end
+end
+-- The last dashboard built stays reachable (the battery picker's callbacks, the LVGL stub's tree),
+-- so a scenario that leaves a session behind would keep the shared code loaded for the next one,
+-- exactly as a second live dashboard would. Each scenario hands its session back at the end.
+local function forget(widget)
+  widget._inflight, widget.inflightFullscreen = nil, nil
+  Stubs.tick(); widget:refresh(0, nil)
+  Stubs.tick(); widget:refresh(nil, nil)
+end
+local function boardOnLink(answer)
+  local prime = rfsuite.modules[ROOT .. "prime.lua"]
+  prime.boardOnLink = function() return answer end
+end
+
+scenario("positive control: the weak-reference check sees a collection and a held table", function()
+  local probe = setmetatable({}, {__mode = "v"})
+  local held = {}
+  probe.dropped, probe.held = {}, held
+  collect()
+  check(probe.dropped == nil, "an unreferenced table is collected")
+  check(probe.held == held, "a referenced table survives")
+end)
+
+scenario("closing on the ground releases the view and keeps the session", function()
+  local widget = newWidget()
+  open(widget)
+  local d = withSession(widget, nil)
+  local weak = weakModules()
+  close(widget)
+  collect()
+  check(weak["screen.lua"] == nil and weak["input.lua"] == nil, "screen.lua and input.lua are collected")
+  for _, name in ipairs(ALL) do
+    if not VIEW[name] then check(weak[name] ~= nil, "session code stays loaded: " .. name) end
+  end
+  check(widget._inflight == d and d.baseline.identity == "kept", "the session object and its start values stay")
+  local driveModule = weak["drive.lua"]
+  open(widget)
+  check(widget._inflight == d, "reopening continues the same session object")
+  check(rfsuite.modules[ROOT .. "drive.lua"] == driveModule, "reopening loads no second drive")
+  check(getmetatable(d) == driveModule.Drive or getmetatable(d).__index == driveModule.Drive,
+    "the session's methods are the loaded drive's")
+  close(widget)
+  forget(widget)
+end)
+
+scenario("closing in the air keeps the view until the landing", function()
+  local widget = newWidget()
+  open(widget)
+  local d = withSession(widget, nil)
+  widget.state.armed, d.phase, d.live = true, "live", true
+  local weak = weakModules()
+  close(widget)
+  collect()
+  check(weak["screen.lua"] ~= nil and weak["input.lua"] ~= nil, "nothing leaves while armed")
+  check(widget._inflight == d and d.phase == "live", "the flight continues closed")
+  widget.state.armed = false
+  for _ = 1, 3 do Stubs.tick(); widget:refresh(0, nil) end
+  collect()
+  check(d.phase ~= "live", "positive control: the landing was observed while closed")
+  check(weak["screen.lua"] == nil and weak["input.lua"] == nil, "the view leaves at the landing")
+  check(widget._inflight == d and weak["drive.lua"] ~= nil, "the session stays after the landing")
+  forget(widget)
+end)
+
+scenario("another board ends the session and releases all of its code", function()
+  local widget = newWidget()
+  open(widget)
+  local d = withSession(widget, "board-A")
+  boardOnLink("board-A")
+  close(widget)
+  check(widget._inflight == d, "control: the same board keeps the session")
+  boardOnLink("board-B")
+  local weak = weakModules()
+  d = nil
+  for _ = 1, 2 do Stubs.tick(); widget:refresh(0, nil) end
+  collect()
+  check(widget._inflight == nil, "the session object is released")
+  for _, name in ipairs(ALL) do check(weak[name] == nil, "collected after the session ended: " .. name) end
+end)
+
+scenario("five minutes without a link on the ground end the session; in the air never", function()
+  local widget = newWidget()
+  open(widget)
+  local d = withSession(widget, nil)
+  widget.state.armed, d.phase, d.live = true, "live", true
+  close(widget)
+  widget.state.fblConnected = false
+  offset = offset + 60000
+  Stubs.tick(); widget:refresh(0, nil)
+  check(widget._inflight == d, "ten minutes without a link in the air keep the session")
+  widget.state.armed, d.phase = false, "ground"
+  Stubs.tick(); widget:refresh(0, nil)
+  offset = offset + 29900
+  Stubs.tick(); widget:refresh(0, nil)
+  check(widget._inflight == d, "just under five minutes on the ground keep the session")
+  widget.state.fblConnected = true
+  Stubs.tick(); widget:refresh(0, nil)
+  widget.state.fblConnected = false
+  Stubs.tick(); widget:refresh(0, nil)
+  offset = offset + 29900
+  Stubs.tick(); widget:refresh(0, nil)
+  check(widget._inflight == d, "a link that came back restarts the five minutes")
+  offset = offset + 200
+  Stubs.tick(); widget:refresh(0, nil)
+  check(widget._inflight == nil, "five minutes without a link on the ground end the session")
+  widget.state.fblConnected = true
+end)
+
+scenario("an open tool, outstanding output or a profile job hold the release back", function()
+  local widget = newWidget()
+  open(widget)
+  local d = withSession(widget, nil)
+  -- An open tool runs in place of the dashboard pass (tool_host.lua); a stand-in host lets the
+  -- pass reach that branch without opening the real tool.
+  local HOST = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/tool_host.lua"
+  local realHost = rfsuite.modules[HOST]
+  for _, hold in ipairs({"tool", "profileJob", "pendingSave"}) do
+    if hold == "tool" then
+      rfsuite.modules[HOST] = {step = function() end}
+      widget._toolHost = {}
+    else d[hold] = {} end
+    widget.inflightFullscreen = nil
+    Stubs.tick(); widget:refresh(0, nil)
+    check(loaded("screen.lua"), hold .. " keeps the view")
+    if hold == "tool" then
+      rfsuite.modules[HOST], widget._toolHost = realHost, nil
+    else d[hold] = nil end
+    Stubs.tick(); widget:refresh(0, nil)
+    check(not loaded("screen.lua") and widget._inflight == d, hold .. " gone: the view leaves, the session stays")
+    open(widget)
+  end
+  close(widget)
+  forget(widget)
+end)
+
+scenario("another dashboard's session keeps the shared code loaded", function()
+  local a = newWidget()
+  open(a)
+  local session = withSession(a, nil)
+  close(a)
+  local b = newWidget()
+  open(b)
+  local weak = weakModules()
+  close(b)
+  collect()
+  check(b._inflight == nil, "the dashboard without a session releases its drive")
+  check(weak["drive.lua"] ~= nil and weak["prime.lua"] ~= nil and weak["setup.lua"] ~= nil,
+    "the code of the other dashboard's session stays")
+  check(a._inflight == session and getmetatable(session) ~= nil, "the other session is untouched")
+  a._inflight.board = "board-A"
+  boardOnLink("board-B")
+  session = nil
+  for _ = 1, 2 do Stubs.tick(); a:refresh(0, nil) end
+  collect()
+  check(a._inflight == nil and weak["drive.lua"] == nil, "the last session's end releases the code")
+end)
+
+scenario("a cancelled opening releases what it had loaded", function()
+  for _, name in ipairs(ALL) do check(not loaded(name), "precondition: nothing loaded: " .. name) end
+  local widget = newWidget()
+  widget.inflightFullscreen = true
+  for _ = 1, 3 do Stubs.tick(); widget:refresh(0, nil) end
+  check(loaded("setup.lua") and widget._inflight == nil, "positive control: the opening loaded a module")
+  local weak = weakModules()
+  widget.inflightFullscreen = nil
+  Stubs.tick(); widget:refresh(nil, nil)
+  collect()
+  for _, name in ipairs(ALL) do check(weak[name] == nil, "collected after a cancelled opening: " .. name) end
+  open(widget)
+  check(widget._inflight ~= nil, "a later opening loads again from the start")
+  close(widget)
+end)
+
+print(string.format("%d checks, %d scenarios passed, %d failed", checks, passed, #failed))
+if #failed > 0 then os.exit(1) end

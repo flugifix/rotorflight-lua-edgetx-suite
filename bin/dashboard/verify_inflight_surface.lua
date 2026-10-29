@@ -19,10 +19,24 @@ local function scenario(name, run)
   if ok then passed = passed + 1; print("PASS " .. name)
   else failed[#failed + 1] = name .. ": " .. tostring(err); print("FAIL " .. failed[#failed]) end
 end
+-- The overlay's modules leave once no dashboard holds a session or shows tuning (runtime.lua,
+-- releaseInflight), so each fixture loads them through the real opening path before its drive is
+-- put in, and takes the module tables that are current after that load.
+local function ready(widget)
+  widget.inflightFullscreen = true
+  for _ = 1, 20 do
+    widget._job = {kind = "control", oneShot = true, step = function() return true end}
+    widget:refresh(0, nil)
+    if widget._inflight then break end
+  end
+  Drive = rfsuite.require("widgets/dashboard/inflight/drive.lua")
+  Input = rfsuite.require("widgets/dashboard/inflight/input.lua")
+end
 local function fixture(armed)
   local widget = Runtime.new({x = 0, y = 0, w = 480, h = 320}, {})
   widget.preferences.general = {preview_inflight_tuning = true}
   widget.preferences.inflight = {enabled = true}
+  ready(widget)
   widget.state.armed, widget.state.armedSeen, widget.state.fblConnected = armed, true, true
   widget._foreground, widget.inflightFullscreen = true, true
   local writes = {}

@@ -396,8 +396,14 @@ silent in both the overlay and the general profile announcer, including while tu
 Ordinary in-flight profile announcements remain enabled.
 
 Closing tuning on the ground or in the air retains the in-memory session and the completed
-SD baseline. Only an explicit session reset or the existing model and identified flight-controller
-changes end the session. A link interruption to the same flight controller keeps the session and
+SD baseline. Closed on the ground, the surface's own code is unloaded and loads again on the next
+opening, which takes a few passes; closed in the air it stays loaded until the landing, so reopening
+during the flight is immediate. The session ends on an explicit session reset, on another model or
+identified flight controller, or after five minutes on the ground without a link to the flight
+controller. All of tuning then leaves memory, the per-flight step history with it; the next opening
+continues from the start values on the SD card after the full ground read, and the post-flight
+comparison is recomputed from them. Nothing is unloaded while armed, while a profile return or a
+save is still outstanding, or while the suite's tool is open. A link interruption to the same flight controller keeps the session and
 the fullscreen visit, resuming automatically once the link and arm state are known. Closing,
 backgrounding, link loss and profile edges clear
 pulse/hold ownership and GVAR output in the flight mode where it was written. MSP never runs

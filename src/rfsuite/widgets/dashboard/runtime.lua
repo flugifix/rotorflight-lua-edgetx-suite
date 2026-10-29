@@ -781,6 +781,9 @@ local function inflightEnabled(self)
   return true
 end
 
+-- Defined below the module list it releases from.
+local releaseInflight
+
 --- Everything the overlay wrote goes back to 0. Called on every way out -- the widget going to
 -- background, fullscreen closing, the feature being switched off -- because which transition is
 -- actually observed is not knowable in advance, and a value variable left standing keeps the
@@ -795,9 +798,14 @@ local function cleanupInflight(self)
   -- The last scene's encoder window and sensor. A firmware fullscreen exit builds no other tuning
   -- scene that would replace them, so without this the closed view stays reachable from the widget.
   self._inflightReverseNode, self._inflightSensor = nil, nil
-  if instance == nil then return end
-  local drive = inflightDrive()
-  if drive then drive.cleanup(self) end
+  if instance ~= nil then
+    local drive = inflightDrive()
+    -- releaseInflight keeps the drive loaded while any dashboard holds a session; should that ever
+    -- fail, the module-free clear still takes both variables back to 0.
+    if drive then drive.cleanup(self)
+    elseif self._inflightPanic then self._inflightPanic() end
+  end
+  releaseInflight(self)
 end
 
 -- Telemetry loss revokes output but keeps the fullscreen visit available for automatic resume.
@@ -876,6 +884,90 @@ local function preloadInflight()
   end
 end
 
+-- How long the overlay keeps what it holds once it is closed. Two lifetimes:
+--
+-- The flight session: the drive object -- start values, profile values, the profile to return to,
+-- pending saves -- and every module above. It ends on another board, when no session is held any
+-- more (never read, or New session), or after INFLIGHT_LINK_GONE_SECONDS without a link on the
+-- ground. The start values stay on the SD card, so the next opening continues from there.
+--
+-- The view: screen.lua and input.lua. They leave when the overlay is closed on the ground. Closed in
+-- the air they stay until the landing, so reopening during the flight loads nothing.
+--
+-- Nothing is released while the craft is armed, while output, a profile job or a save is still
+-- outstanding, or while the suite's tool is open: setup.lua and functions.lua are its settings
+-- page's too, and dropping them under it would leave the page and the overlay with two copies.
+-- The module caches are shared by every dashboard in this Lua state, so a widget releases only
+-- what no other dashboard's overlay still holds or shows.
+local INFLIGHT_LINK_GONE_SECONDS = 300
+local INFLIGHT_VIEW = {["screen.lua"] = true, ["input.lua"] = true}
+local InflightHolders = setmetatable({}, {__mode = "k"})
+
+local function dropInflightModules(viewOnly)
+  local clear = _G.rfsuite and _G.rfsuite.clearModule
+  local first
+  for index, entry in ipairs(InflightLoads) do
+    if not viewOnly or INFLIGHT_VIEW[entry.name] then
+      local cache = entry.cache or entry
+      if cache.module ~= nil and clear then clear("widgets/dashboard/inflight/" .. entry.name) end
+      cache.module, cache.triedAt = nil, nil
+      first = first or index
+    end
+  end
+  if first and first < InflightLoadIndex then InflightLoadIndex = first end
+end
+
+local function inflightHeldElsewhere(self, sessionToo)
+  for other in pairs(InflightHolders) do
+    if other ~= self and (other.inflightFullscreen == true or (sessionToo and other._inflight ~= nil)) then
+      return true
+    end
+  end
+  return false
+end
+
+local function inflightSessionEnded(self, drive)
+  if drive.baseline == nil and drive.sessionProfiles == nil then return true end
+  local prime = inflightPrime()
+  local board = drive.board and prime and prime.boardOnLink() or nil
+  if board ~= nil and board ~= drive.board then return true end
+  if self.state.fblConnected == true then
+    self._inflightLinkGoneAt = nil
+    return false
+  end
+  local now = nowSeconds()
+  self._inflightLinkGoneAt = self._inflightLinkGoneAt or now
+  return now - self._inflightLinkGoneAt >= INFLIGHT_LINK_GONE_SECONDS
+end
+
+releaseInflight = function(self)
+  local drive = self._inflight
+  if drive == nil and InflightLoadIndex == 1 then return end
+  InflightHolders[self] = true
+  if self._toolHost ~= nil or self.state.armed == true then return end
+  if drive == nil then
+    -- A cancelled opening, or a session already released: no session to keep.
+    if not inflightHeldElsewhere(self, true) then dropInflightModules(false) end
+    return
+  end
+  if drive.phase == "live" then return end
+  if (drive.written or 0) ~= 0 or (drive.bankWritten or 0) ~= 0 or drive.holdRow ~= nil
+      or drive.profileJob ~= nil or drive.pendingSave ~= nil or drive.restorePending then
+    return
+  end
+  if inflightSessionEnded(self, drive) then
+    self._inflight, self._inflightLinkGoneAt, self._primeSkips = nil, nil, nil
+    self._inflightPrefs, self._inflightStamp = nil, nil
+    self._inflightStorePath, self._inflightStoreFor, self._inflightStoreAt = nil, nil, nil
+    local session = _G.rfsuite and _G.rfsuite.session
+    if type(session) == "table" then session.inflightSlots = nil end
+    if not inflightHeldElsewhere(self, true) then dropInflightModules(false) end
+  elseif (InflightScreenCache.module ~= nil or InflightInputCache.module ~= nil)
+      and not inflightHeldElsewhere(self, false) then
+    dropInflightModules(true)
+  end
+end
+
 --- The clear the widget's entry point can reach when the widget itself has been shut down.
 --
 -- src/widgets/rfsuite/main.lua holds a widget off for 1.2 s after a CPU limit and RETURNS before
@@ -929,6 +1021,7 @@ local function tickInflight(self)
       and self.state.armedSeen ~= true) then pauseInflight(self); return end
   local drive = inflightDrive()
   if not drive then return end
+  InflightHolders[self] = true
   local instance = drive.get(self)
   if instance ~= nil then
     if instance.linkLost then self._tuningKeyDirty = true; instance.linkLost = nil end
@@ -960,6 +1053,7 @@ end
 
 -- Surface ownership is sampled before native input and before any job can return early.
 local function updateInflightRelease(self)
+  InflightHolders[self] = true
   if self.inflightFullscreen ~= true or self._foreground ~= true
       or not inflightEnabled(self) then
     cleanupInflight(self)
@@ -4700,6 +4794,7 @@ function Runtime.new(zone, options)
         cleanupInflight(self)
       else
         self._passWork = "tuning_load"
+        InflightHolders[self] = true
         preloadInflight()
       end
       self._passEndAt = nowSeconds()
