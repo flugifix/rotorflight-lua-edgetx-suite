@@ -106,13 +106,18 @@ model.
 3. Optionally pick a theme in the tool under *System* → *Settings* → *Dashboard* → *Theme*.
 
 The dashboard runs the background work itself, also while its screen is not shown. There is
-nothing else to set up, and *RFSuite Service* is not needed.
+nothing else to set up. Do not add *RFSuite Service* as well: both would run the same background
+work, twice.
 
 **If you do not use the dashboard:**
 
 Add **RFSuite Service** instead — this is recommended. Place it in a small zone on a screen you
-do not use; it only draws a small status tile. Without it, the link and the announcements stop as soon
-as the tool is closed.
+do not use; it only draws a small status tile. Without it, the link and the announcements stop
+as soon as the tool is closed.
+
+After the first install or an update, restart the radio when the suite asks for it; until then
+the widgets do not connect. What runs the background work, what the service tile shows and what
+to avoid is described in [docs/dashboard/service-widget.md](docs/dashboard/service-widget.md).
 
 
 ## Usage
