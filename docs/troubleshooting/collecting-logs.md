@@ -23,13 +23,33 @@ appear, and then *System* → *Developer* → *Settings*:
 
 **Log Session To Card is the switch that decides whether anything is written.** With it on and
 the log level left at *OFF*, the configuration tool and the widgets already write their files:
-errors, warnings and most info lines — the milestones of the connect sequence and the state line
+errors, warnings and the info lines that mark milestones — the connect sequence and the state line
 below among them — are kept whatever the level says. **The log level decides how much more goes
-in.** The background decoder's files are the exception that needs both, because the decoder only
-starts writing at *DEBUG* or higher.
+in** ([what each level adds](#what-each-level-adds)). The background decoder's files are the
+exception that needs both, because the decoder only starts writing at *DEBUG* or higher.
 
 Switch both back off once the report is sent. The card write is small but it is permanent, and
 *TRACE* left on costs a measurable part of every pass.
+
+## What each level adds
+
+The levels are cumulative: each one writes everything the level above it in the table writes, and
+adds its own row. The examples are the message part of a line; long ones are cut short with `…`.
+
+| Level | What it adds | Example lines |
+| --- | --- | --- |
+| *OFF* | **The base log, written at every level.** Errors, warnings, and the info lines that mark milestones: the connect sequence, the configuration tool being opened and closed, a save to the flight controller, a flight being logged. With *Log Session To Card* on, also the state line every five seconds and any fault the suite caught. All of it goes to *Session Logs* and, with *Log Session To Card* on, to the card. Nothing goes to the radio's debug output or to the serial port. | `MSP runtime initialized via …`, `MSP link connected`, `FBL connected and telemetry initialized`, `tool opened, lua … kB, free … kB`, `start page=… steps=… reboot=… client=…`, `flight logged: …s, battery=…`, `max retries cmd=… rw=R client=… attempts=…`, `low heap: free_kb=…` |
+| *ERROR* | Nothing on the card or in *Session Logs*. Error lines start to appear on the radio's debug output and, with *Enable Serial Debug* on, on the serial port. | `tool not opened: …`, `MSP queue module unavailable`, `playNumber error: …` |
+| *WARN* | Nothing on the card or in *Session Logs*. Warnings join the errors on the debug output and the serial port. | `refused reason=armed page=…`, `queue cleared client=… keepWrites=… …`, `UID read failed (cmd=160); backoff …s` |
+| *INFO* | Info lines on the debug output and the serial port. And the info lines of the parts that ask for *INFO* before they write, which are not in the base log: the in-flight tuning surface (its phase changes with the memory figures, the interlock, every global variable it writes, reading the board), the dashboard reloading its theme and its settings, the configuration tool's closing sequence, and the raw telemetry configuration read from the flight controller. The state lines also reach *Session Logs* with *Log Session To Card* off. | `phase … -> …, lua … kB, free … kB`, `interlock on: bank ch… value ch…`, `prime done: … value(s) cached, … id(s) unanswered`, `LVGL BUILD SUCCESS: themePath=…, #children=…`, `Closing sequence started (Tick 0).`, `parsed slots: …` |
+| *DEBUG* | The steps in between, from every part of the suite. A request to the flight controller that has to be sent again. Every page change in the configuration tool, with the memory figures. The background decoder's own files, and the signal from the dashboard that the decoder watches for the *dashboard widget silent* line. | `page … -> …, lua … kB, free … kB`, `tx cmd=… rw=R client=… attempt=2/… len=…`, `phase … -> … after …s page=…`, `load begin steps=… overlay=…`, `dashboard widget silent 3.0 s, last pass 56 %` |
+| *TRACE* | Every request to and reply from the flight controller, with its bytes, and whether a reply came from the link or from the cache. The setup assistant's screen-by-screen build lines. The service widget's instruction budget every five seconds. | `queued cmd=… rw=R client=… from=… depth=…`, `tx cmd=… rw=R client=… attempt=1/… len=… <bytes>`, `rx cmd=… src=wire len=… client=… attempt=1 dt=… err=… <bytes>`, `rx cmd=… src=cache …` |
+
+***OFF* adds nothing extra; it is not silence.** It is the shipped setting, and a radio left at it
+still keeps errors, warnings and the milestone lines in *Session Logs*, and on the card once
+*Log Session To Card* is on. What *OFF* leaves out is everything the rows below it add. *ERROR* and
+*WARN* change only what reaches the radio's debug output and the serial port; for a log on the
+card, the first level that adds lines is *INFO*.
 
 ## Where the files land
 
@@ -97,9 +117,9 @@ state: instruction budget 12% now, 41% peak/5s, 97% peak since load, 58 objects,
 | `cpu` | How busy the radio's processor was. EdgeTX 2.12.5 and later only. |
 | `ui` | The screen's frame rate and the share of time spent drawing it. EdgeTX 2.12.5 and later, colour radios only. |
 
-The same memory figures are added to the lines that mark the configuration tool being asked for,
-opened and closed, the in-flight tuning surface changing phase or closing, and — at *DEBUG* — every
-page change in the tool. Two such lines around a visit say what that visit kept.
+The same memory figures are added to the lines that mark the configuration tool being opened and
+closed, the in-flight tuning surface changing phase or closing — from *INFO* up — and, at *DEBUG*,
+every page change in the tool. Two such lines around a visit say what that visit kept.
 
 ## The two lines worth reading first
 
