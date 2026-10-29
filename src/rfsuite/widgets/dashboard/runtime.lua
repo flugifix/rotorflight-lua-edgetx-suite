@@ -918,47 +918,56 @@ local function dropInflightModules(viewOnly)
   if first and first < InflightLoadIndex then InflightLoadIndex = first end
 end
 
-local function inflightHeldElsewhere(self, sessionToo)
-  for other in pairs(InflightHolders) do
-    if other ~= self and (other.inflightFullscreen == true or (sessionToo and other._inflight ~= nil)) then
-      return true
-    end
-  end
-  return false
-end
-
 -- Output, a held step, a profile job or a save still to finish: a session is not ended under them.
 local function inflightOutstanding(drive)
   return (drive.written or 0) ~= 0 or (drive.bankWritten or 0) ~= 0 or drive.holdRow ~= nil
     or drive.profileJob ~= nil or drive.pendingSave ~= nil or drive.restorePending == true
 end
 
+-- Whether another dashboard in this Lua state still needs the shared overlay code: it shows tuning;
+-- its hosted tool is open (the settings page takes setup.lua from the same cache); it holds a session
+-- (sessionToo); or, for the view, it would reopen in the air or is finishing work.
+local function inflightHeldElsewhere(self, sessionToo)
+  local registry = (_G.rfsuite and _G.rfsuite.dashboardWidgets) or InflightHolders
+  for other in pairs(registry) do
+    if other ~= self then
+      local drive = other._inflight
+      if other.inflightFullscreen == true or other._toolHost ~= nil
+          or (drive ~= nil and (sessionToo or drive.phase == "live" or inflightOutstanding(drive))) then
+        return true
+      end
+    end
+  end
+  return false
+end
+
 -- The link watch of a session, called on every pass that has a drive, open or closed. On the ground
--- it notes when the link went and answers how long it has been gone; in the air (the live phase,
--- which only an observed landing leaves) there is no gap to count. When the link is back after a
--- gap that long the board is in a new state -- the battery was changed -- and the session ends: its
--- values, its comparison and its parameter choice go, and the ground read starts a new one. A
--- shorter gap continues the session.
+-- it notes when the link went and, once it has been gone for the gap, marks the session expired; in
+-- the air (the live phase, which only an observed landing leaves) there is no gap to count. The board
+-- is then in a new state -- the battery was changed -- and the session ends when the link is back:
+-- its values, its comparison and its parameter choice go, and the ground read starts a new one. A job,
+-- a return or a save still in flight keeps the session until it is done; the expiry waits for it.
+-- A shorter gap continues the session. Answers how long the link has been gone.
 local function inflightLinkWatch(self, drive)
   if self.state.fblConnected ~= true then
     if drive.phase == "live" then drive.linkGoneAt = nil; return 0 end
     local now = nowSeconds()
     drive.linkGoneAt = drive.linkGoneAt or now
-    return now - drive.linkGoneAt
+    local gone = now - drive.linkGoneAt
+    if gone >= INFLIGHT_SESSION_GAP_SECONDS then drive.sessionExpired = true end
+    return gone
   end
-  local since = drive.linkGoneAt
-  if since == nil then return 0 end
   drive.linkGoneAt = nil
-  if nowSeconds() - since >= INFLIGHT_SESSION_GAP_SECONDS and not inflightOutstanding(drive) then
+  if drive.sessionExpired and not inflightOutstanding(drive) then
+    drive.sessionExpired = nil
     drive:endSession()
     drive:setPhase("ground")
   end
   return 0
 end
 
-local function inflightSessionEnded(self, drive)
-  if inflightLinkWatch(self, drive) >= INFLIGHT_SESSION_GAP_SECONDS then return true end
-  if drive.baseline == nil and drive.sessionProfiles == nil then return true end
+local function inflightSessionEnded(drive)
+  if drive.sessionExpired or (drive.baseline == nil and drive.sessionProfiles == nil) then return true end
   local prime = inflightPrime()
   local board = drive.board and prime and prime.boardOnLink() or nil
   return board ~= nil and board ~= drive.board
@@ -968,6 +977,7 @@ releaseInflight = function(self)
   local drive = self._inflight
   if drive == nil and InflightLoadIndex == 1 then return end
   InflightHolders[self] = true
+  if drive ~= nil then inflightLinkWatch(self, drive) end
   if self._toolHost ~= nil or self.state.armed == true then return end
   if drive == nil then
     -- A cancelled opening, or a session already released: no session to keep.
@@ -975,13 +985,18 @@ releaseInflight = function(self)
     return
   end
   if drive.phase == "live" or inflightOutstanding(drive) then return end
-  if inflightSessionEnded(self, drive) then
+  if inflightSessionEnded(drive) then
+    -- A ground read still on the wire answers into nothing from here on.
+    if drive.prime then drive.prime.invalidated = true end
     self._inflight, self._primeSkips = nil, nil
     self._inflightPrefs, self._inflightStamp = nil, nil
     self._inflightStorePath, self._inflightStoreFor, self._inflightStoreAt = nil, nil, nil
-    local session = _G.rfsuite and _G.rfsuite.session
-    if type(session) == "table" then session.inflightSlots = nil end
-    if not inflightHeldElsewhere(self, true) then dropInflightModules(false) end
+    local root = _G.rfsuite
+    if type(root) == "table" and type(root.session) == "table" then root.session.inflightSlots = nil end
+    if not inflightHeldElsewhere(self, true) then
+      if type(root) == "table" then root.inflightSession = nil end
+      dropInflightModules(false)
+    end
   elseif (InflightScreenCache.module ~= nil or InflightInputCache.module ~= nil)
       and not inflightHeldElsewhere(self, false) then
     dropInflightModules(true)

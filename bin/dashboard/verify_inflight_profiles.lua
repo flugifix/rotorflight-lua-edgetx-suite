@@ -536,6 +536,8 @@ do
     idsForPrime[#idsForPrime + 1] = slot.record.adjFunction
   end
 end
+-- A radio restart empties the Lua state, and with it the marker of the session in progress.
+rfsuite.inflightSession = nil
 local reconnected=makeDrive()
 local loads, oldLoad = 0, Store.load
 Store.load = function(...) loads = loads + 1; return oldLoad(...) end
@@ -568,6 +570,20 @@ do
   Store.load = oldLoad
   check(loads == 1 and reconnected.sessionMode == "resume" and files[Store.path(fc.uid)] == newFile,
     "a read within the session resumes its start values from the card once and keeps them")
+  -- A second dashboard in the same Lua state opens tuning while that session is held: it joins the
+  -- session rather than replacing its start values on the card.
+  check(rfsuite.inflightSession == fc.uid, "the session in progress is marked for this board")
+  local second = makeDrive()
+  loads = 0
+  Store.load = function(...) loads = loads + 1; return oldLoad(...) end
+  check(Prime.start(widget, second, true), "a second dashboard's read starts")
+  for _ = 1, 3000 do pass(second); if not Prime.isRunning(second) then break end end
+  Store.load = oldLoad
+  check(loads == 1 and second.sessionMode == "resume" and files[Store.path(fc.uid)] == newFile,
+    "a second dashboard joins the session and leaves its start values on the card")
+  second:endSession()
+  check(rfsuite.inflightSession == nil, "ending the session clears its mark")
+  rfsuite.inflightSession = fc.uid
 end
 
 -- Runtime pauses before the ground tick on loss, so no disconnected Prime.tick is assumed.
@@ -672,6 +688,7 @@ do
   for _ = 1, 3000 do pass(reduced); if not Prime.isRunning(reduced) then break end end
   check(reduced.prime.error == "profile_count" and not reduced.sessionProfiles,
     "resume refuses stored profiles above the current board count")
+  rfsuite.inflightSession = nil
   local fresh = makeDrive(slots)
   check(Prime.start(widget, fresh, true), "a new session on the reduced board starts")
   for _ = 1, 3000 do pass(fresh); if not Prime.isRunning(fresh) then break end end

@@ -840,7 +840,7 @@ local function describeSet(snapshot, t)
   local text
   if snapshot.readRequired then return t("widgets.dashboard.inflight_board_unread", "Not read yet") end
   if snapshot.setSource == "board" then
-    text = string.format(t("widgets.dashboard.inflight_board_parameters", "%d parameters from the board"), snapshot.cellCount or 0)
+    text = string.format(t("widgets.dashboard.inflight_board_parameters", "%d parameters on the board"), snapshot.cellCount or 0)
   elseif snapshot.setSource == "unavailable" then
     text = t("widgets.dashboard.inflight_board_no_slots", "No usable slots on the board")
   else
@@ -995,9 +995,61 @@ function M.buildGround(children, widget, m, w, h, t, p)
     return fitText(text, valueW, lineFont)
   end
   local first = state.inflight or empty
+  local root = _G.rfsuite
+  local events = root and root.preferences and root.preferences.audio_events
+  local announcementsOff = not (events and events.adjustment_events == true)
+  local footerH = math.max(m.footerH, lineH + 2)
+  local footerY = h - footerH
+  local gap = m.large and 8 or 4
+  local barH = m.large and 8 or 5
+  local halfW = math.floor((lineW - gap) / 2)
+  local available = not busy and not (drive and drive.restorePending)
+  local completed = not first.readRequired and first.prime and first.prime.phase == "done"
+  local emptyBoard = completed and (first.setSource ~= "board" or (first.cellCount or 0) == 0)
+  local boundsRow = not busy and not first.readRequired and (first.boundsCount or 0) > 0
+  local saveRow = not busy and drive ~= nil and drive.saveResult ~= nil and drive.saveResult ~= "ok"
 
+  -- The secondary actions, two to a row where both captions fit half the width. Each entry is
+  -- {caption, press, usable while a return is held}.
+  local function pairRows(list)
+    local rows, index = {}, 1
+    while index <= #list do
+      local a, b = list[index], list[index + 1]
+      if b and textFits(a[1], halfW - 8, lineFont) and textFits(b[1], halfW - 8, lineFont) then
+        rows[#rows + 1], index = {a, b}, index + 2
+      else
+        rows[#rows + 1], index = {a}, index + 1
+      end
+    end
+    return rows
+  end
+  local captions = {}
+  if not emptyBoard then captions[#captions + 1] = {t("widgets.dashboard.inflight_fc_setup_action", "Set up suggested functions")} end
+  captions[#captions + 1] = {t("widgets.dashboard.inflight_read_again", "Read again")}
+  if announcementsOff then captions[#captions + 1] = {t("widgets.dashboard.inflight_announcements_enable", "Turn on announcements")} end
+
+  -- The actions are given their room first: each needs a line of text and its margin. Where the
+  -- panel would leave less, a status that wanted two lines takes one -- the skipped count first,
+  -- then the session, the model verdict last -- so nothing on the screen overlaps.
   local firstVerdict = not first.readRequired and first.setupVerdict or nil
   local modelLines = textFits(M.describeCheck(firstVerdict, t), valueW, lineFont) and 1 or 2
+  local slotsLines = textFits(describeSet(first, t), valueW, lineFont) and 1 or 2
+  local sessionLines = (job or textFits(describeBackup(first, t), valueW, lineFont)) and 1 or 2
+  local extraRows = (job and 1 or 0) + (boundsRow and 1 or 0) + (saveRow and 1 or 0)
+  -- From 320 px up an action keeps a comfortable height and the primary a little more; below, a
+  -- line of text and its margin.
+  local actionCount = #pairRows(captions) + 2
+  local actionMin = h >= 320 and 28 or lineH + 2
+  local actionsNeed = actionCount * actionMin + (h >= 320 and 8 or 0) + gap * (actionCount + 1)
+    + ((emptyBoard and available) and lineH * 2 + gap or 0)
+  local function fits()
+    local lines = modelLines + slotsLines + sessionLines + extraRows
+    local panelH = inset * 2 + lines * lineH + (3 + extraRows - 1) * rowGap + (busy and barH + 4 or 0)
+    return y + panelH + actionsNeed <= footerY
+  end
+  if not fits() then slotsLines = 1 end
+  if not fits() then sessionLines = 1 end
+  if not fits() then modelLines = 1 end
   local lastVerdict, lastModelRead, modelText
   row(modelLabel, modelLines, function()
     local verdict = state.inflight and state.inflight.setupVerdict
@@ -1016,14 +1068,14 @@ function M.buildGround(children, widget, m, w, h, t, p)
 
   -- Snapshots are replaced on publication; cache the scalar inputs rather than their tables.
   local lastSource, lastCount, lastSkipped, lastSetRead, setText
-  row(slotsLabel, 1, function()
+  row(slotsLabel, slotsLines, function()
     local snap = state.inflight or empty
     local skipped = snap.prime and snap.prime.skipped
     if setText == nil or snap.setSource ~= lastSource or snap.cellCount ~= lastCount or skipped ~= lastSkipped
       or snap.readRequired ~= lastSetRead then
       lastSetRead = snap.readRequired
       lastSource, lastCount, lastSkipped = snap.setSource, snap.cellCount, skipped
-      setText = fitText(describeSet(snap, t), valueW, lineFont)
+      setText = fit(describeSet(snap, t), slotsLines)
     end
     return setText
   end, p.text)
@@ -1045,7 +1097,6 @@ function M.buildGround(children, widget, m, w, h, t, p)
       return stepText
     end, p.accent)
   else
-    local sessionLines = textFits(describeBackup(first, t), valueW, lineFont) and 1 or 2
     local lastPending, lastTransfer, lastReason, lastSummary, lastPhase, lastError, lastDone, lastSessionRead, lastStamp, sessionText
     row(sessionLabel, sessionLines, function()
       local snap = state.inflight or empty
@@ -1067,7 +1118,6 @@ function M.buildGround(children, widget, m, w, h, t, p)
   end
 
   if busy then
-    local barH = m.large and 8 or 5
     children[#children + 1] = {type = "rectangle", x = labelX, y = y + 2, w = fullW, h = barH, color = p.border, filled = true}
     children[#children + 1] = {
       type = "rectangle", x = labelX, y = y + 2, w = 0, h = barH, color = p.accent, filled = true,
@@ -1105,7 +1155,7 @@ function M.buildGround(children, widget, m, w, h, t, p)
   end
 
   -- Reserve this row at build time; a completed ground read rebuilds the surface.
-  if not busy and state.inflight and not state.inflight.readRequired and (state.inflight.boundsCount or 0) > 0 then
+  if boundsRow then
     local lastBounds, warning
     appendLabel(children, labelX, y, fullW, function()
       local count = state.inflight and state.inflight.boundsCount or 0
@@ -1119,13 +1169,12 @@ function M.buildGround(children, widget, m, w, h, t, p)
     y = y + lineH + rowGap
   end
   -- A model-default save that failed says so until the next build that has nothing to report.
-  if drive and drive.saveResult and drive.saveResult ~= "ok" then
+  if saveRow then
     appendLabel(children, labelX, y, fullW, fitText(t("widgets.dashboard.inflight_save_failed",
       "Not saved as the model default:") .. " " .. drive.saveResult, fullW, lineFont), p.warn, lineFont, LEFT)
     y = y + lineH + rowGap
   end
   panel.h = y - rowGap + inset - panel.y
-  local gap = m.large and 8 or 4
   y = panel.y + panel.h + gap
 
   -- Why the ground half is refusing, when it is not simply that the board is armed. The one case
@@ -1143,11 +1192,6 @@ function M.buildGround(children, widget, m, w, h, t, p)
   end
   if drive == nil or Prime == nil then return end
 
-  local root = _G.rfsuite
-  local events = root and root.preferences and root.preferences.audio_events
-  local announcementsOff = not (events and events.adjustment_events == true)
-  local footerH = math.max(m.footerH, lineH + 2)
-  local footerY = h - footerH
   children[#children + 1] = {type = "rectangle", x = 0, y = footerY, w = w, h = footerH, color = p.header, filled = true}
   -- The footer carries the announcement state: a failed attempt to turn them on, that they are off,
   -- or, with nothing to warn about, the controls.
@@ -1160,10 +1204,7 @@ function M.buildGround(children, widget, m, w, h, t, p)
         t("widgets.dashboard.inflight_ground_controls_short", "Rotate / Press"), lineW, lineFont),
     announcementsOff and p.warn or p.dim, lineFont, LEFT)
 
-  local available = not busy and not drive.restorePending
   local isAvailable = function() return available end
-  local completed = not first.readRequired and first.prime and first.prime.phase == "done"
-  local emptyBoard = completed and (first.setSource ~= "board" or (first.cellCount or 0) == 0)
   local function changed()
     drive.valueEpoch = drive.valueEpoch + 1
     widget._tuningKeyDirty = true
@@ -1180,7 +1221,6 @@ function M.buildGround(children, widget, m, w, h, t, p)
     y = y + lineH * 2 + gap
   end
 
-  -- The secondary actions, two to a row where both captions fit half the width.
   local secondaries = {}
   if not emptyBoard then
     secondaries[#secondaries + 1] = {t("widgets.dashboard.inflight_fc_setup_action", "Set up suggested functions"), openSetup}
@@ -1217,16 +1257,7 @@ function M.buildGround(children, widget, m, w, h, t, p)
       changed()
     end}
   end
-  local halfW = math.floor((lineW - gap) / 2)
-  local rows, index = {}, 1
-  while index <= #secondaries do
-    local a, b = secondaries[index], secondaries[index + 1]
-    if b and textFits(a[1], halfW - 8, lineFont) and textFits(b[1], halfW - 8, lineFont) then
-      rows[#rows + 1], index = {a, b}, index + 2
-    else
-      rows[#rows + 1], index = {a}, index + 1
-    end
-  end
+  local rows = pairRows(secondaries)
 
   -- The space between the panel and the footer is shared: the primary gets a little more, Restore
   -- all sits on the footer, every other row has one height.

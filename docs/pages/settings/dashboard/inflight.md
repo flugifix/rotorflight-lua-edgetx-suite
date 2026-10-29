@@ -142,7 +142,8 @@ continues at the same group and parameter. Every new flight starts at the first 
 first group. Stored interlock-switch values are ignored.
 Link loss immediately clears both variables but keeps the visit visible with **PAUSED** and
 **No FC link**. The retained visit resumes automatically when link and arm telemetry return,
-keeping the same group, parameter and session and still checking the flight-controller identity.
+keeping the same group, parameter and session and still checking the flight-controller identity;
+a link gone for five seconds or more on the ground (a battery change) begins a new session instead.
 Firmware exit, page switch, feature off, and ground X/RTN still close the visit during a link loss.
 Optional trims are off by default for everyone. Existing trim users turn them on again in settings.
 Walk and adjust follows groups and their full function names, without wrapping. Slot-row

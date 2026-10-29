@@ -3734,7 +3734,7 @@ return {
       inflight_ground_controls_short = "Rotate / Press",
       inflight_slots_status = "FC slots",
       inflight_session_status = "Session",
-      inflight_board_parameters = "%d parameters from the board",
+      inflight_board_parameters = "%d parameters on the board",
       inflight_board_skipped = " (%d skipped)",
       inflight_board_unread = "Not read yet",
       inflight_board_no_slots = "No usable slots on the board",

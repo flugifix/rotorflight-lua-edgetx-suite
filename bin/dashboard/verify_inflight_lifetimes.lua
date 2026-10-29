@@ -280,5 +280,78 @@ scenario("a cancelled opening releases what it had loaded", function()
   close(widget)
 end)
 
+scenario("a battery change during a profile job ends the session once the job is done", function()
+  for _, closed in ipairs({false, true}) do
+    local widget = newWidget()
+    open(widget)
+    local d = withSession(widget, nil)
+    if closed then close(widget) end
+    d.profileJob = {}
+    widget.state.fblConnected = false
+    Stubs.tick(); widget:refresh(0, nil)
+    offset = offset + 600
+    Stubs.tick(); widget:refresh(0, nil)
+    widget.state.fblConnected = true
+    Stubs.tick(); widget:refresh(0, nil)
+    check(d.sessionExpired == true, "positive control: the gap was long enough to end the session")
+    check(widget._inflight == d and d.baseline ~= nil, "the job keeps the session (" .. (closed and "closed" or "open") .. ")")
+    d.profileJob = nil
+    -- An open surface's pass reads the link from the MSP stub, which has no board: the link is held
+    -- up by hand on the pass that matters.
+    widget.state.fblConnected = true
+    Stubs.tick(); widget:refresh(0, nil)
+    if closed then
+      check(widget._inflight == nil, "closed: the session ends once the job is done")
+    else
+      check(widget._inflight == d and d.baseline == nil and d.readAgain, "open: the session ends once the job is done")
+      close(widget)
+    end
+    forget(widget)
+  end
+end)
+
+scenario("closing during the first read releases it and its late replies answer into nothing", function()
+  local widget = newWidget()
+  open(widget)
+  local d = widget._inflight
+  local prime = {phase = "slots", done = 3, total = 40, records = {}}
+  d.prime, d.baseline, d.sessionProfiles = prime, nil, nil
+  close(widget)
+  check(widget._inflight == nil and prime.invalidated == true, "the read in flight is invalidated as the drive goes")
+  forget(widget)
+end)
+
+scenario("another dashboard's open tool, flight or job keeps the shared code", function()
+  local a, b = newWidget(), newWidget()
+  open(a)
+  local session = withSession(a, nil)
+  close(a)
+  check(not loaded("screen.lua"), "positive control: a ground close alone releases the view")
+  open(a)
+  open(b)
+  local other = b._inflight
+  other.phase, other.live, b.state.armed = "live", true, true
+  close(b)
+  close(a)
+  check(loaded("screen.lua") and loaded("input.lua"), "a dashboard closed in the air keeps the view loaded for its reopening")
+  b.state.armed, other.phase, other.live = false, "ground", false
+  other.board = "board-B"
+  other = nil
+  forget(b)
+  a._inflight.board = "board-A"
+  b._toolHost = {}
+  boardOnLink("board-B")
+  local weak = weakModules()
+  session = nil
+  for _ = 1, 2 do Stubs.tick(); a:refresh(0, nil) end
+  collect()
+  check(a._inflight == nil and weak["setup.lua"] ~= nil, "a dashboard whose tool is open keeps setup.lua for its settings page")
+  b._toolHost = nil
+  a.inflightFullscreen = nil
+  for _ = 1, 2 do Stubs.tick(); a:refresh(nil, nil) end
+  collect()
+  check(weak["setup.lua"] == nil, "once the tool is closed the code goes")
+end)
+
 print(string.format("%d checks, %d scenarios passed, %d failed", checks, passed, #failed))
 if #failed > 0 then os.exit(1) end

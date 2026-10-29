@@ -153,9 +153,12 @@ function M.begin(widget, drive, env, mode, target)
   -- A session is one power cycle of the board. Its start values are read when it begins; within it
   -- (a short link gap, a link back in the air) the read continues the session from its stored
   -- values. A drive that holds no session -- a new start, a radio restart, a session ended by a
-  -- battery change -- begins a new one, whatever an earlier session left on the card.
+  -- battery change -- begins a new one, whatever an earlier session left on the card. The session
+  -- is the board's, not the widget's: while another dashboard in this Lua state holds one for this
+  -- board (rfsuite.inflightSession), a drive without one joins it rather than replacing its file.
   if mode == "auto" then
-    if drive.baseline == nil then
+    local root = _G.rfsuite
+    if drive.baseline == nil and not (type(root) == "table" and root.inflightSession == uid) then
       mode = "new"
     else
       local reason
@@ -511,7 +514,10 @@ local function finish(drive, job)
     drive.valuesRead, drive.primeInterrupted = true, nil
     if job.mode == "new" or job.mode == "resume" then drive.readRequired, drive.readArmed = nil, nil end
     drive.readAt = drive.radio.clock and drive.radio.clock() or nil
-    if job.mode == "new" or job.mode == "resume" then drive.sessionMode = job.mode end
+    if job.mode == "new" or job.mode == "resume" then
+      drive.sessionMode = job.mode
+      _G.rfsuite.inflightSession = job.uid
+    end
     -- New start values end the session, and its parameter choice with it.
     if job.mode == "new" and drive.sessionList ~= nil then drive:setSessionList(nil) end
     if job.mode ~= "restore" then drive:activateProfiles(); drive:countOutOfBounds() end

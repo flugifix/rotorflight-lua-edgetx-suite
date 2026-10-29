@@ -572,7 +572,7 @@ local FONT_BOX = {[0] = {20, 9}, [SMLSIZE] = {14, 11}, [MIDSIZE] = {30, 16}}
 for _, locale in ipairs({"en", "de"}) do
   local translations = assert(loadfile("src/rfsuite/i18n/" .. locale .. ".lua"))().widgets.dashboard
   for _, size in ipairs({{480, 272}, {480, 320}, {800, 480}}) do
-    for _, variant in ipairs({"ready", "warnings", "empty", "reading", "failed"}) do
+    for _, variant in ipairs({"ready", "warnings", "empty", "reading", "failed", "crowded"}) do
       scenario("ground panel and grid " .. locale .. " " .. size[1] .. "x" .. size[2] .. " " .. variant, function()
         local widget, d = fixture(false)
         local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
@@ -584,12 +584,13 @@ for _, locale in ipairs({"en", "de"}) do
           return translations[string.gsub(key, "^widgets%.dashboard%.", "")] or fallback
         end}
         widget.state.inflight = {phase = "ground", setupVerdict = "ok", setSource = variant == "empty" and "unavailable" or "board",
-          cellCount = variant == "empty" and 0 or 36, boundsCount = variant == "warnings" and 2 or 0,
+          cellCount = variant == "empty" and 0 or 36, boundsCount = (variant == "warnings" or variant == "crowded") and 2 or 0,
           prime = {phase = "done", skipped = variant == "empty" and 0 or 3},
           baseline = {timestamp = "2026-10-25 12:34:56"}}
-        if variant == "warnings" or variant == "empty" then d.saveResult, d.announcementsSaveFailed = "unavailable", true end
-        if variant == "failed" then
-          -- The longest texts the panel shows: a three-part verdict and a refused restore.
+        if variant == "warnings" or variant == "empty" or variant == "crowded" then d.saveResult, d.announcementsSaveFailed = "unavailable", true end
+        if variant == "failed" or variant == "crowded" then
+          -- The longest texts the panel shows: a three-part verdict and a refused restore; "crowded" adds
+          -- every warning row and the announcements button on top.
           widget.state.inflight.setupVerdict = {"mix_missing", "gvar_range", "same_gvar"}
           widget.state.inflight.transfer = {kind = "restore", state = "refused", reason = "baseline_identity"}
           widget.state.inflight.restoreSummary = "PID 1, PID 2, RTE 1"
@@ -656,7 +657,7 @@ for _, locale in ipairs({"en", "de"}) do
           "ground footer shows the controls, the announcements warning, or a failed attempt to turn them on")
         local color = modelValue.color()
         widget.state.inflight.setupVerdict = {"mix_missing"}
-        check(variant == "failed" or (color ~= modelLabel.color and modelValue.color() ~= color), "model verdict colour follows its meaning")
+        check(variant == "failed" or variant == "crowded" or (color ~= modelLabel.color and modelValue.color() ~= color), "model verdict colour follows its meaning")
         local expected = {}
         if variant == "reading" then
           expected[1], expected[2] = translations.inflight_read_again, translations.inflight_restore_cancel
@@ -671,6 +672,10 @@ for _, locale in ipairs({"en", "de"}) do
         for index, label in ipairs(expected) do check(captions[index] == label, "ground action text is complete: " .. label) end
         check(not touches({x = 0, y = 0, w = 0, h = 0}, {x = 0, y = 0, w = 0, h = 0}), "positive control: touches is not always true")
         check(touches({x = 0, y = 0, w = 10, h = 10}, {x = 5, y = 5, w = 10, h = 10}), "positive control: overlapping boxes touch")
+        -- Every action keeps at least a line of text and its margin, however much the panel holds.
+        for _, button in ipairs(buttons) do
+          check(button.h >= 22, "every ground action is at least a text line tall: " .. button.h)
+        end
         local primaries = variant == "reading" and 2 or 1
         local primary = buttons[primaries]
         local restore = buttons[#buttons - 1]

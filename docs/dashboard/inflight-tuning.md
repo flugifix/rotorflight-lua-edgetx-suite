@@ -157,7 +157,7 @@ The flight list is edited only here, on the ground screen; the radio settings ha
 **Set up suggested functions** is a secondary grid action when the board offers parameters.
 After a completed read with no tunable slots on the configured channel pair, a line explains
 that the FC has no adjustment functions for in-flight tuning and this becomes the large primary
-action in place of **Choose parameters**. It is absent while armed or during a read or restore.
+action in place of **Choose parameters**. It is absent while armed; during a read or restore it is shown disabled.
 
 ![Set up suggested functions: what is replaced, and the two step sizes](../images/inflight/fc-setup-choices.png)
 

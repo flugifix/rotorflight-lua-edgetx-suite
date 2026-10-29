@@ -3730,7 +3730,7 @@ return {
       inflight_ground_controls_short = "Drehen / Drücken",
       inflight_slots_status = "FC-Plätze",
       inflight_session_status = "Sitzung",
-      inflight_board_parameters = "%d Parameter vom Flugcontroller",
+      inflight_board_parameters = "%d Parameter vom FC",
       inflight_board_skipped = " (%d übersprungen)",
       inflight_board_unread = "Noch nicht gelesen",
       inflight_board_no_slots = "Keine nutzbaren Plätze auf dem Flugcontroller",

@@ -593,7 +593,7 @@ do
       return plainTextOf(node) .. (second ~= "" and (" " .. second) or "")
     end
     check(modelLine and slotsLine and sessionLine and warning, "ground has three status lines and the FC bounds warning")
-    check(textOf(modelLine) == "Setup OK" and string.find(rowText(slotsLine), "36 parameters from the board", 1, true),
+    check(textOf(modelLine) == "Setup OK" and string.find(rowText(slotsLine), "36 parameters on the board", 1, true),
       "model verdict and parameter count come from the current snapshot")
     check(rowText(sessionLine) == "Start values 12:34", "the session names the time its start values were read")
     -- One line per status, placed by the standard font's measured line.
