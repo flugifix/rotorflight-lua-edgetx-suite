@@ -20,6 +20,7 @@ code is [DEVELOPMENT.md](../DEVELOPMENT.md), and the conventions the sources fol
 
 | Folder | What it holds |
 | --- | --- |
+| [features.md](features.md) | What the suite does, one section per area, with a link to the page that describes each feature. |
 | [pages/](pages/README.md) | One file per configuration page, in the folder layout of `src/rfsuite/app/pages/`. Its index lists every page with its menu path and says whether the file is written yet. |
 | [dashboard/](dashboard/README.md) | The dashboard widget: the shipped themes, the per-theme settings page, user themes, the quick menu, the model image, the service widget. |
 | [audio/](audio/README.md) | Every announcement, what fires it and its default; the sound pack; the model name file. |
