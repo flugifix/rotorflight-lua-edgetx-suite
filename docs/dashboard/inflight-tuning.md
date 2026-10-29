@@ -74,7 +74,8 @@ list and no press, trim or hold steps anything in it; its slots are counted as *
 the **FC slots** status line. An empty or wholly unusable read shows **No usable slots on the
 board** and clears the old row names. Before the read the line says **Not read yet**.
 
-**Set up suggested functions** on the ground screen writes the suggested 36-cell layout, with each parameter's
+**Set up suggested functions** on the ground screen writes the suggested 36-cell layout (see
+*The suggested functions* below for which function goes where), with each parameter's
 full range as its slot minimum and maximum. The overlay still derives its set from the next
 ground read. A cell whose current value lies outside its slot's minimum and maximum refuses
 its step until the flight controller is set up again; the **FC slots** warning counts these
@@ -190,6 +191,46 @@ the success result then closes itself into the fresh read. Cancelling after
 some writes requires another ground read; it does not undo slots already written. Arming, link
 loss or a different board cancel the job without another request. Setup is ground-only and
 never sends MSP while armed.
+
+#### The suggested functions
+
+**Set up suggested functions** writes 36 adjustment slots, numbered as on the Adjustments page:
+slots 1 and 2 (the profile selection) stay as they are, slots 3 to 38 are replaced. Every slot
+gets one function, enabled while the bank channel sits in that slot's band, stepped by the value
+channel's increment and decrement windows, limited to the function's full Configurator range, and
+stepped by the chosen **Step size** (default 5) or, for the head speed, by the **Head speed step**
+(default 50). The table shows where each function sits: a column is a bank (the bank channel's
+band), a row is a pair of step windows on the value channel; the slot number is in brackets.
+
+| Row (increment / decrement window) | Bank 1 (900–1100 µs) | Bank 2 (1100–1300 µs) | Bank 3 (1300–1400 µs) | Bank 4 (1550–1700 µs) | Bank 5 (1750–1900 µs) | Bank 6 (1950–2100 µs) |
+|---|---|---|---|---|---|---|
+| 1 (1925–1975 / 1025–1075 µs) | Pitch P-gain (3) | Pitch I-gain (9) | Pitch D-gain (15) | Pitch F-gain (21) | Pitch O-gain (25) | Pitch B-gain (29) |
+| 2 (1850–1900 / 1100–1150 µs) | Roll P-gain (4) | Roll I-gain (10) | Roll D-gain (16) | Roll F-gain (22) | Roll O-gain (26) | Roll B-gain (30) |
+| 3 (1775–1825 / 1175–1225 µs) | Yaw P-gain (5) | Yaw I-gain (11) | Yaw D-gain (17) | Yaw F-gain (23) | Governor Cyclic Precomp (27) | Yaw B-gain (31) |
+| 4 (1700–1750 / 1250–1300 µs) | Governor P-gain (6) | Governor I-gain (12) | Governor D-gain (18) | Governor F-gain (24) | Governor Collective Precomp (28) | Governor PID-gain (32) |
+| 5 (1625–1675 / 1325–1375 µs) | Yaw CCW Stop Gain (7) | Yaw Cyclic Precomp (13) | Rescue Climb Collective (19) | Yaw Inertia Precomp Gain (33) | Cross Coupling Gain (35) | Governor Headspeed (37) |
+| 6 (1550–1600 / 1400–1450 µs) | Yaw CW Stop Gain (8) | Yaw Collective Precomp (14) | Rescue Hover Collective (20) | Yaw Precomp Cutoff (34) | Cross Coupling Cutoff (36) | Governor TTA-gain (38) |
+
+Ranges: the gains, precomps, cutoffs and cross coupling 0 to 250; the yaw stop gains 25 to 250;
+the rescue climb and hover collective 0 to 1000; the governor head speed 0 to 10000. Slots 3 to 32
+hold the first thirty in bank order; the six cells of rows 5 and 6 in banks 4 to 6 follow on slots
+33 to 38.
+
+The tuning screen does not show the slots in this order. It groups the functions by axis and
+subsystem and shows each name without its group's word; with this layout the groups and their
+order are:
+
+| Group | Functions, in the order shown (slot) |
+|---|---|
+| Roll | P-gain (4), I-gain (10), D-gain (16), F-gain (22), B-gain (30), O-gain (26) |
+| Pitch | P-gain (3), I-gain (9), D-gain (15), F-gain (21), B-gain (29), O-gain (25) |
+| Yaw | P-gain (5), I-gain (11), D-gain (17), F-gain (23), B-gain (31), CW Stop Gain (8), CCW Stop Gain (7), Cyclic Precomp (13), Collective Precomp (14), Inertia Precomp Gain (33), Precomp Cutoff (34) |
+| Governor | P-gain (6), I-gain (12), D-gain (18), F-gain (24), PID-gain (32), TTA-gain (38), Cyclic Precomp (27), Collective Precomp (28), Headspeed (37) |
+| Cross Coupling | Gain (35), Cutoff (36) |
+| Rescue & Level | Rescue Climb Collective (19), Rescue Hover Collective (20) |
+
+**Choose parameters** narrows this to the groups and functions a session flies; the slots on the
+board stay as written.
 
 Below it, **Read again** refreshes the session's profiles without changing its start values.
 **Restore all** is set apart at the bottom in the destructive-action colour and opens the
