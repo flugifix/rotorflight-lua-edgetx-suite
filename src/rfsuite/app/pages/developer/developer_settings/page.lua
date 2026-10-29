@@ -153,7 +153,7 @@ local function buildLogging(cursorY, children, x, w, i18n)
     buildDebugLevelOptions(i18n),
     getValueGetter("debug_level")(),
     getValueSetter("debug_level"),
-    { helpText = t(i18n, "debug_level_help", "How much is logged; errors, warnings and most info lines are kept even at OFF, DEBUG adds the steps between, TRACE every message to and from the flight controller."), helpTitle = levelLabel }
+    { helpText = t(i18n, "debug_level_help", "How much is logged; errors, warnings and milestones are kept even at OFF, INFO adds in-flight tuning and more, DEBUG the steps between, TRACE every message to and from the flight controller."), helpTitle = levelLabel }
   )
 
   local headerLabel = t(i18n, "show_header_memory", "Show Header Memory")

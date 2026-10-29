@@ -2825,7 +2825,7 @@ return {
       settings_developer_settings = {
         section_logging = "Protokollierung",
         debug_level = "Log-Level",
-        debug_level_help = "Wie viel protokolliert wird; Fehler, Warnungen und die meisten Info-Zeilen auch bei AUS, DEBUG fügt die Schritte dazwischen hinzu, TRACE jede Nachricht von und zum Flight Controller.",
+        debug_level_help = "Wie viel protokolliert wird; Fehler, Warnungen und Meilensteine auch bei AUS, INFO fügt u. a. das In-Flight-Tuning hinzu, DEBUG die Schritte dazwischen, TRACE jede Nachricht von und zum FC.",
         debug_level_off = "AUS",
         debug_level_error = "FEHLER",
         debug_level_warn = "WARNUNG",

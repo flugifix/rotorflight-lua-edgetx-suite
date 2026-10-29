@@ -2797,7 +2797,7 @@ return {
       settings_developer_settings = {
         section_logging = "Logging",
         debug_level = "Log Level",
-        debug_level_help = "How much is logged; errors, warnings and most info lines are kept even at OFF, DEBUG adds the steps between, TRACE every message to and from the flight controller.",
+        debug_level_help = "How much is logged; errors, warnings and milestones are kept even at OFF, INFO adds in-flight tuning and more, DEBUG the steps between, TRACE every message to and from the flight controller.",
         debug_level_off = "OFF",
         debug_level_error = "ERROR",
         debug_level_warn = "WARN",
