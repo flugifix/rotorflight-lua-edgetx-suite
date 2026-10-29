@@ -887,9 +887,10 @@ end
 -- How long the overlay keeps what it holds once it is closed. Two lifetimes:
 --
 -- The flight session: the drive object -- start values, profile values, the profile to return to,
--- pending saves -- and every module above. It ends on another board, when no session is held any
--- more (never read, or New session), or after INFLIGHT_LINK_GONE_SECONDS without a link on the
--- ground. The start values stay on the SD card, so the next opening continues from there.
+-- pending saves -- and every module above. A session is one power cycle of the board: it ends after
+-- INFLIGHT_SESSION_GAP_SECONDS without a link on the ground (a battery change), on another board,
+-- or when no session is held any more (never read, or New session). The next opening reads the
+-- board again and starts a new session. In the air a session never ends.
 --
 -- The view: screen.lua and input.lua. They leave when the overlay is closed on the ground. Closed in
 -- the air they stay until the landing, so reopening during the flight loads nothing.
@@ -899,7 +900,7 @@ end
 -- page's too, and dropping them under it would leave the page and the overlay with two copies.
 -- The module caches are shared by every dashboard in this Lua state, so a widget releases only
 -- what no other dashboard's overlay still holds or shows.
-local INFLIGHT_LINK_GONE_SECONDS = 300
+local INFLIGHT_SESSION_GAP_SECONDS = 5
 local INFLIGHT_VIEW = {["screen.lua"] = true, ["input.lua"] = true}
 local InflightHolders = setmetatable({}, {__mode = "k"})
 
@@ -926,18 +927,41 @@ local function inflightHeldElsewhere(self, sessionToo)
   return false
 end
 
+-- Output, a held step, a profile job or a save still to finish: a session is not ended under them.
+local function inflightOutstanding(drive)
+  return (drive.written or 0) ~= 0 or (drive.bankWritten or 0) ~= 0 or drive.holdRow ~= nil
+    or drive.profileJob ~= nil or drive.pendingSave ~= nil or drive.restorePending == true
+end
+
+-- The link watch of a session, called on every pass that has a drive, open or closed. On the ground
+-- it notes when the link went and answers how long it has been gone; in the air (the live phase,
+-- which only an observed landing leaves) there is no gap to count. When the link is back after a
+-- gap that long the board is in a new state -- the battery was changed -- and the session ends: its
+-- values, its comparison and its parameter choice go, and the ground read starts a new one. A
+-- shorter gap continues the session.
+local function inflightLinkWatch(self, drive)
+  if self.state.fblConnected ~= true then
+    if drive.phase == "live" then drive.linkGoneAt = nil; return 0 end
+    local now = nowSeconds()
+    drive.linkGoneAt = drive.linkGoneAt or now
+    return now - drive.linkGoneAt
+  end
+  local since = drive.linkGoneAt
+  if since == nil then return 0 end
+  drive.linkGoneAt = nil
+  if nowSeconds() - since >= INFLIGHT_SESSION_GAP_SECONDS and not inflightOutstanding(drive) then
+    drive:endSession()
+    drive:setPhase("ground")
+  end
+  return 0
+end
+
 local function inflightSessionEnded(self, drive)
+  if inflightLinkWatch(self, drive) >= INFLIGHT_SESSION_GAP_SECONDS then return true end
   if drive.baseline == nil and drive.sessionProfiles == nil then return true end
   local prime = inflightPrime()
   local board = drive.board and prime and prime.boardOnLink() or nil
-  if board ~= nil and board ~= drive.board then return true end
-  if self.state.fblConnected == true then
-    self._inflightLinkGoneAt = nil
-    return false
-  end
-  local now = nowSeconds()
-  self._inflightLinkGoneAt = self._inflightLinkGoneAt or now
-  return now - self._inflightLinkGoneAt >= INFLIGHT_LINK_GONE_SECONDS
+  return board ~= nil and board ~= drive.board
 end
 
 releaseInflight = function(self)
@@ -950,13 +974,9 @@ releaseInflight = function(self)
     if not inflightHeldElsewhere(self, true) then dropInflightModules(false) end
     return
   end
-  if drive.phase == "live" then return end
-  if (drive.written or 0) ~= 0 or (drive.bankWritten or 0) ~= 0 or drive.holdRow ~= nil
-      or drive.profileJob ~= nil or drive.pendingSave ~= nil or drive.restorePending then
-    return
-  end
+  if drive.phase == "live" or inflightOutstanding(drive) then return end
   if inflightSessionEnded(self, drive) then
-    self._inflight, self._inflightLinkGoneAt, self._primeSkips = nil, nil, nil
+    self._inflight, self._primeSkips = nil, nil
     self._inflightPrefs, self._inflightStamp = nil, nil
     self._inflightStorePath, self._inflightStoreFor, self._inflightStoreAt = nil, nil, nil
     local session = _G.rfsuite and _G.rfsuite.session
@@ -1017,6 +1037,7 @@ local function tickInflight(self)
     cleanupInflight(self)
     return
   end
+  if self._inflight then inflightLinkWatch(self, self._inflight) end
   if not inflightLinkUp(self, self._inflight) or (self._inflight and self._inflight.linkLost == true
       and self.state.armedSeen ~= true) then pauseInflight(self); return end
   local drive = inflightDrive()
@@ -1063,6 +1084,7 @@ local function updateInflightRelease(self)
   local instance = Drive and (self._inflight or Drive.get(self))
   if instance then
     installInflightPanic(self)
+    inflightLinkWatch(self, instance)
     -- Reconnection resets the arm latch; missing arm data must not turn a paused flight into
     -- a landing and then reset its selection when armed telemetry arrives again.
     if not inflightLinkUp(self, instance) or (instance.linkLost == true

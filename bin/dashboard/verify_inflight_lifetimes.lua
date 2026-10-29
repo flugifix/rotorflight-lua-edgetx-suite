@@ -150,7 +150,9 @@ scenario("another board ends the session and releases all of its code", function
   for _, name in ipairs(ALL) do check(weak[name] == nil, "collected after the session ended: " .. name) end
 end)
 
-scenario("five minutes without a link on the ground end the session; in the air never", function()
+-- A session is one power cycle of the board: five seconds without a link on the ground (a battery
+-- change) end it. getTime counts 10 ms ticks, so 500 ticks are the five seconds.
+scenario("five seconds without a link on the ground end a closed session; in the air never", function()
   local widget = newWidget()
   open(widget)
   local d = withSession(widget, nil)
@@ -162,20 +164,55 @@ scenario("five minutes without a link on the ground end the session; in the air 
   check(widget._inflight == d, "ten minutes without a link in the air keep the session")
   widget.state.armed, d.phase = false, "ground"
   Stubs.tick(); widget:refresh(0, nil)
-  offset = offset + 29900
+  offset = offset + 400
   Stubs.tick(); widget:refresh(0, nil)
-  check(widget._inflight == d, "just under five minutes on the ground keep the session")
+  check(widget._inflight == d, "four seconds on the ground keep the session")
   widget.state.fblConnected = true
   Stubs.tick(); widget:refresh(0, nil)
+  check(widget._inflight == d and d.baseline.identity == "kept", "a link back within five seconds continues the session")
   widget.state.fblConnected = false
   Stubs.tick(); widget:refresh(0, nil)
-  offset = offset + 29900
+  offset = offset + 450
   Stubs.tick(); widget:refresh(0, nil)
-  check(widget._inflight == d, "a link that came back restarts the five minutes")
+  check(widget._inflight == d, "a link that came back restarts the five seconds")
+  offset = offset + 60
+  Stubs.tick(); widget:refresh(0, nil)
+  check(widget._inflight == nil, "five seconds without a link on the ground end the session")
+  widget.state.fblConnected = true
+end)
+
+scenario("with tuning open, the link back after five seconds on the ground starts a new session", function()
+  local widget = newWidget()
+  open(widget)
+  local d = withSession(widget, nil)
+  widget.state.fblConnected = false
+  for _ = 1, 2 do Stubs.tick(); widget:refresh(0, nil) end
+  offset = offset + 600
+  Stubs.tick(); widget:refresh(0, nil)
+  check(widget._inflight == d and d.baseline ~= nil, "while the link is gone the session stays on screen")
+  widget.state.fblConnected = true
+  Stubs.tick(); widget:refresh(0, nil)
+  check(widget._inflight == d and d.baseline == nil and d.phase == "ground" and d.readAgain,
+    "the link back after the gap ends the session and asks for a new read")
+  withSession(widget, nil)
+  widget.state.fblConnected = false
+  Stubs.tick(); widget:refresh(0, nil)
   offset = offset + 200
   Stubs.tick(); widget:refresh(0, nil)
-  check(widget._inflight == nil, "five minutes without a link on the ground end the session")
   widget.state.fblConnected = true
+  Stubs.tick(); widget:refresh(0, nil)
+  check(d.baseline ~= nil and d.baseline.identity == "kept", "control: a gap under five seconds continues the session")
+  widget.state.armed, d.phase, d.live = true, "live", true
+  widget.state.fblConnected = false
+  Stubs.tick(); widget:refresh(0, nil)
+  offset = offset + 6000
+  Stubs.tick(); widget:refresh(0, nil)
+  widget.state.fblConnected = true
+  Stubs.tick(); widget:refresh(0, nil)
+  check(d.baseline ~= nil and d.baseline.identity == "kept", "a link back in the air continues the session")
+  widget.state.armed, d.phase, d.live = false, "ground", false
+  close(widget)
+  forget(widget)
 end)
 
 scenario("an open tool, outstanding output or a profile job hold the release back", function()

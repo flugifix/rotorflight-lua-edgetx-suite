@@ -3682,6 +3682,8 @@ return {
       inflight_post_armed_controls = "Board has saved",
       inflight_post_actions = "Restore / read values",
       inflight_post_back = "Back to changes",
+      inflight_post_continue = "Continue tuning",
+      inflight_post_restore = "Restore...",
       inflight_changed_count = "%d parameters changed",
       inflight_rate_label = "Rate",
       inflight_rate_restore_note = "PID restore does not cover rate profiles",

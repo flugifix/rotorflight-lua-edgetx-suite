@@ -1400,12 +1400,25 @@ function M.buildPost(children, widget, m, w, h, t, p)
     end
   end
   local note = target.scope == "rate" and t("widgets.dashboard.inflight_rate_restore_note", "PID restore does not cover rate profiles")
-    or t("widgets.dashboard.inflight_delta_title", "CHANGED SINCE SD BASELINE")
+    or t("widgets.dashboard.inflight_delta_title", "CHANGED THIS SESSION")
   appendLabel(children, m.pad, actionY - m.lineH - 2, lineW, note, p.dim, m.small, LEFT)
   if not drive or not Prime then return end
   local arrowW = m.large and 72 or 48
   local buttonW = lineW - arrowW * 2 - m.pad * 2
-  appendAction(children, m, m.pad, actionY, buttonW, t("widgets.dashboard.inflight_post_actions", "Restore / read values"), p, function()
+  -- Two ways on from the list: back to the ground surface to carry on tuning in the same session, or
+  -- the restore menu (this profile, everything, or read again). Each button is as wide as its caption
+  -- needs, Continue first.
+  local continueLabel = t("widgets.dashboard.inflight_post_continue", "Continue tuning")
+  local continueW = math.min(math.floor((buttonW - m.pad) / 2) + 40, #continueLabel * charWidth(m.small) + 16)
+  appendAction(children, m, m.pad, actionY, continueW, continueLabel, p, function()
+    if Prime.isRunning(drive) or drive.profileJob then return end
+    drive:setPhase("ground")
+    widget._tuningKeyDirty = true
+  end)
+  children[#children - 1].color = p.accent
+  children[#children].color = p.onAccent
+  appendAction(children, m, m.pad * 2 + continueW, actionY, buttonW - continueW - m.pad,
+    t("widgets.dashboard.inflight_post_restore", "Restore..."), p, function()
     drive.postActionsOpen = {kind = target.scope, index = target.profile}
     drive.valueEpoch = drive.valueEpoch + 1; widget._tuningKeyDirty = true
   end)

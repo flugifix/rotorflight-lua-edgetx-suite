@@ -518,7 +518,8 @@ check(Prime.retryReturn(d), "explicit read-again requests pending return")
 finish(d)
 check(fc.pid==2 and fc.rate==3 and not d.restorePending, "explicit return retry restores original pair")
 
--- The full slot-table prime reuses a matching SD baseline after reconnect.
+-- A session is one power cycle of the board: after a restart the full prime begins a new session
+-- from the board's current values and replaces the start values an earlier session left on the card.
 for _, name in ipairs({"rx_map","get_adjustment_function_ids","get_adjustment_range"}) do
   apis["tasks/msp/api/"..name..".lua"]={parse=function(buf) return copy(buf[1]) end, simulatorResponse={}}
 end
@@ -546,15 +547,28 @@ for _=1,3000 do
   if not Prime.isRunning(reconnected) then break end
 end
 Store.load = oldLoad
-check(loads == 1, "automatic resume loads the SD baseline exactly once")
+check(loads == 0, "a restart begins a new session: the stored start values are not loaded")
 local craftCache = ResponseCache.get(10)
 check(craftCache and craftCache[1] == 42, "profile reads retain unrelated connection cache entries")
 ResponseCache.put(112, {99}, ResponseCache.keyFor(112))
 ResponseCache.clear(112)
 check(ResponseCache.get(112) == nil and ResponseCache.get(10)[1] == 42, "targeted invalidation clears only the read command")
-check(reconnected.prime.phase=="done" and reconnected.sessionProfiles.pid[6]
-  and files[Store.path(fc.uid)]==savedFile, "full prime resumes persisted membership without replacing start values")
+check(reconnected.prime.phase=="done" and reconnected.sessionProfiles.pid[6] and reconnected.sessionMode == "new"
+  and files[Store.path(fc.uid)] ~= savedFile, "the new session's start values replace the earlier session's on the card")
 check(fc.pid==2 and fc.rate==3, "reconnect prime returns initial pair")
+-- Within a session a read continues it: a drive that still holds its start values resumes them
+-- from the card, exactly once.
+do
+  local newFile = files[Store.path(fc.uid)]
+  reconnected.readRequired = true
+  loads = 0
+  Store.load = function(...) loads = loads + 1; return oldLoad(...) end
+  check(Prime.start(widget, reconnected, true), "a read within the session starts")
+  for _ = 1, 3000 do pass(reconnected); if not Prime.isRunning(reconnected) then break end end
+  Store.load = oldLoad
+  check(loads == 1 and reconnected.sessionMode == "resume" and files[Store.path(fc.uid)] == newFile,
+    "a read within the session resumes its start values from the card once and keeps them")
+end
 
 -- Runtime pauses before the ground tick on loss, so no disconnected Prime.tick is assumed.
 do
@@ -562,6 +576,8 @@ do
   local reconnected = makeDrive()
   check(Prime.start(widget, reconnected, true), "reconnect fixture reads its initial board")
   for _ = 1, 3000 do pass(reconnected); if not Prime.isRunning(reconnected) then break end end
+  -- The session this fixture reads is a new one, and its start values are what the card now holds.
+  local sessionFile = files[Store.path(fc.uid)]
   local function reconnect(instance)
     instance._primeAutoDone = true
     widget._inflight = instance
@@ -592,7 +608,7 @@ do
   reconnect(reconnected)
   check(reconnected:profileRefusal() == "session_unread", "ground reconnect refuses retained membership before reading")
   reread(reconnected)
-  check(files[Store.path(fc.uid)] == savedFile and reconnected.prime.records[4].adjFunction == originalIds[4],
+  check(files[Store.path(fc.uid)] == sessionFile and reconnected.prime.records[4].adjFunction == originalIds[4],
     "unchanged reconnect control retains baseline bytes and slot function")
 
   reconnected:setPhase("live")
@@ -605,7 +621,7 @@ do
   widget.state.armed = false
   reconnected:setPhase("ground")
   reread(reconnected)
-  check(not reconnected.readRequired and files[Store.path(fc.uid)] == savedFile,
+  check(not reconnected.readRequired and files[Store.path(fc.uid)] == sessionFile,
     "disarming after armed reconnect completes the full read and keeps the baseline")
 
   slotsForPrime[1].adjMax = 4
@@ -639,7 +655,7 @@ do
   fc.pid = 2; reconnected:watchProfiles()
 
   -- Restore still visits only stored sections, even when current selectors reach another one.
-  files[Store.path(fc.uid)] = savedFile
+  files[Store.path(fc.uid)] = sessionFile
   local before = #sent
   check(Prime.restore(widget, reconnected), "restore-only membership control starts")
   finish(reconnected)
@@ -648,12 +664,21 @@ do
       and not (setters[sent[i].command] == 111 and sent[i].rate == 4), "restore excludes profiles absent from the baseline")
   end
   fc.counts.pid = 5
+  -- Within a session (a drive holding its start values) the resume refuses profiles the board no
+  -- longer has; a drive without a session begins a new one on what the board has now.
   local reduced = makeDrive(slots)
+  reduced.baseline = reconnected.baseline
   check(Prime.start(widget, reduced, true), "reduced profile count control starts")
   for _ = 1, 3000 do pass(reduced); if not Prime.isRunning(reduced) then break end end
   check(reduced.prime.error == "profile_count" and not reduced.sessionProfiles,
     "resume refuses stored profiles above the current board count")
+  local fresh = makeDrive(slots)
+  check(Prime.start(widget, fresh, true), "a new session on the reduced board starts")
+  for _ = 1, 3000 do pass(fresh); if not Prime.isRunning(fresh) then break end end
+  check(fresh.prime.phase == "done" and fresh.sessionMode == "new" and fresh.sessionProfiles
+    and not fresh.sessionProfiles.pid[6], "a new session reads only the profiles the board has")
   fc.counts.pid = 6
+  files[Store.path(fc.uid)] = sessionFile
 
   fc.data = originalData
   slotsForPrime, idsForPrime = originalSlots, originalIds
@@ -669,7 +694,7 @@ do
   fc.identity, fc.uid = "FC-A", "UID-A"
   rfsuite.session.signature, rfsuite.session.mcu_id = fc.identity, fc.uid
   msp.values.mcuId, msp.signatureMcuId = fc.uid, fc.uid
-  fc.data, files[Store.path(fc.uid)] = originalData, savedFile
+  fc.data, files[Store.path(fc.uid)] = originalData, sessionFile
 
   local interrupted = makeDrive(slots)
   check(Prime.start(widget, interrupted, true), "interrupted slot read starts")
@@ -711,6 +736,8 @@ do
   check(recovered and not why and Profiles.complete(recovered), "sliced orphan recovery accepts only the complete baseline")
   print("sliced temporary recovery peak: " .. peak .. " VM instructions")
   local instance = makeDrive(slots)
+  -- A session in progress (its start values held) that finds only the orphan on the card.
+  instance.baseline = {meta = {}}
   check(Prime.start(widget, instance, true), "automatic read starts with an orphan baseline")
   for _ = 1, 3000 do pass(instance); if not Prime.isRunning(instance) then break end end
   check(instance.sessionMode == "resume" and instance.baseline.pid1["14"] == 300,
@@ -890,18 +917,27 @@ for _,size in ipairs({{480,272},{480,320},{800,480}}) do
   repeat
     reconnected.deltaPage=page
     local nodes={}; Screen.buildFullscreen(nodes,view); pages=reconnected.deltaPages
-    local heading,entryButton
+    local heading,entryButton,continueButton,lastButton
     for _,node in ipairs(nodes) do
       check((node.y or 0)+(node.h or 0)<=size[2],"post-flight top-level geometry fits")
       if node.type=="label" and type(node.text)=="string" then
         if string.find(node.text, " / ",1,true) and (string.find(node.text, "PID ",1,true)==1 or string.find(node.text, "Rate ",1,true)==1) then heading=node.text end
         if node.text=="PID restore does not cover rate profiles" then rateNotice=true end
         if string.find(node.text, " -> ",1,true) then check(heading~=nil,"delta row has a repeated profile/group heading"); seen[#seen+1]=node.text end
+        if node.text=="Restore..." then entryButton=lastButton end
+        if node.text=="Continue tuning" then continueButton=lastButton end
+        check(#node.text*(node.font==SMLSIZE and 11 or node.font==MIDSIZE and 16 or 9)<=(node.w or 0),"post-flight text fits its box: "..node.text)
       end
-      if node.type=="button" and not entryButton then entryButton=node end
+      if node.type=="button" then lastButton=node end
     end
-    check(entryButton~=nil,"post-flight has an action entry")
+    check(entryButton~=nil and continueButton~=nil and continueButton.x<entryButton.x
+      and continueButton.x+continueButton.w<entryButton.x,"post-flight offers Continue tuning, then the restore menu")
     local sentBefore=#sent
+    local phase,baseline,values=reconnected.phase,reconnected.baseline,reconnected.profileValues
+    continueButton.press()
+    check(reconnected.phase=="ground" and #sent==sentBefore and reconnected.baseline==baseline
+      and reconnected.profileValues==values,"Continue tuning returns to the ground surface in the same session, without MSP")
+    reconnected:setPhase(phase)
     entryButton.press()
     check(#sent==sentBefore and reconnected.postActionsOpen,"opening restore menu sends no MSP")
     local menu={}; Screen.buildFullscreen(menu,view)

@@ -150,12 +150,20 @@ function M.begin(widget, drive, env, mode, target)
   local board, uid = identity(env)
   if not board then return false, "reading" end
   local baseline, recovery
+  -- A session is one power cycle of the board. Its start values are read when it begins; within it
+  -- (a short link gap, a link back in the air) the read continues the session from its stored
+  -- values. A drive that holds no session -- a new start, a radio restart, a session ended by a
+  -- battery change -- begins a new one, whatever an earlier session left on the card.
   if mode == "auto" then
-    local reason
-    baseline, reason, recovery = Store.load(uid, board, true)
-    if baseline or recovery then mode = "resume"
-    elseif reason == "baseline_missing" then mode = "new"
-    else return false, reason end
+    if drive.baseline == nil then
+      mode = "new"
+    else
+      local reason
+      baseline, reason, recovery = Store.load(uid, board, true)
+      if baseline or recovery then mode = "resume"
+      elseif reason == "baseline_missing" then mode = "new"
+      else return false, reason end
+    end
   end
   if mode == "restore" or mode == "resume" then
     local reason

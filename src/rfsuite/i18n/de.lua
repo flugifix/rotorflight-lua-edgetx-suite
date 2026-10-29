@@ -3678,6 +3678,8 @@ return {
       inflight_post_armed_controls = "Im FC gespeichert",
       inflight_post_actions = "Werte lesen / wiederherstellen",
       inflight_post_back = "Zur Änderungsliste",
+      inflight_post_continue = "Weiter tunen",
+      inflight_post_restore = "Zurücksetzen...",
       inflight_changed_count = "%d Parameter geändert",
       inflight_rate_label = "Rate",
       inflight_rate_restore_note = "PID-Restore gilt nicht für Rateprofile",
