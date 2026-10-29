@@ -774,7 +774,7 @@ end
 -- Running out of Lua heap is the one failure the guards in this file cannot catch: the firmware
 -- closes the whole Lua state rather than raising into the script, so there is no pcall between
 -- it and the pilot. It can be seen coming, and that is what the warning below is for.
-local function logMemoryUsage(now)
+local function logMemoryUsage(now, deferred)
   local tickNow = tonumber(now) or 0
   if tickNow > 0 and state.memLastTick > 0 and (tickNow - state.memLastTick) < MEM_LOG_INTERVAL_TICKS then
     return
@@ -796,8 +796,10 @@ local function logMemoryUsage(now)
 
   -- The state line, every STATE_LINE_INTERVAL_TICKS, the same shape the dashboard writes. Hosted,
   -- this file runs in the dashboard's Lua state and the dashboard's own line already reports it,
-  -- so a second one here would only say the same thing twice.
-  if state.hosted or not (Log and type(Log.recording) == "function" and Log.recording()) then
+  -- so a second one here would only say the same thing twice. Like the other periodic work it
+  -- steps aside on a pass that has just built a page; its timer is not advanced, so it is written
+  -- on the next pass instead.
+  if deferred or state.hosted or not (Log and type(Log.recording) == "function" and Log.recording()) then
     return
   end
   if tickNow > 0 and state.stateLineTick > 0 and (tickNow - state.stateLineTick) < STATE_LINE_INTERVAL_TICKS then
@@ -4109,7 +4111,7 @@ function M.run(event, touchState)
       end
     end
 
-    logMemoryUsage(now)
+    logMemoryUsage(now, deferBackground)
 
     updateRuntimeMenuConditions()
     maybeRefreshInfoPageFromSession()
