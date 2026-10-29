@@ -28,6 +28,38 @@ turning, and while the arm state has not been read at all.
 
 ## Setting it up
 
+### What it needs
+
+On the radio:
+
+- The RFSuite dashboard widget, opened in full screen; **In-flight tuning** is in its quick menu, or
+  on a hardware key bound to it under *System* → *Settings* → *Dashboard* → *Keys*.
+- The preview switch: *System* → *Settings* → *General* → *Preview* → *In-flight tuning*.
+- The master switch under *System* → *Settings* → *Dashboard* → *In-Flight Tuning*, with two
+  channels and two global variables the model does not use otherwise (by default channel 11 for
+  the bank, channel 12 for the value, GV6 and GV5). Both channels have to reach the flight controller.
+- The model wired for them: **Set up the model** on that page writes the two mixer lines, the
+  logical switch, the variables' range and precision and, with trims in use, the trim settings. The
+  **Model** line on the ground screen has to read **Setup OK** before tuning drives anything.
+
+On the flight controller:
+
+- Adjustment slots on those two channels: your own, or the suggested set written from the ground
+  screen (*The suggested functions* and *Your own adjustment functions* below).
+- [Telemetry](../pages/setup/telemetry.md) with these sensors selected:
+  - **Arming Flags** (90) or **System Status** (120). Without an arm reading the ground screen
+    refuses everything, because a model that is never seen armed cannot be told from one in the air.
+  - **PID Profile** (95) and **Rates Profile** (96). Tuning follows the active profiles; while one is
+    unknown, steps are refused.
+  - **Adjustment Function** (99). The board reports each step with it; without it the values on
+    screen are not updated after a step.
+- The model disarmed and connected on the ground when a session begins, for its read.
+
+Optional: *Adjustment Announcements*, which speak each name and value (the ground screen offers to
+turn them on), and **Drive rows from the trims** (off by default).
+
+### Wiring and the setup check
+
 The radio wiring stays in
 [*System* → *Settings* → *Dashboard* → *In-Flight Tuning*](../pages/settings/dashboard/inflight.md):
 the master switch, channels, variables and optional trims.
