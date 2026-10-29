@@ -135,7 +135,7 @@ local function fontHeight(font)
   return FONT_H[font] or 12
 end
 
--- How wide one character of each font is, on average. The firmware will not say, and a label
+-- Fallback widths for firmware without text measurement. A label
 -- whose text is wider than its box does not clip it -- it WRAPS, onto the row below and off the
 -- bottom of the screen. So text that cannot fit is cut here instead.
 --
@@ -216,12 +216,23 @@ local function appendCentredLabel(children, x, y, w, boxH, text, color, font, al
 end
 
 
---- `text`, cut to what fits in `width` at `font`. Cut without an ellipsis: three dots cost three
--- of the characters that were the reason to cut, and on a parameter name the front is what
--- identifies it.
+-- Fitting and column layout share the firmware's measurement, with a UTF-8 fallback.
+local function textWidth(text, font)
+  if lcd and type(lcd.sizeText) == "function" then
+    local width = lcd.sizeText(text, font)
+    if type(width) == "number" then return width end
+  end
+  local count = 0
+  for index = 1, #text do
+    local byte = string.byte(text, index)
+    if byte < 128 or byte >= 192 then count = count + 1 end
+  end
+  return count * charWidth(font)
+end
+
 local function textFits(text, width, font)
   if type(text) ~= "string" then return true end
-  return (#text * charWidth(font)) <= width
+  return textWidth(text, font) <= width
 end
 
 -- At most `n` bytes of `text`, never ending inside a UTF-8 character: the Configurator's German
@@ -383,8 +394,13 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
   -- dim text beside a title that said "TUNING - set: standard"; the set moved to the ground
   -- surface, which is where it can be acted on, and the profile took the room.
   local titleW = w - closeW - m.pad * 4 - 84
+  local unreadTitle = t("widgets.dashboard.inflight_title", "TUNING")
   appendCentredLabel(children, m.pad, 0, titleW, m.headerH,
-    function() local snap = widget.state.inflight; return snap and snap.profileText or "" end,
+    function()
+      local snap = widget.state.inflight
+      if snap and snap.readRequired and snap.phase ~= "live" then return unreadTitle end
+      return snap and snap.profileText or ""
+    end,
     p.text, m.large and MIDSIZE or 0, LEFT, m)
 
   -- Which of the three phases this is, in one word. The switch is one, so the word is what says
@@ -817,6 +833,7 @@ end
 --- The usable set comes only from the completed board slot read.
 local function describeSet(snapshot, t)
   local text
+  if snapshot.readRequired then return t("widgets.dashboard.inflight_board_unread", "Not read yet") end
   if snapshot.setSource == "board" then
     text = string.format(t("widgets.dashboard.inflight_board_parameters", "%d parameters from the board"), snapshot.cellCount or 0)
   elseif snapshot.setSource == "unavailable" then
@@ -848,6 +865,12 @@ local function describeBackup(snapshot, t)
   end
   if snapshot.restorePending then
     return t("widgets.dashboard.inflight_return_pending", "Original profiles: return pending; disarm/reconnect")
+  end
+  if snapshot.readRequired then
+    if status and status.phase == "error" then
+      return t("widgets.dashboard.inflight_prime_failed", "Reading failed") .. ": " .. M.restoreReason(status.error, t)
+    end
+    return t("widgets.dashboard.inflight_prime_never", "Values not read")
   end
   local transfer = snapshot.transfer
   if transfer then
@@ -891,7 +914,16 @@ local function appendAction(children, m, x, y, width, label, p, press)
   children[#children + 1] = {
     type = "button", x = x, y = y, w = width, h = m.actionH, color = p.button, press = press
   }
-  appendCentredLabel(children, x, y, width, m.actionH, fitText(label, width, m.small), p.text, m.small, CENTER, m)
+  local fits = textFits(label, width, m.small)
+  if m.wrap and not fits then
+    local step = fontHeight(m.small)
+    local text = fitTwoLines(label, width, m.small)
+    appendTwoLines(children, x, y + math.floor((m.actionH - step * 2) / 2), width,
+      function() return text end, p.text, m.small, step)
+    children[#children - 1].align, children[#children].align = CENTER, CENTER
+  else
+    appendCentredLabel(children, x, y, width, m.actionH, fits and label or fitText(label, width, m.small), p.text, m.small, CENTER, m)
+  end
 end
 
 -- Preserve every word on setup surfaces; the plan paginates these measured lines.
@@ -917,43 +949,60 @@ function M.buildGround(children, widget, m, w, h, t, p)
   local armed = (widget.state and widget.state.armed) == true
   local state = widget.state
   local empty = {}
-  local y, lineW = m.chipY, w - m.pad * 2
-  local lineFont = m.font
-  local wrap = h >= 320
-  local statusH = (fontHeight(lineFont) + 2) * (wrap and 2 or 1)
-  local fit = wrap and fitTwoLines or fitText
-  -- One status row at the current y; where rows wrap, its two lines are two labels `step` apart.
+  local y, lineW = m.large and m.chipY or m.headerH, w - m.pad * 2
+  local lineFont = 0
+  local lineStep = fontHeight(lineFont) + (h >= 320 and 2 or 0)
+  local inset = m.large and 8 or 0
+  local modelLabel = t("widgets.dashboard.inflight_model_status", "Model")
+  local slotsLabel = t("widgets.dashboard.inflight_slots_status", "FC slots")
+  local sessionLabel = t("widgets.dashboard.inflight_session_status", "Session")
+  local labelW = math.max(textWidth(modelLabel, lineFont), textWidth(slotsLabel, lineFont), textWidth(sessionLabel, lineFont))
+  local labelX, valueX = m.pad + inset, m.pad + inset + labelW + 4
+  local valueW = lineW - inset * 2 - labelW - 4
+  children[#children + 1] = {type = "rectangle", x = m.pad, y = y, w = lineW, h = 0, color = p.header, filled = true}
+  local panel = children[#children]
+  y = y + inset
+  -- Each status has a dim caption and a cached value; two labels keep wrapped text on the grid.
   local function row(textFn, color, font, step)
-    if wrap then appendTwoLines(children, m.pad, y, lineW, textFn, color, font, step)
-    else appendLabel(children, m.pad, y, lineW, textFn, color, font, LEFT) end
+    appendTwoLines(children, valueX, y, valueW, textFn, color, font, step)
   end
-  local lineStep = fontHeight(lineFont) + 2
 
-  local lastVerdict, modelText
+  local lastVerdict, lastModelRead, modelText
+  appendLabel(children, labelX, y, labelW, modelLabel, p.dim, lineFont, LEFT)
   row(function()
     local verdict = state.inflight and state.inflight.setupVerdict
-    if modelText == nil or verdict ~= lastVerdict then
-      lastVerdict = verdict
-      modelText = fit(t("widgets.dashboard.inflight_model_status", "Model") .. ": " .. M.describeCheck(verdict, t), lineW, lineFont)
+    local unread = state.inflight and state.inflight.readRequired
+    if unread then verdict = nil end
+    if modelText == nil or verdict ~= lastVerdict or unread ~= lastModelRead then
+      lastVerdict, lastModelRead = verdict, unread
+      modelText = fitTwoLines(M.describeCheck(verdict, t), valueW, lineFont)
     end
     return modelText
-  end, p.text, lineFont, lineStep)
-  y = y + statusH
+  end, function()
+    local snap = state.inflight
+    local verdict = snap and not snap.readRequired and snap.setupVerdict or nil
+    return verdict == "ok" and p.ok or type(verdict) == "table" and verdict[1] ~= "trims_pending" and p.error or p.warn
+  end, lineFont, lineStep)
+  y = y + lineStep * 2
 
   -- Snapshots are replaced on publication; cache the scalar inputs rather than their tables.
-  local lastSource, lastCount, lastSkipped, setText
+  local lastSource, lastCount, lastSkipped, lastSetRead, setText
+  appendLabel(children, labelX, y, labelW, slotsLabel, p.dim, lineFont, LEFT)
   row(function()
     local snap = state.inflight or empty
     local skipped = snap.prime and snap.prime.skipped
-    if setText == nil or snap.setSource ~= lastSource or snap.cellCount ~= lastCount or skipped ~= lastSkipped then
+    if setText == nil or snap.setSource ~= lastSource or snap.cellCount ~= lastCount or skipped ~= lastSkipped
+      or snap.readRequired ~= lastSetRead then
+      lastSetRead = snap.readRequired
       lastSource, lastCount, lastSkipped = snap.setSource, snap.cellCount, skipped
-      setText = fit(t("widgets.dashboard.inflight_slots_status", "FC slots") .. ": " .. describeSet(snap, t), lineW, lineFont)
+      setText = fitTwoLines(describeSet(snap, t), valueW, lineFont)
     end
     return setText
   end, p.text, lineFont, lineStep)
-  y = y + statusH
+  y = y + lineStep * 2
 
-  local lastMode, lastTimestamp, lastPending, lastTransfer, lastReason, lastSummary, lastPhase, lastError, lastDone, sessionText
+  local lastMode, lastTimestamp, lastPending, lastTransfer, lastReason, lastSummary, lastPhase, lastError, lastDone, lastSessionRead, sessionText
+  appendLabel(children, labelX, y, labelW, sessionLabel, p.dim, lineFont, LEFT)
   row(function()
     local snap = state.inflight or empty
     local timestamp = snap.baseline and snap.baseline.timestamp
@@ -962,37 +1011,40 @@ function M.buildGround(children, widget, m, w, h, t, p)
     local phase, err, done = status and status.phase, status and status.error, status and status.done
     if sessionText == nil or snap.sessionMode ~= lastMode or timestamp ~= lastTimestamp
       or snap.restorePending ~= lastPending or transferState ~= lastTransfer or reason ~= lastReason
-      or snap.restoreSummary ~= lastSummary or phase ~= lastPhase or err ~= lastError or done ~= lastDone then
+      or snap.restoreSummary ~= lastSummary or phase ~= lastPhase or err ~= lastError or done ~= lastDone
+      or snap.readRequired ~= lastSessionRead then
+      lastSessionRead = snap.readRequired
       lastMode, lastTimestamp, lastPending = snap.sessionMode, timestamp, snap.restorePending
       lastTransfer, lastReason, lastSummary = transferState, reason, snap.restoreSummary
       lastPhase, lastError, lastDone = phase, err, done
-      sessionText = fit(t("widgets.dashboard.inflight_session_status", "Session") .. ": " .. describeBackup(snap, t), lineW, lineFont)
+      sessionText = fitTwoLines(describeBackup(snap, t), valueW, lineFont)
     end
     return sessionText
   end, p.text, lineFont, lineStep)
-  y = y + statusH
+  y = y + lineStep * 2
 
   -- Reserve this row at build time; a completed ground read rebuilds the surface.
-  if (state.inflight and state.inflight.boundsCount or 0) > 0 then
+  if state.inflight and not state.inflight.readRequired and (state.inflight.boundsCount or 0) > 0 then
     local lastBounds, warning
-    row(function()
+    appendLabel(children, labelX, y, lineW - inset * 2, function()
       local count = state.inflight and state.inflight.boundsCount or 0
       if count ~= lastBounds then
         lastBounds = count
-        warning = count > 0 and fit(string.format(t("widgets.dashboard.inflight_bounds_warning",
-          "%d beyond the FC limits: set up the FC again"), count), lineW, m.small) or ""
+        warning = count > 0 and fitText(string.format(t("widgets.dashboard.inflight_bounds_warning",
+          "%d beyond the FC limits: set up the FC again"), count), lineW - inset * 2, lineFont) or ""
       end
       return warning
-    end, p.warn, m.small, m.lineH)
-    y = y + m.lineH * (wrap and 2 or 1)
+    end, p.warn, lineFont, LEFT)
+    y = y + lineStep
   end
   -- A model-default save that failed says so until the next build that has nothing to report.
   if drive and drive.saveResult and drive.saveResult ~= "ok" then
-    appendLabel(children, m.pad, y, lineW, fitText(t("widgets.dashboard.inflight_save_failed",
-      "Not saved as the model default:") .. " " .. drive.saveResult, lineW, m.small), p.warn, m.small, LEFT)
-    y = y + m.lineH
+    appendLabel(children, labelX, y, lineW - inset * 2, fitText(t("widgets.dashboard.inflight_save_failed",
+      "Not saved as the model default:") .. " " .. drive.saveResult, lineW - inset * 2, lineFont), p.warn, lineFont, LEFT)
+    y = y + lineStep
   end
-  y = y + 4
+  panel.h = y + inset - panel.y
+  y = y + inset + (m.large and 8 or 2)
 
   -- Why the ground half is refusing, when it is not simply that the board is armed. The one case
   -- so far is the arm sensor never having answered: the ground half then refuses everything,
@@ -1022,11 +1074,28 @@ function M.buildGround(children, widget, m, w, h, t, p)
   if blocked then return end
   if drive == nil or Prime == nil then return end
 
-  local gap = m.large and 8 or 4
-  local action = {actionH = m.large and 56 or 40, small = m.large and m.font or m.small, textOff = m.textOff}
+  local root = _G.rfsuite
+  local events = root and root.preferences and root.preferences.audio_events
+  local announcementsOff = not (events and events.adjustment_events == true)
+  local footerH = m.large and m.footerH or lineStep
+  local footerY = h - footerH
+  children[#children + 1] = {type = "rectangle", x = 0, y = footerY, w = w, h = footerH, color = p.header, filled = true}
+  appendCentredLabel(children, m.pad, footerY, lineW, footerH,
+    announcementsOff and t("widgets.dashboard.inflight_announcements_off", "Adjustment announcements are off")
+      or pickText(t("widgets.dashboard.inflight_ground_controls", "Rotate select / Press open"),
+        t("widgets.dashboard.inflight_ground_controls_short", "Rotate / Press"), lineW, lineFont),
+    announcementsOff and p.warn or p.dim, lineFont, LEFT, {textOff = 0})
+  if drive.announcementsSaveFailed then
+    appendLabel(children, m.pad, y, lineW,
+      t("widgets.dashboard.inflight_announcements_failed", "Announcements were not saved"), p.warn, lineFont, LEFT)
+    y = y + lineStep
+  end
+
+  local gap = m.large and 8 or 2
+  local action = {small = lineFont, textOff = 0, wrap = true}
   local available = not Prime.isRunning(drive) and not drive.profileJob and not drive.restorePending
   local snapshot = state.inflight or {}
-  local completed = snapshot.prime and snapshot.prime.phase == "done"
+  local completed = not snapshot.readRequired and snapshot.prime and snapshot.prime.phase == "done"
   local emptyBoard = completed and (snapshot.setSource ~= "board" or (snapshot.cellCount or 0) == 0)
   local function openSetup()
     if drive.fcSetupOpen or widget.state.armed == true or Prime.isRunning(drive) or drive.profileJob or drive.restorePending then return end
@@ -1035,18 +1104,27 @@ function M.buildGround(children, widget, m, w, h, t, p)
     widget._tuningKeyDirty = true
   end
   if emptyBoard and available then
-    appendLabel(children, m.pad, y, lineW,
-      t("widgets.dashboard.inflight_fc_no_functions", "The FC has no adjustment functions for in-flight tuning."),
-      p.text, m.small, LEFT)
-    y = y + m.lineH
+    local text = fitTwoLines(t("widgets.dashboard.inflight_fc_no_functions",
+      "The FC has no adjustment functions for in-flight tuning."), lineW, lineFont)
+    appendTwoLines(children, m.pad, y, lineW, function() return text end, p.text, lineFont, lineStep)
+    y = y + lineStep * 2
   end
   local chooseActive = function()
     local snap = state.inflight
-    return snap ~= nil and snap.setSource == "board" and (snap.cellCount or 0) > 0
+    return snap ~= nil and not snap.readRequired and snap.setSource == "board" and (snap.cellCount or 0) > 0
   end
+  local secondaryCount = 2 + (not emptyBoard and available and 1 or 0) + (announcementsOff and 1 or 0)
+  local gridRows = math.ceil(secondaryCount / 2)
+  local actionSpace = footerY - y - (gridRows + 2) * gap
+  local primaryH = math.max(m.large and 56 or (h >= 320 and 40 or 32),
+    math.floor(actionSpace / (gridRows + 2)) + (m.large and 12 or 4))
+  local secondaryH = math.floor((actionSpace - primaryH) / (gridRows + 1))
+  local primaryLabel = emptyBoard and t("widgets.dashboard.inflight_fc_setup_action", "Set up suggested functions")
+    or t("widgets.dashboard.inflight_choose_parameters", "Choose parameters")
+  action.actionH = primaryH
+  action.small = m.large and textFits(primaryLabel, lineW, MIDSIZE) and MIDSIZE or lineFont
   appendAction(children, action, m.pad, y, lineW,
-    emptyBoard and t("widgets.dashboard.inflight_fc_setup_action", "Set up suggested functions")
-      or t("widgets.dashboard.inflight_choose_parameters", "Choose parameters"), p, function()
+    primaryLabel, p, function()
       if not available or drive.fcSetupOpen or widget.state.armed == true then return end
       if emptyBoard then openSetup(); return end
       drive.sessionPickerOpen = true
@@ -1060,16 +1138,17 @@ function M.buildGround(children, widget, m, w, h, t, p)
   children[#children].color = p.onAccent
   children[#children].visible = primaryActive
   y = y + action.actionH + gap
+  action.actionH, action.small = secondaryH, lineFont
 
-  action.actionH, action.small = m.large and 32 or (h >= 320 and 24 or 32), m.small
+  local buttonW = math.floor((lineW - gap) / 2)
+  local secondary = 0
   if not emptyBoard and available then
-    appendAction(children, action, m.pad, y, lineW,
+    appendAction(children, action, m.pad, y, buttonW,
       t("widgets.dashboard.inflight_fc_setup_action", "Set up suggested functions"), p, openSetup)
-    y = y + action.actionH + gap
+    secondary = secondary + 1
   end
-  action.actionH = m.large and 24 or 26
-  local buttonW = math.floor((lineW - m.pad) / 2)
-  appendAction(children, action, m.pad, y, buttonW,
+  appendAction(children, action, m.pad + secondary % 2 * (buttonW + gap),
+    y + math.floor(secondary / 2) * (action.actionH + gap), buttonW,
     t("widgets.dashboard.inflight_read_again", "Read again"), p, function()
       if drive.fcSetupOpen then return end
       if drive.restorePending then Prime.retryReturn(drive)
@@ -1080,14 +1159,44 @@ function M.buildGround(children, widget, m, w, h, t, p)
       else Prime.refreshValues(widget, drive) end
       widget._tuningKeyDirty = true
     end)
-  appendAction(children, action, m.pad * 2 + buttonW, y, buttonW,
+  secondary = secondary + 1
+  appendAction(children, action, m.pad + secondary % 2 * (buttonW + gap),
+    y + math.floor(secondary / 2) * (action.actionH + gap), buttonW,
     t("widgets.dashboard.inflight_reset_start", "Reset start values"), p, function()
       if drive.fcSetupOpen then return end
       drive.resetConfirm = true
       drive.valueEpoch = drive.valueEpoch + 1
       widget._tuningKeyDirty = true
     end)
-  appendAction(children, action, m.pad, h - m.pad - action.actionH, lineW,
+  if announcementsOff then
+    secondary = secondary + 1
+    appendAction(children, action, m.pad + secondary % 2 * (buttonW + gap),
+      y + math.floor(secondary / 2) * (action.actionH + gap), buttonW,
+      t("widgets.dashboard.inflight_announcements_enable", "Turn on announcements"), p, function()
+        if drive.fcSetupOpen or widget.state.armed == true or Prime.groundRefusal(widget) then return end
+        local root = _G.rfsuite
+        local prefs = root and root.preferences
+        local saved = false
+        if prefs then
+          local previousEvents = prefs.audio_events
+          local events = previousEvents or {}
+          local previous = events.adjustment_events
+          prefs.audio_events, events.adjustment_events = events, true
+          if type(root.savePreferences) == "function" then saved = root.savePreferences()
+          else
+            local Preferences = requireModule("lib/preferences.lua")
+            if Preferences and type(Preferences.save) == "function" then saved = Preferences.save(prefs) end
+          end
+          if not saved then
+            events.adjustment_events, prefs.audio_events = previous, previousEvents
+          end
+        end
+        drive.announcementsSaveFailed = not saved
+        drive.valueEpoch = drive.valueEpoch + 1
+        widget._tuningKeyDirty = true
+      end)
+  end
+  appendAction(children, action, m.pad, footerY - gap - action.actionH, lineW,
     t("widgets.dashboard.inflight_restore_all", "Restore all"), p, function()
       if drive.fcSetupOpen then return end
       if Prime.isRunning(drive) then return end
@@ -1601,7 +1710,7 @@ function M.buildFullscreen(children, widget)
 
   -- Arm state chooses ground, live or post; a setup fault stays on the ground surface.
   local snapshot = widget.state.inflight or {}
-  if snapshot.linkLost == true then
+  if snapshot.linkLost == true and (snapshot.phase ~= "post" or armed) then
     local width = w - m.pad * 2
     appendCentredLabel(children, m.pad, m.chipY, width, m.statusLineH,
       t("widgets.dashboard.inflight_paused", "PAUSED"), p.error, m.font, CENTER, m)

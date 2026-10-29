@@ -453,6 +453,335 @@ scenario("stored switch is ignored and cannot cause a setup fault", function()
   Drive.storeRadioSettings(target, Drive.loadRadioSettings({inflight = {enabled = true}}))
   check(target.switch == 999, "saving leaves the ignored stored switch untouched")
 end)
+scenario("ground announcements follow the global preference and save only on press", function()
+  local widget, d = fixture(false)
+  local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+  local savedPrefs, savedSave = rfsuite.preferences, rfsuite.savePreferences
+  local modelPrefs = rfsuite.session.modelPreferences
+  rfsuite.session.modelPreferences = {audio_events = {adjustment_events = true}}
+  rfsuite.preferences = {audio_events = {adjustment_events = false}}
+  local saves = 0
+  rfsuite.savePreferences = function()
+    saves = saves + 1
+    check(rfsuite.preferences.audio_events.adjustment_events == true, "explicit save receives the enabled global preference")
+    return true
+  end
+  local function scene()
+    Drive.sample(widget)
+    local nodes = {}; Screen.buildFullscreen(nodes, widget)
+    local hint, enable, button
+    for _, node in ipairs(nodes) do
+      if node.type == "button" then button = node end
+      local text = type(node.text) == "function" and node.text() or node.text
+      if text == "Adjustment announcements are off" then hint = node end
+      if text == "Turn on announcements" then enable = button end
+    end
+    return hint, enable
+  end
+  local hint, enable = scene()
+  check(hint and enable and saves == 0 and not rfsuite.preferences.audio_events.adjustment_events,
+    "opening shows the off hint and button without changing preferences, regardless of a model override")
+  enable.press()
+  hint, enable = scene()
+  check(saves == 1 and rfsuite.preferences.audio_events.adjustment_events and not hint and not enable,
+    "successful explicit save hides the hint and button")
+  rfsuite.preferences, rfsuite.savePreferences = savedPrefs, savedSave
+  rfsuite.session.modelPreferences = modelPrefs
+end)
+scenario("failed announcement save stays visible and can be retried", function()
+  local widget, d = fixture(false)
+  local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+  local savedPrefs, savedSave = rfsuite.preferences, rfsuite.savePreferences
+  rfsuite.preferences = {audio_events = {adjustment_events = false}}
+  rfsuite.savePreferences = function() return false, "unavailable" end
+  local nodes = {}; Drive.sample(widget); Screen.buildFullscreen(nodes, widget)
+  local button
+  for _, node in ipairs(nodes) do
+    if node.type == "button" then button = node end
+    if node.text == "Turn on announcements" then button.press(); break end
+  end
+  nodes = {}; Screen.buildFullscreen(nodes, widget)
+  local warning, hint, retry
+  for _, node in ipairs(nodes) do
+    local text = type(node.text) == "function" and node.text() or node.text
+    if text == "Announcements were not saved" then warning = node end
+    if text == "Adjustment announcements are off" then hint = node end
+    if text == "Turn on announcements" then retry = node end
+  end
+  check(warning and hint and retry and not rfsuite.preferences.audio_events.adjustment_events,
+    "failed save reports the warning and rolls back the global switch")
+  rfsuite.preferences, rfsuite.savePreferences = savedPrefs, savedSave
+end)
+scenario("standalone widget saves announcements through the preferences module", function()
+  local widget = fixture(false)
+  local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+  local Preferences = rfsuite.require("lib/preferences.lua")
+  local savedPrefs, savedSave, savedModuleSave = rfsuite.preferences, rfsuite.savePreferences, Preferences.save
+  rfsuite.preferences, rfsuite.savePreferences = {audio_events = {adjustment_events = false}}, nil
+  local written
+  Preferences.save = function(prefs) written = prefs; return true end
+  local nodes = {}; Drive.sample(widget); Screen.buildFullscreen(nodes, widget)
+  local button
+  for _, node in ipairs(nodes) do
+    if node.type == "button" then button = node end
+    if node.text == "Turn on announcements" then button.press(); break end
+  end
+  check(written == rfsuite.preferences and written.audio_events.adjustment_events == true,
+    "widget without a tool save callback reuses Preferences.save")
+  Preferences.save = savedModuleSave
+  rfsuite.preferences, rfsuite.savePreferences = savedPrefs, savedSave
+end)
+scenario("announcement controls are absent from armed and air surfaces", function()
+  local widget, d = fixture(true)
+  local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+  local savedPrefs = rfsuite.preferences
+  rfsuite.preferences = {audio_events = {adjustment_events = false}}
+  for _, phase in ipairs({"ground", "live"}) do
+    d.phase = phase; Drive.sample(widget)
+    local nodes = {}; Screen.buildFullscreen(nodes, widget)
+    for _, node in ipairs(nodes) do
+      local text = type(node.text) == "function" and node.text() or node.text
+      check(text ~= "Turn on announcements" and text ~= "Adjustment announcements are off",
+        "armed surfaces carry no announcement switch or hint")
+    end
+  end
+  rfsuite.preferences = savedPrefs
+end)
+
+for _, locale in ipairs({"en", "de"}) do
+  local translations = assert(loadfile("src/rfsuite/i18n/" .. locale .. ".lua"))().widgets.dashboard
+  for _, size in ipairs({{480, 272}, {480, 320}, {800, 480}}) do
+    for _, variant in ipairs({"ready", "warnings", "empty"}) do
+      scenario("ground panel and grid " .. locale .. " " .. size[1] .. "x" .. size[2] .. " " .. variant, function()
+        local widget, d = fixture(false)
+        local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+        local savedPrefs = rfsuite.preferences
+        rfsuite.preferences = {audio_events = {adjustment_events = variant == "ready"}}
+        widget.zone = {w = size[1], h = size[2]}
+        widget.i18n = {t = function(key, fallback)
+          return translations[string.gsub(key, "^widgets%.dashboard%.", "")] or fallback
+        end}
+        widget.state.inflight = {phase = "ground", setupVerdict = "ok", setSource = variant == "empty" and "unavailable" or "board",
+          cellCount = variant == "empty" and 0 or 36, boundsCount = variant == "warnings" and 2 or 0,
+          prime = {phase = "done", skipped = variant == "empty" and 0 or 3},
+          sessionMode = "resume", baseline = {timestamp = "2026-10-25 12:34"}}
+        if variant ~= "ready" then d.saveResult, d.announcementsSaveFailed = "unavailable", true end
+        local nodes = {}; Screen.buildFullscreen(nodes, widget)
+        rfsuite.preferences = savedPrefs
+        local labels, buttons, captions, captionFonts, panel, footer, footerText, modelLabel, modelValue = {}, {}, {}, {}
+        local function height(node)
+          return node.h or (node.type == "label" and (node.font == MIDSIZE and 30 or node.font == SMLSIZE and 14 or 12)) or 0
+        end
+        for index, node in ipairs(nodes) do
+          local x, y, width, tall = node.x or 0, node.y or 0, node.w or 0, height(node)
+          check(x >= 0 and y >= 0 and x + width <= size[1] and y + tall <= size[2], "every ground child fits the screen")
+          if node.type == "button" then buttons[#buttons + 1] = node; captions[#captions + 1] = "" end
+          local text = type(node.text) == "function" and node.text() or node.text
+          if node.type == "label" and text and text ~= "" then
+            for _, other in ipairs(labels) do
+              check(x >= other.x + other.w or x + width <= other.x or y >= other.y + height(other) or y + tall <= other.y,
+                "ground text children never overlap")
+            end
+            labels[#labels + 1] = node
+            local button = buttons[#buttons]
+            if button and x == button.x and y >= button.y and y + tall <= button.y + button.h then
+              captions[#captions] = captions[#captions] == "" and text or captions[#captions] .. " " .. text
+              captionFonts[#captions] = node.font
+            end
+            if footer and y >= footer.y and y + tall <= footer.y + footer.h then footerText = text end
+            if text == translations.inflight_model_status then modelLabel, modelValue = node, nodes[index + 1] end
+          elseif node.type == "rectangle" and node.filled then
+            if node.x > 0 then panel = node elseif y > size[2] / 2 then footer = node end
+          end
+        end
+        check(panel and footer and panel.color == footer.color and modelLabel and modelValue
+          and modelLabel.y >= panel.y and modelValue.x > modelLabel.x,
+          "status values share a filled panel and the footer uses the same palette")
+        check(footerText == (variant == "ready" and translations.inflight_ground_controls or translations.inflight_announcements_off),
+          "ground footer shows controls when announcements are on and the warning when off")
+        local color = modelValue.color()
+        widget.state.inflight.setupVerdict = {"mix_missing"}
+        check(color ~= modelLabel.color and modelValue.color() ~= color, "model verdict colour follows its meaning")
+        local expected = {variant == "empty" and translations.inflight_fc_setup_action or translations.inflight_choose_parameters}
+        if variant ~= "empty" then expected[#expected + 1] = translations.inflight_fc_setup_action end
+        expected[#expected + 1], expected[#expected + 2] = translations.inflight_read_again, translations.inflight_reset_start
+        if variant ~= "ready" then expected[#expected + 1] = translations.inflight_announcements_enable end
+        expected[#expected + 1], expected[#expected + 2] = translations.inflight_restore_all, "X"
+        check(#captions == #expected, "ground retains every action in encoder order")
+        for index, label in ipairs(expected) do check(captions[index] == label, "ground action text is complete: " .. label) end
+        local restore = buttons[#buttons - 1]
+        local primary = buttons[1]
+        local minimum = size[2] > 350 and 48 or size[2] >= 320 and 36 or 0
+        check(primary.active() and primary.h >= minimum and primary.h > buttons[2].h
+          and primary.color == lcd.RGB(41, 163, 224), "ground primary is active, accented and taller than secondary cells")
+        for index = 2, #buttons - 2 do
+          local button = buttons[index]
+          check(button.w == buttons[2].w and button.h == buttons[2].h and button.y + button.h < restore.y,
+            "secondary grid cells are uniform and end above Restore all")
+        end
+        check(buttons[1].w == size[1] - buttons[1].x * 2 and buttons[1].w == restore.w
+          and restore.h == buttons[2].h and restore.y + restore.h < footer.y and restore.color ~= buttons[2].color,
+          "primary and restore are full width with restore above the footer")
+        local lastSecondary = buttons[#buttons - 2]
+        check(restore.y - lastSecondary.y - lastSecondary.h <= (size[2] > 350 and 10 or 4),
+          "ground grid uses the available space above Restore all")
+        if size[2] > 350 then
+          check(modelLabel.font == 0 and modelValue.font == 0 and captionFonts[1] == MIDSIZE,
+            "large ground screen uses standard status text and a larger primary caption")
+          for index = 2, #buttons - 1 do
+            check(captionFonts[index] == 0, "large ground secondary captions use the standard font")
+          end
+        end
+      end)
+    end
+  end
+end
+
+scenario("ground label columns use native text widths", function()
+  local widget = fixture(false)
+  local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+  local translations = assert(loadfile("src/rfsuite/i18n/de.lua"))().widgets.dashboard
+  local modelCaption = translations.inflight_ground_controls
+  widget.zone = {w = 800, h = 480}
+  widget.i18n = {t = function(key, fallback)
+    return key == "widgets.dashboard.inflight_model_status" and modelCaption or fallback
+  end}
+  widget.state.inflight = {phase = "ground", setupVerdict = "ok", setSource = "board", cellCount = 36}
+  local savedMeasure, measured = lcd.sizeText, 0
+  local widths = {[modelCaption] = 93, ["FC slots"] = 41, Session = 57}
+  lcd.sizeText = function(text, font)
+    if widths[text] then measured = measured + 1; return widths[text] end
+    return savedMeasure(text, font)
+  end
+  local nodes = {}; Screen.buildFullscreen(nodes, widget)
+  local caption, value
+  for index, node in ipairs(nodes) do
+    if node.text == modelCaption then caption, value = node, nodes[index + 1] end
+    if type(node.text) == "function" then node.text(); node.text() end
+  end
+  lcd.sizeText = savedMeasure
+  check(caption and value and caption.w == 93 and value.x == caption.x + 93 + 4,
+    "native caption widths place the value column independently of UTF-8 byte counts")
+  check(measured == 3, "each caption is measured once at build time and never by cached text callbacks")
+end)
+scenario("ground primary caption falls back to the standard font when needed", function()
+  local widget = fixture(false)
+  local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+  widget.zone = {w = 800, h = 480}
+  widget.state.inflight = {phase = "ground", setupVerdict = "ok", setSource = "board", cellCount = 36}
+  local savedMeasure = lcd.sizeText
+  lcd.sizeText = function(text, font)
+    if text == "Choose parameters" and font == MIDSIZE then return 1000 end
+    return savedMeasure(text, font)
+  end
+  local nodes = {}; Screen.buildFullscreen(nodes, widget)
+  lcd.sizeText = savedMeasure
+  local button, caption
+  for _, node in ipairs(nodes) do
+    if node.type == "button" then button = node end
+    if node.text == "Choose parameters" then caption = node; break end
+  end
+  check(caption and caption.font == 0 and button.h >= 48,
+    "a wide primary caption keeps its complete text and prominence in the standard font")
+end)
+scenario("ground footer uses the short controls hint when the long hint does not fit", function()
+  local widget = fixture(false)
+  local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+  local savedPrefs, savedMeasure = rfsuite.preferences, lcd.sizeText
+  rfsuite.preferences = {audio_events = {adjustment_events = true}}
+  widget.state.inflight = {phase = "ground", setupVerdict = "ok", setSource = "board", cellCount = 36}
+  lcd.sizeText = function(text, font)
+    if text == "Rotate select / Press open" then return 1000 end
+    return savedMeasure(text, font)
+  end
+  local nodes = {}; Screen.buildFullscreen(nodes, widget)
+  rfsuite.preferences, lcd.sizeText = savedPrefs, savedMeasure
+  local short, long
+  for _, node in ipairs(nodes) do
+    if node.text == "Rotate / Press" then short = node end
+    if node.text == "Rotate select / Press open" then long = node end
+  end
+  check(short and not long, "the ground footer selects the complete short controls hint")
+end)
+
+scenario("ground link loss invalidates readings before a pending build", function()
+  local widget, d = fixture(false)
+  d.valuesRead, d._primeAutoDone = true, true
+  d.prime = {phase = "done", records = {}}
+  widget.state.fblConnected = false
+  job(widget); widget:refresh(0, nil)
+  check(d.readRequired and not d.valuesRead and not d._primeAutoDone and d.prime.invalidated,
+    "runtime pause invalidates a completed read without a ground tick")
+  widget.state.fblConnected = true
+  job(widget); widget:refresh(0, nil)
+  check(d:profileRefusal() == "session_unread", "ground resume cannot accept retained values")
+end)
+scenario("retained ground rows stay unread until a fresh read succeeds", function()
+  local widget, d = fixture(false)
+  local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+  widget.state.inflight = {phase = "ground", setupVerdict = "ok", setSource = "board", cellCount = 36,
+    sessionMode = "resume", baseline = {timestamp = "2026-10-25 12:34"}, prime = {phase = "done"}, readRequired = true}
+  local nodes = {}; Screen.buildFullscreen(nodes, widget)
+  local values = {}
+  for _, node in ipairs(nodes) do
+    local text = type(node.text) == "function" and node.text() or node.text
+    if text then values[text] = true end
+  end
+  check(values["Setup not checked"] and values["Not read yet"] and values["Values not read"] and not values["Setup OK"],
+    "retained model, slots and baseline never claim a current ground read")
+  widget.state.inflight.readRequired = nil
+  local current = false
+  for _, node in ipairs(nodes) do
+    if type(node.text) == "function" and node.text() == "Setup OK" then current = true end
+  end
+  check(current, "successful read updates the cached model row")
+end)
+scenario("post-flight history remains visible through link loss and reconnect", function()
+  local widget, d = fixture(false)
+  local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+  widget.state.inflight = {phase = "post", setupVerdict = "ok", setSource = "board", cellCount = 36,
+    profileText = "TUNING PID 2 / RTE 3", boundsCount = 2, readRequired = true}
+  d.readRequired = true
+  d.baseline = {pid1 = {["14"] = 50}}
+  d.profileValues.pid[1][14] = 57
+  d.changes = {pid = {[1] = {[14] = true}}, rate = {}, global = {}}
+  for _, lost in ipairs({true, false}) do
+    widget.state.inflight.linkLost = lost
+    local nodes = {}; Screen.buildFullscreen(nodes, widget)
+    local changed, values, title
+    for _, node in ipairs(nodes) do
+      local text = type(node.text) == "function" and node.text() or node.text
+      if text == "1 parameters changed" then changed = true end
+      if text == "50 -> 57  +7" then values = true end
+      if text == "TUNING" then title = true end
+    end
+    check(changed and values and title, "post-flight list retains the flight's recorded change while readings are invalidated")
+  end
+  widget.state.inflight.phase, widget.state.inflight.linkLost = "ground", nil
+  local nodes = {}; Screen.buildFullscreen(nodes, widget)
+  local unread, title
+  for _, node in ipairs(nodes) do
+    local text = type(node.text) == "function" and node.text() or node.text
+    if text == "Values not read" then unread = true end
+    if text == "TUNING" then title = true end
+    check(text ~= "TUNING PID 2 / RTE 3" and not (type(text) == "string" and string.find(text, "2 beyond", 1, true)),
+      "unread ground does not label retained profiles or bounds as current")
+  end
+  check(unread and title, "ground surface still marks retained readings as unread")
+end)
+scenario("armed link resume owes a full read after landing", function()
+  local widget, d = fixture(true)
+  d.valuesRead, d._primeAutoDone = true, true
+  widget.state.fblConnected = false
+  job(widget); widget:refresh(0, nil)
+  widget.state.fblConnected = true
+  job(widget); widget:refresh(0, nil)
+  check(d.readRequired and d:profileRefusal() == nil, "armed continuation retains permission and the full-read obligation")
+  widget.state.armed = false
+  job(widget); widget:refresh(0, nil)
+  check(d.readRequired and not d.readArmed and d:profileRefusal() == "session_unread",
+    "landing refuses the old read even when the automatic latch was set before loss")
+end)
 scenario("automatic link resume retains the board identity refusal", function()
   local widget, d, writes = fixture(true)
   energize(d, writes)

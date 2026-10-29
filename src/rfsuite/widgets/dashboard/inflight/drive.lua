@@ -382,6 +382,7 @@ function Drive:setPhase(phase)
   elseif was == M.PHASE_LIVE then
     -- The continuation across a link gap is a property of the flight it was taken in.
     self.armedThrough = nil
+    self.readArmed = nil
     -- Landing clears the value. The bank may remain selected only while the surface is open;
     -- every exit clears both variables before changing the phase.
     self:cleanup(false, self.live == true)
@@ -922,6 +923,7 @@ function Drive:endSession()
   self.values = {}
   self.previous = {}
   self.valuesRead = nil
+  self.readArmed = nil
   self.readAt = nil
   self.profilePaused = false
   self.reportFence = nil
@@ -1036,6 +1038,7 @@ end
 -- Permission follows completed ground membership, independent of reopening tuning.
 function Drive:profileRefusal()
   if self.profileBusy or self.restorePending then return "profile_reading" end
+  if self.readRequired and not (self.readArmed and self.phase == M.PHASE_LIVE) then return "session_unread" end
   if self.sessionProfiles == nil then return "session_unread" end
   if self.board then
     if not boardIdentity then boardIdentity = requireModule("widgets/dashboard/inflight/prime.lua") end
@@ -1892,6 +1895,7 @@ local function publish(widget, drive)
     cellCount = drive.cellCount,
     boundsCount = drive.boundsCount,
     sessionMode = drive.sessionMode,
+    readRequired = drive.readRequired,
     transfer = transferState
   }
 end
@@ -2001,11 +2005,27 @@ function M.release(widget)
   return true
 end
 
+-- A link gap invalidates current readings even when the same board returns. The flight may
+-- continue while armed, but its next ground pass must read the complete board again.
+function Drive:invalidateRead()
+  if not self.readRequired then
+    self.readArmed = self.phase == M.PHASE_LIVE
+    self.valueEpoch = self.valueEpoch + 1
+  end
+  self.readRequired, self.valuesRead, self.compare = true, nil, nil
+  self._primeAutoDone, self._primeLinkSince, self._primeFails = false, nil, nil
+  local session = _G.rfsuite and _G.rfsuite.session
+  if session then session.inflightSlots = nil end
+  if self.prime then self.prime.invalidated = true end
+  if self.profileJob then self.profileJob.linkLost = true end
+end
+
 --- Revoke output during telemetry loss without advancing the flight phase from missing arm data.
 function M.pause(widget)
   if type(widget) ~= "table" then return end
   local drive = widget._inflight
   if drive == nil then return end
+  if not drive.linkLost then drive:invalidateRead() end
   drive:evaluateInterlock(drive.radio.now(), false)
   if drive.fcSurface then drive.fcSurface.close(widget, drive) end
   drive.valueMode = false

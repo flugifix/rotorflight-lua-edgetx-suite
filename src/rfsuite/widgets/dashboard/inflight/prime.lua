@@ -271,13 +271,14 @@ local RUNNING = {
 --- Whether a run is still expecting a reply.
 function M.isRunning(drive)
   local prime = type(drive) == "table" and drive.prime or nil
-  return type(prime) == "table" and (RUNNING[prime.phase] == true or drive.profileJob ~= nil)
+  return type(drive) == "table" and (drive.profileJob ~= nil
+    or type(prime) == "table" and not prime.invalidated and RUNNING[prime.phase] == true)
 end
 
 -- A completed session cache survives an interrupted refresh; phase alone is not evidence
 -- that values exist. readAt is optional because some radios have no wall clock.
 function M.hasRead(drive)
-  if type(drive) ~= "table" or drive.valuesRead ~= true then return false end
+  if type(drive) ~= "table" or drive.valuesRead ~= true or drive.readRequired then return false end
   return type(drive.values) == "table" and next(drive.values) ~= nil
 end
 
@@ -307,7 +308,7 @@ end
 -- callbacks close over the run they were made for. Comparing the run rather than a flag is what
 -- keeps a late reply from a previous attempt out of the current one's counters.
 local function stillCurrent(drive, prime)
-  return type(drive) == "table" and drive.prime == prime and RUNNING[prime.phase] == true
+  return type(drive) == "table" and drive.prime == prime and not prime.invalidated and RUNNING[prime.phase] == true
 end
 
 local function fail(drive, prime, reason)
@@ -1157,6 +1158,7 @@ function M.refreshValues(widget, drive)
   if type(widget.state) ~= "table" then return false, "armed" end
   if isArmed(widget) then return false, "armed" end
   if M.isRunning(drive) then return false, "reading" end
+  if drive.readRequired then return M.start(widget, drive, true) end
   local previous = drive.prime
   if type(previous) ~= "table" or type(previous.records) ~= "table" then
     return M.start(widget, drive)
@@ -1334,6 +1336,7 @@ end
 -- handled before this edge and can only return to its own board.
 local function boardChanged(drive, board)
   drive:endSession()
+  drive.readRequired = true
   drive.prime = nil
   drive.readAgain = nil
   drive.primeInterrupted = nil
@@ -1358,6 +1361,7 @@ end
 function M.tick(widget, drive)
   if type(widget) ~= "table" or type(drive) ~= "table" then return end
   if type(widget.state) ~= "table" then return end
+  if widget.state.fblConnected ~= true then drive:invalidateRead() end
 
   if drive.fcSetupOpen then
     if drive.fcSurface == nil then
@@ -1377,7 +1381,7 @@ function M.tick(widget, drive)
 
   if drive.profileJob ~= nil then
     local job = drive.profileJob
-    local board = job.suspended and boardOnLink()
+    local board = (job.suspended or job.linkLost) and boardOnLink()
     if board and board ~= job.identity then
       profileModule().drop(drive)
       if job.original then logPrime("original profile return is still owed to flight controller %s", job.identity) end
@@ -1393,6 +1397,8 @@ function M.tick(widget, drive)
     drive._primeLinkSince = nil
     return
   end
+
+  if drive.prime and drive.prime.invalidated then drive.prime = nil end
 
   if widget.state.fblConnected ~= true then
     if M.isRunning(drive) then abandon(drive, drive.prime, "no_link") end

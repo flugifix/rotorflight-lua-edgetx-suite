@@ -144,13 +144,13 @@ end
 local function pass(d, failure)
   reply(failure)
   tick=tick+10
-  local before=d.prime.done or 0
+  local before=d.prime and d.prime.done or 0
   local instructions = 0
   debug.sethook(function() instructions = instructions + 1 end, "", 1)
   Prime.tick(widget,d)
   debug.sethook()
   peak = math.max(peak, instructions)
-  check((d.prime.done or 0)-before <= 1, "at most one reply parsed per pass")
+  check((d.prime and d.prime.done or 0)-before <= 1, "at most one reply parsed per pass")
 end
 local function finish(d)
   for _=1,2000 do
@@ -555,6 +555,144 @@ check(ResponseCache.get(112) == nil and ResponseCache.get(10)[1] == 42, "targete
 check(reconnected.prime.phase=="done" and reconnected.sessionProfiles.pid[6]
   and files[Store.path(fc.uid)]==savedFile, "full prime resumes persisted membership without replacing start values")
 check(fc.pid==2 and fc.rate==3, "reconnect prime returns initial pair")
+
+-- Runtime pauses before the ground tick on loss, so no disconnected Prime.tick is assumed.
+do
+  local originalSlots, originalIds, originalData = copy(slotsForPrime), copy(idsForPrime), copy(fc.data)
+  local reconnected = makeDrive()
+  check(Prime.start(widget, reconnected, true), "reconnect fixture reads its initial board")
+  for _ = 1, 3000 do pass(reconnected); if not Prime.isRunning(reconnected) then break end end
+  local function reconnect(instance)
+    instance._primeAutoDone = true
+    widget._inflight = instance
+    widget.state.fblConnected = false
+    Drive.pause(widget)
+    check(instance.readRequired and not Prime.hasRead(instance), "reconnect invalidates retained current readings")
+    widget.state.fblConnected = true
+    instance.linkLost, instance.open = nil, true
+  end
+  local function reread(instance)
+    local start = #sent
+    for _ = 1, 3000 do
+      pass(instance)
+      if instance.prime and instance.prime.phase == "done" and not instance.readRequired then break end
+    end
+    check(instance.prime and instance.prime.phase == "done" and not instance.readRequired,
+      "reconnect completes a fresh ground read")
+    local maps, ids, records, statusReads = 0, 0, 0, 0
+    for i = start + 1, #sent do
+      local command = sent[i].command
+      if command == 64 then maps = maps + 1 elseif command == 167 then ids = ids + 1
+      elseif command == 156 then records = records + 1 elseif command == 101 then statusReads = statusReads + 1 end
+    end
+    check(maps == 1 and ids == 1 and records == #idsForPrime and statusReads > 0,
+      "reconnect reads receiver map, function ids, every populated slot and status")
+  end
+
+  reconnect(reconnected)
+  check(reconnected:profileRefusal() == "session_unread", "ground reconnect refuses retained membership before reading")
+  reread(reconnected)
+  check(files[Store.path(fc.uid)] == savedFile and reconnected.prime.records[4].adjFunction == originalIds[4],
+    "unchanged reconnect control retains baseline bytes and slot function")
+
+  reconnected:setPhase("live")
+  widget.state.armed = true
+  reconnect(reconnected)
+  local requests = #sent
+  for _ = 1, 3 do Prime.tick(widget, reconnected) end
+  check(#sent == requests and #pending == 0 and reconnected:profileRefusal() == nil,
+    "armed reconnect continues the session without starting MSP reads")
+  widget.state.armed = false
+  reconnected:setPhase("ground")
+  reread(reconnected)
+  check(not reconnected.readRequired and files[Store.path(fc.uid)] == savedFile,
+    "disarming after armed reconnect completes the full read and keeps the baseline")
+
+  slotsForPrime[1].adjMax = 4
+  slotsForPrime[2].adjMin, slotsForPrime[2].adjMax = 1, 1
+  slotsForPrime[3].adjMax = 4
+  slotsForPrime[4].adjFunction, idsForPrime[4] = 15, 15
+  fc.data.pid2[112].pid_1_P = 152
+  reconnect(reconnected)
+  reread(reconnected)
+  check(reconnected.prime.records[4].adjFunction == 15 and reconnected:functionId(1, 1) == 15,
+    "same-board reconnect reflects a changed slot function")
+  check(reconnected.sessionProfiles.pid[4] and reconnected.profileValues.pid[4][14] == fc.data.pid4[112].pid_1_P
+    and reconnected.sessionProfiles.rate[4] and reconnected.profileValues.rate[4][5] == fc.data.rate4[111].rates_2,
+    "resume unions newly reachable profiles with stored profiles")
+  check(reconnected.sessionProfiles.pid[6] and reconnected.profileValues.pid[6][14] == fc.data.pid6[112].pid_1_P,
+    "resume reads baseline-only profiles after their selector range disappears")
+  local extended = assert(Store.load(fc.uid, fc.identity))
+  check(extended.pid4["14"] == fc.data.pid4[112].pid_1_P and extended.rate4["5"] == fc.data.rate4[111].rates_2
+    and extended.pid2["14"] == data.pid2["14"]
+    and reconnected.profileValues.pid[2][14] == 152 and extended.meta.timestamp == data.meta.timestamp,
+    "resume persists new start values without overwriting existing baseline values or timestamp")
+  for name, values in pairs(data) do
+    if name ~= "meta" then
+      for id, value in pairs(values) do
+        check(extended[name][id] == value, "resume preserves every existing PID, rate and global baseline value")
+      end
+    end
+  end
+  fc.pid = 4; reconnected:watchProfiles()
+  check(reconnected:profileRefusal() == nil, "newly reachable profile is tunable after resume")
+  fc.pid = 2; reconnected:watchProfiles()
+
+  -- Restore still visits only stored sections, even when current selectors reach another one.
+  files[Store.path(fc.uid)] = savedFile
+  local before = #sent
+  check(Prime.restore(widget, reconnected), "restore-only membership control starts")
+  finish(reconnected)
+  for i = before + 1, #sent do
+    check(not (setters[sent[i].command] and sent[i].pid == 4)
+      and not (setters[sent[i].command] == 111 and sent[i].rate == 4), "restore excludes profiles absent from the baseline")
+  end
+  fc.counts.pid = 5
+  local reduced = makeDrive(slots)
+  check(Prime.start(widget, reduced, true), "reduced profile count control starts")
+  for _ = 1, 3000 do pass(reduced); if not Prime.isRunning(reduced) then break end end
+  check(reduced.prime.error == "profile_count" and not reduced.sessionProfiles,
+    "resume refuses stored profiles above the current board count")
+  fc.counts.pid = 6
+
+  fc.data = originalData
+  slotsForPrime, idsForPrime = originalSlots, originalIds
+  reconnect(reconnected)
+  fc.identity, fc.uid = "FC-RECONNECT", "UID-RECONNECT"
+  rfsuite.session.signature, rfsuite.session.mcu_id = fc.identity, fc.uid
+  msp.values.mcuId, msp.signatureMcuId = fc.uid, fc.uid
+  fc.data = copy(originalData)
+  fc.data.pid2[112].pid_1_P = 172
+  reread(reconnected)
+  check(reconnected.board == fc.identity and reconnected.profileValues.pid[2][14] == 172
+    and reconnected.baseline.pid2["14"] == 172, "different-board reconnect reads and stores its own values")
+  fc.identity, fc.uid = "FC-A", "UID-A"
+  rfsuite.session.signature, rfsuite.session.mcu_id = fc.identity, fc.uid
+  msp.values.mcuId, msp.signatureMcuId = fc.uid, fc.uid
+  fc.data, files[Store.path(fc.uid)] = originalData, savedFile
+
+  local interrupted = makeDrive(slots)
+  check(Prime.start(widget, interrupted, true), "interrupted slot read starts")
+  local late = table.remove(pending, 1)
+  reconnect(interrupted)
+  late.processReply(nil, {{rx_map = {3, 2, 1, 0}}})
+  check(interrupted.prime.done == 0 and interrupted.prime.pendingTail == 0 and #pending == 0,
+    "late pre-disconnect slot reply cannot populate or chain the invalidated read")
+  reread(interrupted)
+
+  check(Prime.refreshValues(widget, interrupted), "interrupted profile read starts")
+  while not (interrupted.profileJob.original and #pending > 0) do pass(interrupted) end
+  local oldJob = interrupted.profileJob
+  late = table.remove(pending, 1)
+  reconnect(interrupted)
+  late.processReply(nil, {status()})
+  check(oldJob.reply == nil, "late pre-disconnect profile reply cannot enter the suspended transaction")
+  for _ = 1, 2000 do pass(interrupted); if not interrupted.profileJob then break end end
+  check(not interrupted.profileJob and interrupted.readRequired and fc.pid == 2 and fc.rate == 3,
+    "interrupted profile read returns the original pair before the full reconnect read")
+  reread(interrupted)
+  widget._inflight = nil
+end
 
 -- Recovery validation is also sliced when an automatic job finds only a complete orphan.
 do

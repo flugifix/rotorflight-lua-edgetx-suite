@@ -89,23 +89,41 @@ On the ground, X or RTN closes tuning and returns to the quick menu; the session
 In the air there is no X, and RTN only leaves value mode. A firmware fullscreen exit (long RTN)
 or a page switch pauses tuning immediately: both variables go to zero. Reopen tuning from the
 quick menu while still armed to continue at the same group and parameter. Link loss removes the
-release immediately but keeps the tuning visit open, showing **PAUSED** and **No FC link**.
+release immediately but keeps the tuning visit open, showing **PAUSED** and **No FC link**
+while tuning. After landing, the post-flight comparison stays visible even after the pack is
+unplugged: it records the flight's history. A fresh read after reconnect recomputes the comparison.
 When the link and arm telemetry return, the same visit resumes automatically at the same group
 and parameter, subject to the existing flight-controller identity and session checks. A link
 that returns while the model is still armed resumes as soon as the radio receives a fresh armed
 reading, without waiting for landing: the flight controller is not identified again while armed,
 and a controller that rebooted would report disarmed. Disabling
 the feature closes the visit; enabling it again requires opening tuning from the quick menu.
+Every link loss also requires a full ground read of the receiver map, adjustment function IDs,
+populated slot records, profile status and parameter values, even when the same FC returns.
+An armed continuation defers that read until the model is disarmed and connected. Until it
+succeeds, the ground surface marks the retained readings as unread and refuses tuning steps;
+a different identified FC starts its own read and cannot reuse the previous FC's values.
 
 ### On the ground, before the flight
 
 ![The ground surface: model check, FC slots, session, and the actions](../images/inflight/overlay-ground.png)
 
-Three status lines show **Model** (the setup verdict), **FC slots** (the number of parameters
+One filled status panel shows **Model** (the setup verdict), **FC slots** (the number of parameters
 read from the board, plus skipped slots), and **Session** (continued or new, with the stored
-start-values date and time, or a not-read/refused status). Each reserves two text lines on
-480x320 and 800x480 displays; 480x272 uses one cut line each. A separate warning counts values
-beyond the FC limits and asks for FC setup again.
+start-values date and time, or a not-read/refused status). Dim labels sit beside values, each
+with two reserved text lines on 480x272, 480x320 and 800x480 displays. The model verdict is
+green when setup passes, amber while unchecked or checking, and red for a setup fault.
+Warnings about FC bounds and an unsaved model default stay in the panel. Secondary actions
+use equal-height cells in two columns, in the same encoder order, above **Restore all**. The
+full-width primary action is taller than the secondary cells on every size. On 800x480, status
+rows and secondary captions use the standard font, with a larger primary caption when it fits.
+
+When **Adjustment Announcements** is off, the footer warns that adjustment announcements
+are off and **Turn on announcements** enables and saves the existing radio-wide preference.
+Opening tuning changes nothing. A failed save leaves the switch off, shows **Announcements
+were not saved**, and allows another press. The hint and button are ground-only; model audio
+overrides do not control this switch, and its default remains off. When announcements are on,
+the footer shows **Rotate select / Press open**, or **Rotate / Press** where space is limited.
 
 **Choose parameters** is the large, full-width primary action. It opens the session parameter
 picker and is visible and active only after the board supplies at least one usable parameter.
@@ -118,7 +136,7 @@ model's flight list on the next pass; the ground surface says if that write fail
 changes nothing. The picker closes when the model is armed.
 The flight list is edited only here, on the ground screen; the radio settings have no second editor.
 
-**Set up suggested functions** is a small secondary action when the board offers parameters.
+**Set up suggested functions** is a secondary grid action when the board offers parameters.
 After a completed read with no tunable slots on the configured channel pair, a line explains
 that the FC has no adjustment functions for in-flight tuning and this becomes the large primary
 action in place of **Choose parameters**. It is absent while armed or during a read or restore.
@@ -195,8 +213,12 @@ Snapshots live beside the suite's MCU-keyed model preferences, under
 `rfsuite.user/<model-id>.inflight.lua`. They contain a version, UID/FC signature, craft name,
 clock timestamp, a profile manifest and tunable values per scope. A complete temporary Lua-data
 file is verified in slices before promotion with the suite's FAT delete/rename convention.
-Only session starts write the baseline; adjustment reports do not write the card. Reconnects
-reuse a matching saved baseline and reread its profiles, preserving the previous start values.
+Session starts and newly reachable profiles write the baseline; adjustment reports do not write
+the card. Reconnects read the union of currently reachable profiles and profiles held in a matching
+saved baseline. Existing start values and the session timestamp stay unchanged; a newly reachable
+profile gets its start values from the fresh read and is added to the same SD baseline after the
+read and return succeed. Restore still targets only profiles held in that baseline. A stored
+profile above the FC's current profile count refuses the transaction.
 Missing/incomplete/foreign baselines refuse restoration. The baseline is an undo for tracked
 parameters, not a full FC configuration backup.
 
@@ -392,7 +414,7 @@ An always-active adjustment slot on the tuning value channel can fire in every b
 
 Ground reads accept the firmware range of PID gains and rescue altitude P/I/D gains (0 to 1000) and of the governor head speed (0 to 50000), even when a value exceeds the Configurator's standard-slot range. Values outside the firmware range refuse the read with the function name and value. The standard-layout writer retains its Configurator limits.
 
-After a link interruption on the ground, tuning waits for the flight controller's UID to answer; in the air a fresh armed reading continues the same flight instead (see above). The paused surface says *Waiting for FC identity*; a matching identity permits tuning again. Another identified controller ends the previous session. If a read or restore was suspended, its original-profile return is still owed to the disconnected controller and is logged; it does not block a new read on the connected controller.
+After a link interruption on the ground, tuning waits for the flight controller's UID to answer; in the air a fresh armed reading continues the same flight instead (see above). A matching identity allows the required full ground read before tuning can resume; the post-flight history remains visible while waiting. Another identified controller ends the previous session. If a read or restore was suspended, its original-profile return is still owed to the disconnected controller and is logged; it does not block a new read on the connected controller.
 
 Closing fullscreen or backgrounding the widget in flight pauses tuning, clears both variables,
 and retains the flight's steps for the post-flight list, including when the widget returns after

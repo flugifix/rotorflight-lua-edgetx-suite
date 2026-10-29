@@ -552,8 +552,15 @@ do
     return type(text) == "string" and string.gsub(text, "\n", " ") or ""
   end
   local function action(nodes, label)
+    local button
     for index, node in ipairs(nodes) do
-      if node.type == "label" and textOf(node) == label then return nodes[index - 1], node end
+      if node.type == "button" then button = node end
+      if node.type == "label" then
+        local text, following = textOf(node), nodes[index + 1]
+        if text == label then return button, node end
+        if following and following.type == "label" and following.x == node.x
+          and text .. " " .. textOf(following) == label then return button, node end
+      end
     end
   end
   for _, size in ipairs({ { 480, 272 }, { 480, 320 }, { 800, 480 } }) do
@@ -577,33 +584,34 @@ do
       if nextNode and nextNode.type == "label" and nextNode.x == node.x and (nextNode.y or 0) > (node.y or 0) then
         secondOf[node] = nextNode
       end
-      if string.find(text, "Model:", 1, true) == 1 then modelLine = node end
-      if string.find(text, "FC slots:", 1, true) == 1 then slotsLine = node end
-      if string.find(text, "Session:", 1, true) == 1 then sessionLine = node end
+      if text == "Model" then modelLine = nextNode end
+      if text == "FC slots" then slotsLine = nextNode end
+      if text == "Session" then sessionLine = nextNode end
       if string.find(text, "2 beyond the FC limits:", 1, true) == 1 then warning = node end
     end
     local plainTextOf = textOf
     local function rowText(node)
-      local second = size[2] >= 320 and secondOf[node] and plainTextOf(secondOf[node]) or ""
+      local second = secondOf[node] and plainTextOf(secondOf[node]) or ""
       return plainTextOf(node) .. (second ~= "" and (" " .. second) or "")
     end
     check(modelLine and slotsLine and sessionLine and warning, "ground has three status lines and the FC bounds warning")
-    check(textOf(modelLine) == "Model: Setup OK" and string.find(rowText(slotsLine), "36 parameters from the board", 1, true),
+    check(textOf(modelLine) == "Setup OK" and string.find(rowText(slotsLine), "36 parameters from the board", 1, true),
       "model verdict and parameter count come from the current snapshot")
-    check(string.find(rowText(sessionLine), "Session: Continued,", 1, true) == 1, "stored session is marked continued")
-    local statusH = size[2] > 350 and 64 or size[2] >= 320 and 32 or 16
+    check(string.find(rowText(sessionLine), "Continued,", 1, true) == 1, "stored session is marked continued")
+    local statusH = size[2] >= 320 and 28 or 24
     check(slotsLine.y - modelLine.y == statusH and sessionLine.y - slotsLine.y == statusH,
-      "each status reserves two lines on taller radios and one on 480x272")
-    if size[2] >= 320 then
+      "each status reserves two measured lines at every supported size")
+    do
       check(string.find(rowText(slotsLine), "(3 skipped)", 1, true)
         and string.find(rowText(sessionLine), "2026-10-25 12:34", 1, true), "wrapped statuses retain skipped count and baseline timestamp")
       check(string.find(rowText(warning), "set up the FC again", 1, true), "bounds warning includes the remedy")
       -- The second line sits one font box below the first and ends before the next row: one
       -- label with a line break was laid out at LVGL's wider line pitch and ran into the warning.
-      local fontH = sessionLine.font == MIDSIZE and 30 or 14
+      local fontH = sessionLine.font == SMLSIZE and 14 or 12
+      local step = fontH + (size[2] >= 320 and 2 or 0)
       for _, pair in ipairs({{modelLine, slotsLine}, {slotsLine, sessionLine}, {sessionLine, warning}}) do
         local second = secondOf[pair[1]]
-        check(second and second.y - pair[1].y == fontH + 2 and second.y + fontH <= pair[2].y,
+        check(second and second.y - pair[1].y == step and second.y + fontH <= pair[2].y,
           "a wrapped status's second line stays inside its row at " .. size[1] .. "x" .. size[2])
       end
     end
@@ -614,12 +622,15 @@ do
     local restore = action(nodes, "Restore all")
     check(choose and read and reset and restore and choose.active() and choose.visible() and chooseLabel.visible(),
       "usable board exposes the primary and all ground actions")
-    check(choose.w == restore.w and choose.h > read.h and read.y == reset.y and read.x + read.w < reset.x
-      and choose.y + choose.h < read.y and read.y + read.h < restore.y and restore.color ~= read.color,
-      "primary is large and full width, secondary actions share a row, restore is set apart and coloured")
+    local setup = action(nodes, "Set up suggested functions")
+    check(choose.w == restore.w and setup and setup.h == read.h and read.h == reset.h
+      and setup.y == read.y and setup.x + setup.w < read.x and reset.x == setup.x
+      and read.y + read.h < reset.y and choose.y + choose.h < read.y
+      and reset.y + reset.h < restore.y and restore.color ~= read.color,
+      "primary is full width, secondary actions form uniform cells in focus order, restore stays below")
     for _, node in ipairs(nodes) do
       local text = type(node.text) == "function" and node.text() or node.text
-      local height = node.h or (node.type == "label" and (node.font == MIDSIZE and 30 or 14) *
+      local height = node.h or (node.type == "label" and (node.font == MIDSIZE and 30 or node.font == SMLSIZE and 14 or 12) *
         (1 + select(2, string.gsub(text or "", "\n", ""))) or 0)
       check((node.y or 0) + height <= size[2], "ground geometry stays inside every supported height")
     end
@@ -629,7 +640,7 @@ do
     slotsLine.text(); sessionLine.text(); warning.text()
     check(translations == before, "unchanged scalar inputs reuse cached ground strings even with fresh snapshot tables")
     snap.sessionMode, snap.baseline.timestamp = "new", "2026-10-25 13:45"
-    check(string.find(rowText(sessionLine), "Session: New,", 1, true) == 1, "new session updates the retained status")
+    check(string.find(rowText(sessionLine), "New,", 1, true) == 1, "new session updates the retained status")
     if size[2] >= 320 then
       check(string.find(rowText(sessionLine), "2026-10-25 13:45", 1, true), "session cache tracks the stored timestamp")
     end
@@ -643,7 +654,7 @@ do
       check(button and button.active() == case[3] and button.visible() == case[3] and label.visible() == case[3],
         "initial scene applies the same picker availability")
       if case[1] == "unread" then
-        check(rowText(slotsLine) == "FC slots: Not read yet", "unread board offers no documented set")
+        check(rowText(slotsLine) == "Not read yet", "unread board offers no documented set")
       elseif case[1] == "unavailable" then
         check(string.find(rowText(slotsLine), "No usable slots on the board", 1, true), "unusable board explains the empty set")
       end
@@ -651,11 +662,11 @@ do
     snap.boundsCount = 0
     check(warning.text() == "", "retained warning clears when no values exceed FC limits")
     snap.sessionMode, snap.baseline, snap.prime = nil, nil, {phase = "idle"}
-    check(rowText(sessionLine) == "Session: Values not read", "session explains that start values have not been read")
+    check(rowText(sessionLine) == "Values not read", "session explains that start values have not been read")
     snap.prime = {phase = "error", error = "no_link"}
-    check(rowText(sessionLine) == "Session: Reading failed: No FC link", "session retains read refusal text")
+    check(rowText(sessionLine) == "Reading failed: No FC link", "session retains read refusal text")
     snap.transfer = {state = "error", reason = "baseline_identity"}
-    check(string.find(rowText(sessionLine), "Session: Restore refused/failed:", 1, true) == 1,
+    check(string.find(rowText(sessionLine), "Restore refused/failed:", 1, true) == 1,
       "session retains backup refusal text")
     snap.transfer = nil
     local epoch = instance.valueEpoch
@@ -1791,9 +1802,9 @@ do
   Drive.sample(view)
   local nodes = {}; Screen.buildFullscreen(nodes, view)
   local line
-  for _, node in ipairs(nodes) do
+  for index, node in ipairs(nodes) do
     local text = type(node.text) == "function" and node.text() or node.text
-    if type(text) == "string" and string.find(text, "Model:", 1, true) == 1 then line = node end
+    if text == "Model" then line = nodes[index + 1] end
   end
   check(line ~= nil, "two-fault scene has a model status line")
   local function text() return type(line.text) == "function" and line.text() or line.text end
@@ -1806,7 +1817,7 @@ do
   check(instance.valueEpoch == epoch, "verdict-only publication does not rebuild the scene")
   instance:forgetVerdict(); instance._checkResult, instance._checkedAt, instance._checkFault = "ok", ticks, false
   Drive.sample(view)
-  check(text() == "Model: Setup OK", "control: all repaired produces setup OK")
+  check(text() == "Setup OK", "control: all repaired produces setup OK")
   instance.phase, instance.live, instance.open = nil, false, true
   instance:tick(true)
   check(instance.phase == "live", "all repaired permits the live phase")
@@ -1823,8 +1834,8 @@ do
   local first, second
   for index, node in ipairs(nodes) do
     local text = type(node.text) == "function" and node.text() or node.text
-    if type(text) == "string" and string.find(text, "Session:", 1, true) == 1 then
-      first, second = node, nodes[index + 1]
+    if text == "Session" then
+      first, second = nodes[index + 1], nodes[index + 2]
     end
   end
   local session = first and {text = function() return first.text() .. " " .. second.text() end}

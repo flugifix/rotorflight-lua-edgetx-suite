@@ -275,14 +275,17 @@ local function buildPlan(job, drive, parsed)
     if not drive.sessionProfiles then return "session_unread" end
     reachable = drive.sessionProfiles
   elseif job.mode == "restore" or job.mode == "resume" then
-    reachable = { pid = {}, rate = {} }
+    if job.mode == "restore" then reachable = { pid = {}, rate = {} } end
     for name in pairs(job.baseline) do
       local kind, n = string.match(name, "^(%a+)(%d)$")
       if reachable[kind] then reachable[kind][tonumber(n)] = true end
     end
     for kind, profiles in pairs(reachable) do
       local count = kind == "pid" and parsed.pid_profile_count or parsed.control_rate_profile_count
-      for index in pairs(profiles) do if index > count then return "profile_count" end end
+      for index in pairs(profiles) do
+        if index > count then return "profile_count" end
+        if not job.baseline[section(kind, index)] then job.extendBaseline = true end
+      end
     end
   end
   job.reachable = reachable
@@ -430,14 +433,14 @@ local function send(widget, drive, job, op)
   queue:add({ command = command, payload = payload, isWrite = write, client = CLIENT,
     simulatorResponse = simulator,
     processReply = function(_, buf)
-      if drive.profileJob ~= job or job.serial ~= serial or not job.waiting then return end
+      if drive.profileJob ~= job or job.serial ~= serial or job.linkLost or not job.waiting then return end
       local copy = {}
       for i = 1, #(buf or {}) do copy[i] = buf[i] end
       job.reply = {buf = copy}
       job.waiting = false
     end,
     errorHandler = function(_, reason)
-      if drive.profileJob ~= job or job.serial ~= serial or not job.waiting then return end
+      if drive.profileJob ~= job or job.serial ~= serial or job.linkLost or not job.waiting then return end
       job.reply, job.waiting = {error = reason or "failed"}, false
     end })
 end
@@ -453,6 +456,12 @@ local function snapshotStep(job, drive)
       craft = tostring((_G.rfsuite.session or {}).modelName or ""), timestamp = stamp,
       ticks = drive.radio.now(), pidCount = 0, rateCount = 0, pidMask = 0, rateMask = 0,
       masterGains = job.masterGains == true}}
+    if job.mode == "resume" then
+      -- Keep the original session metadata and start values; only new sections come from the FC.
+      for key, value in pairs(job.baseline.meta) do job.data.meta[key] = value end
+      job.data.meta.pidCount, job.data.meta.rateCount = 0, 0
+      job.data.meta.pidMask, job.data.meta.rateMask = 0, 0
+    end
     job.snapKind, job.snapIndex = 1, 0
     return
   end
@@ -469,8 +478,11 @@ local function snapshotStep(job, drive)
     index, values = next(job.values[kind], last)
   end
   if not index then job.snapKind, job.snapIndex = job.snapKind + 1, 0; return end
-  local out = {}
-  for id, value in pairs(values) do out[tostring(id)] = value end
+  local out = job.mode == "resume" and job.baseline[section(kind, index)] or nil
+  if not out then
+    out = {}
+    for id, value in pairs(values) do out[tostring(id)] = value end
+  end
   job.data[section(kind, index)] = out
   if kind ~= "global" then
     job.data.meta[kind .. "Count"] = job.data.meta[kind .. "Count"] + 1
@@ -489,6 +501,7 @@ local function finish(drive, job)
     elseif job.mode == "refresh" then drive.profileValues, drive.changes = job.values, job.changes
     end
     drive.valuesRead, drive.primeInterrupted = true, nil
+    if job.mode == "new" or job.mode == "resume" then drive.readRequired, drive.readArmed = nil, nil end
     drive.readAt = drive.radio.clock and drive.radio.clock() or nil
     if job.mode == "new" or job.mode == "resume" then drive.sessionMode = job.mode end
     -- New start values end the session, and its parameter choice with it.
@@ -548,6 +561,11 @@ function M.tick(widget, drive, hasRoom)
   local job = drive.profileJob
   if not job then return false end
   local env = job.env
+  if job.linkLost then
+    if not job.suspended then abort(drive, job, "no_link") end
+    job.linkLost, job.suspended = nil, true
+    return true
+  end
   local blocked = env.armed(widget) or not widget.state.fblConnected
   local board, uid = identity(env)
   if blocked or board ~= job.identity or uid ~= job.uid then
@@ -616,7 +634,7 @@ function M.tick(widget, drive, hasRoom)
   if not op then
     if not job.returning then returnPlan(job); drive.restorePending = true; return true end
     if not job.returned then abort(drive, job, "profile_changed"); return true end
-    if job.mode == "new" and not job.error then
+    if (job.mode == "new" or job.extendBaseline) and not job.error then
       snapshotStep(job, drive)
     else job.finished = true end
     return true

@@ -67,8 +67,18 @@ local function build(widget)
   return nodes
 end
 local function action(nodes, text)
+  local button
   for index, node in ipairs(nodes) do
-    if node.type == "label" and node.text == text then return nodes[index - 1] end
+    if node.type == "button" then button = node end
+    if node.type == "label" then
+      local caption = type(node.text) == "function" and node.text() or node.text
+      if caption == text then return button end
+      local following = nodes[index + 1]
+      if following and following.type == "label" and following.x == node.x then
+        local tail = type(following.text) == "function" and following.text() or following.text
+        if type(caption) == "string" and type(tail) == "string" and caption .. " " .. tail == text then return button end
+      end
+    end
   end
 end
 local function setupTitle(nodes)
@@ -83,7 +93,9 @@ local widget, drive = view(0)
 local groundNodes = build(widget)
 local primary = action(groundNodes, "Set up suggested functions")
 local oldRead = action(groundNodes, "Read again")
-check(primary and primary.h == 40 and primary.active(), "empty board offers large primary setup action")
+check(primary and oldRead and primary.active() and primary.w == widget.zone.w - primary.x * 2
+  and primary.h > oldRead.h and primary.color == BLUE,
+  "empty board offers an active full-width accented primary taller than secondary cells")
 local full = view(36)
 local nodes = build(full)
 local secondary, choose = action(nodes, "Set up suggested functions"), action(nodes, "Choose parameters")
