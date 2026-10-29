@@ -91,6 +91,30 @@ preferences and any user dashboard themes live in `/SCRIPTS/TOOLS/rfsuite.user/`
 release archive does not write to.
 
 
+## Quick start
+
+After installing, put one of the two RFSuite widgets on a screen of each model you fly with
+RFSuite. The suite's background work — the link to the flight controller, the custom telemetry
+sensors, the connect events and the voice announcements — only runs while the tool is open or
+one of the widgets is running. EdgeTX keeps screen layouts per model, so this is done once per
+model.
+
+**If you want the dashboard:**
+
+1. In the model's screen setup, add a screen (a full-screen layout suits the dashboard best).
+2. Choose **RFSuite** as the widget for it.
+3. Optionally pick a theme in the tool under *System* → *Settings* → *Dashboard* → *Theme*.
+
+The dashboard runs the background work itself, also while its screen is not shown. There is
+nothing else to set up, and *RFSuite Service* is not needed.
+
+**If you do not use the dashboard:**
+
+Add **RFSuite Service** instead — this is recommended. Place it in a small zone on a screen you
+do not use; it only draws a small status tile. Without it, the link and the announcements stop as soon
+as the tool is closed.
+
+
 ## Usage
 
 Start the tool from the *Tools* menu of your transmitter. The home screen shows the connection
