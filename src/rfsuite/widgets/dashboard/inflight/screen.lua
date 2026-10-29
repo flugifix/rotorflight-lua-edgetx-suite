@@ -1179,14 +1179,15 @@ function M.buildGround(children, widget, m, w, h, t, p)
 
   -- Why the ground half is refusing, when it is not simply that the board is armed. The one case
   -- so far is the arm sensor never having answered: the ground half then refuses everything,
-  -- because a model whose sensor 99 is not in the telemetry list reads as disarmed for ever and
+  -- because a model whose arm telemetry -- Arming Flags (90) or System Status (120) -- is not in the
+  -- telemetry list reads as disarmed for ever and
   -- MSP sent on that reading goes to a helicopter in the air.
   local refusal = (Prime ~= nil and type(Prime.groundRefusal) == "function") and Prime.groundRefusal(widget) or nil
   if armed or refusal == "no_arm_sensor" then
     -- Nothing here can reach the board while it is armed -- the MSP runtime clears its queue on
     -- every armed tick -- so the actions are absent rather than present and refusing.
     local text = armed and t("widgets.dashboard.inflight_ground_armed", "Disarm to read or restore")
-      or t("widgets.dashboard.inflight_ground_no_arm", "Arm sensor not seen: is sensor 99 selected?")
+      or t("widgets.dashboard.inflight_ground_no_arm", "No arm state: select sensor 90 or 120")
     appendLabel(children, m.pad, y, lineW, fitText(text, lineW, lineFont), armed and p.text or p.warn, lineFont, LEFT)
     return
   end

@@ -3782,7 +3782,8 @@ local function readTelemetry(state, audioState)
   if type(armState) == "number" then
     -- STICKY, and cleared only on the reconnect edge below. `armed` starting false is
     -- indistinguishable from `armed` never having been read at all -- a model whose telemetry
-    -- sensor 99 is not selected reads nil here for ever and looks disarmed the whole time -- and
+    -- arm telemetry (Arming Flags, sensor 90, or System Status, sensor 120) is not selected reads nil
+    -- here for ever and looks disarmed the whole time -- and
     -- anything that refuses while armed has to be able to tell those two apart, because failing
     -- open there means sending MSP to a flying helicopter. Set on a reading left untaken as well:
     -- the sensor answered.

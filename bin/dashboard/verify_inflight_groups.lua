@@ -674,6 +674,21 @@ do
       local locked = {}; Screen.buildFullscreen(locked, view)
       check(not action(locked, "Choose parameters")
         and not action(locked, "Read again") and not action(locked, "Restore all"), "armed/missing-arm scenes retain no ground actions")
+      if blocked == "no_arm_sensor" then
+        -- The arm state comes from Arming Flags (90) or System Status (120); 99 is Adjustment Function.
+        local hint
+        for _, node in ipairs(locked) do
+          local text = textOf(node)
+          if string.find(text, "arm state", 1, true) then hint = text end
+        end
+        check(hint and string.find(hint, "90", 1, true) and string.find(hint, "120", 1, true)
+          and not string.find(hint, "99", 1, true), "the missing-arm hint names the arming sensors")
+      end
+    end
+    for _, locale in ipairs({"en", "de"}) do
+      local text = assert(loadfile("src/rfsuite/i18n/" .. locale .. ".lua"))().widgets.dashboard.inflight_ground_no_arm
+      check(text and string.find(text, "90", 1, true) and string.find(text, "120", 1, true)
+        and not string.find(text, "99", 1, true), "the missing-arm hint names the arming sensors in " .. locale)
     end
     view.state.armed, refusal = false, nil
     check(Screen.buildZone == nil, "the dashboard zone has no tuning builder")

@@ -3869,7 +3869,7 @@ return {
       inflight_profile_banner_short = "PID",
       inflight_profile_banner_tail_short = "- values ?",
       inflight_ground_armed = "Disarm to read or restore",
-      inflight_ground_no_arm = "Arm sensor not seen: is sensor 99 selected?",
+      inflight_ground_no_arm = "No arm state: select sensor 90 or 120",
       inflight_delta_title = "CHANGED THIS SESSION",
       inflight_delta_unprimed = "Read the values first: nothing to compare against",
       inflight_delta_none = "Nothing has changed",

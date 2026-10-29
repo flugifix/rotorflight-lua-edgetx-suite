@@ -3865,7 +3865,7 @@ return {
       inflight_profile_banner_short = "PID",
       inflight_profile_banner_tail_short = "- Werte ?",
       inflight_ground_armed = "Zum Lesen/Wiederherstellen entschärfen",
-      inflight_ground_no_arm = "Arm-Sensor nicht gesehen: ist Sensor 99 gewählt?",
+      inflight_ground_no_arm = "Kein Arm-Status: Sensor 90 oder 120 wählen",
       inflight_delta_title = "ÄNDERUNGEN IN DIESER SITZUNG",
       inflight_delta_unprimed = "Erst die Werte lesen: es gibt nichts zum Vergleichen",
       inflight_delta_none = "Nichts hat sich geändert",
