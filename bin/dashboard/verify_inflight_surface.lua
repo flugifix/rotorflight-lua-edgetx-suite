@@ -522,8 +522,10 @@ scenario("failed announcement save stays visible and can be retried", function()
     if text == "Adjustment announcements are off" then hint = node end
     if text == "Turn on announcements" then retry = node end
   end
-  check(warning and hint and retry and not rfsuite.preferences.audio_events.adjustment_events,
-    "failed save reports the warning and rolls back the global switch")
+  -- The failure takes the footer's place of the off hint: the switch is still off, and saying so twice
+  -- costs a row the small screens do not have.
+  check(warning and not hint and retry and not rfsuite.preferences.audio_events.adjustment_events,
+    "failed save reports the warning in place of the hint and rolls back the global switch")
   rfsuite.preferences, rfsuite.savePreferences = savedPrefs, savedSave
 end)
 scenario("standalone widget saves announcements through the preferences module", function()
@@ -562,15 +564,21 @@ scenario("announcement controls are absent from armed and air surfaces", functio
   rfsuite.preferences = savedPrefs
 end)
 
+-- Ground children are measured with the fonts' rendered boxes: the standard font's line is about
+-- 20 px and runs at most 9 px a character, the small font 14 and 11, the middle one 30 and 16. A
+-- text wider than its box wraps on the radio onto whatever is under it, so the width is checked as
+-- well as the position, and a text that is no button's own caption may not touch a button.
+local FONT_BOX = {[0] = {20, 9}, [SMLSIZE] = {14, 11}, [MIDSIZE] = {30, 16}}
 for _, locale in ipairs({"en", "de"}) do
   local translations = assert(loadfile("src/rfsuite/i18n/" .. locale .. ".lua"))().widgets.dashboard
   for _, size in ipairs({{480, 272}, {480, 320}, {800, 480}}) do
-    for _, variant in ipairs({"ready", "warnings", "empty"}) do
+    for _, variant in ipairs({"ready", "warnings", "empty", "reading", "failed"}) do
       scenario("ground panel and grid " .. locale .. " " .. size[1] .. "x" .. size[2] .. " " .. variant, function()
         local widget, d = fixture(false)
         local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
         local savedPrefs = rfsuite.preferences
-        rfsuite.preferences = {audio_events = {adjustment_events = variant == "ready"}}
+        local announcementsOn = variant == "ready" or variant == "reading"
+        rfsuite.preferences = {audio_events = {adjustment_events = announcementsOn}}
         widget.zone = {w = size[1], h = size[2]}
         widget.i18n = {t = function(key, fallback)
           return translations[string.gsub(key, "^widgets%.dashboard%.", "")] or fallback
@@ -578,74 +586,125 @@ for _, locale in ipairs({"en", "de"}) do
         widget.state.inflight = {phase = "ground", setupVerdict = "ok", setSource = variant == "empty" and "unavailable" or "board",
           cellCount = variant == "empty" and 0 or 36, boundsCount = variant == "warnings" and 2 or 0,
           prime = {phase = "done", skipped = variant == "empty" and 0 or 3},
-          sessionMode = "resume", baseline = {timestamp = "2026-10-25 12:34"}}
-        if variant ~= "ready" then d.saveResult, d.announcementsSaveFailed = "unavailable", true end
+          baseline = {timestamp = "2026-10-25 12:34:56"}}
+        if variant == "warnings" or variant == "empty" then d.saveResult, d.announcementsSaveFailed = "unavailable", true end
+        if variant == "failed" then
+          -- The longest texts the panel shows: a three-part verdict and a refused restore.
+          widget.state.inflight.setupVerdict = {"mix_missing", "gvar_range", "same_gvar"}
+          widget.state.inflight.transfer = {kind = "restore", state = "refused", reason = "baseline_identity"}
+          widget.state.inflight.restoreSummary = "PID 1, PID 2, RTE 1"
+        end
+        if variant == "reading" then
+          d.profileJob = {plan = {{op = "initial"}, {op = "read", kind = "pid", index = 2}, {op = "read", kind = "rate", index = 2}},
+            at = 2, original = {pid = 2, rate = 2}}
+        end
         local nodes = {}; Screen.buildFullscreen(nodes, widget)
         rfsuite.preferences = savedPrefs
-        local labels, buttons, captions, captionFonts, panel, footer, footerText, modelLabel, modelValue = {}, {}, {}, {}
-        local function height(node)
-          return node.h or (node.type == "label" and (node.font == MIDSIZE and 30 or node.font == SMLSIZE and 14 or 12)) or 0
+        local function shown(node)
+          if type(node.visible) == "function" then return node.visible() end
+          return node.visible ~= false
         end
+        local function height(node)
+          return node.h or (node.type == "label" and (FONT_BOX[node.font] or FONT_BOX[0])[1]) or 0
+        end
+        local function inside(node, box)
+          return node.x >= box.x and node.y >= box.y and node.x + node.w <= box.x + box.w and node.y + height(node) <= box.y + box.h
+        end
+        local function touches(a, b)
+          return not (a.x >= b.x + b.w or a.x + a.w <= b.x or a.y >= b.y + height(b) or a.y + height(a) <= b.y)
+        end
+        local allButtons = {}
+        for _, node in ipairs(nodes) do if node.type == "button" and shown(node) then allButtons[#allButtons + 1] = node end end
+        local labels, buttons, captions, captionFonts, panel, footer, footerText, modelLabel, modelValue = {}, {}, {}, {}
         for index, node in ipairs(nodes) do
           local x, y, width, tall = node.x or 0, node.y or 0, node.w or 0, height(node)
           check(x >= 0 and y >= 0 and x + width <= size[1] and y + tall <= size[2], "every ground child fits the screen")
           if node.type == "button" then buttons[#buttons + 1] = node; captions[#captions + 1] = "" end
           local text = type(node.text) == "function" and node.text() or node.text
-          if node.type == "label" and text and text ~= "" then
+          if node.type == "label" and text and text ~= "" and shown(node) then
+            check(#text * (FONT_BOX[node.font] or FONT_BOX[0])[2] <= width, "ground text fits its box: " .. text)
             for _, other in ipairs(labels) do
-              check(x >= other.x + other.w or x + width <= other.x or y >= other.y + height(other) or y + tall <= other.y,
-                "ground text children never overlap")
+              check(not touches(node, other), "ground text children never overlap: " .. text)
             end
             labels[#labels + 1] = node
             local button = buttons[#buttons]
-            if button and x == button.x and y >= button.y and y + tall <= button.y + button.h then
+            local caption = button and inside(node, button)
+            if caption then
               captions[#captions] = captions[#captions] == "" and text or captions[#captions] .. " " .. text
               captionFonts[#captions] = node.font
+            else
+              for _, other in ipairs(allButtons) do
+                check(not touches(node, other), "ground text stays off the buttons: " .. text)
+              end
             end
-            if footer and y >= footer.y and y + tall <= footer.y + footer.h then footerText = text end
+            if footer and inside(node, footer) then footerText = text end
             if text == translations.inflight_model_status then modelLabel, modelValue = node, nodes[index + 1] end
-          elseif node.type == "rectangle" and node.filled then
+          elseif node.type == "label" and text and text ~= "" then
+            local button = buttons[#buttons]
+            if button and inside(node, button) then
+              captions[#captions] = captions[#captions] == "" and text or captions[#captions] .. " " .. text
+            end
+          elseif node.type == "rectangle" and node.filled and node.h > 12 then
             if node.x > 0 then panel = node elseif y > size[2] / 2 then footer = node end
           end
         end
         check(panel and footer and panel.color == footer.color and modelLabel and modelValue
           and modelLabel.y >= panel.y and modelValue.x > modelLabel.x,
           "status values share a filled panel and the footer uses the same palette")
-        check(footerText == (variant == "ready" and translations.inflight_ground_controls or translations.inflight_announcements_off),
-          "ground footer shows controls when announcements are on and the warning when off")
+        local warning = d.announcementsSaveFailed and translations.inflight_announcements_failed or translations.inflight_announcements_off
+        check(footerText == (announcementsOn and translations.inflight_ground_controls or warning),
+          "ground footer shows the controls, the announcements warning, or a failed attempt to turn them on")
         local color = modelValue.color()
         widget.state.inflight.setupVerdict = {"mix_missing"}
-        check(color ~= modelLabel.color and modelValue.color() ~= color, "model verdict colour follows its meaning")
-        local expected = {variant == "empty" and translations.inflight_fc_setup_action or translations.inflight_choose_parameters}
+        check(variant == "failed" or (color ~= modelLabel.color and modelValue.color() ~= color), "model verdict colour follows its meaning")
+        local expected = {}
+        if variant == "reading" then
+          expected[1], expected[2] = translations.inflight_read_again, translations.inflight_restore_cancel
+        else
+          expected[1] = variant == "empty" and translations.inflight_fc_setup_action or translations.inflight_choose_parameters
+        end
         if variant ~= "empty" then expected[#expected + 1] = translations.inflight_fc_setup_action end
-        expected[#expected + 1], expected[#expected + 2] = translations.inflight_read_again, translations.inflight_reset_start
-        if variant ~= "ready" then expected[#expected + 1] = translations.inflight_announcements_enable end
+        expected[#expected + 1] = translations.inflight_read_again
+        if not announcementsOn then expected[#expected + 1] = translations.inflight_announcements_enable end
         expected[#expected + 1], expected[#expected + 2] = translations.inflight_restore_all, "X"
         check(#captions == #expected, "ground retains every action in encoder order")
         for index, label in ipairs(expected) do check(captions[index] == label, "ground action text is complete: " .. label) end
+        check(not touches({x = 0, y = 0, w = 0, h = 0}, {x = 0, y = 0, w = 0, h = 0}), "positive control: touches is not always true")
+        check(touches({x = 0, y = 0, w = 10, h = 10}, {x = 5, y = 5, w = 10, h = 10}), "positive control: overlapping boxes touch")
+        local primaries = variant == "reading" and 2 or 1
+        local primary = buttons[primaries]
         local restore = buttons[#buttons - 1]
-        local primary = buttons[1]
-        local minimum = size[2] > 350 and 48 or size[2] >= 320 and 36 or 0
-        check(primary.active() and primary.h >= minimum and primary.h > buttons[2].h
-          and primary.color == lcd.RGB(41, 163, 224), "ground primary is active, accented and taller than secondary cells")
-        for index = 2, #buttons - 2 do
-          local button = buttons[index]
-          check(button.w == buttons[2].w and button.h == buttons[2].h and button.y + button.h < restore.y,
-            "secondary grid cells are uniform and end above Restore all")
+        local first = buttons[primaries + 1]
+        -- 480x272 with every warning row up has no height to spare: there the primary may equal the
+        -- others, but never drops below a line of text and its margin.
+        local minimum = size[2] > 350 and 48 or size[2] >= 320 and 36 or 22
+        check(primary.active() and primary.h >= minimum and primary.h >= first.h and (size[2] < 300 or primary.h > first.h),
+          "ground primary is active and at least as tall as the other actions, taller where there is room")
+        if variant ~= "reading" then
+          check(primary.color == lcd.RGB(41, 163, 224), "ground primary is accented")
+        else
+          check(not buttons[1].active() and not first.active() and not restore.active(),
+            "while a read runs, retry waits for a held return and the other actions are shown disabled")
         end
-        check(buttons[1].w == size[1] - buttons[1].x * 2 and buttons[1].w == restore.w
-          and restore.h == buttons[2].h and restore.y + restore.h < footer.y and restore.color ~= buttons[2].color,
+        for index = primaries + 1, #buttons - 2 do
+          local button = buttons[index]
+          check(button.h == first.h and (button.w == restore.w or button.w * 2 < restore.w) and button.y + button.h < restore.y,
+            "secondary cells share one height, are full or half width and end above Restore all")
+        end
+        check(primary.w == size[1] - primary.x * 2 and primary.w == restore.w
+          and restore.h == first.h and restore.y + restore.h < footer.y and restore.color ~= first.color,
           "primary and restore are full width with restore above the footer")
         local lastSecondary = buttons[#buttons - 2]
-        check(restore.y - lastSecondary.y - lastSecondary.h <= (size[2] > 350 and 10 or 4),
+        check(restore.y - lastSecondary.y - lastSecondary.h <= (size[2] > 350 and 10 or 6),
           "ground grid uses the available space above Restore all")
         if size[2] > 350 then
-          check(modelLabel.font == 0 and modelValue.font == 0 and captionFonts[1] == MIDSIZE,
+          check(modelLabel.font == 0 and modelValue.font == 0 and (variant == "reading" or captionFonts[1] == MIDSIZE),
             "large ground screen uses standard status text and a larger primary caption")
-          for index = 2, #buttons - 1 do
+          for index = primaries + 1, #buttons - 1 do
             check(captionFonts[index] == 0, "large ground secondary captions use the standard font")
           end
         end
+        d.profileJob = nil
       end)
     end
   end

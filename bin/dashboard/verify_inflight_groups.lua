@@ -451,10 +451,9 @@ do
     elseif phase == "setup" then
       instance.fcSetupOpen = true
       instance.fcSurface = {close = function() instance.fcSetupOpen = false end}
-    elseif phase == "restore" then instance.restoreConfirm = {all = true}
-    elseif phase == "reset" then instance.resetConfirm = true end
+    elseif phase == "restore" then instance.restoreConfirm = {all = true} end
   end
-  for _, phase in ipairs({"ground", "live", "post", "busy", "setup", "restore", "reset"}) do
+  for _, phase in ipairs({"ground", "live", "post", "busy", "setup", "restore"}) do
     for _, source in ipairs({"key", "touch"}) do
       for _, action in ipairs({"close", "back"}) do
         regression("armed " .. phase .. " " .. source .. " " .. action .. " refused", function()
@@ -479,7 +478,7 @@ do
       end)
     end
   end
-  for _, substate in ipairs({"busy", "browse", "value", "setup", "post", "restore", "reset", "results"}) do
+  for _, substate in ipairs({"busy", "browse", "value", "setup", "post", "restore", "results"}) do
     regression("armed " .. substate .. " has no X or close hint", function()
       local instance = drive()
       local view = viewFor(instance, true)
@@ -488,7 +487,6 @@ do
       elseif substate == "setup" then instance.fcSetupOpen = true; view.state.inflight.phase = "ground"
       elseif substate == "post" then instance:setPhase("post"); view.state.inflight.phase = "post"
       elseif substate == "restore" then instance.restoreConfirm = {all = true}
-      elseif substate == "reset" then instance.resetConfirm = true
       elseif substate == "results" then instance.restoreResultOpen = 1 end
       local nodes, closes, hints = {}, 0, 0
       Screen.buildFullscreen(nodes, view)
@@ -534,7 +532,7 @@ do
   check(#failures == 0, table.concat(failures, "\n"))
 end
 
--- Ground actions use the published slot/session scalars and require an explicit reset decision.
+-- Ground actions use the published slot/session scalars.
 do
   local savedStart, savedRefresh, savedRetry = BoardPrime.start, BoardPrime.refreshValues, BoardPrime.retryReturn
   local savedRefusal, savedRunning = BoardPrime.groundRefusal, BoardPrime.isRunning
@@ -567,7 +565,7 @@ do
     local instance = drive()
     instance.phase, instance._checkedAt, instance._checkResult = "ground", ticks, "ok"
     local snap = {phase = "ground", setupVerdict = "ok", setSource = "board", cellCount = 36, boundsCount = 2,
-      prime = {skipped = 3}, sessionMode = "resume", baseline = {timestamp = "2026-10-25 12:34"}}
+      prime = {skipped = 3}, baseline = {timestamp = "2026-10-25 12:34"}}
     local translations = 0
     local view = {_inflight = instance, state = {armed = false, inflight = snap},
       zone = {w = size[1], h = size[2]}, i18n = {t = function(_, fallback)
@@ -597,40 +595,29 @@ do
     check(modelLine and slotsLine and sessionLine and warning, "ground has three status lines and the FC bounds warning")
     check(textOf(modelLine) == "Setup OK" and string.find(rowText(slotsLine), "36 parameters from the board", 1, true),
       "model verdict and parameter count come from the current snapshot")
-    check(string.find(rowText(sessionLine), "Continued,", 1, true) == 1, "stored session is marked continued")
-    local statusH = size[2] >= 320 and 28 or 24
-    check(slotsLine.y - modelLine.y == statusH and sessionLine.y - slotsLine.y == statusH,
-      "each status reserves two measured lines at every supported size")
-    do
-      check(string.find(rowText(slotsLine), "(3 skipped)", 1, true)
-        and string.find(rowText(sessionLine), "2026-10-25 12:34", 1, true), "wrapped statuses retain skipped count and baseline timestamp")
-      check(string.find(rowText(warning), "set up the FC again", 1, true), "bounds warning includes the remedy")
-      -- The second line sits one font box below the first and ends before the next row: one
-      -- label with a line break was laid out at LVGL's wider line pitch and ran into the warning.
-      local fontH = sessionLine.font == SMLSIZE and 14 or 12
-      local step = fontH + (size[2] >= 320 and 2 or 0)
-      for _, pair in ipairs({{modelLine, slotsLine}, {slotsLine, sessionLine}, {sessionLine, warning}}) do
-        local second = secondOf[pair[1]]
-        check(second and second.y - pair[1].y == step and second.y + fontH <= pair[2].y,
-          "a wrapped status's second line stays inside its row at " .. size[1] .. "x" .. size[2])
-      end
-    end
+    check(rowText(sessionLine) == "Start values 12:34", "the session names the time its start values were read")
+    -- One line per status, placed by the standard font's measured line.
+    local statusH = 20 + (size[2] > 350 and 6 or 0)
+    check(slotsLine.y - modelLine.y == statusH and sessionLine.y - slotsLine.y == statusH
+      and warning.y - sessionLine.y == statusH, "each status takes one measured line at every supported size")
+    check(not secondOf[modelLine] and not secondOf[slotsLine] and not secondOf[sessionLine],
+      "statuses that fit take no second line")
+    check(string.find(rowText(slotsLine), "(3 skipped)", 1, true), "the slot status retains the skipped count")
+    check(string.find(rowText(warning), "set up the FC again", 1, true), "bounds warning includes the remedy")
     check(warning.color ~= slotsLine.color, "FC bounds warning uses a warning colour")
     local choose, chooseLabel = action(nodes, "Choose parameters")
     local read = action(nodes, "Read again")
-    local reset = action(nodes, "Reset start values")
     local restore = action(nodes, "Restore all")
-    check(choose and read and reset and restore and choose.active() and choose.visible() and chooseLabel.visible(),
+    check(choose and read and restore and choose.active() and choose.visible() and chooseLabel.visible(),
       "usable board exposes the primary and all ground actions")
+    check(not action(nodes, "Reset start values"), "every session reads its own start values: no reset action")
     local setup = action(nodes, "Set up suggested functions")
-    check(choose.w == restore.w and setup and setup.h == read.h and read.h == reset.h
-      and setup.y == read.y and setup.x + setup.w < read.x and reset.x == setup.x
-      and read.y + read.h < reset.y and choose.y + choose.h < read.y
-      and reset.y + reset.h < restore.y and restore.color ~= read.color,
-      "primary is full width, secondary actions form uniform cells in focus order, restore stays below")
+    check(choose.w == restore.w and setup and setup.h == read.h and choose.y + choose.h < setup.y
+      and (setup.y < read.y or (setup.y == read.y and setup.x + setup.w < read.x)) and read.y + read.h < restore.y and restore.color ~= read.color,
+      "primary is full width, secondary actions follow in focus order with one height, restore stays below")
     for _, node in ipairs(nodes) do
       local text = type(node.text) == "function" and node.text() or node.text
-      local height = node.h or (node.type == "label" and (node.font == MIDSIZE and 30 or node.font == SMLSIZE and 14 or 12) *
+      local height = node.h or (node.type == "label" and (node.font == MIDSIZE and 30 or node.font == SMLSIZE and 14 or 20) *
         (1 + select(2, string.gsub(text or "", "\n", ""))) or 0)
       check((node.y or 0) + height <= size[2], "ground geometry stays inside every supported height")
     end
@@ -639,11 +626,8 @@ do
     snap.prime, snap.baseline = {skipped = 3}, {timestamp = "2026-10-25 12:34"}
     slotsLine.text(); sessionLine.text(); warning.text()
     check(translations == before, "unchanged scalar inputs reuse cached ground strings even with fresh snapshot tables")
-    snap.sessionMode, snap.baseline.timestamp = "new", "2026-10-25 13:45"
-    check(string.find(rowText(sessionLine), "New,", 1, true) == 1, "new session updates the retained status")
-    if size[2] >= 320 then
-      check(string.find(rowText(sessionLine), "2026-10-25 13:45", 1, true), "session cache tracks the stored timestamp")
-    end
+    snap.baseline.timestamp = "2026-10-25 13:45"
+    check(rowText(sessionLine) == "Start values 13:45", "session cache tracks the stored timestamp")
     for _, case in ipairs({{"unread", 36, false}, {"unavailable", 36, false}, {"board", 0, false}, {"board", 1, true}}) do
       snap.setSource, snap.cellCount = case[1], case[2]
       check(choose.active() == case[3] and choose.visible() == case[3] and chooseLabel.visible() == case[3],
@@ -661,7 +645,7 @@ do
     end
     snap.boundsCount = 0
     check(warning.text() == "", "retained warning clears when no values exceed FC limits")
-    snap.sessionMode, snap.baseline, snap.prime = nil, nil, {phase = "idle"}
+    snap.baseline, snap.prime = nil, {phase = "idle"}
     check(rowText(sessionLine) == "Values not read", "session explains that start values have not been read")
     snap.prime = {phase = "error", error = "no_link"}
     check(rowText(sessionLine) == "Reading failed: No FC link", "session retains read refusal text")
@@ -673,6 +657,7 @@ do
     view._tuningKeyDirty = nil; choose.press()
     check(instance.sessionPickerOpen and instance.valueEpoch == epoch + 1 and view._tuningKeyDirty,
       "Choose parameters opens the session picker and requests a rebuild")
+    instance.sessionPickerOpen = nil
     local readBefore = refreshes
     read.press()
     check(refreshes == readBefore + 1, "Read again still refreshes the current session")
@@ -681,36 +666,13 @@ do
     read.press()
     check(retries == retryBefore + 1 and refreshes == readBefore + 1, "Read again retries a pending return")
     instance.restorePending = nil
-    local startsBefore = starts
-    epoch = instance.valueEpoch; view._tuningKeyDirty = nil; reset.press()
-    check(instance.resetConfirm and starts == startsBefore and instance.valueEpoch == epoch + 1 and view._tuningKeyDirty,
-      "reset opens confirmation without starting a read")
-    local confirmation = {}
-    Screen.buildFullscreen(confirmation, view)
-    local confirm = action(confirmation, "Reset")
-    local cancel = action(confirmation, "Cancel")
-    local explanation = {}
-    for _, node in ipairs(confirmation) do
-      explanation[#explanation + 1] = textOf(node)
-      check((node.y or 0) + (node.h or 14) <= size[2], "reset confirmation fits every supported height")
-    end
-    check(confirm and cancel and string.find(table.concat(explanation, " "), "Restore all will then return to these new values.", 1, true),
-      "confirmation explains the new restore destination and offers an explicit choice")
-    epoch = instance.valueEpoch; view._tuningKeyDirty = nil; cancel.press()
-    check(not instance.resetConfirm and starts == startsBefore and instance.valueEpoch == epoch + 1 and view._tuningKeyDirty,
-      "cancel clears confirmation without calling Prime.start")
-    reset.press(); confirmation = {}; Screen.buildFullscreen(confirmation, view)
-    confirm = action(confirmation, "Reset")
-    epoch = instance.valueEpoch; view._tuningKeyDirty = nil; confirm.press(); confirm.press()
-    check(not instance.resetConfirm and starts == startsBefore + 1 and startedWidget == view and startedDrive == instance
-      and instance.valueEpoch == epoch + 1 and view._tuningKeyDirty, "confirm calls Prime.start exactly once with the original arguments")
     restore.press()
     check(instance.restoreConfirm and instance.restoreConfirm.all, "Restore all still opens its existing target confirmation")
     instance.restoreConfirm = nil
     for _, blocked in ipairs({"armed", "no_arm_sensor"}) do
       view.state.armed, refusal = blocked == "armed", blocked == "no_arm_sensor" and blocked or nil
       local locked = {}; Screen.buildFullscreen(locked, view)
-      check(not action(locked, "Choose parameters") and not action(locked, "Reset start values")
+      check(not action(locked, "Choose parameters")
         and not action(locked, "Read again") and not action(locked, "Restore all"), "armed/missing-arm scenes retain no ground actions")
     end
     view.state.armed, refusal = false, nil
@@ -720,7 +682,8 @@ do
   BoardPrime.groundRefusal, BoardPrime.isRunning = savedRefusal, savedRunning
 end
 
--- A single busy scene keeps its geometry while the job reads, returns and saves.
+-- After landing a read or restore takes the whole screen, so the post-flight list it was started from
+-- is still there when it ends; that busy scene keeps its geometry while the job reads, returns and saves.
 for _, size in ipairs({ { 480, 272 }, { 480, 320 }, { 800, 480 } }) do
   for _, restoring in ipairs({ false, true }) do
     local job = {
@@ -738,7 +701,7 @@ for _, size in ipairs({ { 480, 272 }, { 480, 320 }, { 800, 480 } }) do
     }
     local instance = { profileJob = job }
     if restoring then instance.transfer = { state = "busy", kind = "restore" } end
-    local view = { _inflight = instance, state = { inflight = { phase = "ground" } },
+    local view = { _inflight = instance, state = { inflight = { phase = "post" } },
       zone = { w = size[1], h = size[2] } }
     local nodes = {}
     Screen.buildFullscreen(nodes, view)
@@ -838,6 +801,80 @@ for _, size in ipairs({ { 480, 272 }, { 480, 320 }, { 800, 480 } }) do
     instance.profileJob = nil
     check(not cancel.active() and not retry.active(), "old actions cannot operate on a finished job")
   end
+end
+
+-- On the ground the same job runs inside the ground surface: the session row names it and its step,
+-- a bar and a caption follow it in the panel, the actions stay on screen and only the primary place
+-- changes -- Cancel while a read may stop, Read again while the return is held.
+do
+local savedRetry, savedRunning, savedRefusal = BoardPrime.retryReturn, BoardPrime.isRunning, BoardPrime.groundRefusal
+local retries = 0
+BoardPrime.retryReturn = function() retries = retries + 1 end
+BoardPrime.isRunning = function() return false end
+BoardPrime.groundRefusal = function() return nil end
+for _, size in ipairs({ { 480, 272 }, { 480, 320 }, { 800, 480 } }) do
+  for _, restoring in ipairs({ false, true }) do
+    local job = {
+      at = 1, original = { pid = 1, rate = 2 },
+      plan = {
+        { op = "read", kind = "pid", index = 2 },
+        { op = "returnSelect", kind = "pid", index = 1 },
+        { op = "eeprom" },
+        { op = "persistDone" }
+      }
+    }
+    local instance = drive()
+    instance.phase, instance.profileJob = "ground", job
+    if restoring then instance.transfer = { state = "busy", kind = "restore" } end
+    local view = { _inflight = instance, state = { armed = false, inflight = { phase = "ground", setupVerdict = "ok",
+      setSource = "board", cellCount = 36, prime = { phase = "done" } } }, zone = { w = size[1], h = size[2] } }
+    local nodes = {}
+    Screen.buildFullscreen(nodes, view)
+    local bar, session, current, cancel, cancelLabel, retry, retryLabel, setup, restore
+    for i, node in ipairs(nodes) do
+      if node.type == "rectangle" and type(node.size) == "function" then bar = node end
+      if node.type == "label" then
+        local text = type(node.text) == "function" and node.text() or node.text
+        if text == (restoring and "Restoring" or "Reading") .. " - Step 1 of 4" then session = node end
+        if text == "PID profile 2: reading values" then current = node end
+        if text == "Cancel" then cancel, cancelLabel = nodes[i - 1], node end
+        if text == "Read again" and not retry then retry, retryLabel = nodes[i - 1], node end
+        if text == "Set up suggested functions" then setup = nodes[i - 1] end
+        if text == "Restore all" then restore = nodes[i - 1] end
+      end
+    end
+    check(bar and session and current and cancel and retry and setup and restore,
+      "ground progress has its step in the session row, a bar, a caption and the actions")
+    check(session.y < bar.y and bar.y + bar.h <= current.y and current.y < retry.y and retry.y == cancel.y,
+      "ground progress sits in the panel above the actions")
+    check(not setup.active() and not restore.active(), "the other ground actions are shown but disabled while it runs")
+    check(bar.size() == 0, "ground progress starts empty")
+    if restoring then
+      check(not cancel.active() and not cancel.visible() and not cancelLabel.visible(),
+        "a restore on the ground offers no Cancel either")
+    else
+      check(cancel.active() and cancel.visible() and cancelLabel.visible(), "a ground read offers Cancel")
+    end
+    check(not retry.active() and not retry.visible() and not retryLabel.visible(), "Read again waits for a held return")
+    job.at = 2
+    check(session.text() == (restoring and "Restoring" or "Reading") .. " - Step 2 of 4"
+      and current.text() == "Back to PID 1 / RTE 2" and bar.size() > 0, "the panel follows the job")
+    check(not cancel.active(), "no Cancel during the return to the original profiles")
+    job.returnBlocked, job.error = true, "no_link"
+    check(retry.active() and retry.visible() and retryLabel.visible() and current.text() == "No FC link"
+      and current.color() ~= session.color, "a held return shows why and offers Read again")
+    retry.press()
+    check(retries > 0, "Read again on the ground retries the held return")
+    job.returnBlocked, job.at = nil, 1
+    if not restoring then
+      cancel.press()
+      check(job.cancelled, "Cancel on the ground requests cancellation of the read")
+    end
+    instance.profileJob = nil
+    check(not cancel.active() and not retry.active(), "the job's actions cannot act on a finished job")
+  end
+end
+BoardPrime.retryReturn, BoardPrime.isRunning, BoardPrime.groundRefusal = savedRetry, savedRunning, savedRefusal
 end
 
 -- Model the source-backed non-editing encoder group: creation order, wrapping and immediate
@@ -1823,29 +1860,24 @@ do
   check(instance.phase == "live", "all repaired permits the live phase")
 end
 
--- Existing compact SD stamps are made readable only for display.
+-- Existing compact SD stamps are made readable only for display; a session names its start time.
 do
   local instance = drive()
   instance.phase = "ground"
-  local snap = {phase="ground", setupVerdict="ok", sessionMode="resume", baseline={timestamp="20261025123456"}}
+  local snap = {phase="ground", setupVerdict="ok", baseline={timestamp="20261025123456"}}
   local view = {_inflight=instance, state={inflight=snap}, zone={w=800,h=480}}
   local nodes = {}; Screen.buildFullscreen(nodes,view)
-  -- The session row is two labels at this size; read it as both lines.
-  local first, second
+  local session
   for index, node in ipairs(nodes) do
     local text = type(node.text) == "function" and node.text() or node.text
-    if text == "Session" then
-      first, second = nodes[index + 1], nodes[index + 2]
-    end
+    if text == "Session" then session = nodes[index + 1] end
   end
-  local session = first and {text = function() return first.text() .. " " .. second.text() end}
-  check(session and string.find(session.text(), "2026-10-25 12:34", 1, true), "compact timestamp displays readable date and minutes")
+  check(session and session.text() == "Start values 12:34", "compact timestamp displays the start time in minutes")
   check(snap.baseline.timestamp == "20261025123456", "stored compact timestamp stays compatible")
   snap.baseline.timestamp = "2026-10-25 12:34:56"
-  check(string.find(session.text(), "2026-10-25 12:34", 1, true) and not string.find(session.text(), "12:34:56", 1, true),
-    "control: existing separated timestamp displays the same minute precision")
+  check(session.text() == "Start values 12:34", "control: existing separated timestamp displays the same minute precision")
   snap.baseline.timestamp = "clock unavailable"
-  check(string.find(string.gsub(session.text(), "\n", " "), "clock unavailable", 1, true), "non-date timestamp text is retained in full")
+  check(string.find(session.text(), "clock unavailable", 1, true), "non-date timestamp text is retained in full")
 end
 
 -- The channel reader accepts raw EdgeTX units, including the overlap with microseconds.

@@ -154,6 +154,17 @@ local function charWidth(font)
   return FONT_W[font] or 9
 end
 
+-- The standard font has no entry in FONT_H, and its fallback of 12 is shorter than the font: on
+-- rendered frames (480x320 and 800x480) its glyphs run about 16 px with descenders and a line
+-- takes 19 to 20. Rows stacked at 12 put a wrapped second line across the next control and cut a
+-- footer in half. The ground surface, its captions and its footer are placed by this measured
+-- line; the live surface keeps its own tuned geometry.
+local STD_LINE_H = 20
+local function lineHeight(font)
+  if font == 0 then return STD_LINE_H end
+  return fontHeight(font)
+end
+
 -- Geometry scales with the surface; fonts use the firmware's discrete size ladder.
 local function metrics(w, h)
   local m = {}
@@ -788,7 +799,12 @@ local function appendFlight(children, widget, m, w, h, t, p)
   button(children, w - m.pad - arrowW, groupY, arrowW, groupH, ">", action("function", 1), p.accent)
 end
 
-local appendBusy
+local appendBusy, busyStepText
+
+-- The steps of a profile transaction a pilot may still cancel: reads only. A restore stopped between
+-- its writes would leave the board holding some restored values in RAM and some not, and the return
+-- to the original profiles always runs to its end.
+local CANCELLABLE = { initial = true, select = true, status = true, read = true, targetDone = true }
 
 -- ---------------------------------------------------------------------------
 -- The fullscreen screen
@@ -869,13 +885,10 @@ local function describeBackup(snapshot, t)
       .. M.restoreReason(transfer.reason, t) .. " " .. (snapshot.restoreSummary or "")
   end
   if snapshot.baseline then
+    -- A session is one power cycle of the board, so its start is today: the time alone names it.
     local stamp = displayTimestamp(snapshot.baseline.timestamp)
-    if snapshot.sessionMode == "resume" then
-      return string.format(t("widgets.dashboard.inflight_session_continued", "Continued, start values from %s"), stamp)
-    elseif snapshot.sessionMode == "new" then
-      return string.format(t("widgets.dashboard.inflight_session_new", "New, start values from %s"), stamp)
-    end
-    return t("widgets.dashboard.inflight_baseline_sd", "SD baseline") .. " " .. stamp
+    local clock = string.match(stamp, "(%d%d:%d%d)$") or stamp
+    return string.format(t("widgets.dashboard.inflight_session_start", "Start values %s"), clock)
   end
   local state = snapshot.prime
   if state and state.phase == "error" then
@@ -905,11 +918,14 @@ local function appendAction(children, m, x, y, width, label, p, press)
   }
   local fits = textFits(label, width, m.small)
   if m.wrap and not fits then
-    local step = fontHeight(m.small)
+    local step = lineHeight(m.small)
     local text = fitTwoLines(label, width, m.small)
     appendTwoLines(children, x, y + math.floor((m.actionH - step * 2) / 2), width,
       function() return text end, p.text, m.small, step)
     children[#children - 1].align, children[#children].align = CENTER, CENTER
+  elseif m.small == 0 then
+    appendLabel(children, x, y + math.floor((m.actionH - STD_LINE_H) / 2), width,
+      fits and label or fitText(label, width, 0), p.text, 0, CENTER)
   else
     appendCentredLabel(children, x, y, width, m.actionH, fits and label or fitText(label, width, m.small), p.text, m.small, CENTER, m)
   end
@@ -931,270 +947,362 @@ local function wrapSetup(text, width, font)
   return lines
 end
 
---- The ground surface shows model readiness, board slots and the stored session.
+--- The ground surface: model readiness, board slots and the session in one panel, the actions
+-- under it. A read or a restore running on the ground shows its progress inside the panel instead
+-- of replacing the surface, so the actions stay where they were and come back as soon as it ends.
+--
+-- Every row is placed by the measured line of the standard font (STD_LINE_H). A status row takes a
+-- second line only when the text it has at build time needs one; the texts that grow later -- a
+-- transfer's result, a new verdict -- arrive with a rebuild, so the row is sized again then.
 function M.buildGround(children, widget, m, w, h, t, p)
   local drive = widget._inflight
   local Prime = prime()
   local armed = (widget.state and widget.state.armed) == true
   local state = widget.state
   local empty = {}
-  local y, lineW = m.large and m.chipY or m.headerH, w - m.pad * 2
-  local lineFont = 0
-  local lineStep = fontHeight(lineFont) + (h >= 320 and 2 or 0)
-  local inset = m.large and 8 or 0
+  local lineFont, lineH = 0, STD_LINE_H
+  local lineW = w - m.pad * 2
+  local inset = m.large and 8 or 3
+  local rowGap = m.large and 6 or 0
+  local y = m.large and m.chipY or m.headerH + 2
+  local job = drive and drive.profileJob
+  local reading = drive ~= nil and Prime ~= nil and job == nil and Prime.isRunning(drive)
+  local busy = job ~= nil or reading
   local modelLabel = t("widgets.dashboard.inflight_model_status", "Model")
   local slotsLabel = t("widgets.dashboard.inflight_slots_status", "FC slots")
   local sessionLabel = t("widgets.dashboard.inflight_session_status", "Session")
   -- The byte-count estimate textFits uses: a multibyte caption only widens the column.
   local labelW = math.max(#modelLabel, #slotsLabel, #sessionLabel) * charWidth(lineFont)
-  local labelX, valueX = m.pad + inset, m.pad + inset + labelW + 4
-  local valueW = lineW - inset * 2 - labelW - 4
+  local labelX, valueX = m.pad + inset, m.pad + inset + labelW + 6
+  local valueW = lineW - inset * 2 - labelW - 6
+  local fullW = lineW - inset * 2
   children[#children + 1] = {type = "rectangle", x = m.pad, y = y, w = lineW, h = 0, color = p.header, filled = true}
   local panel = children[#children]
   y = y + inset
-  -- Each status has a dim caption and a cached value; two labels keep wrapped text on the grid.
-  local function row(textFn, color, font, step)
-    appendTwoLines(children, valueX, y, valueW, textFn, color, font, step)
-  end
 
+  -- One status row: a dim caption and a value on one line, or on two where `lines` says so.
+  local function row(caption, lines, textFn, color)
+    appendLabel(children, labelX, y, labelW, caption, p.dim, lineFont, LEFT)
+    if lines == 2 then
+      appendTwoLines(children, valueX, y, valueW, textFn, color, lineFont, lineH)
+    else
+      appendLabel(children, valueX, y, valueW, textFn, color, lineFont, LEFT)
+    end
+    y = y + lineH * lines + rowGap
+  end
+  local function fit(text, lines)
+    if lines == 2 then return fitTwoLines(text, valueW, lineFont) end
+    return fitText(text, valueW, lineFont)
+  end
+  local first = state.inflight or empty
+
+  local firstVerdict = not first.readRequired and first.setupVerdict or nil
+  local modelLines = textFits(M.describeCheck(firstVerdict, t), valueW, lineFont) and 1 or 2
   local lastVerdict, lastModelRead, modelText
-  appendLabel(children, labelX, y, labelW, modelLabel, p.dim, lineFont, LEFT)
-  row(function()
+  row(modelLabel, modelLines, function()
     local verdict = state.inflight and state.inflight.setupVerdict
     local unread = state.inflight and state.inflight.readRequired
     if unread then verdict = nil end
     if modelText == nil or verdict ~= lastVerdict or unread ~= lastModelRead then
       lastVerdict, lastModelRead = verdict, unread
-      modelText = fitTwoLines(M.describeCheck(verdict, t), valueW, lineFont)
+      modelText = fit(M.describeCheck(verdict, t), modelLines)
     end
     return modelText
   end, function()
     local snap = state.inflight
     local verdict = snap and not snap.readRequired and snap.setupVerdict or nil
     return verdict == "ok" and p.ok or type(verdict) == "table" and verdict[1] ~= "trims_pending" and p.error or p.warn
-  end, lineFont, lineStep)
-  y = y + lineStep * 2
+  end)
 
   -- Snapshots are replaced on publication; cache the scalar inputs rather than their tables.
   local lastSource, lastCount, lastSkipped, lastSetRead, setText
-  appendLabel(children, labelX, y, labelW, slotsLabel, p.dim, lineFont, LEFT)
-  row(function()
+  row(slotsLabel, 1, function()
     local snap = state.inflight or empty
     local skipped = snap.prime and snap.prime.skipped
     if setText == nil or snap.setSource ~= lastSource or snap.cellCount ~= lastCount or skipped ~= lastSkipped
       or snap.readRequired ~= lastSetRead then
       lastSetRead = snap.readRequired
       lastSource, lastCount, lastSkipped = snap.setSource, snap.cellCount, skipped
-      setText = fitTwoLines(describeSet(snap, t), valueW, lineFont)
+      setText = fitText(describeSet(snap, t), valueW, lineFont)
     end
     return setText
-  end, p.text, lineFont, lineStep)
-  y = y + lineStep * 2
+  end, p.text)
 
-  local lastMode, lastTimestamp, lastPending, lastTransfer, lastReason, lastSummary, lastPhase, lastError, lastDone, lastSessionRead, sessionText
-  appendLabel(children, labelX, y, labelW, sessionLabel, p.dim, lineFont, LEFT)
-  row(function()
-    local snap = state.inflight or empty
-    local timestamp = snap.baseline and snap.baseline.timestamp
-    local transfer, status = snap.transfer, snap.prime
-    local transferState, reason = transfer and transfer.state, transfer and transfer.reason
-    local phase, err, done = status and status.phase, status and status.error, status and status.done
-    if sessionText == nil or snap.sessionMode ~= lastMode or timestamp ~= lastTimestamp
-      or snap.restorePending ~= lastPending or transferState ~= lastTransfer or reason ~= lastReason
-      or snap.restoreSummary ~= lastSummary or phase ~= lastPhase or err ~= lastError or done ~= lastDone
-      or snap.readRequired ~= lastSessionRead then
-      lastSessionRead = snap.readRequired
-      lastMode, lastTimestamp, lastPending = snap.sessionMode, timestamp, snap.restorePending
-      lastTransfer, lastReason, lastSummary = transferState, reason, snap.restoreSummary
-      lastPhase, lastError, lastDone = phase, err, done
-      sessionText = fitTwoLines(describeBackup(snap, t), valueW, lineFont)
+  if job then
+    -- The running transaction: what it is and how far it has come.
+    local restoring = drive.transfer and drive.transfer.state == "busy" and drive.transfer.kind == "restore"
+    local title = restoring and t("widgets.dashboard.inflight_progress_restoring", "Restoring")
+      or t("widgets.dashboard.inflight_prime_running", "Reading")
+    local stepFormat = t("widgets.dashboard.inflight_progress_step", "Step %d of %d")
+    local lastAt, lastTotal, stepText
+    row(sessionLabel, 1, function()
+      local total = #job.plan
+      local at = math.max(0, math.min(total, job.at or 1))
+      if at ~= lastAt or total ~= lastTotal then
+        lastAt, lastTotal = at, total
+        stepText = fitText(title .. " - " .. string.format(stepFormat, at, total), valueW, lineFont)
+      end
+      return stepText
+    end, p.accent)
+  else
+    local sessionLines = textFits(describeBackup(first, t), valueW, lineFont) and 1 or 2
+    local lastPending, lastTransfer, lastReason, lastSummary, lastPhase, lastError, lastDone, lastSessionRead, lastStamp, sessionText
+    row(sessionLabel, sessionLines, function()
+      local snap = state.inflight or empty
+      local timestamp = snap.baseline and snap.baseline.timestamp
+      local transfer, status = snap.transfer, snap.prime
+      local transferState, reason = transfer and transfer.state, transfer and transfer.reason
+      local phase, err, done = status and status.phase, status and status.error, status and status.done
+      if sessionText == nil or timestamp ~= lastStamp
+        or snap.restorePending ~= lastPending or transferState ~= lastTransfer or reason ~= lastReason
+        or snap.restoreSummary ~= lastSummary or phase ~= lastPhase or err ~= lastError or done ~= lastDone
+        or snap.readRequired ~= lastSessionRead then
+        lastSessionRead, lastStamp, lastPending = snap.readRequired, timestamp, snap.restorePending
+        lastTransfer, lastReason, lastSummary = transferState, reason, snap.restoreSummary
+        lastPhase, lastError, lastDone = phase, err, done
+        sessionText = fit(describeBackup(snap, t), sessionLines)
+      end
+      return sessionText
+    end, p.text)
+  end
+
+  if busy then
+    local barH = m.large and 8 or 5
+    children[#children + 1] = {type = "rectangle", x = labelX, y = y + 2, w = fullW, h = barH, color = p.border, filled = true}
+    children[#children + 1] = {
+      type = "rectangle", x = labelX, y = y + 2, w = 0, h = barH, color = p.accent, filled = true,
+      size = function()
+        local done, total
+        if drive.profileJob == job and job then
+          total, done = #job.plan, (job.at or 1) - 1
+        else
+          local status = drive.prime
+          total, done = status and status.total or 0, status and status.done or 0
+        end
+        if total <= 0 then return 0, barH end
+        return math.floor(fullW * math.max(0, math.min(total, done)) / total), barH
+      end
+    }
+    y = y + barH + 4
+    if job then
+      -- What the board is being asked now, or why the return to the original profiles is held.
+      local lastOp, lastKind, lastIndex, lastChecking, lastBlocked, lastError, caption
+      appendLabel(children, labelX, y, fullW, function()
+        local op = job.plan[job.at]
+        local name, kind, index = op and op.op, op and op.kind, op and op.index
+        local checking = job.recovery ~= nil or job.validation ~= nil
+        if caption == nil or name ~= lastOp or kind ~= lastKind or index ~= lastIndex or checking ~= lastChecking
+          or job.returnBlocked ~= lastBlocked or job.error ~= lastError then
+          lastOp, lastKind, lastIndex, lastChecking = name, kind, index, checking
+          lastBlocked, lastError = job.returnBlocked, job.error
+          local text = job.returnBlocked and M.restoreReason(job.error, t) or (op and busyStepText(op, job.original, t, checking))
+          caption = fitText(text or caption or "", fullW, lineFont)
+        end
+        return caption
+      end, function() return job.returnBlocked and p.warn or p.text end, lineFont, LEFT)
+      y = y + lineH + rowGap
     end
-    return sessionText
-  end, p.text, lineFont, lineStep)
-  y = y + lineStep * 2
+  end
 
   -- Reserve this row at build time; a completed ground read rebuilds the surface.
-  if state.inflight and not state.inflight.readRequired and (state.inflight.boundsCount or 0) > 0 then
+  if not busy and state.inflight and not state.inflight.readRequired and (state.inflight.boundsCount or 0) > 0 then
     local lastBounds, warning
-    appendLabel(children, labelX, y, lineW - inset * 2, function()
+    appendLabel(children, labelX, y, fullW, function()
       local count = state.inflight and state.inflight.boundsCount or 0
       if count ~= lastBounds then
         lastBounds = count
         warning = count > 0 and fitText(string.format(t("widgets.dashboard.inflight_bounds_warning",
-          "%d beyond the FC limits: set up the FC again"), count), lineW - inset * 2, lineFont) or ""
+          "%d beyond the FC limits: set up the FC again"), count), fullW, lineFont) or ""
       end
       return warning
     end, p.warn, lineFont, LEFT)
-    y = y + lineStep
+    y = y + lineH + rowGap
   end
   -- A model-default save that failed says so until the next build that has nothing to report.
   if drive and drive.saveResult and drive.saveResult ~= "ok" then
-    appendLabel(children, labelX, y, lineW - inset * 2, fitText(t("widgets.dashboard.inflight_save_failed",
-      "Not saved as the model default:") .. " " .. drive.saveResult, lineW - inset * 2, lineFont), p.warn, lineFont, LEFT)
-    y = y + lineStep
+    appendLabel(children, labelX, y, fullW, fitText(t("widgets.dashboard.inflight_save_failed",
+      "Not saved as the model default:") .. " " .. drive.saveResult, fullW, lineFont), p.warn, lineFont, LEFT)
+    y = y + lineH + rowGap
   end
-  panel.h = y + inset - panel.y
-  y = y + inset + (m.large and 8 or 2)
+  panel.h = y - rowGap + inset - panel.y
+  local gap = m.large and 8 or 4
+  y = panel.y + panel.h + gap
 
   -- Why the ground half is refusing, when it is not simply that the board is armed. The one case
   -- so far is the arm sensor never having answered: the ground half then refuses everything,
   -- because a model whose sensor 99 is not in the telemetry list reads as disarmed for ever and
   -- MSP sent on that reading goes to a helicopter in the air.
   local refusal = (Prime ~= nil and type(Prime.groundRefusal) == "function") and Prime.groundRefusal(widget) or nil
-
-  local blocked = false
-  if armed then
+  if armed or refusal == "no_arm_sensor" then
     -- Nothing here can reach the board while it is armed -- the MSP runtime clears its queue on
     -- every armed tick -- so the actions are absent rather than present and refusing.
-    appendLabel(children, m.pad, y, lineW,
-      fitText(t("widgets.dashboard.inflight_ground_armed", "Disarm to read or restore"),
-              lineW, lineFont),
-      p.text, lineFont, LEFT)
-    y = y + m.statusLineH
-    blocked = true
-  elseif refusal == "no_arm_sensor" then
-    appendLabel(children, m.pad, y, lineW,
-      fitText(t("widgets.dashboard.inflight_ground_no_arm", "Arm sensor not seen: is sensor 99 selected?"),
-              lineW, lineFont),
-      p.warn, lineFont, LEFT)
-    y = y + m.statusLineH
-    blocked = true
+    local text = armed and t("widgets.dashboard.inflight_ground_armed", "Disarm to read or restore")
+      or t("widgets.dashboard.inflight_ground_no_arm", "Arm sensor not seen: is sensor 99 selected?")
+    appendLabel(children, m.pad, y, lineW, fitText(text, lineW, lineFont), armed and p.text or p.warn, lineFont, LEFT)
+    return
   end
-
-  if blocked then return end
   if drive == nil or Prime == nil then return end
 
   local root = _G.rfsuite
   local events = root and root.preferences and root.preferences.audio_events
   local announcementsOff = not (events and events.adjustment_events == true)
-  local footerH = m.large and m.footerH or lineStep
+  local footerH = math.max(m.footerH, lineH + 2)
   local footerY = h - footerH
   children[#children + 1] = {type = "rectangle", x = 0, y = footerY, w = w, h = footerH, color = p.header, filled = true}
-  appendCentredLabel(children, m.pad, footerY, lineW, footerH,
-    announcementsOff and t("widgets.dashboard.inflight_announcements_off", "Adjustment announcements are off")
+  -- The footer carries the announcement state: a failed attempt to turn them on, that they are off,
+  -- or, with nothing to warn about, the controls.
+  local footerText = drive and drive.announcementsSaveFailed
+    and t("widgets.dashboard.inflight_announcements_failed", "Announcements were not saved")
+    or t("widgets.dashboard.inflight_announcements_off", "Adjustment announcements are off")
+  appendLabel(children, m.pad, footerY + math.floor((footerH - lineH) / 2), lineW,
+    announcementsOff and fitText(footerText, lineW, lineFont)
       or pickText(t("widgets.dashboard.inflight_ground_controls", "Rotate select / Press open"),
         t("widgets.dashboard.inflight_ground_controls_short", "Rotate / Press"), lineW, lineFont),
-    announcementsOff and p.warn or p.dim, lineFont, LEFT, {textOff = 0})
-  if drive.announcementsSaveFailed then
-    appendLabel(children, m.pad, y, lineW,
-      t("widgets.dashboard.inflight_announcements_failed", "Announcements were not saved"), p.warn, lineFont, LEFT)
-    y = y + lineStep
-  end
+    announcementsOff and p.warn or p.dim, lineFont, LEFT)
 
-  local gap = m.large and 8 or 2
-  local action = {small = lineFont, textOff = 0, wrap = true}
-  local available = not Prime.isRunning(drive) and not drive.profileJob and not drive.restorePending
-  local snapshot = state.inflight or {}
-  local completed = not snapshot.readRequired and snapshot.prime and snapshot.prime.phase == "done"
-  local emptyBoard = completed and (snapshot.setSource ~= "board" or (snapshot.cellCount or 0) == 0)
+  local available = not busy and not drive.restorePending
+  local isAvailable = function() return available end
+  local completed = not first.readRequired and first.prime and first.prime.phase == "done"
+  local emptyBoard = completed and (first.setSource ~= "board" or (first.cellCount or 0) == 0)
+  local function changed()
+    drive.valueEpoch = drive.valueEpoch + 1
+    widget._tuningKeyDirty = true
+  end
   local function openSetup()
     if drive.fcSetupOpen or widget.state.armed == true or Prime.isRunning(drive) or drive.profileJob or drive.restorePending then return end
     drive.fcSetupOpen = true
-    drive.valueEpoch = drive.valueEpoch + 1
-    widget._tuningKeyDirty = true
+    changed()
   end
   if emptyBoard and available then
     local text = fitTwoLines(t("widgets.dashboard.inflight_fc_no_functions",
       "The FC has no adjustment functions for in-flight tuning."), lineW, lineFont)
-    appendTwoLines(children, m.pad, y, lineW, function() return text end, p.text, lineFont, lineStep)
-    y = y + lineStep * 2
+    appendTwoLines(children, m.pad, y, lineW, function() return text end, p.text, lineFont, lineH)
+    y = y + lineH * 2 + gap
   end
-  local chooseActive = function()
-    local snap = state.inflight
-    return snap ~= nil and not snap.readRequired and snap.setSource == "board" and (snap.cellCount or 0) > 0
+
+  -- The secondary actions, two to a row where both captions fit half the width.
+  local secondaries = {}
+  if not emptyBoard then
+    secondaries[#secondaries + 1] = {t("widgets.dashboard.inflight_fc_setup_action", "Set up suggested functions"), openSetup}
   end
-  local secondaryCount = 2 + (not emptyBoard and available and 1 or 0) + (announcementsOff and 1 or 0)
-  local gridRows = math.ceil(secondaryCount / 2)
-  local actionSpace = footerY - y - (gridRows + 2) * gap
-  local primaryH = math.max(m.large and 56 or (h >= 320 and 40 or 32),
-    math.floor(actionSpace / (gridRows + 2)) + (m.large and 12 or 4))
-  local secondaryH = math.floor((actionSpace - primaryH) / (gridRows + 1))
+  secondaries[#secondaries + 1] = {t("widgets.dashboard.inflight_read_again", "Read again"), function()
+    if drive.fcSetupOpen then return end
+    if drive.restorePending then Prime.retryReturn(drive)
+    elseif drive.setSource ~= "board" then
+      -- No set from the board (never read, or the channels changed since): read the slot table too.
+      Prime.start(widget, drive, true)
+    else Prime.refreshValues(widget, drive) end
+    widget._tuningKeyDirty = true
+  end, true}
+  if announcementsOff then
+    secondaries[#secondaries + 1] = {t("widgets.dashboard.inflight_announcements_enable", "Turn on announcements"), function()
+      if drive.fcSetupOpen or widget.state.armed == true or Prime.groundRefusal(widget) then return end
+      local prefs = root and root.preferences
+      local saved = false
+      if prefs then
+        local previousEvents = prefs.audio_events
+        local events = previousEvents or {}
+        local previous = events.adjustment_events
+        prefs.audio_events, events.adjustment_events = events, true
+        if type(root.savePreferences) == "function" then saved = root.savePreferences()
+        else
+          local Preferences = requireModule("lib/preferences.lua")
+          if Preferences and type(Preferences.save) == "function" then saved = Preferences.save(prefs) end
+        end
+        if not saved then
+          events.adjustment_events, prefs.audio_events = previous, previousEvents
+        end
+      end
+      drive.announcementsSaveFailed = not saved
+      changed()
+    end}
+  end
+  local halfW = math.floor((lineW - gap) / 2)
+  local rows, index = {}, 1
+  while index <= #secondaries do
+    local a, b = secondaries[index], secondaries[index + 1]
+    if b and textFits(a[1], halfW - 8, lineFont) and textFits(b[1], halfW - 8, lineFont) then
+      rows[#rows + 1], index = {a, b}, index + 2
+    else
+      rows[#rows + 1], index = {a}, index + 1
+    end
+  end
+
+  -- The space between the panel and the footer is shared: the primary gets a little more, Restore
+  -- all sits on the footer, every other row has one height.
+  local count = #rows + 2
+  local space = footerY - gap - y - gap * (count - 1)
+  local extra = m.large and 16 or 6
+  local secondaryH = math.floor((space - extra) / count)
+  if secondaryH < lineH + 4 then extra, secondaryH = 0, math.floor(space / count) end
+  local primaryH = space - secondaryH * (count - 1)
+  local action = {small = lineFont, textOff = 0, wrap = true, actionH = primaryH}
+
   local primaryLabel = emptyBoard and t("widgets.dashboard.inflight_fc_setup_action", "Set up suggested functions")
     or t("widgets.dashboard.inflight_choose_parameters", "Choose parameters")
-  action.actionH = primaryH
-  action.small = m.large and textFits(primaryLabel, lineW, MIDSIZE) and MIDSIZE or lineFont
-  appendAction(children, action, m.pad, y, lineW,
-    primaryLabel, p, function()
+  if job then
+    -- The primary place is the running transaction's: Read again where the return to the original
+    -- profiles is held, Cancel while a READ may still be stopped. A restore stopped between its
+    -- writes would leave the board half restored, so it has neither.
+    local retryActive = function() return drive.profileJob == job and job.returnBlocked == true end
+    local cancelActive = function()
+      if drive.profileJob ~= job or job.returnBlocked then return false end
+      if drive.transfer and drive.transfer.state == "busy" and drive.transfer.kind == "restore" then return false end
+      local op = job.plan[job.at]
+      return op ~= nil and CANCELLABLE[op.op] == true
+    end
+    for _, entry in ipairs({{t("widgets.dashboard.inflight_read_again", "Read again"), retryActive, function()
+        if retryActive() then Prime.retryReturn(drive); widget._tuningKeyDirty = true end
+      end}, {t("widgets.dashboard.inflight_restore_cancel", "Cancel"), cancelActive, function()
+        if cancelActive() then job.cancelled = true end
+      end}}) do
+      appendAction(children, action, m.pad, y, lineW, entry[1], p, entry[3])
+      children[#children - 1].active, children[#children - 1].visible = entry[2], entry[2]
+      children[#children].visible = entry[2]
+    end
+  else
+    action.small = m.large and textFits(primaryLabel, lineW, MIDSIZE) and MIDSIZE or lineFont
+    appendAction(children, action, m.pad, y, lineW, primaryLabel, p, function()
       if not available or drive.fcSetupOpen or widget.state.armed == true then return end
       if emptyBoard then openSetup(); return end
       drive.sessionPickerOpen = true
-      drive.valueEpoch = drive.valueEpoch + 1
-      widget._tuningKeyDirty = true
+      changed()
     end)
-  local primaryActive = function() return available and (emptyBoard or chooseActive()) end
-  children[#children - 1].active = primaryActive
-  children[#children - 1].visible = primaryActive
-  children[#children - 1].color = p.accent
-  children[#children].color = p.onAccent
-  children[#children].visible = primaryActive
-  y = y + action.actionH + gap
+    local primaryActive = function()
+      local snap = state.inflight
+      return available and (emptyBoard or (snap ~= nil and not snap.readRequired and snap.setSource == "board"
+        and (snap.cellCount or 0) > 0))
+    end
+    children[#children - 1].active = primaryActive
+    children[#children - 1].visible = primaryActive
+    children[#children - 1].color = p.accent
+    children[#children].color = p.onAccent
+    children[#children].visible = primaryActive
+  end
+  y = y + primaryH + gap
   action.actionH, action.small = secondaryH, lineFont
 
-  local buttonW = math.floor((lineW - gap) / 2)
-  local secondary = 0
-  if not emptyBoard and available then
-    appendAction(children, action, m.pad, y, buttonW,
-      t("widgets.dashboard.inflight_fc_setup_action", "Set up suggested functions"), p, openSetup)
-    secondary = secondary + 1
-  end
-  appendAction(children, action, m.pad + secondary % 2 * (buttonW + gap),
-    y + math.floor(secondary / 2) * (action.actionH + gap), buttonW,
-    t("widgets.dashboard.inflight_read_again", "Read again"), p, function()
-      if drive.fcSetupOpen then return end
-      if drive.restorePending then Prime.retryReturn(drive)
-      elseif drive.setSource ~= "board" then
-        -- No set from the board (never read, or the channels changed since): read the slot table
-        -- again too, continuing the stored session rather than replacing its start values.
-        Prime.start(widget, drive, true)
-      else Prime.refreshValues(widget, drive) end
-      widget._tuningKeyDirty = true
-    end)
-  secondary = secondary + 1
-  appendAction(children, action, m.pad + secondary % 2 * (buttonW + gap),
-    y + math.floor(secondary / 2) * (action.actionH + gap), buttonW,
-    t("widgets.dashboard.inflight_reset_start", "Reset start values"), p, function()
-      if drive.fcSetupOpen then return end
-      drive.resetConfirm = true
-      drive.valueEpoch = drive.valueEpoch + 1
-      widget._tuningKeyDirty = true
-    end)
-  if announcementsOff then
-    secondary = secondary + 1
-    appendAction(children, action, m.pad + secondary % 2 * (buttonW + gap),
-      y + math.floor(secondary / 2) * (action.actionH + gap), buttonW,
-      t("widgets.dashboard.inflight_announcements_enable", "Turn on announcements"), p, function()
-        if drive.fcSetupOpen or widget.state.armed == true or Prime.groundRefusal(widget) then return end
-        local root = _G.rfsuite
-        local prefs = root and root.preferences
-        local saved = false
-        if prefs then
-          local previousEvents = prefs.audio_events
-          local events = previousEvents or {}
-          local previous = events.adjustment_events
-          prefs.audio_events, events.adjustment_events = events, true
-          if type(root.savePreferences) == "function" then saved = root.savePreferences()
-          else
-            local Preferences = requireModule("lib/preferences.lua")
-            if Preferences and type(Preferences.save) == "function" then saved = Preferences.save(prefs) end
-          end
-          if not saved then
-            events.adjustment_events, prefs.audio_events = previous, previousEvents
-          end
-        end
-        drive.announcementsSaveFailed = not saved
-        drive.valueEpoch = drive.valueEpoch + 1
-        widget._tuningKeyDirty = true
+  for _, cells in ipairs(rows) do
+    local cellW = #cells == 2 and halfW or lineW
+    for column, cell in ipairs(cells) do
+      -- Read again also retries a held return to the original profiles, so it stays usable then.
+      local usable = cell[3] and function() return available or drive.restorePending == true end or isAvailable
+      appendAction(children, action, m.pad + (column - 1) * (halfW + gap), y, cellW, cell[1], p, function()
+        if usable() then cell[2]() end
       end)
+      children[#children - 1].active = usable
+    end
+    y = y + secondaryH + gap
   end
-  appendAction(children, action, m.pad, footerY - gap - action.actionH, lineW,
+
+  appendAction(children, action, m.pad, footerY - gap - secondaryH, lineW,
     t("widgets.dashboard.inflight_restore_all", "Restore all"), p, function()
-      if drive.fcSetupOpen then return end
-      if Prime.isRunning(drive) then return end
+      if not available or drive.fcSetupOpen then return end
       drive.restoreConfirm = {all = true}
-      drive.valueEpoch = drive.valueEpoch + 1
-      widget._tuningKeyDirty = true
+      changed()
     end)
   children[#children - 1].color = p.error
+  children[#children - 1].active = isAvailable
 end
 
 -- ---------------------------------------------------------------------------
@@ -1349,28 +1457,6 @@ local function appendRestoreConfirmation(children, widget, m, w, t, p)
   end)
   appendAction(children, m, m.pad * 2 + bw, y, bw, t("widgets.dashboard.inflight_restore_cancel", "Cancel"), p, function()
     drive.restoreConfirm = nil
-    drive.valueEpoch = drive.valueEpoch + 1; widget._tuningKeyDirty = true
-  end)
-end
-
-local function appendResetConfirmation(children, widget, m, w, t, p)
-  local drive, Prime = widget._inflight, prime()
-  local y, width = m.headerH + m.pad, w - m.pad * 2
-  appendLabel(children, m.pad, y, width, fitTwoLines(t("widgets.dashboard.inflight_reset_start_confirm",
-    "Replace the stored start values with the current values?"), width, m.small), p.warn, m.small, LEFT)
-  y = y + m.lineH * 2
-  appendLabel(children, m.pad, y, width, fitTwoLines(t("widgets.dashboard.inflight_reset_start_restore",
-    "Restore all will then return to these new values."), width, m.small), p.text, m.small, LEFT)
-  y = y + m.lineH * 2 + m.pad
-  local bw = math.floor((width - m.pad) / 2)
-  appendAction(children, m, m.pad, y, bw, t("widgets.dashboard.inflight_reset_start_yes", "Reset"), p, function()
-    if not drive.resetConfirm then return end
-    drive.resetConfirm = nil
-    Prime.start(widget, drive)
-    drive.valueEpoch = drive.valueEpoch + 1; widget._tuningKeyDirty = true
-  end)
-  appendAction(children, m, m.pad * 2 + bw, y, bw, t("widgets.dashboard.inflight_reset_start_cancel", "Cancel"), p, function()
-    drive.resetConfirm = nil
     drive.valueEpoch = drive.valueEpoch + 1; widget._tuningKeyDirty = true
   end)
 end
@@ -1557,7 +1643,7 @@ local function appendRestoreResults(children, widget, m, w, h, t, p)
   end
 end
 
-local function busyStepText(op, original, t, checking)
+busyStepText = function(op, original, t, checking)
   local name, kind, index = op.op, op.kind, op.index
   if name == "initial" then
     -- The saved session is validated from the SD card before the first message goes out, a slice
@@ -1668,10 +1754,7 @@ appendBusy = function(children, widget, m, w, h, t, p)
         widget._tuningKeyDirty = true
       end
     end)
-  -- Only a READ may be cancelled, and only while it is reading: a restore stopped between its
-  -- writes would leave the board holding some restored values in RAM and some not, and the return
-  -- to the original profiles always runs to its end.
-  local CANCELLABLE = { initial = true, select = true, status = true, read = true, targetDone = true }
+  -- Only a READ may be cancelled, and only while it is reading (CANCELLABLE above).
   local cancelActive = function()
     if drive.profileJob ~= job or job.returnBlocked or restoring then return false end
     local op = job.plan[job.at]
@@ -1714,7 +1797,9 @@ function M.buildFullscreen(children, widget)
     if surface then surface.build(children, widget, m, w, h, t, p, appendLabel, appendAction, wrapSetup) end
     return
   end
-  if widget._inflight and widget._inflight.profileJob and snapshot.phase ~= "live" then
+  -- On the ground a read or restore runs inside the ground surface (M.buildGround). After landing it
+  -- takes the screen, so the post-flight list it was started from is still there when it ends.
+  if widget._inflight and widget._inflight.profileJob and snapshot.phase == "post" then
     appendBusy(children, widget, m, w, h, t, p)
     appendClose(children, widget, m, w, p)
     return
@@ -1725,10 +1810,6 @@ function M.buildFullscreen(children, widget)
   end
   if widget._inflight and widget._inflight.restoreConfirm then
     appendRestoreConfirmation(children, widget, m, w, t, p)
-    return
-  end
-  if widget._inflight and widget._inflight.resetConfirm then
-    appendResetConfirmation(children, widget, m, w, t, p)
     return
   end
   if widget._inflight and widget._inflight.sessionPickerOpen and snapshot.phase ~= "live" then

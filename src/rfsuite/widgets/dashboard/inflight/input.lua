@@ -98,7 +98,9 @@ function M.renderKey(snapshot)
       .. tostring(snapshot.valueMode) .. "|" .. tostring(snapshot.groupPicker) .. "|" .. tostring(snapshot.profileRefusal)
       .. "|" .. tostring(snapshot.ladderEpoch)
   end
+  -- The ground surface sizes its model row by the verdict it is built with (screen.lua, buildGround).
   return tostring(snapshot.bank) .. "|" .. tostring(snapshot.row) .. "|" .. tostring(snapshot.epoch)
+    .. "|" .. tostring(snapshot.setupVerdict)
 end
 
 M.LADDER_ROWS = 64

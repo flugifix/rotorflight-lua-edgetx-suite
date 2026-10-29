@@ -911,7 +911,7 @@ function Drive:endSession()
   self.restoreConfirm = nil
   self.restoreResultOpen = nil
   -- The session's parameter choice and the ground dialogs belong to the session that ends.
-  self.sessionList, self.sessionPick, self.sessionPickerOpen, self.resetConfirm = nil, nil, nil, nil
+  self.sessionList, self.sessionPick, self.sessionPickerOpen = nil, nil, nil
   self.pendingSave = nil
   self.baseline = nil
   self.sessionProfiles = nil
@@ -1446,9 +1446,9 @@ function Drive:tick(armed)
   -- here because the drive touches no telemetry it does not have to, and because the ground half
   -- already has a stricter reading of the same fact for the writes it makes.
   if armed == true then
-    if self.restoreConfirm or self.resetConfirm or self.sessionPickerOpen then
+    if self.restoreConfirm or self.sessionPickerOpen then
       -- Ground dialogs close on arming: nothing they offer may run while the model is armed.
-      self.restoreConfirm, self.resetConfirm, self.sessionPickerOpen, self.sessionPick = nil, nil, nil, nil
+      self.restoreConfirm, self.sessionPickerOpen, self.sessionPick = nil, nil, nil
       self.valueEpoch = self.valueEpoch + 1
     end
     self:setPhase(M.PHASE_LIVE)
@@ -1922,10 +1922,10 @@ function M.tick(widget, drive)
   end
   local grouped = not drive.fcSetupOpen and drive:stepGroups()
   if widget.state and widget.state.armed == true
-      and (drive.restoreConfirm or drive.resetConfirm or drive.sessionPickerOpen) then
+      and (drive.restoreConfirm or drive.sessionPickerOpen) then
     -- Ground dialogs close on arming, whether tuning is open or closed: nothing they offer may run
     -- while the model is armed.
-    drive.restoreConfirm, drive.resetConfirm, drive.sessionPickerOpen, drive.sessionPick = nil, nil, nil, nil
+    drive.restoreConfirm, drive.sessionPickerOpen, drive.sessionPick = nil, nil, nil
     drive.valueEpoch = drive.valueEpoch + 1
   end
   local state = widget.state
