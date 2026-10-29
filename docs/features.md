@@ -44,12 +44,21 @@ the details.
   [Urban](dashboard/urban-theme.md), [Grid](dashboard/grid-theme.md) and
   [Deck](dashboard/deck-theme.md); and [user themes](dashboard/user-themes.md) copied from a
   shipped one and edited.
+- Customizable: on [*Settings*](pages/settings/dashboard/settings.md) each theme offers its
+  own pages — what every value tile shows before the flight, in flight and in the post-flight
+  statistics, the full-screen keys, colours and the battery range its gauges span. Urban, Grid
+  and Deck can show any of the radio's telemetry sensors by name in a row or a tile. These are
+  standard values for every model, and a model can change them for itself on
+  [*Per-Model Settings*](pages/settings/dashboard/overrides.md).
 - In full screen: a [quick menu](dashboard/quick-menu.md) for the flight line,
   [keys](pages/settings/dashboard/keys.md) that apply to every theme, and an optional
   [standby screen](dashboard/standby-screen.md) shown before the flight controller is ready.
 - The [in-flight tuning overlay](dashboard/inflight-tuning.md) (preview), which steps the
   flight controller's adjustment functions through two global variables while flying.
 - A model image and caption, resolved as the README describes under *Model images*.
+- An event log on Urban's [status page](dashboard/urban-theme.md): arming and disarming, the
+  connection, and every change of the governor state and the ESC's verdict, with the radio's
+  time.
 - The *RFSuite Service* widget keeps the link and the announcements running while the tool
   is closed.
 
@@ -64,7 +73,10 @@ and when is in [Audio events](audio/events.md); how loud they play is the
 ## Logs and diagnostics
 
 - [Flight Log](pages/tools/flight_log.md): one line per flight, written when the model
-  disarms, with its model, pack, armed time and what its telemetry reached.
+  disarms, with its model, pack, armed time and what its telemetry reached; browsed by flight,
+  by model and by pack. Its battery registry counts each pack's cycles, the pack is picked on
+  the dashboard after connecting or from the quick menu, and the flight controller can be
+  moved onto that pack's battery profile. Off until *Write a flight log* is switched on.
 - [Logs](pages/logs.md): the transmitter's own telemetry logs on the SD card, with a flight
   summary and a graph of up to four columns.
 - Diagnostics: flight controller and Rotorflight status, [ELRS Link](pages/tools/diagnostics/elrs_link.md),

@@ -27,8 +27,9 @@ Documentation can be found at [doc.rotorflight.org](https://doc.rotorflight.org/
 on the [Rotorflight website](https://www.rotorflight.org/).
 
 The page-by-page reference for the tool itself, what each configuration page does, its
-settings, and when a page is hidden or read-only, is in [docs/](docs/README.md). Every page
-also carries a short explanation in the tool, behind the `?` button in its header.
+settings, and when a page is hidden or read-only, is in [docs/](docs/README.md), and the same
+pages are published with search as the [RFSuite documentation site](https://rotorflight.github.io/rotorflight-lua-edgetx-suite/). Every
+page also carries a short explanation in the tool, behind the `?` button in its header.
 
 
 ## Requirements
@@ -132,14 +133,23 @@ and in [docs/features.md](docs/features.md). In short:
 * Motor Override, for spooling up main and tail motors on the bench behind an explicit disarm
   confirmation, an arming switch check and a deadman timeout
 * Dashboard widget with ten shipped themes (among them Urban, Grid and Deck), separate
-  preflight, inflight and postflight screens, per-model settings and user-supplied themes
+  preflight, inflight and postflight screens, and user-supplied themes
+* Customizable dashboards: choose what each value tile shows before the flight, in flight and
+  in the post-flight statistics, bind the full-screen keys per theme, show any of the radio's
+  telemetry sensors by name on Urban, Grid and Deck, and set colours and gauge ranges — as
+  standard values for every model, or per model
+* An event log on the Urban status page: arming, connection, governor and ESC state changes
+  with the radio's time
 * Dashboard in full screen: a quick menu, a standby screen before the flight controller
   connects, and radio-wide keys
 * In-flight tuning overlay (preview feature, off by default) that drives the flight
   controller's adjustment functions from the dashboard
 * Diagnostics: flight controller status, RF status, ELRS link, sensor validation, SmartFuel,
   CRSF sensors, System Status, session logs and system information
-* Flight Log: one line per flight with its model, pack, armed time and telemetry extremes
+* Flight Log: one line per flight with its model, pack, armed time and telemetry extremes,
+  browsable by flight, model and pack; a battery registry that counts each pack's cycles, the
+  pack picked on the dashboard after connecting, and optionally the matching battery profile
+  set on the flight controller
 * A log browser that reads the transmitter's own telemetry CSV files on the radio and
   plots channels against flight time
 * Voice announcements for connect, arming, governor, voltage, profiles, ESC and MCU
