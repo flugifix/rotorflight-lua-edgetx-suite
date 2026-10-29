@@ -144,13 +144,8 @@ local function buildDebugLevelOptions(i18n)
   return options
 end
 
--- A row's `?` shows its own line, titled with the row's label (ui/controls.lua draws the button
--- and opens the message when no handler of the page's own is given).
-local function helpOpts(text, title)
-  if type(text) ~= "string" or text == "" then return {} end
-  return { helpText = text, helpTitle = title }
-end
-
+-- Every row carries its own `?`: ui/controls.lua draws the button and shows `helpText` under
+-- `helpTitle` when no handler of the page's own is given.
 local function buildLogging(cursorY, children, x, w, i18n)
   local levelLabel = t(i18n, "debug_level", "Log Level")
   cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
@@ -158,7 +153,7 @@ local function buildLogging(cursorY, children, x, w, i18n)
     buildDebugLevelOptions(i18n),
     getValueGetter("debug_level")(),
     getValueSetter("debug_level"),
-    helpOpts(t(i18n, "debug_level_help", "How much is logged; errors, warnings and most info lines are kept even at OFF, DEBUG adds the steps between, TRACE every message to and from the flight controller."), levelLabel)
+    { helpText = t(i18n, "debug_level_help", "How much is logged; errors, warnings and most info lines are kept even at OFF, DEBUG adds the steps between, TRACE every message to and from the flight controller."), helpTitle = levelLabel }
   )
 
   local headerLabel = t(i18n, "show_header_memory", "Show Header Memory")
@@ -166,7 +161,7 @@ local function buildLogging(cursorY, children, x, w, i18n)
     headerLabel,
     ui.runtime.getBoolGetter("show_header_memory"),
     ui.runtime.getBoolSetter("show_header_memory"),
-    helpOpts(t(i18n, "show_header_memory_help", "Shows the configuration tool's Lua memory in the page header."), headerLabel)
+    { helpText = t(i18n, "show_header_memory_help", "Shows the configuration tool's Lua memory in the page header."), helpTitle = headerLabel }
   )
 
   local serialLabel = t(i18n, "enable_serial_debug", "Enable Serial Debug")
@@ -174,7 +169,7 @@ local function buildLogging(cursorY, children, x, w, i18n)
     serialLabel,
     ui.runtime.getBoolGetter("enable_serial_debug"),
     ui.runtime.getBoolSetter("enable_serial_debug"),
-    helpOpts(t(i18n, "enable_serial_debug_help", "Also sends the lines the log level lets through to the radio's serial port; at OFF that is none."), serialLabel)
+    { helpText = t(i18n, "enable_serial_debug_help", "Also sends the lines the log level lets through to the radio's serial port; at OFF that is none."), helpTitle = serialLabel }
   )
 
   local cardLabel = t(i18n, "log_to_card", "Log Session To Card")
@@ -182,11 +177,10 @@ local function buildLogging(cursorY, children, x, w, i18n)
     cardLabel,
     ui.runtime.getBoolGetter("log_to_card"),
     ui.runtime.getBoolSetter("log_to_card"),
-    helpOpts(t(i18n, "log_to_card_help", "Writes the log to the SD card, one set of files per power-up of the radio; the background decoder writes only from DEBUG up."), cardLabel)
+    { helpText = t(i18n, "log_to_card_help", "Writes the log to the SD card, one set of files per power-up of the radio; the background decoder writes only from DEBUG up."), helpTitle = cardLabel }
   )
 
   local runsLabel = t(i18n, "log_runs", "Keep Logs Of")
-  local runsHelp = helpOpts(t(i18n, "log_runs_help", "How many power-ups of the radio keep their log files on the card; the oldest are deleted when a new one starts."), runsLabel)
   cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w,
     runsLabel,
     {
@@ -196,8 +190,8 @@ local function buildLogging(cursorY, children, x, w, i18n)
       suffix = t(i18n, "log_runs_suffix", " runs"),
       get = getValueGetter("log_runs"),
       set = getValueSetter("log_runs"),
-      helpText = runsHelp.helpText,
-      helpTitle = runsHelp.helpTitle
+      helpText = t(i18n, "log_runs_help", "How many power-ups of the radio keep their log files on the card; the oldest are deleted when a new one starts."),
+      helpTitle = runsLabel
     }
   )
   return cursorY
