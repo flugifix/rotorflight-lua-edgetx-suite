@@ -152,9 +152,7 @@ Nothing ends while a profile job, a pending return to the original profiles or a
 
 ### On the ground, before the flight
 
-![The ground surface: model check, FC slots, session, and the actions (an earlier layout)](../images/inflight/overlay-ground.png)
-
-The picture shows an earlier layout of the same contents; the text below describes the current one.
+![The ground surface: model check, FC slots, session, and the actions](../images/inflight/overlay-ground.png)
 
 One filled status panel shows **Model** (the setup verdict), **FC slots** (the number of parameters
 read from the board, plus skipped slots), and **Session** (the time this session's start values
@@ -288,11 +286,11 @@ restore must finish its writes and return), and **Read again** while that return
 session, its stored start values are checked on the SD card before the first profile is read
 (*Checking the saved session*).
 
-![The progress screen used after landing; on the ground the same progress runs inside the ground surface](../images/inflight/overlay-reading.png)
+![A read on the ground: its progress runs inside the status panel, the actions stay in place](../images/inflight/overlay-reading.png)
 
 A read or restore started from the post-flight screen takes its own progress screen with a
 **Reading** or **Restoring** title, so the change list it was started from is still there when it
-ends. The picture predates the current layout and also shows the former widget-zone surface.
+ends.
 
 The reachable set is the union of `adjMin..adjMax` from all PID-profile (function 2)
 and rate-profile (function 1) adjustment slots, capped to 1..6 and the FC-reported counts,
@@ -327,9 +325,9 @@ session's tracked parameters, not a full FC configuration backup.
 
 ### In the air
 
-The overlay uses a Rotorflight dark palette with a blue accent. The historical
-[flight screenshot](../images/inflight/overlay-live.png) shows the former bank surface;
-the image is retained as a reference and does not depict this interface.
+The overlay uses a Rotorflight dark palette with a blue accent.
+
+![In the air: the group as the title, the selected function with its value, its neighbours below](../images/inflight/overlay-live.png)
 
 The current group is the title, for example **Pitch**. Tapping it replaces the list with a
 picker of every group, two to a row, the current one highlighted. Tapping a group, or turning
@@ -360,6 +358,8 @@ five-second maximum hold; a lost release is bounded by that maximum. Values are 
 FC reports, never predicted changes. Under the value, **Start N / +/-difference** compares
 against the session's start value of the active PID/rate/global scope. An unknown start value
 leaves that line empty. The value is drawn in the largest font the radio has, on the left.
+
+![Value mode: the value with its start value and difference, the plus and minus targets](../images/inflight/overlay-value.png)
 Plus and minus are stacked in one column on the right, as large as the surface allows: plus on
 top in the accent blue, minus below in orange, so the two can be told apart without reading the
 glyph. The full-width name remains the
@@ -459,6 +459,8 @@ clears the filtered list; at least one parameter must remain selected in a filte
 same FC connected. The picker sends no MSP. Native acceptance of the controls remains pending.
 
 ### After landing
+
+![After landing: the changes of this session, with Continue tuning and Restore...](../images/inflight/overlay-after.png)
 
 The complete change list is grouped by **PID profile**, **rate profile**, then **Global**;
 each profile contains the same function groups as the flying list. Rows show SD start value,
