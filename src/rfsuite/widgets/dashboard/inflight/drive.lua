@@ -93,18 +93,6 @@ M.migrateTrims = Setup.migrateTrims
 M.check = Setup.check
 
 local logDrive = Setup.log
-
--- What this Lua state and the radio have left (lib/log.lua, Log.resources), for the lines that
--- mark the overlay coming up and going down: read against each other they say what a tuning
--- visit kept. Only built where such a line is written, which is a handful of times per flight.
-local function resourcesText()
-  local Log = _G.rfsuite and _G.rfsuite.Log
-  if type(Log) == "table" and type(Log.resources) == "function" then
-    local ok, text = pcall(Log.resources)
-    if ok and type(text) == "string" then return text end
-  end
-  return "-"
-end
 local SWITCH_SLICE = Setup.SWITCH_SLICE
 local SWITCH_WALK_LIMIT = Setup.SWITCH_WALK_LIMIT
 
@@ -236,6 +224,18 @@ end
 M.PHASE_GROUND = "ground"
 M.PHASE_LIVE = "live"
 M.PHASE_POST = "post"
+
+-- What this Lua state and the radio have left (lib/log.lua, Log.resources), for the lines that
+-- mark the overlay coming up and going down: read against each other they say what a tuning
+-- visit kept. Only built where such a line is written, which is a handful of times per flight.
+local function resourcesText()
+  local Log = _G.rfsuite and _G.rfsuite.Log
+  if type(Log) == "table" and type(Log.resources) == "function" then
+    local ok, text = pcall(Log.resources)
+    if ok and type(text) == "string" then return text end
+  end
+  return "-"
+end
 
 --- Which of the three the overlay is in, and everything that has to happen on a transition.
 --
@@ -2034,8 +2034,7 @@ function M.cleanup(widget)
   -- took the overlay down: a backgrounded widget was invisible in the card log until now, and a
   -- trace that simply stops reads like a widget that died.
   if wasLive == true or wasPhase ~= nil then
-    logDrive("overlay off: was live %s, phase %s, %s", tostring(wasLive == true), tostring(wasPhase),
-      resourcesText())
+    logDrive("overlay off: was live %s, phase %s", tostring(wasLive == true), tostring(wasPhase))
   end
   if widget.state then widget.state.inflight = nil end
 end
