@@ -1,0 +1,2 @@
+- **RF Status theme in full screen, with tile choices and keys (`widgets/dashboard/themes/rfstatus`)**:
+  - RF Status takes the full screen like Default, and its settings open Look, Before flight, In flight, Statistics and Keys: choose what each plain value tile shows and bind the full-screen keys.

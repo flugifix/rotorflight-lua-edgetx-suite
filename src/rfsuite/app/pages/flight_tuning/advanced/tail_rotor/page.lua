@@ -17,6 +17,7 @@ local MspRuntime = nil
 local PidProfileApi = nil
 local GovernorProfileApi = nil
 local GovernorConfigApi = nil
+local SavePipeline = nil
 local LoadingOverlay = nil
 local Sensors = nil
 local Profile = nil
@@ -234,32 +235,10 @@ local function queueRcRead(isAutoReload)
   return true, nil
 end
 
-local function writeEeprom(queue)
-  ui.dirty = false
-  local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-  if eepromApi then
-    queue:add({
-      command = eepromApi.command,
-      payload = {},
-      isWrite = true,
-      processReply = function()
-        queueRcRead(true)
-      end
-    })
-  else
-    queueRcRead(true)
-  end
-end
-
 local function queueRcWrite()
-  if not PidProfileApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not PidProfileApi then
     return false, "msp_runtime_unavailable"
-  end
-
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
   end
 
   local session = getSession()
@@ -289,34 +268,39 @@ local function queueRcWrite()
     end
   end
 
-  queue:add({
-    command = PidProfileApi.writeCommand,
-    payload = PidProfileApi.buildWritePayload(session.pid_profile),
-    isWrite = true,
-    processReply = function()
-      if isAtLeastVersion({12, 0, 9}) and GovernorProfileApi and ui.runtime.governorReadComplete then
-        local govPayload = GovernorProfileApi.buildWritePayload(session.governor_profile)
-        if govPayload then
-          queue:add({
-            command = GovernorProfileApi.writeCommand,
-            payload = govPayload,
-            isWrite = true,
-            processReply = function()
-              writeEeprom(queue)
-            end,
-            errorHandler = function() end
-          })
-        else
-          writeEeprom(queue)
-        end
-      else
-        writeEeprom(queue)
-      end
-    end,
-    errorHandler = function() end
-  })
+  local steps = {
+    {
+      label = "MSP_SET_PID_PROFILE",
+      command = PidProfileApi.writeCommand,
+      payload = PidProfileApi.buildWritePayload(session.pid_profile)
+    }
+  }
+  if isAtLeastVersion({12, 0, 9}) and GovernorProfileApi and ui.runtime.governorReadComplete then
+    local govPayload = GovernorProfileApi.buildWritePayload(session.governor_profile)
+    if govPayload then
+      steps[#steps + 1] = {
+        label = "MSP_SET_GOVERNOR_PROFILE",
+        command = GovernorProfileApi.writeCommand,
+        payload = govPayload
+      }
+    end
+  end
 
-  return true, nil
+  return SavePipeline.start({
+    pageId = "flight_tuning_advanced_tail_rotor",
+    steps = steps,
+    reboot = false,
+    onSaved = function()
+      ui.dirty = false
+    end,
+    onDone = function(result)
+      if not ui.runtime then return end
+      if result.saved then queueRcRead(true) end
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
+  })
 end
 
 local function getLiveProfile()
@@ -636,7 +620,18 @@ end
 
 function M.onSave(ctx)
   if not M.canSave() then return false, "loaded_data_missing" end
-  queueRcWrite()
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if SavePipeline and SavePipeline.isActive() then return false end
+  local ok, err = queueRcWrite()
+  if not ok then
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
+        title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
+        message = tostring(err or "MSP write failed")
+      })
+    end
+    return false
+  end
   return true
 end
 
@@ -679,6 +674,7 @@ function M.onClose()
   PidProfileApi = nil
   GovernorProfileApi = nil
   GovernorConfigApi = nil
+  SavePipeline = nil
   LoadingOverlay = nil
   Sensors = nil
   ApiVersion = nil

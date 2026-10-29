@@ -1,16 +1,17 @@
 -- Whether the craft is armed, and whether that question can be answered at all.
 --
--- One definition for the tool's own screens. The header's Reload refuses on isArmed(), its Save
+-- Shared by the tool's screens and MSP runtime. The header's Reload refuses on isArmed(), its Save
 -- refuses on isArmed() and asks on isUncertain(), and the menu registry locks an entry while the
 -- first one holds -- but both predicates were file-locals in ui/home.lua, so a page that draws a
 -- write button of its own had nothing to ask, and every page that grew one would have grown a
 -- second, weaker test with it.
 --
--- Not the only definition in the repository, and deliberately so. tasks/msp/runtime.lua reads the
--- radio's own ARM source to decide whether to carry configuration traffic at all, which is a
--- question about the link rather than about a screen; and widgets/dashboard/inflight/fcsetup.lua
--- answers with a NAMED refusal ("no_sensors", no link, armed) because it has to tell the pilot
--- which of the three it is. Neither is replaced here.
+-- tasks/msp/runtime.lua uses isArmed() for its queue and save gates, so they follow the same
+-- sensor mapping as the screens. An uncertain reading counts as disarmed only for a craft never
+-- read armed; a craft last read armed stays armed until a current reading says disarmed or the
+-- reading stays uncertain for FLIGHT_CONFIRM_SECONDS (5 seconds) with the link up.
+-- widgets/dashboard/inflight/fcsetup.lua keeps a NAMED refusal ("no_sensors", no link, armed)
+-- because it has to tell the pilot which of the three it is.
 --
 -- isArmed() answers the question the screen needs -- "paint the warning?" -- and answers false
 -- for three different reasons: not armed, no sensor, no link. That is the right default for a
@@ -47,8 +48,8 @@ end
 
 -- How often the answer to isArmed() has changed, as seen by any caller in this Lua state.
 --
--- The tool asks isArmed() at the top of every pass (ui/home.lua, isModelArmed), but it wakes a
--- page only while the craft is NOT armed. So work a page runs across passes -- the ELRS link
+-- The tool (ui/home.lua, isModelArmed) and MSP runtime ask isArmed() every pass, but the tool wakes
+-- a page only while the craft is NOT armed. So work a page runs across passes -- the ELRS link
 -- sync's parameter walk and its paced writes -- never runs during an armed period, and on the
 -- first pass after the disarm the craft reads as disarmed again: from inside that work, nothing
 -- happened. The count is the witness that something did. Work that must not outlive an arming

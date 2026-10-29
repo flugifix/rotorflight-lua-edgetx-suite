@@ -30,7 +30,7 @@ Read-only while the model is armed.
 
 ## Notes
 
-- Save writes the whole PID profile and then stores it on the flight controller. PID Bandwidth, Autolevel, Main Rotor and Tail Rotor write the same profile; a save there writes back the Error Decay Stick Gain and the Master Gains it read and changes nothing. The Master Gains are sent only while the last PID profile reply of the connection carried them, so a flight controller without them never receives the two bytes.
+- Save writes the whole PID profile and commits it once to EEPROM, reporting success only once the flight controller has stored the values; a failed write or commit is reported, and a successful save re-reads the profile without a reboot. PID Bandwidth, Autolevel, Main Rotor and Tail Rotor write the same profile; a save there writes back the Error Decay Stick Gain and the Master Gains it read and changes nothing. The Master Gains are sent only while the last PID profile reply of the connection carried them, so a flight controller without them never receives the two bytes.
 - The flight controller applies Error Decay Stick Gain in its default PID mode (`pid_mode = 3`) only. The CLI name of the setting is `error_decay_gain_cyclic`.
 - The CLI names of the master gains are `cyclic_master_gain` and `yaw_master_gain`. In flight they can be changed with the *Cyclic Master Gain* and *Yaw Master Gain* adjustment functions ([Adjustments](../../setup/controls/adjustments.md)).
 

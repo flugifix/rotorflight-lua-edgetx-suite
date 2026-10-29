@@ -88,12 +88,18 @@ state, the throttle percentage, and — with the governor off — headspeed and 
 
 The arm flag is the spine. It comes from the `armflags` sensor, and the widget keeps the
 previous pass's value beside it, so an arm and a disarm are edges rather than states.
+The MSP runtime uses the shared arming reader and sensor mapping for its queue clear and save
+refusal. An uncertain reading counts as disarmed only for a craft never read armed; a craft last
+read armed stays armed until a current reading says disarmed or the reading stays uncertain
+continuously for `FLIGHT_CONFIRM_SECONDS` (5 seconds) with the link up. A link loss resets that
+timer, so reconnecting in flight leaves time for the arming flags to arrive.
 
 A reading that says *disarmed* is not taken while the MSP runtime still reads the model as armed.
 The runtime reads the same sensor at the top of the same pass, ahead of the custom-telemetry
-drain, so a disagreement means the sensor changed between the two reads of one pass -- and a
-real disarm is taken by the first read after the runtime has seen it too. A reading that says
-*armed* is always taken. Both `armed` and the raw `armFlags` a theme can read follow this rule.
+drain, so a disagreement between two current readings means the sensor changed between the
+two reads of one pass -- and a real disarm is taken by the first read after the runtime has seen
+it too. A reading that says *armed* is always taken. Both `armed` and the raw `armFlags` a theme
+can read follow this rule.
 
 | Phase | Reached when |
 | --- | --- |
@@ -819,9 +825,80 @@ between two pages of one theme re-loads `configure.lua` and calls the factory ag
 that has not been saved is gone. Save before leaving a page, or keep what must survive in the
 preferences.
 
+For the shared phase and Keys pages below, saving passes only the open page's settings to
+`DashboardLib.setThemeConfig`, which merges them into the stored configuration and preserves
+the other pages' values.
+
 A radio that offers no directory enumeration reads the theme list from
 `theme_index.lua` instead of from `init.lua`, and the packager copies the declared pages into
 it, so the split is there as well.
+
+## Choosing what a tile shows
+
+A theme that declares boxes can let the pilot choose the value of each plain value tile.
+Only `type = "text"` boxes with `subtype = "telemetry"` or `subtype = "stats"` are reassignable:
+telemetry chooses a live reading, and stats chooses a figure of the flight. Gauges, timers,
+governor, blackbox, flight count and model images retain their declared behaviour.
+
+The catalogue is `widgets/dashboard/fields.lua`: `M.LIVE` holds the live readings and
+`M.STATS` the flight figures. Each entry has a stable `id` stored as the choice, a `source`
+and, for statistics, a `stattype`, together with its unit, decimals and transform where
+needed. Its `label` is sentence case for the dropdown; its `title` is the short uppercase
+caption drawn on the tile. Both use i18n in shipped themes.
+
+A box is named by its non-empty string `id`, or by `col_row` formed from its `col` and `row`
+when no id is given. That name must be unique within its phase: give boxes sharing a cell
+distinct ids. The setting key is `field_<phase>_<box>`, for example
+`field_preflight_2_3` for the box at column 2, row 3, or `field_postflight_peak` for a box
+with `id = "peak"`. Keep names stable when changing a layout if saved choices should follow
+the same tiles. A box with neither an id nor a grid cell has no settings row.
+
+The theme continues to declare each box's original value. The dropdown starts on the
+catalogue entry matching that source and, for stats, its stattype; recognised aliases match
+too. A box whose source is computed or absent from the catalogue gets no row: its choice would have
+to start on a value it does not show, so it keeps its declaration. Missing or unknown saved choices, and
+too. A computed source or a value absent from the catalogue has no initial selection and
+keeps its declaration until a valid choice is saved. Missing or unknown saved choices, and
+choices matching the original value, leave the box unchanged.
+
+At theme load, `applyFieldChoices` in `widgets/dashboard/runtime.lua` applies the resolved
+theme configuration to a boxes table, or wraps a boxes function to apply it to the returned
+list. It delegates to `Fields.apply`, which copies reassigned boxes and updates `source`,
+`stattype`, `title`, `unit`, `decimals` and `transform` without changing geometry. A box
+without a title keeps none; a changed title clears its old `title_lowres`. Reassignment also
+clears `thresholds`, `min` and `max`, which belonged to the original reading. These are
+ordinary theme settings, so the standard values and Per-Model Settings use the same storage
+and override rules as the theme's other settings.
+
+To offer the shared pages, declare `pages` in `init.lua` with the ids `preflight`, `inflight`,
+`postflight` and `keys`, alongside any pages the theme owns. Use the phase titles **Before
+flight**, **In flight** and **Statistics**, and **Keys** for the key page, with literal i18n
+markers for shipped themes as in `themes/default/init.lua`. The manifest selects the pages;
+`configure.lua` must delegate them to `app/pages/settings/dashboard/fields_form.lua` as
+`themes/default/configure.lua` does:
+
+- Create a form with `FieldsForm.new(folder, phases)`, passing the theme's own folder with
+  a trailing slash and a map such as `{ preflight = "preflight.lua", inflight = "inflight.lua",
+  postflight = "postflight.lua" }`.
+- Read `ctx.page.id` and use `form.owns(page)` to distinguish shared pages from the theme's
+  own pages. Add `form.defaults(page, config, defaults)` to the defaults passed through
+  `DashboardLib.getThemeConfig`, then call `form.load(page, config)` with the resolved values.
+  Registering those defaults lets a model save discard values equal to the standard.
+- Delegate rendering to `form.build(page, children, x, cursorY, w, config, dashboard)`,
+  passing the radio's dashboard preferences for global key ownership, and save
+  `form.save()` through `DashboardLib.setThemeConfig` in the current edit scope. The theme's
+  own pages keep their own controls and save values.
+
+The shared form reads only the phase module needed for the open page. A boxes function is
+called with a nil zone and a state containing `themeConfig`, so it must be able to enumerate
+the same named boxes with those inputs. Rows use the box's own caption, then its default
+entry's label, then Tile as a fallback.
+
+The Keys page binds PAGE >, PAGE <, MDL, SYS and TELE to the host actions defined in
+`widgets/dashboard/keys.lua`: nothing, quick menu, suite tool, Flight Log and exit full
+screen. Bindings start unbound. The radio-wide Keys page takes priority; rows for keys it
+holds are greyed out and marked *(global)*, and become editable when that page sets the key
+to Theme. Per-model theme bindings obey the same priority.
 
 ## A theme that takes fullscreen
 

@@ -335,7 +335,9 @@ file is written yet.
 
 The same files are also published as a website with search and a navigation tree, built by
 MkDocs from `mkdocs.yml` at the root. `bin/docs/mkdocs_hooks.py` points a link that leaves
-`docs/` at the file on GitHub and orders each section by `sidebar_position`. To preview it:
+`docs/` at the file on GitHub, lists the files under `docs/pages/` in the menus, order and
+titles of `src/rfsuite/app/manifest.lua` (through `bin/docs/menu_structure.py`), and
+orders every other section by `sidebar_position`. To preview it:
 
 ```
 pip install -r bin/docs/requirements.txt

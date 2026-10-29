@@ -5,6 +5,7 @@ end
 
 local Controls = loadModule("ui/controls.lua")
 local DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
+local FieldsForm = loadModule("app/pages/settings/dashboard/fields_form.lua")
 
 -- The settings page loads this file for the theme it is configuring and hands that theme
 -- to the factory below, so a copy of this theme under rfsuite.user/dashboard stores its
@@ -16,8 +17,14 @@ local THEME_DEFAULTS = {
     v_max = 8.4,
 }
 
+-- The pages init.lua declares beside Look: what the tiles of each phase show, and the keys.
+local PHASES = { preflight = "preflight.lua", inflight = "inflight.lua", postflight = "postflight.lua" }
+
 local ui = {
     loaded = false,
+    -- The page the settings page opened, nil for the whole form of a host without pages.
+    page = nil,
+    form = nil,
     config = {
         v_min_tenths = 70,
         v_max_tenths = 84,
@@ -39,6 +46,16 @@ local function loadConfig(prefs)
     local modelPrefs = session and session.mcu_id and session.modelPreferences or nil
 
     local cfg = DashboardLib.getThemeConfig(prefs, THEME_PATH, THEME_DEFAULTS, modelPrefs)
+    -- A page of the shared form reads again with its own defaults added, so a model's save of it
+    -- can tell a choice that repeats the standard from one that deviates.
+    if ui.form and ui.form.owns(ui.page) then
+        local defaults = {}
+        for k, v in pairs(THEME_DEFAULTS) do defaults[k] = v end
+        ui.form.defaults(ui.page, cfg, defaults)
+        cfg = DashboardLib.getThemeConfig(prefs, THEME_PATH, defaults, modelPrefs)
+        ui.form.load(ui.page, cfg)
+    end
+    ui.cfg = cfg
     local vMin = tonumber(cfg.v_min) or THEME_DEFAULTS.v_min
     local vMax = tonumber(cfg.v_max) or THEME_DEFAULTS.v_max
 
@@ -58,10 +75,16 @@ local function saveConfig(prefs)
     -- controller's id -- without it the model scope saves nothing.
     local modelPrefs = session and session.mcu_id and session.modelPreferences or nil
 
-    DashboardLib.setThemeConfig(prefs, THEME_PATH, {
-        v_min = (tonumber(ui.config.v_min_tenths) or 70) / 10,
-        v_max = (tonumber(ui.config.v_max_tenths) or 84) / 10,
-    }, modelPrefs, { voltageEdited = ui.voltageEdited == true })
+    -- A page saves what it shows and nothing else: the shared form's page its own values, Look
+    -- (or the whole form, on a host without pages) the theme's.
+    if ui.form and ui.form.owns(ui.page) then
+        DashboardLib.setThemeConfig(prefs, THEME_PATH, ui.form.save(), modelPrefs)
+    else
+        DashboardLib.setThemeConfig(prefs, THEME_PATH, {
+            v_min = (tonumber(ui.config.v_min_tenths) or 70) / 10,
+            v_max = (tonumber(ui.config.v_max_tenths) or 84) / 10,
+        }, modelPrefs, { voltageEdited = ui.voltageEdited == true })
+    end
 
     -- The model's file is written whenever a flight controller is connected, but it carries
     -- this save's values only in the model scope: there its answer is what the save reports.
@@ -159,7 +182,13 @@ function M.onSave(ctx)
 end
 
 function M.build(ctx)
+    ui.page = ctx and ctx.page and ctx.page.id or nil
     loadConfig(ctx.preferences)
+    if ui.form and ui.form.owns(ui.page) then
+        local dashboard = type(ctx.preferences) == "table" and ctx.preferences.dashboard or nil
+        ui.form.build(ui.page, ctx.children, ctx.x, ctx.y, ctx.w, ui.cfg, dashboard)
+        return
+    end
 
     local children = ctx.children
     local x, y, w = ctx.x, ctx.y, ctx.w
@@ -216,5 +245,11 @@ return function(ctx)
     if type(theme) == "table" and type(theme.path) == "string" and theme.path ~= "" then
         THEME_PATH = theme.path
     end
+    -- The phase modules are read from where this file was loaded, so a copy of the theme on the
+    -- card lists its own tiles.
+    local folder = type(theme) == "table" and type(theme.configurePath) == "string"
+        and string.match(theme.configurePath, "^(.*/)[^/]*$") or nil
+    if folder then ui.form = FieldsForm.new(folder, PHASES) end
+    ui.page = ctx and ctx.page and ctx.page.id or nil
     return M
 end

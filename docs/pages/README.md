@@ -1,17 +1,25 @@
 ---
-title: Pages
-sidebar_label: Pages
+title: Menu
+sidebar_label: Menu
 ---
 
-# Configuration pages
+# Menu
 
 For the shared Save action, read [Saving configuration](../reference/saving.md).
 
 One file per page, at the path of the page under `src/rfsuite/app/pages/` with `.md`
 appended: the page `setup/power/smartfuel/page.lua` is documented in
 `docs/pages/setup/power/smartfuel.md`. Menu entries that only open a submenu have no file.
+On the website these files are listed under *Menu*, in the menus, the order and the
+titles the tool shows; the folders here follow the page sources instead.
 
-**Status:** 97 reachable pages, 40 written. 81 of them carry an in-app help text behind the
+**Status:** which pages are reachable, and which of them have a file here, is listed in the
+generated [menu structure](../reference/menu-structure.md), which CI keeps current. A page with
+an in-app help text behind the `?` in the header starts its file from that text; the others
+start from the page source.
+**Status:** 97 reachable pages, 56 written. 81 of them carry an in-app help text behind the
+**Status:** 97 reachable pages, 42 written. 81 of them carry an in-app help text behind the
+**Status:** 97 reachable pages, 43 written. 81 of them carry an in-app help text behind the
 `?` in the header, which is the text to start a page file from; the others start from the
 page source.
 
@@ -29,20 +37,26 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 
 | Page | File | In-app help | Conditions | Status |
 | --- | --- | --- | --- | --- |
-| PIDs | `flight_tuning/pids.md` | yes | read-only while armed | to write |
+| PIDs | [flight_tuning/pids.md](flight_tuning/pids.md) | yes | read-only while armed | written |
 | Rates | [flight_tuning/rates.md](flight_tuning/rates.md) | yes | read-only while armed | written |
 | Tune Advisor | [flight_tuning/tune_advisor.md](flight_tuning/tune_advisor.md) | yes | read-only while armed, needs MSP API 12.10 | written |
-| Governor | `flight_tuning/governor.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
+| Governor | [flight_tuning/governor.md](flight_tuning/governor.md) | yes | read-only while armed, needs MSP API 12.09 | written |
 | Advanced → Filters | `flight_tuning/advanced/filters.md` | yes | read-only while armed | to write |
+| Governor | `flight_tuning/governor.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
+| Advanced → Filters | [flight_tuning/advanced/filters.md](flight_tuning/advanced/filters.md) | yes | read-only while armed | written |
 | Advanced → PID Controller | [flight_tuning/advanced/pid_controller.md](flight_tuning/advanced/pid_controller.md) | yes | read-only while armed | written |
-| Advanced → PID Bandwidth | `flight_tuning/advanced/pid_bandwidth.md` | yes | read-only while armed | to write |
-| Advanced → Autolevel | `flight_tuning/advanced/autolevel.md` | yes | read-only while armed | to write |
-| Advanced → Main Rotor | `flight_tuning/advanced/main_rotor.md` | yes | read-only while armed | to write |
+| Advanced → PID Bandwidth | [flight_tuning/advanced/pid_bandwidth.md](flight_tuning/advanced/pid_bandwidth.md) | yes | read-only while armed | written |
+| Advanced → Autolevel | [flight_tuning/advanced/autolevel.md](flight_tuning/advanced/autolevel.md) | yes | read-only while armed | written |
+| Advanced → Main Rotor | [flight_tuning/advanced/main_rotor.md](flight_tuning/advanced/main_rotor.md) | yes | read-only while armed | written |
 | Advanced → Tail Rotor | [flight_tuning/advanced/tail_rotor.md](flight_tuning/advanced/tail_rotor.md) | yes | read-only while armed | written |
-| Advanced → Rescue | `flight_tuning/advanced/rescue.md` | yes | read-only while armed | to write |
+| Advanced → Rescue | [flight_tuning/advanced/rescue.md](flight_tuning/advanced/rescue.md) | yes | read-only while armed | written |
 | Advanced → Rates (Advanced) → Advanced | `flight_tuning/advanced/rates_advanced/advanced.md` | yes | read-only while armed | to write |
 | Advanced → Rates (Advanced) → Cyclic Behaviour | `flight_tuning/advanced/rates_advanced/cyclic_behaviour.md` | yes | read-only while armed | to write |
 | Advanced → Rates (Advanced) → Rate Table | `flight_tuning/advanced/rates_advanced/table.md` | yes | read-only while armed | to write |
+| Advanced → Rescue | `flight_tuning/advanced/rescue.md` | yes | read-only while armed | to write |
+| Advanced → Rates (Advanced) → Advanced | [flight_tuning/advanced/rates_advanced/advanced.md](flight_tuning/advanced/rates_advanced/advanced.md) | yes | read-only while armed | written |
+| Advanced → Rates (Advanced) → Cyclic Behaviour | [flight_tuning/advanced/rates_advanced/cyclic_behaviour.md](flight_tuning/advanced/rates_advanced/cyclic_behaviour.md) | yes | read-only while armed | written |
+| Advanced → Rates (Advanced) → Rate Table | [flight_tuning/advanced/rates_advanced/table.md](flight_tuning/advanced/rates_advanced/table.md) | yes | read-only while armed | written |
 
 ## Configuration → Setup
 
@@ -90,7 +104,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | ESC & Motors → ESC Tools → ESC Configurator (the shared run page) | `setup/esc_motors/esc_tools/run.md` | no | read-only while armed | to write |
 | ESC & Motors → Motor Override | `setup/esc_motors/motor_override.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
 | Governor → General | [setup/governor/general.md](setup/governor/general.md) | yes | read-only while armed | written |
-| Governor → Ramp Time | `setup/governor/time.md` | yes | read-only while armed | to write |
+| Governor → Ramp Time | [setup/governor/time.md](setup/governor/time.md) | yes | read-only while armed | written |
 | Governor → Filters | `setup/governor/filters.md` | yes | read-only while armed | to write |
 | Governor → Bypass Curve | `setup/governor/curves.md` | yes | read-only while armed | to write |
 | Model | [setup/model.md](setup/model.md) | yes | needs the flight controller, read-only while armed | written |

@@ -43,6 +43,10 @@ page, for one -- while its tiles are made, sixteen at a time, and then all of th
 
 ### Default
 
+Default opens a grid with **Look**, **Before flight**, **In flight**, **Statistics** and
+**Keys**. The existing settings below are on Look; the other four use the shared pages
+described next.
+
 | Setting | What it does |
 | --- | --- |
 | Minimum, Maximum | The battery voltage the gauge spans. Editing either limit saves both as an explicit range. Saving another option leaves an automatic or inherited range unchanged. |
@@ -51,6 +55,29 @@ page, for one -- while its tiles are made, sixteen at a time, and then all of th
 A theme may split its settings into pages. Its tile then opens a second grid, one tile per
 page, and each of those opens part of the theme's settings — the same settings, divided so a
 page fits the screen. Themes that do not split show their settings directly.
+
+### Shared phase and Keys pages
+
+Themes that declare boxes can offer shared **Before flight**, **In flight**, **Statistics**
+and **Keys** pages; every shipped theme that declares boxes uses them -- Default, RF Status,
+@AERC, @AERC Nitro, @RT-RC, @RT-RC Nitro and @SRB-RC, each with its own settings on Look. Each
+phase page lists one
+dropdown per reassignable plain value tile, labelled with its own caption. Before flight and
+In flight choose live readings; Statistics chooses figures from the last flight. The choice
+starts on the theme's own value, and the caption, unit and decimals follow a different choice.
+A tile without a caption stays without one. Gauges, timers, governor, blackbox, flight count
+and the model image keep what the theme draws.
+
+The shared Keys page assigns PAGE >, PAGE <, MDL, SYS and TELE to nothing, the quick menu, the
+suite tool, Flight Log or leaving full screen for that theme. A key held by the radio-wide
+[*Settings* → *Dashboard* → *Keys*](keys.md) page is greyed out and marked *(global)*; change
+it there, or set it to **Theme** there to enable the theme's binding. Theme bindings start on
+Nothing. The radio-wide choice takes priority over both standard and model-specific bindings.
+
+The phase choices and theme key bindings are ordinary theme settings: the theme tile edits
+the standard values, and opening the theme through [Per-Model Settings](overrides.md) lets
+the connected model override them, along with its Look settings. Save each page before leaving
+it for another page.
 
 ## Notes
 

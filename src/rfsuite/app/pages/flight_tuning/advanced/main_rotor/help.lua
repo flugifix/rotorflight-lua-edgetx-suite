@@ -12,15 +12,15 @@ return function(ctx)
   local t = Common and Common.pageT("flight_tuning_advanced_main_rotor") or function(_, _, fb) return fb end
   local i18n = ctx.i18n
 
-  local help_p1 = t(i18n, "help_p1", "Collective Pitch Compensation: Increasing will compensate for the pitching motion caused by tail drag when climbing.")
-  local help_p2 = t(i18n, "help_p2", "Cross Coupling Gain: Removes roll coupling when only elevator is applied.")
-  local help_p3 = t(i18n, "help_p3", "Cross Coupling Ratio: Amount of compensation (pitch vs roll) to apply.")
-  local help_p4 = t(i18n, "help_p4", "Cross Coupling Freq. Limit: Frequency limit for the compensation, higher value will make the compensation action faster.")
+  local help_p1 = t(i18n, "help_p1", "Col. Pitch Comp: Compensates the nose-up tendency during collective pitch pumps.")
+  local help_p2 = t(i18n, "help_p2", "Cyclic Cross coupling: Gain of the compensation that removes the roll wobble when only pitch (elevator) is applied.")
+  local help_p3 = t(i18n, "help_p3", "Ratio: Sets roll-to-pitch compensation relative to pitch-to-roll compensation.")
+  local help_p4 = t(i18n, "help_p4", "Cutoff: Higher frequencies make the cross-coupling compensation act faster.")
 
   local parts = { help_p1, help_p2, help_p3, help_p4 }
 
   return {
     title = t(i18n, "help_title", "Main Rotor Help"),
-    message = table.concat(parts, "\n\n")
+    message = table.concat(parts, "\n")
   }
 end
