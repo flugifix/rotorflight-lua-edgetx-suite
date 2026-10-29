@@ -3685,6 +3685,7 @@ return {
       inflight_post_continue = "Continue tuning",
       inflight_post_restore = "Restore...",
       inflight_changed_count = "%d parameters changed",
+      inflight_changed_count_one = "%d parameter changed",
       inflight_rate_label = "Rate",
       inflight_rate_restore_note = "PID restore does not cover rate profiles",
       inflight_encoder = "Encoder",

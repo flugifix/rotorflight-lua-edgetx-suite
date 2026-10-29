@@ -150,8 +150,14 @@ end
 -- a failure at all.
 local FONT_W = { [SMLSIZE or -1] = 11, [MIDSIZE or -2] = 16, [DBLSIZE or -3] = 21, [XXLSIZE or -4] = 34 }
 
+-- The standard font is not one size: it is drawn larger on the 800x480 screens. "31 parameters on
+-- the board" runs about 7.7 px a character at 480x320 and 10.3 at 800x480, so the 9 that is the
+-- widest figure on the smaller screens left the ground captions wrapping on the larger one.
+-- metrics() sets it per surface.
+local stdCharW = 9
+
 local function charWidth(font)
-  return FONT_W[font] or 9
+  return FONT_W[font] or stdCharW
 end
 
 -- The standard font has no entry in FONT_H, and its fallback of 12 is shorter than the font: on
@@ -169,6 +175,7 @@ end
 local function metrics(w, h)
   local m = {}
   m.large = h > 350
+  stdCharW = m.large and 12 or 9
   m.font = m.large and MIDSIZE or SMLSIZE
   m.nameFont = m.large and DBLSIZE or MIDSIZE
   m.small, m.valueFont = SMLSIZE, XXLSIZE
@@ -1391,11 +1398,17 @@ function M.buildPost(children, widget, m, w, h, t, p)
     return
   end
 
-  appendLabel(children, m.pad, y, lineW, list and string.format(
-    t("widgets.dashboard.inflight_changed_count", "%d parameters changed"), #list)
+  local countText = list and (#list == 1
+    and t("widgets.dashboard.inflight_changed_count_one", "%d parameter changed")
+    or t("widgets.dashboard.inflight_changed_count", "%d parameters changed"))
+  appendLabel(children, m.pad, y, lineW, list and string.format(countText, #list)
     or t("widgets.dashboard.inflight_delta_unprimed", "Read the values first: nothing to compare against"), p.accent, rowFont, LEFT)
-  y = y + rowH + 4
-  local capacity = math.max(2, math.floor((actionY - m.lineH - 2 - y) / rowH))
+  -- A label is laid out with LVGL's own line, which for the middle font at 800x480 is about 41 px
+  -- and for the small one about 22: a step of the row height put the heading under the first band
+  -- and the caption above the buttons on their top border.
+  y = y + (m.large and 44 or rowH + 4)
+  local noteY = actionY - (m.large and 24 or m.lineH + 2)
+  local capacity = math.max(2, math.floor((noteY - y) / rowH))
   local pageRows = {}
   local pages = {pageRows}
   local heading, previousScope, previousProfile, previousGroup, title
@@ -1433,7 +1446,7 @@ function M.buildPost(children, widget, m, w, h, t, p)
   end
   local note = target.scope == "rate" and t("widgets.dashboard.inflight_rate_restore_note", "PID restore does not cover rate profiles")
     or t("widgets.dashboard.inflight_delta_title", "CHANGED THIS SESSION")
-  appendLabel(children, m.pad, actionY - m.lineH - 2, lineW, note, p.dim, m.small, LEFT)
+  appendLabel(children, m.pad, noteY, lineW, note, p.dim, m.small, LEFT)
   if not drive or not Prime then return end
   local arrowW = m.large and 72 or 48
   local buttonW = lineW - arrowW * 2 - m.pad * 2

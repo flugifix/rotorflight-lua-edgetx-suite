@@ -3681,6 +3681,7 @@ return {
       inflight_post_continue = "Weiter tunen",
       inflight_post_restore = "Zurücksetzen...",
       inflight_changed_count = "%d Parameter geändert",
+      inflight_changed_count_one = "%d Parameter geändert",
       inflight_rate_label = "Rate",
       inflight_rate_restore_note = "PID-Restore gilt nicht für Rateprofile",
       inflight_encoder = "Drehgeber",

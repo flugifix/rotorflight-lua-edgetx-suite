@@ -565,10 +565,16 @@ scenario("announcement controls are absent from armed and air surfaces", functio
 end)
 
 -- Ground children are measured with the fonts' rendered boxes: the standard font's line is about
--- 20 px and runs at most 9 px a character, the small font 14 and 11, the middle one 30 and 16. A
--- text wider than its box wraps on the radio onto whatever is under it, so the width is checked as
--- well as the position, and a text that is no button's own caption may not touch a button.
+-- 20 px and runs at most 9 px a character (12 at 800x480, where it is drawn larger: "31
+-- parameters on the board" measured 10.3 a character there against 7.7 at 480x320), the small
+-- font 14 and 11, the middle one 30 and 16. A text wider than its box wraps on the radio onto
+-- whatever is under it, so the width is checked as well as the position, and a text that is no
+-- button's own caption may not touch a button.
 local FONT_BOX = {[0] = {20, 9}, [SMLSIZE] = {14, 11}, [MIDSIZE] = {30, 16}}
+local function charW(font, screenH)
+  if (font == 0 or FONT_BOX[font] == nil) and screenH > 350 then return 12 end
+  return (FONT_BOX[font] or FONT_BOX[0])[2]
+end
 for _, locale in ipairs({"en", "de"}) do
   local translations = assert(loadfile("src/rfsuite/i18n/" .. locale .. ".lua"))().widgets.dashboard
   for _, size in ipairs({{480, 272}, {480, 320}, {800, 480}}) do
@@ -623,7 +629,7 @@ for _, locale in ipairs({"en", "de"}) do
           if node.type == "button" then buttons[#buttons + 1] = node; captions[#captions + 1] = "" end
           local text = type(node.text) == "function" and node.text() or node.text
           if node.type == "label" and text and text ~= "" and shown(node) then
-            check(#text * (FONT_BOX[node.font] or FONT_BOX[0])[2] <= width, "ground text fits its box: " .. text)
+            check(#text * charW(node.font, size[2]) <= width, "ground text fits its box: " .. text)
             for _, other in ipairs(labels) do
               check(not touches(node, other), "ground text children never overlap: " .. text)
             end
@@ -803,6 +809,34 @@ scenario("retained ground rows stay unread until a fresh read succeeds", functio
   end
   check(current, "successful read updates the cached model row")
 end)
+-- The post-flight list's labels are laid out with LVGL's own line: about 41 px for the middle font
+-- and 22 for the small one at 800x480, 20 and 16 for the standard and small font at 480x320. The
+-- count heading has to end above the first band and the caption above the buttons.
+for _, size in ipairs({{480, 272}, {480, 320}, {800, 480}}) do
+  scenario("post-flight heading and caption clear the list and the buttons " .. size[1] .. "x" .. size[2], function()
+    local widget, d = fixture(false)
+    local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
+    widget.zone = {w = size[1], h = size[2]}
+    widget.state.inflight = {phase = "post", setupVerdict = "ok", setSource = "board", cellCount = 36}
+    d.baseline = {pid1 = {["14"] = 50}}
+    d.profileValues.pid[1][14] = 57
+    d.changes = {pid = {[1] = {[14] = true}}, rate = {}, global = {}}
+    local nodes = {}; Screen.buildFullscreen(nodes, widget)
+    local large = size[2] > 350
+    local lineOf = {[0] = 20, [SMLSIZE] = large and 22 or 16, [MIDSIZE] = large and 41 or 30}
+    local heading, band, caption, button
+    for _, node in ipairs(nodes) do
+      local text = type(node.text) == "function" and node.text() or node.text
+      if text == "1 parameter changed" then heading = node end
+      if node.type == "rectangle" and node.filled and heading and not band and node.y > heading.y then band = node end
+      if text == "CHANGED THIS SESSION" then caption = node end
+      if node.type == "button" and not button then button = node end
+    end
+    check(heading ~= nil, "a single change is counted in the singular")
+    check(heading and band and heading.y + lineOf[heading.font] <= band.y, "the count heading ends above the first band")
+    check(caption and button and caption.y + lineOf[caption.font] <= button.y, "the caption ends above the buttons")
+  end)
+end
 scenario("post-flight history remains visible through link loss and reconnect", function()
   local widget, d = fixture(false)
   local Screen = rfsuite.require("widgets/dashboard/inflight/screen.lua")
@@ -818,7 +852,7 @@ scenario("post-flight history remains visible through link loss and reconnect", 
     local changed, values, title
     for _, node in ipairs(nodes) do
       local text = type(node.text) == "function" and node.text() or node.text
-      if text == "1 parameters changed" then changed = true end
+      if text == "1 parameter changed" then changed = true end
       if text == "50 -> 57  +7" then values = true end
       if text == "TUNING" then title = true end
     end
