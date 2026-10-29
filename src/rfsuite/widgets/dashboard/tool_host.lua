@@ -80,8 +80,8 @@ local function hostLog(msg, level)
 end
 
 -- A transition, with what this state and the radio have left at that moment: the tool runs in
--- the dashboard's Lua state, so the line before it opens and the line after it closes are the
--- two readings that say what the visit left behind.
+-- the dashboard's Lua state, so the line when it is up and the line after it has closed say what
+-- the visit took and what it left behind; the dashboard's own state line is the reading before.
 local function hostLogTransition(msg)
   if Log and type(Log.resources) == "function" then
     local ok, text = pcall(Log.resources)
@@ -277,7 +277,6 @@ function M.request(widget, landing)
     hostLog("tool not opened: the model is armed", "warn")
     return false
   end
-  hostLogTransition("tool requested")
   widget._toolHost = { phase = "load", cpuHits = 0, landing = landing }
   widget.built = false
   widget.renderKey = nil
