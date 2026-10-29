@@ -55,8 +55,9 @@ there is nothing to do but land, and no need to power-cycle anything.
 
 ## Reading the log
 
-Switch *Log Session To Card* on and set the debug level to *DEBUG* (see
-[Collecting logs](collecting-logs.md)), then reproduce it. The lines worth finding, in order:
+Switch *Log Session To Card* on and set the log level to *TRACE* (see
+[Collecting logs](collecting-logs.md)), then reproduce it. The request and reply lines below are
+written only at *TRACE*; a request sent again is also written at *DEBUG*. The lines worth finding, in order:
 
 | Line | What it means |
 | --- | --- |
@@ -70,7 +71,8 @@ Switch *Log Session To Card* on and set the debug level to *DEBUG* (see
 
 ## What to attach to a report
 
-- The session file covering the power-up, from the card's log directory.
+- The files of the power-up in which it happened, from the card's log directory — the ones whose
+  names start with the same date and time.
 - The flight controller's firmware version and its MSP API version, if the tool got far enough
   to show them.
 - The receiver, and whether it is CRSF or ELRS.

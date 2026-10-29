@@ -17,52 +17,101 @@ appear, and then *System* → *Developer* → *Settings*:
 
 | Setting | What to set it to |
 | --- | --- |
-| **Debug Level** | *INFO* for a first report. *DEBUG* for a problem that needs the steps in between, and it is also the level from which the background decoder keeps a record of its own. *TRACE* only when asked — among other lines it adds the raw bytes of every request to and reply from the flight controller. |
-| **Log Session To Card** | On. Nothing is written to the card while this is off, whatever the debug level says. |
+| **Log Level** | *INFO* for a first report. *DEBUG* for a problem that needs the steps in between, and it is also the level from which the background decoder keeps a record of its own. *TRACE* only when asked — among other lines it adds every request to and reply from the flight controller, with its bytes. |
+| **Log Session To Card** | On. Nothing is written to the card while this is off, whatever the log level says. |
+| **Keep Logs Of** | How many power-ups of the radio keep their files, default 10. Raise it if a problem is often noticed only days later. |
 
 **Log Session To Card is the switch that decides whether anything is written.** With it on and
-the debug level left at *OFF*, the configuration tool and the widgets already write their `tool_*`
-and `widget_*` files: errors, warnings and most info lines, the milestones of the connect sequence
-among them, are kept whatever the level says. **The debug level decides how much more goes in.** The background
-decoder's `function_*` files are the exception that needs both, because the decoder only starts
-writing at *DEBUG* or higher.
+the log level left at *OFF*, the configuration tool and the widgets already write their files:
+errors, warnings and most info lines — the milestones of the connect sequence and the state line
+below among them — are kept whatever the level says. **The log level decides how much more goes
+in.** The background decoder's files are the exception that needs both, because the decoder only
+starts writing at *DEBUG* or higher.
 
 Switch both back off once the report is sent. The card write is small but it is permanent, and
 *TRACE* left on costs a measurable part of every pass.
 
 ## Where the files land
 
-`/SCRIPTS/TOOLS/rfsuite.user/logs/`, and there is one set per part of the suite that runs in a
-script of its own:
+`/SCRIPTS/TOOLS/rfsuite.user/logs/`. **Every file of one power-up of the radio starts with the
+date and time the radio was switched on**, so the files that belong together sort next to each
+other:
 
-| Prefix | Written by |
+```
+2026-10-29_10-15-03_dashboard.log
+2026-10-29_10-15-03_dashboard.step
+2026-10-29_10-15-03_function.log
+2026-10-29_10-15-03_function.step
+2026-10-29_10-15-03_tool.log
+2026-10-29_10-15-03_tool.step
+2026-10-29_14-02-41_dashboard.log
+...
+```
+
+The part after the time says which part of the suite wrote it:
+
+| Name | Written by |
 | --- | --- |
-| `tool_` | The configuration tool, while it is open. |
-| `widget_` | The dashboard widget and the service widget, which share a script. |
-| `function_` | The background decoder special function, if the model runs it and the debug level is *DEBUG* or *TRACE*. |
+| `dashboard` | The dashboard widget and the service widget, which share a script — and the configuration tool when it is opened from the dashboard, which runs in that same script. |
+| `tool` | The configuration tool started from the radio's *Tools* menu. Opening it again during the same power-up adds to the same file, under a header line of its own. |
+| `function` | The background decoder special function, if the model runs it and the log level is *DEBUG* or *TRACE*. |
 
-Each of those writes **two files**, and they answer different questions:
+Each of them writes **two files**, and they answer different questions:
 
-- **`<prefix>_1.log` … `<prefix>_10.log`** — the log itself. Ten slots, reused in turn, so the
-  last ten sessions are on the card and the eleventh overwrites the first. It is written every
-  few seconds, so the last few seconds before a freeze can be missing from it.
-- **`<prefix>_step.txt`** — one line, saying the last thing that was started and how much Lua
-  memory was in use at that moment. It is rewritten and closed on the spot, so it is there even
-  when the radio stopped without warning. Its timestamp is how far that part of the suite got.
+- **`.log`** — the log itself. It is written every few seconds, so the last few seconds before a
+  freeze can be missing from it.
+- **`.step`** — one line, saying the last thing that was started and how much Lua memory was in
+  use at that moment. It is rewritten and closed on the spot, so it is there even when the radio
+  stopped without warning. Its timestamp is how far that part of the suite got.
 
-`<prefix>_seq.txt` is only the counter that decides which slot is next.
+The files of the last 10 power-ups are kept (*Keep Logs Of*); when the radio is switched on the
+next time with logging on, the oldest are deleted. Only files named this way are touched. Files
+an older release wrote — `widget_1.log`, `tool_seq.txt`, `function_step.txt` and the like — are
+left where they are; delete them by hand once they are no longer needed.
+
+A radio whose clock was never set names its files after the date its clock shows. They still sort
+in the order the radio was switched on, as long as the clock runs.
+
+## Reading the files together
+
+**All files of one power-up share one clock.** The number at the start of every line is the time
+in seconds since the radio was switched on, the same in every file, so the lines of the dashboard,
+the tool and the background decoder can be read side by side in the order they happened.
+
+**The first line of every session names what wrote it**: the part of the suite, the power-up it
+belongs to, the date and time the session started, the radio, the screen size, the EdgeTX
+version, the suite version, the build and the language. *build* changes with every change to the
+installed files, so two installations of the same version can be told apart by it.
+
+**Every five seconds each part of the suite writes a state line** at *INFO*:
+
+```
+state: instruction budget 12% now, 41% peak/5s, 97% peak since load, 58 objects, lua 1293 kB, free 1933 kB, cpu 38%, ui 30 fps / 21%, theme=system/grid
+```
+
+| Field | Meaning |
+| --- | --- |
+| `instruction budget` | The dashboard only: how much of its share of a cycle the dashboard used. |
+| `lua` | The Lua memory of the part of the suite that wrote the line. The dashboard, the tool started from the *Tools* menu and the background decoder each count their own. |
+| `free` | What the radio has left for every script and most of its own work. `-` where the radio does not report it. |
+| `cpu` | How busy the radio's processor was. EdgeTX 2.12.5 and later only. |
+| `ui` | The screen's frame rate and the share of time spent drawing it. EdgeTX 2.12.5 and later, colour radios only. |
+
+The same memory figures are added to the lines that mark the configuration tool being asked for,
+opened and closed, the in-flight tuning surface changing phase or closing, and — at *DEBUG* — every
+page change in the tool. Two such lines around a visit say what that visit kept.
 
 ## The two lines worth reading first
 
-**`widget_step.txt` says what the dashboard was doing.** While the suite connects it names the
-task it is on; afterwards it names the class of work of the last screen it built — *splash*,
+**The dashboard's `.step` says what the dashboard was doing.** While the suite connects it names
+the task it is on; afterwards it names the class of work of the last screen it built — *splash*,
 *scene*, *menu* or one of the tuning surfaces. So a radio found stopped tells you which of those
 it was in the middle of.
 
-**`function_step.txt` says whether the dashboard is still running at all**, which is the one thing
-the dashboard cannot say about itself. When a widget uses more than its share of a cycle the radio
-stops calling it, and it cannot write down that this happened to it. The background decoder runs
-outside the widgets and keeps watching, so its line reads:
+**The background decoder's `.step` says whether the dashboard is still running at all**, which is
+the one thing the dashboard cannot say about itself. When a widget uses more than its share of a
+cycle the radio stops calling it, and it cannot write down that this happened to it. The
+background decoder runs outside the widgets and keeps watching, so its line reads:
 
 ```
 dashboard widget silent 3.0 s, last pass 56 %
@@ -76,37 +125,33 @@ radio keeps calling it there, and it keeps doing its work. Off screen, the perce
 last cycle in which it was drawn, or 0 if it has not been drawn yet, so a low figure after a stop
 off screen says nothing about what the dashboard's last cycle there cost.
 
-`widget_step.txt` needs nothing but *Log Session To Card*. `function_step.txt` also needs the
-background decoder on the model and the debug level at *DEBUG* or above.
+The dashboard's `.step` needs nothing but *Log Session To Card*. The background decoder's also
+needs the decoder on the model and the log level at *DEBUG* or above.
 
 ## What to attach
 
 Take the card out and copy the whole `logs` folder. If that is too much, the useful minimum is:
 
-- Every `*_step.txt` — they are one line each and they are the part that survives a freeze.
-- The newest `.log` of the part that misbehaved, and the newest `tool_*.log` if the tool was
-  open at the time.
+- Every file of the power-up in which the problem happened — the ones whose names start with the
+  same date and time.
 - What you did, in the order you did it, and what the screen showed.
-
-The first line of every `.log` names the radio, the screen size, the EdgeTX version and the
-suite version, so that does not have to be written out separately.
 
 ## Notes
 
-- **A file that is not there is an answer too.** No `function_*` file means either that the debug
+- **A file that is not there is an answer too.** No `function` file means either that the log
   level was below *DEBUG* or that the background decoder was not running on that model — see
-  [the background decoder](../reference/background-decoder.md). No `widget_*` file after a
+  [the background decoder](../reference/background-decoder.md). No `dashboard` file after a
   session with the dashboard on screen means the widget never got as far as writing one.
 - **A widget that overran its instruction budget cannot report it.** The radio stops calling a
-  widget that does, so the last thing in `widget_1.log` is the approach to the fault and never
-  the fault. The background decoder's files are not affected: its script is paused and resumed
-  rather than cut off.
+  widget that does, so the last thing in the dashboard's `.log` is the approach to the fault and
+  never the fault. The background decoder's files are not affected: its script is paused and
+  resumed rather than cut off.
 - **Opening the configuration tool pauses the background decoder** for as long as the tool is
-  open, so a gap in `function_*` over that stretch is expected.
-- **A session file stops at 5000 lines** and says so on its last line, rather than dropping its
+  open, so a gap in the `function` file over that stretch is expected.
+- **A session stops writing at 5000 lines** and says so on its last line, rather than dropping its
   middle. Even at *TRACE* that takes a long session: the connect sequence writes a few hundred
   lines, and after it a file grows by two lines or more for each request a page sends to the
   flight controller, and by a line or two every five seconds while the dashboard shows a
   disarmed model. Nothing is added to it after that, a fault included: a fault after the cap
-  goes only to the `*_step.txt` file, where it stays until the next step replaces it. Turning
-  *Log Session To Card* off and on again starts a new file.
+  goes only to the `.step` file, where it stays until the next step replaces it. Turning
+  *Log Session To Card* off and on again starts a new session in the same file.

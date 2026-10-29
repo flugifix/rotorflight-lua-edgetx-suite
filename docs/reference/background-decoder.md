@@ -54,14 +54,14 @@ and nothing needs to be configured.
   background decoder installed there is invisible to the check above.
 - **It watches the dashboard widget and records the moment it stops.** A widget that uses more
   than its share of a cycle is not called again by the radio, so it cannot write down that this
-  happened to it; this script runs outside the widgets and can. With the debug level at *DEBUG* or
+  happened to it; this script runs outside the widgets and can. With the log level at *DEBUG* or
   above its log then carries a line naming how long the dashboard has been silent and what its
   last drawn cycle cost. A dashboard on another screen page or behind one of the radio's menu pages
   is still called by the radio and still does its work, so it is not reported. A model without this script has nothing
   that can report that.
-- **It writes a log of its own** when *Log Session To Card* is on and the debug level is *DEBUG*
-  or above, under the `function_` prefix, beside the tool's and the widgets'. Unlike theirs, it
-  needs both switches to start: *Log Session To Card* alone writes no `function_` file. Once it
+- **It writes a log of its own** when *Log Session To Card* is on and the log level is *DEBUG*
+  or above, the `function` files of each power-up, beside the tool's and the dashboard's. Unlike
+  theirs, it needs both switches to start: *Log Session To Card* alone writes no `function` file. Once it
   has started, lowering the level again does not stop it for the rest of that session, although
   its step file is then no longer rewritten. Because this script is paused and resumed rather
   than cut off, it keeps writing where a widget that overran its instruction budget cannot, and its
