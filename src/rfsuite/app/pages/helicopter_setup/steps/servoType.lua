@@ -98,6 +98,7 @@ return function(w)
       card.servoIndex,card.servoIndices=indices[1],indices
       local text = captions(tail, indices)
       card.caption, card.captionShort = function() return text(false) end, function() return text(true) end
+      card.captionLines, card.wideText = 2, true
       -- The type's picture while the group matches a type.
       card.servoPicture=function()
         local preset = not custom(tail) and TYPES[group(tail)][current(tail)]

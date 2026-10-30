@@ -144,13 +144,14 @@ function M.append(children, w, card, x, y, width, height)
   elseif kind == "motorGears" then
     image(function() return "motor-gears" end)
   elseif kind == "pulses" then
-    text(5,0,210,L.pulseTrain)
     local servoIndex=card.servoIndex or 0
     local pts={}
     for i=1,50 do pts[i]={px(10),py(112)} end
     local windowText,valid="",false
     local preset
     local sketchStart=#children+1
+    -- The heading belongs to the live drawing; a type's picture carries no heading.
+    text(5,0,210,L.pulseTrain)
     -- Called during scene preparation or a settings edit, never by a native getter.
     w.refreshPulse=function()
       local s=w.data.servo_configurations.servos[servoIndex] or {rate=50,mid=1520,max=700}

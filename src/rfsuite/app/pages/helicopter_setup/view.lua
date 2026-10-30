@@ -197,10 +197,10 @@ function M.new(w, ctx, diagrams)
         local artH = wideText and cardBottom-6-artY or large and 174 or height-controlH-35-artY
         -- A caption under the picture carries the values the picture stands for.
         if card.caption then
-          local lines = large and 3 or 1
+          local lines = card.captionLines or (large and 3 or 1)
           local lineH = large and 24 or 16
           artH = artH-lines*lineH
-          all[#all+1] = label(10, artY+artH+2, formX-20, large and card.caption or card.captionShort or card.caption)
+          all[#all+1] = label(10, artY+artH+2, formX-20, lines > 1 and card.caption or card.captionShort or card.caption)
           all[#all].h, all[#all].color = lines*lineH, palette.muted
         end
         diagrams.append(all, w, card, 6, artY, formX-18, artH)

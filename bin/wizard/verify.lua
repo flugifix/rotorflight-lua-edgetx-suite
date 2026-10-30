@@ -229,6 +229,8 @@ for i=1,#arg do if arg[i]=="--view" then view=assert(loadfile(arg[i+1]))() end e
 local exported = {}
 local function resolve(t)
   local out = {}
+  -- A line with a points getter is shown once its points were read: read them before visible.
+  if type(t.pts) == "function" then t.pts() end
   for k,v in pairs(t) do
     if type(v) == "function" then
       if k=="pos" then
