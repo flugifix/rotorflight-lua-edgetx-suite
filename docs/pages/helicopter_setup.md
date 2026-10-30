@@ -568,7 +568,7 @@ desktop fonts. They are not native EdgeTX screenshots or radio acceptance eviden
 [Tail](../images/helicopter_setup/06-small-task-3.png) ·
 [Swashplate set](../images/helicopter_setup/06-small-task-4.png)
 
-[Switches done](../images/helicopter_setup/03-small-task-2.png) ·
+[Switches done](../images/helicopter_setup/03-small-task-3.png) ·
 [Rates set](../images/helicopter_setup/05-small-task-2.png) ·
 [800×480 stick check](../images/helicopter_setup/02-large-task-3.png)
 

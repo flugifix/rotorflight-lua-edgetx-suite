@@ -211,7 +211,7 @@ function M.new(w, ctx, diagrams)
       -- One framed block per item, side by side, each a title and live lines below it.
       local n, gap = #card.blocks, 8
       local bw = math.floor((width-20-(n-1)*gap)/math.max(1,n))
-      local lineH = large and 26 or height <= 272 and 16 or 18
+      local lineH = large and 30 or height <= 272 and 16 or 18
       local bh = math.min(cardBottom-4-overviewY, (#card.blocks[1].lines+1)*lineH+12)
       for i, block in ipairs(card.blocks) do
         local x = 10+(i-1)*(bw+gap)
