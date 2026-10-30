@@ -3,10 +3,10 @@
   "configurator_revision": "b8f0eca5a73e8ea00a21a8122a8f7029ad705ee7",
   "semantics": "Static source templates; conditional branches and runtime repetitions are alternatives, not a session trace.",
   "inputs": {
-    "bin/wizard/source-map.json": "577933568f45c41540aa45e1dfc82d87b55a565400a7dac1f7c1cb8ad8987962",
+    "bin/wizard/source-map.json": "73fcb2f83c26053a3060c33160983b7493ef13e4e5b1832604aa075a6387d76f",
     "src/rfsuite/app/pages/helicopter_setup/attitude_view.lua": "d67a1e1cde6b46fc7e33f500e2085fe2e391b021cb96df69dfce03c194744faa",
     "src/rfsuite/app/pages/helicopter_setup/controller.lua": "8cd7c33b9dcb51f93d4fe46050ad0d00a67d132d0dfca3e12240df765e0b32f7",
-    "src/rfsuite/app/pages/helicopter_setup/diagrams.lua": "423c1537425961b491e7de34eb8e0173a557d746f5ac5bec148c6a215bb7251e",
+    "src/rfsuite/app/pages/helicopter_setup/diagrams.lua": "899a0648ffd40e0c3bbd2d00b07c1598ca0109d1179a64557832e063a2b0919e",
     "src/rfsuite/app/pages/helicopter_setup/elrs_link.lua": "2da65f54ecf424df2a75e37bdf7c4f8618429eb3c623a1bdf0939a21579431bf",
     "src/rfsuite/app/pages/helicopter_setup/esc_link.lua": "281da481f9e8406e760fc9c5d94809d661cb2df4060b05a3fb1430b5380ec71d",
     "src/rfsuite/app/pages/helicopter_setup/feedback.lua": "4f73ebe86a8b140a8960ec3d0af6d9e29373994545bb48afaf2827ca6a8a661e",
@@ -14,7 +14,7 @@
     "src/rfsuite/app/pages/helicopter_setup/help.lua": "210bc647674c7bdf88e1ac00cf623c53858bb0721623f089caa1f95465ac2c46",
     "src/rfsuite/app/pages/helicopter_setup/history.lua": "d5f7b4799e1a93821b1ebfaecf5e458a054e7cf904bdc5435ae8e985bea3350b",
     "src/rfsuite/app/pages/helicopter_setup/history_store.lua": "e98250cf48a8a360541abd967a4663d09fd33c7f936a94cf13ea67233442cda8",
-    "src/rfsuite/app/pages/helicopter_setup/labels.lua": "32fafd1d0cecd21e00b3629af6eb98a3e7e5f58192625ed210021855a56797d8",
+    "src/rfsuite/app/pages/helicopter_setup/labels.lua": "7581e5da211bbfe06585a163f840bc2706fd97b9dd0dd02f271858afb61e0d50",
     "src/rfsuite/app/pages/helicopter_setup/math.lua": "c4124f86de6988af6bb22e6fa1cb67e7e924eb78de38cffa5be107492caa14c1",
     "src/rfsuite/app/pages/helicopter_setup/navigation.lua": "1e54a9965742d66c7454f7fe0e32ad7512fce7dfed931aee47353757b95ae4d3",
     "src/rfsuite/app/pages/helicopter_setup/page.lua": "5b90895498d7cd91784b8ca10aa736c9aa72f90f7696318bc7c58f49838c186b",
@@ -35,19 +35,19 @@
     "src/rfsuite/app/pages/helicopter_setup/steps/rates.lua": "4157b1bd7bcd0136bfa3e744ff6d384595d7fcc246b1798e639ccba93b6d69b8",
     "src/rfsuite/app/pages/helicopter_setup/steps/receiver.lua": "d0af9c9ca4990baa9027bd76d327d5ef1170f07730c5d0be255c626ec7932623",
     "src/rfsuite/app/pages/helicopter_setup/steps/sensors.lua": "d725edcb37c5fcdc9c8ef4ba5bc688875fc7a4c84946dbaafb09860b72fa0df6",
-    "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua": "ca50e8999ee91065ae82d59bbbc01c1e8d448623cee969700eb19bc71ff01925",
+    "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua": "4e728677fa31acb62385f4a6a1cff58489f7005a38e92c0d2dbf0bd9aa23643c",
     "src/rfsuite/app/pages/helicopter_setup/steps/servos.lua": "a257d4f4a155d6e93a333ce435e1462bbe659ed1ef85252fa415e16fab24124c",
     "src/rfsuite/app/pages/helicopter_setup/steps/swash.lua": "201aa352353dff142883ce0d3980d9dc12e7dfcdbdf85398f872ef496d68d64e",
     "src/rfsuite/app/pages/helicopter_setup/steps/tail.lua": "4810aefafd236621fc3214bcc6361b29e3b5edeecebc9fd4ac362df45c2799f9",
     "src/rfsuite/app/pages/helicopter_setup/steps/throttle.lua": "477a6a94493f0ef71b1ce5c941f5e0fd6577a881583b891a8b3ce523efd4dd07",
     "src/rfsuite/app/pages/helicopter_setup/transport.lua": "a75fa8705f5c2c82eca0c356fc5d085e723d487fc9243ce3a1127a65805d1c91",
-    "src/rfsuite/app/pages/helicopter_setup/view.lua": "9007823f2d3c7fa309d6aa5a8b3f44cf5adc4ac5735c349396a6066e6ef35b2d",
+    "src/rfsuite/app/pages/helicopter_setup/view.lua": "a7c174226329b022a05bf7745b962008c150108f57f63789e92a482682a2fda8",
     "src/rfsuite/app/pages/helicopter_setup/workflow.lua": "d7a24987575021a428756b724dc4b155a89689372886fc07c78842d2bc0f1b1e",
     "src/rfsuite/app/pages/setup/esc_motors/throttle/page.lua": "b26b2956996f57090bca476e02adc1444831a243da8d6bb3b26959a96aced8d5",
     "src/rfsuite/app/pages/setup/power/battery/page.lua": "2638ce09dd191b4003982664ee48587da70625de9d8be2195033d3ab9c46f958",
     "src/rfsuite/app/pages/setup/power/smartfuel/page.lua": "74863d65af8394ac42d56081612dd190395ab0a4edb6a8af2a245f507edc3c95",
     "src/rfsuite/app/pages/setup/power/sources/page.lua": "6dde30b05c017650a36d5ae73524aaf4a4c72e92699aba616d43b16304b0b16c",
-    "src/rfsuite/i18n/en.lua": "1fb872c4e05d5fda10b387aca7784d3406ebfab0856860391d8d3abbd16bbfb0",
+    "src/rfsuite/i18n/en.lua": "91cbd047ed44ddb4e25a1997ec007746c1d0d77c111d2f45b15f695f24a3586f",
     "src/rfsuite/lib/esc_params.lua": "2a9f2fb0fd6f762ef396ed20da5a48081a5583687bb2803b870a34ca2635eeaf",
     "src/rfsuite/lib/governor_fields.lua": "2c7407a6d75e7b00de9002dbb4be49696a6a3468b2d76013e1998549a2932a3c",
     "src/rfsuite/lib/power_fields.lua": "2204f3bd87281732a784d9aacd45a432d91cd3ab99a7a649c5976192c345c41e",
@@ -775,7 +775,7 @@
         "contracts": [
           "VISUAL.configurator-pictures"
         ],
-        "adaptation": "Exact group Hz/width presets select packaged Configurator pulse pictures. Custom or mixed settings retain cached waveform geometry. Image and sketch visibility change within the same scene."
+        "adaptation": "Each servo type has a packaged picture composed of this pulse train above the Configurator servo drawing. Custom or mixed settings retain cached waveform geometry. Image and sketch visibility change within the same scene."
       },
       {
         "source": "tabs/setup_wizard/RateCurve.svelte",
@@ -1314,9 +1314,9 @@
         ],
         "contracts": [
           "S07.servo-bands-and-reboot",
-          "REVIEW.custom-servo-hz"
+          "REVIEW.servo-types-per-group"
         ],
-        "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises. Separate cyclic/tail cards add custom 25-5000 Hz without changing pulse calibration; mixed settings and firmware pulse constraints are explicit. The waveform uses stable cached points refreshed on edits."
+        "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises. Separate cyclic/tail cards offer their own servo types (cyclic: Analog 50, Digital 165, Hi-end digital 333 Hz at 1520 us, Narrow band 560 Hz at 760 us; tail: Digital 200 Hz at 1520 us, Specific digital 333 and Hi-end specific digital 560 Hz at 760 us) instead of one list of three; a trimmed centre keeps its type, servos matching no type read Custom, which is shown and not chosen. The waveform uses stable cached points refreshed on edits."
       },
       {
         "source": "tabs/setup_wizard/StepServos.svelte",
@@ -4252,23 +4252,6 @@
               "expression": "w : check ( \"unplugged\" , L . servosUnplugged )"
             },
             {
-              "kind": "read",
-              "label": "Group",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ServoArt.svelte",
-                "tabs/setup_wizard/StepServoType.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-              "expression": "w : value ( L . groupState , function ( ) local first = w . data . servo_configurations . servos [ indices [ 1 ] ] for _ , index in ipairs ( indices ) do local s = w . data . servo_configurations . servos [ index ] if s . rate ~= first . rate or ( s . mid <= 860 ) ~= ( first . mid <= 860 ) then return L . mixed end end return L . uniform end )"
-            },
-            {
               "kind": "gate",
               "label": "reboot pending",
               "api": null,
@@ -4287,7 +4270,7 @@
             },
             {
               "kind": "pilot sets",
-              "label": "Swash servos",
+              "label": "Geometry correction",
               "api": null,
               "field": null,
               "deviation": false,
@@ -4300,24 +4283,7 @@
               ],
               "additions": [],
               "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-              "expression": "{ kind = \"choice\" , label = L . cyclicServos , enabled = unplugged , values = { L . analog , L . digital , L . narrow , L . customServo } , get = function ( ) local v = current ( false ) ; return v == 0 and 4 or v end , set = function ( v ) apply ( false , v ) end }"
-            },
-            {
-              "kind": "pilot sets",
-              "label": "Hz",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ServoArt.svelte",
-                "tabs/setup_wizard/StepServoType.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-              "expression": "{ kind = \"number\" , label = L . servoHz , min = 25 , max = 5000 , enabled = unplugged , get = function ( ) return w . data . servo_configurations . servos [ indices [ 1 ] ] . rate end , set = function ( v ) if not w . checks . unplugged then w . message = L . confirmCheck ; return end if type ( v ) ~= \"number\" or v % 1 ~= 0 or v < 25 or v > 5000 then return end local changed = false for _ , index in ipairs ( indices ) do local servo = w . data . servo_configurations . servos [ index ] if servo . rate ~= v then servo . rate = v ; changed = true end end if false then w . rebootPending = true ; w : touch ( \"servo_configurations\" , false , true ) end if w . refreshPulse then w . refreshPulse ( ) end end }"
+              "expression": "{ kind = \"choice\" , label = L . geometryCorrection , values = { L . off , L . on } , allowUnset = true , get = function ( ) local result for _ , index in ipairs ( indices ) do local on = ( w . data . servo_configurations . servos [ index ] . flags & 2 ) ~= 0 and 2 or 1 if result and result ~= on then return 0 end result = on end return result or 0 end , set = function ( v ) if v ~= 1 and v ~= 2 then return end for _ , index in ipairs ( indices ) do local s = w . data . servo_configurations . servos [ index ] s . flags = v == 2 and ( s . flags | 2 ) or ( s . flags & ~ 2 ) end w : touch ( \"servo_configurations\" , false , true ) end }"
             },
             {
               "kind": "MSP write",
@@ -4422,6 +4388,23 @@
               "expression": "servo . rate ="
             },
             {
+              "kind": "MSP write",
+              "label": "servo_configurations.flags",
+              "api": "servo_configurations",
+              "field": "flags",
+              "deviation": false,
+              "configurator_status": [
+                "same"
+              ],
+              "configurator_reference": [
+                "tabs/setup_wizard/ServoArt.svelte",
+                "tabs/setup_wizard/StepServoType.svelte"
+              ],
+              "additions": [],
+              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
+              "expression": "s . flags ="
+            },
+            {
               "kind": "read",
               "label": "MSP status",
               "api": "status",
@@ -4483,189 +4466,6 @@
               "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
               "expression": "w : check ( \"unplugged\" , L . servosUnplugged )"
             },
-            {
-              "kind": "MSP write",
-              "label": "servo_configurations (record/payload)",
-              "api": "servo_configurations",
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ServoArt.svelte",
-                "tabs/setup_wizard/StepServoType.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-              "expression": "w : touch ( \"servo_configurations\" , false , true )"
-            },
-            {
-              "kind": "read",
-              "label": "Group",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ServoArt.svelte",
-                "tabs/setup_wizard/StepServoType.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-              "expression": "w : value ( L . groupState , function ( ) local first = w . data . servo_configurations . servos [ indices [ 1 ] ] for _ , index in ipairs ( indices ) do local s = w . data . servo_configurations . servos [ index ] if s . rate ~= first . rate or ( s . mid <= 860 ) ~= ( first . mid <= 860 ) then return L . mixed end end return L . uniform end )"
-            },
-            {
-              "kind": "pilot sets",
-              "label": "Tail servo",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ServoArt.svelte",
-                "tabs/setup_wizard/StepServoType.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-              "expression": "{ kind = \"choice\" , label = L . tailServo , enabled = unplugged , values = { L . analog , L . digital , L . narrow , L . customServo } , get = function ( ) local v = current ( true ) ; return v == 0 and 4 or v end , set = function ( v ) apply ( true , v ) end }"
-            },
-            {
-              "kind": "pilot sets",
-              "label": "Hz",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ServoArt.svelte",
-                "tabs/setup_wizard/StepServoType.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-              "expression": "{ kind = \"number\" , label = L . servoHz , min = 25 , max = 5000 , enabled = unplugged , get = function ( ) return w . data . servo_configurations . servos [ indices [ 1 ] ] . rate end , set = function ( v ) if not w . checks . unplugged then w . message = L . confirmCheck ; return end if type ( v ) ~= \"number\" or v % 1 ~= 0 or v < 25 or v > 5000 then return end local changed = false for _ , index in ipairs ( indices ) do local servo = w . data . servo_configurations . servos [ index ] if servo . rate ~= v then servo . rate = v ; changed = true end end if false then w . rebootPending = true ; w : touch ( \"servo_configurations\" , false , true ) end if w . refreshPulse then w . refreshPulse ( ) end end }"
-            },
-            {
-              "kind": "gate",
-              "label": "reboot pending",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ServoArt.svelte",
-                "tabs/setup_wizard/StepServoType.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-              "expression": "rebootPending"
-            },
-            {
-              "kind": "MSP write",
-              "label": "servo_configurations.rate",
-              "api": "servo_configurations",
-              "field": "rate",
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ServoArt.svelte",
-                "tabs/setup_wizard/StepServoType.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-              "expression": "servo . rate ="
-            }
-          ]
-        },
-        {
-          "title": "Geometry correction",
-          "title_expression": "L . geometryCorrection",
-          "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-          "configurator_reference": [
-            "tabs/setup_wizard/ServoArt.svelte",
-            "tabs/setup_wizard/StepServoType.svelte"
-          ],
-          "configurator_status": [
-            "same"
-          ],
-          "additions": [],
-          "rows": [
-            {
-              "kind": "MSP write",
-              "label": "servo_configurations (record/payload)",
-              "api": "servo_configurations",
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ServoArt.svelte",
-                "tabs/setup_wizard/StepServoType.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-              "expression": "w : touch ( \"servo_configurations\" , false , true )"
-            },
-            {
-              "kind": "pilot sets",
-              "label": "Geometry correction",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ServoArt.svelte",
-                "tabs/setup_wizard/StepServoType.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-              "expression": "{ kind = \"choice\" , label = L . geometryCorrection , values = { L . off , L . on } , allowUnset = true , get = function ( ) local result for _ , index in ipairs ( indices ) do local on = ( w . data . servo_configurations . servos [ index ] . flags & 2 ) ~= 0 and 2 or 1 if result and result ~= on then return 0 end result = on end return result or 0 end , set = function ( v ) if v ~= 1 and v ~= 2 then return end for _ , index in ipairs ( indices ) do local s = w . data . servo_configurations . servos [ index ] s . flags = v == 2 and ( s . flags | 2 ) or ( s . flags & ~ 2 ) end w : touch ( \"servo_configurations\" , false , true ) end }"
-            },
-            {
-              "kind": "MSP write",
-              "label": "servo_configurations.flags",
-              "api": "servo_configurations",
-              "field": "flags",
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ServoArt.svelte",
-                "tabs/setup_wizard/StepServoType.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-              "expression": "s . flags ="
-            }
-          ]
-        },
-        {
-          "title": "Tail geometry correction",
-          "title_expression": "L . tailGeometryCorrection",
-          "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
-          "configurator_reference": [
-            "tabs/setup_wizard/ServoArt.svelte",
-            "tabs/setup_wizard/StepServoType.svelte"
-          ],
-          "configurator_status": [
-            "same"
-          ],
-          "additions": [],
-          "rows": [
             {
               "kind": "MSP write",
               "label": "servo_configurations (record/payload)",
@@ -4748,6 +4548,40 @@
               "additions": [],
               "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
               "expression": "w : value ( L . servo , function ( ) return L . unavailable end )"
+            },
+            {
+              "kind": "pilot sets",
+              "label": "Swash servos",
+              "api": null,
+              "field": null,
+              "deviation": false,
+              "configurator_status": [
+                "same"
+              ],
+              "configurator_reference": [
+                "tabs/setup_wizard/ServoArt.svelte",
+                "tabs/setup_wizard/StepServoType.svelte"
+              ],
+              "additions": [],
+              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
+              "expression": "{ kind = \"choice\" , label = L . cyclicServos , enabled = unplugged , values = string . format ( L . servoSpec , first . mid , first . rate ) , allowUnset = true , get = function ( ) return current ( false ) end , set = function ( v ) if string . format ( L . servoSpec , first . mid , first . rate ) [ v ] then apply ( false , v ) end end }"
+            },
+            {
+              "kind": "pilot sets",
+              "label": "Tail servo",
+              "api": null,
+              "field": null,
+              "deviation": false,
+              "configurator_status": [
+                "same"
+              ],
+              "configurator_reference": [
+                "tabs/setup_wizard/ServoArt.svelte",
+                "tabs/setup_wizard/StepServoType.svelte"
+              ],
+              "additions": [],
+              "source": "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua",
+              "expression": "{ kind = \"choice\" , label = L . tailServo , enabled = unplugged , values = string . format ( L . servoSpec , first . mid , first . rate ) , allowUnset = true , get = function ( ) return current ( true ) end , set = function ( v ) if string . format ( L . servoSpec , first . mid , first . rate ) [ v ] then apply ( true , v ) end end }"
             }
           ]
         }

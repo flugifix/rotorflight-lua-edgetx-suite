@@ -98,15 +98,11 @@ flowchart LR
     end
     subgraph S7["7. Servo type"]
       direction TB
-      S7c0["<b>Swash servos</b><br/>sets: Swash servos, Hz<br/>confirms: Servos unplugged<br/>writes: servo_configurations"]:::k3
-      S7c1["<b>Tail servo</b><br/>sets: Tail servo, Hz<br/>confirms: Servos unplugged<br/>writes: servo_configurations, servo_configura..."]:::k3
+      S7c0["<b>Swash servos</b><br/>sets: Geometry correction<br/>confirms: Servos unplugged<br/>writes: servo_configurations"]:::k3
+      S7c1["<b>Tail servo</b><br/>sets: Geometry correction<br/>confirms: Servos unplugged<br/>writes: servo_configurations, servo_configura..."]:::k3
       S7c0 --> S7c1
-      S7c2["<b>Geometry correction</b><br/>sets: Geometry correction<br/>writes: servo_configurations, servo_configura..."]:::k3
+      S7c2["<b>Servo type</b><br/>sets: Swash servos, Tail servo<br/>reads: Servo"]:::k0
       S7c1 --> S7c2
-      S7c3["<b>Tail geometry correction</b><br/>sets: Geometry correction<br/>writes: servo_configurations, servo_configura..."]:::k3
-      S7c2 --> S7c3
-      S7c4["<b>Servo type</b><br/>reads: Servo"]:::k1
-      S7c3 --> S7c4
     end
     S6 --> S7
     subgraph S8["8. Governor"]
@@ -336,7 +332,7 @@ MSP writes include deferred dirty records and immediate commands. The inventory 
 | 4. Profiles & gain | Profiles & gain<br/>Master gain<br/>Trim-button guide<br/>Channel use | Profile switch<br/>Method | — | status<br/>rc<br/>servo | adjustment_ranges<br/>set_adjustment_range | same |
 | 5. Rates | Switch position {n} · rate profile {n} / Rate profile {n}<br/>Rates set | — | — | rc_tuning<br/>status<br/>servo | set_pid_profile<br/>rc_tuning | same |
 | 6. Swashplate | Swash type<br/>Rotor direction<br/>Tail type<br/>Swashplate set | Swash type<br/>Servo 1<br/>Rotor direction<br/>Tail type | — | governor_profile<br/>status<br/>servo | tail_motor_output.action<br/>mixer_input<br/>mixer_config.swash_type<br/>mixer_input.rate<br/>set_pid_profile<br/>governor_profile<br/>governor_profile.governor_tta_gain<br/>mixer_config.main_rotor_dir<br/>mixer_config.tail_rotor_mode | same |
-| 7. Servo type | Swash servos<br/>Tail servo<br/>Geometry correction<br/>Tail geometry correction<br/>Servo type | Swash servos<br/>Hz<br/>Tail servo<br/>Geometry correction | Servos unplugged | status<br/>servo | servo_configurations<br/>servo_configurations.mid<br/>servo_configurations.min<br/>servo_configurations.max<br/>servo_configurations.rneg<br/>servo_configurations.rpos<br/>servo_configurations.rate<br/>servo_configurations.flags | same |
+| 7. Servo type | Swash servos<br/>Tail servo<br/>Servo type | Geometry correction<br/>Swash servos<br/>Tail servo | Servos unplugged | status<br/>servo | servo_configurations<br/>servo_configurations.mid<br/>servo_configurations.min<br/>servo_configurations.max<br/>servo_configurations.rneg<br/>servo_configurations.rpos<br/>servo_configurations.rate<br/>servo_configurations.flags | same |
 | 8. Governor | Governor Mode<br/>RPM source<br/>RPM filter<br/>Throttle Type<br/>PID profile {n}<br/>Ramp Time | Mode<br/>RPM source<br/>Throttle Type<br/>Full headspeed (rpm)<br/>Spoolup time<br/>Spooldown time<br/>Recovery time | — | filter_config<br/>rpm_filter_v2<br/>governor_profile<br/>status<br/>governor_profile.governor_headspeed<br/>filter_config.rpm_preset<br/>rpm_filter_v2.notch_source_1..16 (axes 0..2, CUSTOM only)<br/>servo<br/>governor_config.gov_spoolup_time<br/>governor_config.gov_spooldown_time<br/>governor_config.gov_recovery_time | governor_config.gov_mode<br/>feature_config.enabledFeatures<br/>governor_config.gov_throttle_type<br/>set_pid_profile<br/>governor_profile<br/>governor_profile.governor_headspeed<br/>motor_config.use_dshot_telemetry<br/>governor_config.gov_spoolup_time<br/>governor_config.gov_spooldown_time<br/>governor_config.gov_recovery_time | beyond the Configurator |
 | 9. Motor & ESC | Throttle Protocol<br/>Motor and gearing<br/>Motor and gearing (cont.) | Bidirectional DShot<br/>Protocol<br/>Main motor poles<br/>Motor pinion teeth<br/>Main gear teeth<br/>Tail motor poles<br/>Tail input gear teeth<br/>Tail output gear teeth | All blades removed | status<br/>servo | motor_config.use_dshot_telemetry<br/>motor_config.motor_pwm_protocol<br/>esc_sensor_config<br/>feature_config.enabledFeatures<br/>motor_config.motor_pole_count_0<br/>motor_config.main_rotor_gear_ratio_0<br/>motor_config.main_rotor_gear_ratio_1<br/>motor_config.motor_pole_count_1<br/>motor_config.tail_rotor_gear_ratio_0<br/>motor_config.tail_rotor_gear_ratio_1 | same |
 | 10. Connect the servos | Connect the servos<br/>Plug the servos in<br/>Battery | — | Servos unplugged<br/>Servos connected and powered<br/>All blades removed | status<br/>servo<br/>motor | — | same |
@@ -350,4 +346,4 @@ MSP writes include deferred dirty records and immediate commands. The inventory 
 | 18. Gyro check | Roll<br/>Pitch<br/>Yaw | — | Corrects against movement | status<br/>servo | — | same |
 | 19. Finish | Finish | — | Final checks understood | status<br/>servo | — | same |
 
-Diagram: 99 nodes; 19 numbered steps plus the model card.
+Diagram: 97 nodes; 19 numbered steps plus the model card.

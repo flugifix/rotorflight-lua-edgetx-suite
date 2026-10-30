@@ -573,8 +573,9 @@ desktop fonts. They are not native EdgeTX screenshots or radio acceptance eviden
 
 [Stick check](../images/helicopter_setup/02-small-task-3.png) ·
 [Throttle-switch endpoints](../images/helicopter_setup/02-small-task-4.png) ·
-[Cyclic servo Hz](../images/helicopter_setup/07-small.png) ·
-[Tail servo Hz](../images/helicopter_setup/07-small-task-2.png)
+[Swash servo type](../images/helicopter_setup/07-small.png) ·
+[Tail servo type](../images/helicopter_setup/07-small-task-2.png) ·
+[Servos with no type](../images/helicopter_setup/07-small-task-type-none.png)
 
 [480×272 illustrated tasks](../images/helicopter_setup/illustrations-small.png) ·
 [800×480 illustrated tasks](../images/helicopter_setup/illustrations-large.png)
