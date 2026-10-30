@@ -67,6 +67,9 @@ local state = {
   -- pickCurves puts it into its column chooser.
   view = nil,
   pickCurves = false,
+  -- The plot was opened from the list's Graph button rather than from a summary, so Back from
+  -- it returns to the list and the engine holds no summary.
+  direct = false,
   slots = {},
   -- Set when the engine refused the chosen columns, so the view says so instead of drawing
   -- the chooser again.
@@ -273,6 +276,7 @@ local function closeGraph()
   end
   state.view = nil
   state.pickCurves = false
+  state.direct = false
   state.slots = {}
   collectgarbage("collect")
 end
@@ -818,9 +822,19 @@ function M.wakeup(ctx)
       end
       if not Graph.isBusy() then break end
     end
-    if redraw and state.requestRebuild then
-      state.requestRebuild()
+    if redraw then
+      -- Asked for before the flag is cleared: a call stopped in between asks again, never not.
+      if state.requestRebuild then state.requestRebuild() end
+      state.drawnBusy = false
     end
+  end
+
+  -- A view drawn while the engine was busy is drawn again once it is idle, also where the tick
+  -- that finished was stopped before its answer reached the loop above: the loading notice
+  -- would otherwise stay up over a finished index.
+  if state.view == "graph" and state.drawnBusy and Graph and not Graph.isBusy() then
+    if state.requestRebuild then state.requestRebuild() end
+    state.drawnBusy = false
   end
 end
 
@@ -852,16 +866,17 @@ function M.onBack(ctx)
     end
     -- Back to the summary of the same file: the plot's data goes, the engine and its index
     -- stay until the page leaves the file (the branch below, onReload, onClose), so Graph
-    -- opens again without reading the log.
-    if Graph and Graph.releasePlot() then
+    -- opens again without reading the log. A plot opened from the list has no summary to go
+    -- back to, and leaves the file.
+    if not state.direct and Graph and Graph.releasePlot() then
       state.view = nil
       state.pickCurves = false
       state.slots = {}
       collectgarbage("collect")
-    else
+    elseif not state.direct then
       closeGraph()
     end
-    return true
+    if not state.direct then return true end
   end
 
   if state.selectedFile ~= nil then
@@ -878,17 +893,20 @@ function M.onBack(ctx)
   return false
 end
 
-local function openGraph()
+-- `direct` opens the plot from the list: the engine then indexes the log without the summary,
+-- which is the larger part of a summary walk's cost.
+local function openGraph(direct)
   if not Graph then Graph = loadModule("app/pages/logs/graph.lua") end
   if not Graph then return false end
   state.view = "graph"
   state.pickCurves = false
+  state.direct = direct == true
   state.slots = {}
   state.graphRefused = false
   -- The statistics view has had this file walked, and the walk built the index the plot needs;
   -- Back from the plot keeps it. Opening it again here is what the engine recognises and
   -- answers without reading.
-  Graph.open(state.selectedFilePath, { stats = true })
+  Graph.open(state.selectedFilePath, { stats = not state.direct })
   return true
 end
 
@@ -953,7 +971,7 @@ end
 -- event of its own -- ui/home.lua reads them for its back handling only -- so this focus
 -- movement is how the encoder reaches the list, and every row has a control that can hold it.
 --
--- LIST_WINDOW bounds what a build creates and measures: four LVGL objects and a wrapped label
+-- LIST_WINDOW bounds what a build creates and measures: five LVGL objects and a wrapped label
 -- per row, however many logs the card holds. Twenty-five rows are about a hundred objects, the
 -- list a card of twenty-five logs always built, and at 480x320, with rows of at least 44 px,
 -- some four screens to scroll or turn through. Previous above the window and Next below it
@@ -1304,6 +1322,8 @@ local function buildGraphView(children, x, y, w, availH, i18n)
   -- Told once per build, before anything is asked of the engine. A change drops its cached
   -- windows and starts the current one again; the points it still holds are drawn meanwhile.
   Graph.setGeometry(chartRect(x, y, w, availH))
+  -- What this build drew, so the wakeup can draw again once the engine is idle (see M.wakeup).
+  state.drawnBusy = Graph.isBusy()
 
   -- The engine walks a file to the end for the summary whether or not the plot can use it, so
   -- a file the plot cannot draw is only known once the walk is done: one without Date and Time
@@ -1316,7 +1336,9 @@ local function buildGraphView(children, x, y, w, availH, i18n)
   if err == nil and not Graph.isBusy() then
     if not Graph.isTelemetry() then
       err = "not_telemetry"
-    elseif not Graph.hasSummary() then
+    elseif not state.direct and not Graph.hasSummary() then
+      -- Opened from the list the engine reads no summary; a file with no row it can use is
+      -- then refused by the engine itself (getError).
       err = "no_data"
     elseif #Graph.getSessions() == 0 then
       err = "no_time"
@@ -1604,8 +1626,9 @@ function M.build(ctx)
       filled = true
     }
 
-    -- The statistics answer what the flight came to; the plot answers when. It is
-    -- opened from here rather than from the list, so the log is chosen once.
+    -- The statistics answer what the flight came to; the plot answers when. Opened from here
+    -- it reuses the index the summary walk built; the list's own Graph button reads only that
+    -- index.
     local graphBtnW = 200
     if graphBtnW > w then graphBtnW = w end
     children[#children + 1] = {
@@ -1703,16 +1726,19 @@ function M.build(ctx)
   --
   -- Proportional layout based on available width `w`:
   -- - Date/Time column: ~28-34% of `w` (compacts to `MM-DD HH:MM` on narrow screens < 380px)
-  -- - Action button: 60px on narrow screens, 80px on medium (<480px), 100px on wide screens
+  -- - Action buttons, View and Graph side by side: 56px on narrow screens, 76px on medium (<600px),
+  --   100px on wide screens. Narrower than one button had, so the model and file name keep the room
+  --   their wrapping needs; on 480 px two 100px buttons left half of it and doubled the build.
   -- - Model & filename: space between date column and action button with safe margins
   -- - Row height: follows measured broken lines so wrapped titles cannot overflow into adjacent rows
   local ROW_MIN_H = 44
   local ROW_MAX_LINES = 3
   local isNarrow = w < 380
   local dateColW = isNarrow and math.floor(w * 0.34) or math.min(180, math.floor(w * 0.28))
-  local btnW = isNarrow and 60 or (w < 480 and 80 or 100)
+  local btnW = isNarrow and 56 or (w < 600 and 76 or 100)
   local btnH = 30
-  local btnX = x + w - btnW - 10
+  local graphX = x + w - btnW - 10
+  local btnX = graphX - GRAPH_GAP - btnW
   local labelX = x + dateColW + 15
   local labelW = math.max(40, btnX - labelX - 10)
   local _, labelLineH = textSize("Ag", SMLSIZE)
@@ -1789,6 +1815,28 @@ function M.build(ctx)
         state.summary = nil
         state.loading = true
         state.reading = false
+        if state.requestRebuild then
+          state.requestRebuild()
+        end
+      end
+    }
+
+    -- Graph button: straight to the plot, without the summary.
+    children[#children + 1] = {
+      type = "button",
+      x = graphX,
+      y = itemY + 7,
+      w = btnW,
+      h = btnH,
+      text = pageText(i18n, "graph_open"),
+      press = function()
+        state.selectedFile = item.file
+        state.selectedFilePath = item.path
+        state.selectedModel = item.model
+        state.summary = nil
+        state.loading = false
+        state.reading = false
+        openGraph(true)
         if state.requestRebuild then
           state.requestRebuild()
         end

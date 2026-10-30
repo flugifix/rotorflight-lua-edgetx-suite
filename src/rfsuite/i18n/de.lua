@@ -3316,7 +3316,7 @@ return {
         list_range = "%d-%d von %d",
         help_p1 = "Listet Telemetrie-Logs aus /LOGS/, /LOGS/rfsuite/ und /LOGS/rfsuite/telemetry/, neueste zuerst, je 25 (Zurück/Weiter).",
         help_p2 = "Anzeigen: Öffnet die Log-Zusammenfassung mit Flugzeit, Spannung, Strom, Kopfdrehzahl und Regler-Temp; fehlt eine Spalte, steht dort --.",
-        help_p3 = "Diagramm: Zeigt das Log im Zeitverlauf.",
+        help_p3 = "Diagramm: Zeigt das Log im Zeitverlauf; in der Liste ohne Zusammenfassung und dadurch schneller.",
         help_p4 = "Kurve: Bis zu vier Spalten oder eines der angebotenen Sets (Leistung, Akku, Funk, Governor) wählen, dann Anzeigen; Zoom, Blättern und Cursor-Anzeige wirken auf den gezeigten Flug.",
         graph_open = "Diagramm",
         graph_title = "Diagramm",

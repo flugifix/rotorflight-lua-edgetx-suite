@@ -22,7 +22,10 @@ Function *SD Logs*. Without it there is nothing for this page to list.
 
 The page searches `/LOGS/`, `/LOGS/rfsuite/` and `/LOGS/rfsuite/telemetry/`, each at its top
 level and one folder down, and lists every `.csv` file it finds there that is a telemetry log,
-newest first. *View* opens the summary of that log.
+newest first. *View* opens the summary of that log. *Graph* beside it opens the log's plot
+straight away: it reads only what the plot needs and not the summary, so for a long log the plot
+is there sooner, most of all in the tool opened from the dashboard. Back from that plot returns to
+the list.
 
 While it searches, the page shows how many folder entries it has read and how many logs it has
 found so far. It shows no bar: how many entries a folder holds is not known before they have
@@ -35,8 +38,8 @@ the radio's menu, so on a card with many logs, or for a long log, they take long
 Putting the found logs in order is split up the same way, so a card with several hundred logs
 is listed there too.
 
-The list shows 25 logs at a time. Scroll it by touch, or turn the rotary encoder to step from
-one log's *View* to the next. Where there are more logs, *Previous* above the list and *Next*
+The list shows 25 logs at a time. Scroll it by touch, or turn the rotary encoder to step through
+the logs' *View* and *Graph* buttons. Where there are more logs, *Previous* above the list and *Next*
 below it show the 25 before or after, with which logs are shown out of how many beside them.
 Coming back from a log's summary finds the list on the same 25.
 
@@ -82,7 +85,8 @@ telemetry page, and the next log has one column of each name.
 
 ## The graph
 
-*Graph* opens a plot of the log over time. Choose up to four columns, one per *Curve*, or one of
+*Graph*, on the summary or in the list, opens a plot of the log over time. Choose up to four
+columns, one per *Curve*, or one of
 the offered sets (*Power*, *Battery*, *Link*, *Governor*, whichever this log can serve), and
 press *Show*. Zoom, page and a cursor readout work on the plotted flight; where the log holds
 more than one flight, the chooser also offers which one.
@@ -103,7 +107,8 @@ the way EdgeTX writes it (`HH:MM:SS.mmm`). A file that lacks either says so inst
 columns: *Not an EdgeTX telemetry log* without the two columns, *No row carries a time the graph
 can read* where no row's time has that form. The summary also reads a time without the
 milliseconds, so such a file can have a summary and still no graph. A log without any data rows
-has no summary, and its *Graph* button is not offered.
+has no summary, and the summary offers no *Graph* button. The list's *Graph* opens every listed
+log; one without a row the graph can read then says *The log file carries no data rows*.
 
 ## Related
 

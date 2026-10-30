@@ -3321,7 +3321,7 @@ return {
         list_range = "%d-%d of %d",
         help_p1 = "Lists EdgeTX telemetry logs on the SD card in /LOGS/, /LOGS/rfsuite/ and /LOGS/rfsuite/telemetry/, newest first, 25 at a time (Previous/Next).",
         help_p2 = "View: Opens the log summary with Flight Time, Voltage, Current, Headspeed and ESC Temp; missing columns give --.",
-        help_p3 = "Graph: Plots the log over time.",
+        help_p3 = "Graph: Plots the log over time; in the list it skips the summary and opens the plot sooner.",
         help_p4 = "Curve: Choose up to four columns, or one of the offered sets (Power, Battery, Link, Governor), then press Show; zoom, paging and a cursor readout work on the plotted flight.",
         graph_open = "Graph",
         graph_title = "Graph",

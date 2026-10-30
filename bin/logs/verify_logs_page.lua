@@ -772,5 +772,235 @@ do
   files[path] = nil
 end
 
+-- #969: the list's Graph button opens the plot without the summary: one index walk, no
+-- statistics, and Back returns to the list. Control: View still reads the summary.
+local function listPage(isHosted, w)
+  hosted = isHosted
+  local page = loadPage()
+  local st = find(page.wakeup, "state")
+  st.logsList = { { file = "Heli-2026-10-01-120000.csv", path = LOG, model = "Heli", date = "2026-10-01",
+    time = "12:00:00", sortKey = "2026-10-01_120000_Heli-2026-10-01-120000.csv" } }
+  st.scanned = true
+  local ctx = { children = {}, x = 0, y = 0, w = w or 800, h = 430, requestRebuild = function() end }
+  page.build(ctx)
+  return page, st, ctx
+end
+
+local function button(ctx, text)
+  for _, c in ipairs(ctx.children) do
+    if c.type == "button" and c.text == text then return c end
+  end
+  return nil
+end
+
+for _, w in ipairs({ 320, 480, 800 }) do
+  local _, _, ctx = listPage(true, w)
+  local view, graph = button(ctx, "btn_view"), button(ctx, "graph_open")
+  check(view ~= nil and graph ~= nil, "list row " .. w .. ": View and Graph buttons")
+  check(view ~= nil and graph ~= nil and view.x + view.w < graph.x and graph.x + graph.w <= w,
+    "list row " .. w .. ": side by side, inside the row")
+end
+
+for _, isHosted in ipairs({ true, false }) do
+  local label = "graph from the list " .. (isHosted and "hosted" or "tool")
+  local page, st, ctx = listPage(isHosted)
+  local before = reads.bytes
+  button(ctx, "graph_open").press()
+  check(st.view == "graph" and st.direct and not st.loading, label .. ": opens the plot view")
+  local G = find(page.wakeup, "Graph")
+  local wakeups = 0
+  while G and G.isBusy() and wakeups < 100000 do page.wakeup(ctx); wakeups = wakeups + 1 end
+  check(G ~= nil and not G.isBusy() and #G.getSessions() == 1, label .. ": the log is indexed")
+  check(G ~= nil and not G.hasSummary(), label .. ": no summary was read")
+  -- The view built on the finished index is the curve chooser, not an error. With the shared
+  -- controls stubbed out the chooser says graph_no_columns, which only the chooser says.
+  ctx.children = {}
+  page.build(ctx)
+  local errorShown, chooser = false, false
+  for _, c in ipairs(ctx.children) do
+    if type(c.text) == "string" and string.find(c.text, "graph_err", 1, true) then errorShown = true end
+    if c.text == "graph_no_columns" or c.text == "graph_show" then chooser = true end
+  end
+  check(chooser and not errorShown, label .. ": the view is the curve chooser")
+  check(reads.bytes - before == #files[LOG], label .. ": the file is read once", reads.bytes - before)
+  G.setGeometry(0, 0, 760, 200)
+  check(plot(G, { 3, 4 }) and not G.isCurveEmpty(1), label .. ": a plot is drawn")
+  page.onBack(ctx)
+  check(st.selectedFile == nil and st.view == nil and find(page.wakeup, "Graph") == nil,
+    label .. ": Back returns to the list and releases the engine")
+  -- Control: View reads the summary as before, in more wakeups than the index alone.
+  ctx.children = {}
+  page.build(ctx)
+  button(ctx, "btn_view").press()
+  ctx.children = {}
+  page.build(ctx)
+  local viewWakeups = 0
+  while st.loading and viewWakeups < 100000 do page.wakeup(ctx); viewWakeups = viewWakeups + 1 end
+  check(st.summary ~= nil, label .. ": View still reads the summary")
+  if isHosted then
+    check(wakeups < viewWakeups, label .. ": fewer wakeups than the summary walk", wakeups .. " vs " .. viewWakeups)
+  end
+  page.onClose()
+end
+
+-- #969: the tick that finishes the index answers true and the page rebuilds. Where that answer
+-- is lost -- the call stopped after the engine went idle -- the next wakeup rebuilds anyway.
+do
+  local page, st, ctx = listPage(true)
+  local rebuilds = 0
+  ctx.requestRebuild = function() rebuilds = rebuilds + 1 end
+  button(ctx, "graph_open").press()
+  ctx.children = {}
+  page.build(ctx)
+  check(ctx.children[1] and type(ctx.children[1].progress) == "function", "lost completion: the loading notice is up")
+  local G = find(page.wakeup, "Graph")
+  local n = 0
+  while G.isBusy() and n < 100000 do G.tick(); n = n + 1 end
+  rebuilds = 0
+  page.wakeup(ctx)
+  check(rebuilds == 1, "lost completion: the next wakeup rebuilds once", rebuilds)
+  page.wakeup(ctx)
+  check(rebuilds == 1, "lost completion: and not again", rebuilds)
+  page.onClose()
+end
+
+-- Stops at every instruction of a call, each in a fresh setup: `setup()` returns the state to
+-- stop in, `call(state)` is stopped once at instruction n, `judge(state, stopped)` answers true
+-- when the outcome is acceptable. Answers the number of stops and of bad outcomes.
+local function sweep(setup, call, judge, limit)
+  local total = 0
+  do
+    local st = setup()
+    pcall(function()
+      debug.sethook(function() total = total + 1 end, "", 1)
+      call(st)
+      debug.sethook()
+    end)
+    debug.sethook()
+  end
+  if limit and total > limit then total = limit end
+  local bad, firstBad = 0, nil
+  for stopAt = 1, total do
+    local st = setup()
+    local n = 0
+    local ok = pcall(function()
+      debug.sethook(function()
+        n = n + 1
+        if n == stopAt then debug.sethook(); error("stop", 0) end
+      end, "", 1)
+      call(st)
+      debug.sethook()
+    end)
+    debug.sethook()
+    local fine, why = judge(st, not ok)
+    if not fine then
+      bad = bad + 1
+      firstBad = firstBad or (stopAt .. ": " .. tostring(why))
+    end
+  end
+  return total, bad, firstBad
+end
+
+local function settleG(G) local n = 0; while G.isBusy() and n < 100000 do G.tick(); n = n + 1 end end
+
+-- #970: an index pass stopped while it reads the row that sets the clock back can miss that
+-- session boundary; the extraction of the first flight still ends at the row whose time runs
+-- backwards, so the later flight's 48 never joins it.
+do
+  local path = "/LOGS/Back-2026-10-01-120000.csv"
+  local nl = string.char(10)
+  files[path] = "Date,Time,Vbat(V)" .. nl
+    .. "2026-10-01,12:00:00.000,24" .. nl .. "2026-10-01,12:00:10.000,24" .. nl
+    .. "2026-10-01,12:00:05.000,48" .. nl .. "2026-10-01,12:00:15.000,48" .. nl
+  local total, bad, firstBad = sweep(function()
+    local G = assert(loadfile(GRAPH))()
+    G.open(path, { stats = false })
+    return { G = G }
+  end, function(st) settleG(st.G) end, function(st)
+    local G = st.G
+    settleG(G)
+    if #G.getSessions() == 0 then return true end
+    G.setGeometry(0, 0, 760, 200)
+    G.selectSession(1)
+    plot(G, { 3 })
+    local _, hi = G.getCurveRange(1)
+    G.close()
+    return hi == nil or hi < 30, hi
+  end)
+  check(total > 100 and bad == 0, "index stopped at each of its " .. total .. " instructions: flight 1 never reads flight 2", firstBad)
+  files[path] = nil
+end
+
+-- #961: a change of flight stopped at any instruction while the old flight's plot is still being
+-- computed: Show with the same curves afterwards plots the flight selected.
+do
+  local TWO = "/LOGS/Two-2026-10-01-120000.csv"
+  local second = makeLog(300, 12 * 3600 + 600)
+  files[TWO] = makeLog(300, 12 * 3600) .. string.sub(second, string.find(second, string.char(10), 1, true) + 1)
+  local total, bad, firstBad = sweep(function()
+    local G = indexedGraph(TWO)
+    G.selectSession(1); settleG(G)
+    plot(G, { 3, 4 })
+    G.selectSession(1)                     -- the old flight's pass, left running
+    local n = 0
+    while G.getPhase() ~= "pts" and G.isBusy() and n < 10000 do G.tick(); n = n + 1 end
+    return { G = G }
+  end, function(st) st.G.selectSession(2) end, function(st)
+    local G = st.G
+    settleG(G)
+    plot(G, { 3, 4 })
+    local s = G.getSessions()[G.getSessionIndex()]
+    local w0, w1 = G.getWindow()
+    local fine = not G.isCurveEmpty(1) and w0 >= s.t0 and w1 <= s.t1
+    G.close()
+    return fine, w0
+  end)
+  check(total > 5 and bad == 0, "flight change stopped mid-pass at each of " .. total .. " instructions: Show plots the selected flight", firstBad)
+  files[TWO] = nil
+end
+
+-- #794: a curve change stopped at any instruction shows no reading under a curve it has no
+-- points for.
+do
+  local total, bad, firstBad = sweep(function()
+    local G = indexedGraph()
+    plot(G, { 3 })
+    return { G = G }
+  end, function(st) st.G.applyColumns({ 4 }) end, function(st)
+    local G = st.G
+    local readout = G.getReadout()
+    local fine = true
+    for k = 1, #readout do
+      if G.isCurveEmpty(k) and readout[k].value ~= nil then fine = false end
+    end
+    G.close()
+    return fine, readout[1] and readout[1].name
+  end)
+  check(total > 20 and bad == 0, "curve change stopped at each of " .. total .. " instructions: no reading without points", firstBad)
+end
+
+-- #969: the wakeup that finds the index finished, stopped at any instruction: the next one still
+-- asks for the rebuild, and the notice does not stay up.
+do
+  local total, bad, firstBad = sweep(function()
+    local page, st, ctx = listPage(true)
+    local counter = { n = 0 }
+    ctx.requestRebuild = function() counter.n = counter.n + 1 end
+    button(ctx, "graph_open").press()
+    ctx.children = {}
+    page.build(ctx)
+    local G = find(page.wakeup, "Graph")
+    local n = 0
+    while G.isBusy() and n < 100000 do G.tick(); n = n + 1 end
+    return { page = page, ctx = ctx, counter = counter }
+  end, function(st) st.page.wakeup(st.ctx) end, function(st)
+    st.page.wakeup(st.ctx)
+    local fine = st.counter.n >= 1
+    st.page.onClose()
+    return fine, st.counter.n
+  end)
+  check(total > 5 and bad == 0, "finished-index wakeup stopped at each of " .. total .. " instructions: a rebuild is asked for", firstBad)
+end
+
 print(string.format("Logs page: %d checks, %d failures", checks, failures))
 os.exit(failures == 0 and 0 or 1)
