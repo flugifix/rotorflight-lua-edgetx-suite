@@ -556,7 +556,7 @@ return {
         journal_failed = "The change journal could not be written.",
         applied = "Applied. Fly again to check the new settings.",
         help_title = "Tune Advisor",
-        help_message = "Fly in rate mode; read each axis, save its changes once, then fly again.\nAxis: Roll, Pitch or Yaw; all lines are for this axis.\nFlight data: rate flight measured and whether collecting now.\nResponse: heli turn rate compared with the stick.\nStops: bounce-back after centring the stick, or the shake with it centred.\nSuggested changes: what to change, by page and setting.\nWhy: reason for each change."
+        help_message = "Fly in rate mode; read each axis, save its changes once, then fly again.\nAxis: Roll, Pitch or Yaw; all lines are for this axis.\nFlight data: rate flight measured and whether collecting now.\nResponse: heli turn rate compared with the stick.\nStops: bounce-back after centring the stick, or the shake with it centred.\nSuggested changes: what to change, by page and setting.\nWhy: reason for each change.\n*: clears collected data after asking.\nSave (header): writes suggested changes for this axis after you confirm."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
         save_error_title = "Error",

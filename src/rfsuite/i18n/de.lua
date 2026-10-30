@@ -556,7 +556,7 @@ return {
         journal_failed = "Das Änderungsjournal konnte nicht geschrieben werden.",
         applied = "Übernommen. Neue Einstellungen im Flug prüfen.",
         help_title = "Tuning-Berater",
-        help_message = "Im Rate-Modus fliegen; jede Achse lesen, ihre Änderungen einmal speichern, erneut fliegen.\nAchse: Roll, Nick oder Gier; alle Zeilen gelten für diese Achse.\nFlugdaten: gemessener Rate-Flug und ob gerade erfasst wird.\nAnsprechen: Helidrehrate im Vergleich zum Knüppel.\nStopps: Rückprall nach Zentrieren des Knüppels, oder Schwingen in der Mitte.\nVorgeschlagene Änderungen: nach Seite und Einstellung.\nWarum: Grund jeder Änderung."
+        help_message = "Im Rate-Modus fliegen; jede Achse lesen, ihre Änderungen einmal speichern, erneut fliegen.\nAchse: Roll, Nick oder Gier; alle Zeilen gelten für diese Achse.\nFlugdaten: gemessener Rate-Flug und ob gerade erfasst wird.\nAnsprechen: Helidrehrate im Vergleich zum Knüppel.\nStopps: Rückprall nach Zentrieren des Knüppels, oder Schwingen in der Mitte.\nVorgeschlagene Änderungen: nach Seite und Einstellung.\nWarum: Grund jeder Änderung.\n*: löscht gesammelte Daten nach Rückfrage.\nSpeichern (Kopfzeile): schreibt Vorschläge dieser Achse nach Bestätigung."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
         save_error_title = "Fehler",

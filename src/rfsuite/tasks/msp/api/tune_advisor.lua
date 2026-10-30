@@ -40,7 +40,8 @@ local REPLY_BYTES = { [1] = 67, [2] = 71 }
 local BAND_COUNT = 3
 local RATES_TYPE_ACTUAL = 4
 
-Api.REPLY_BYTES = REPLY_BYTES[2]
+-- Reply length of the newest payload version read here
+Api.MAX_REPLY_BYTES = REPLY_BYTES[2]
 
 local function u8(buf, i)
   return tonumber(buf[i]) or 0
