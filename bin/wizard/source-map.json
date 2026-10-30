@@ -680,7 +680,7 @@
       "contracts": [
         "VISUAL.configurator-pictures"
       ],
-      "adaptation": "Exact group Hz/width presets select packaged Configurator pulse pictures. Custom or mixed settings retain cached waveform geometry. Image and sketch visibility change within the same scene."
+      "adaptation": "Each servo type has a packaged picture composed of this pulse train above the Configurator servo drawing. Custom or mixed settings retain cached waveform geometry. Image and sketch visibility change within the same scene."
     },
     {
       "source": "tabs/setup_wizard/RateCurve.svelte",
@@ -1219,9 +1219,9 @@
       ],
       "contracts": [
         "S07.servo-bands-and-reboot",
-        "REVIEW.custom-servo-hz"
+        "REVIEW.servo-types-per-group"
       ],
-      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises. Separate cyclic/tail cards add custom 25-5000 Hz without changing pulse calibration; mixed settings and firmware pulse constraints are explicit. The waveform uses stable cached points refreshed on edits."
+      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises. Separate cyclic/tail cards offer their own servo types (cyclic: Analog 50, Digital 165, Hi-end digital 333 Hz at 1520 us, Narrow band 560 Hz at 760 us; tail: Digital 200 Hz at 1520 us, Specific digital 333 and Hi-end specific digital 560 Hz at 760 us) instead of one list of three; a trimmed centre keeps its type, servos matching no type read Custom, which is shown and not chosen. The waveform uses stable cached points refreshed on edits."
     },
     {
       "source": "tabs/setup_wizard/StepServos.svelte",

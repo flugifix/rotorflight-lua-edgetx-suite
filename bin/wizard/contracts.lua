@@ -1961,44 +1961,43 @@ return function(h)
     check(w.error==nil,"S06 refused tail pin is not a failure")
     eq(w.tailPinRefused,1,"S06 refused tail pin is latched for the motor tail")
   end)
-  case("REVIEW.custom-servo-hz",function()
+  case("REVIEW.servo-types-per-group",function()
     local w=world();local c=step(w,"servoType")
-    local rate
-    for _,r in ipairs(c[1].rows) do if r.kind=="number" then rate=r end end
-    check(rate~=nil,"REVIEW servo type offers an editable Hz field")
-    if not rate then return end
-    eq(rate.min,25,"REVIEW custom Hz uses the firmware minimum")
-    eq(rate.max,5000,"REVIEW custom Hz uses the firmware maximum")
+    local cyclic,tail=c[1].rows[2],c[2].rows[2]
+    for _,r in ipairs(c[1].rows) do check(r.kind~="number","REVIEW servo type has no frame-rate field") end
+    eq(table.concat(cyclic.values,"|"),table.concat({L.servoAnalog,L.servoDigital,L.servoHiendDigital,L.servoNarrowBand,L.customServo},"|"),
+      "REVIEW cyclic servo types")
+    eq(table.concat(tail.values,"|"),table.concat({L.servoDigital,L.servoSpecificDigital,L.servoHiendSpecificDigital,L.customServo},"|"),
+      "REVIEW tail servo types")
     local servos=w.data.servo_configurations.servos
-    local mid,travel,scale=servos[0].mid,servos[0].max,servos[0].rpos
-    local original=servos[0].rate;rate.set(200)
-    eq(servos[0].rate,original,"REVIEW Hz change requires unplugged servos")
-    w.checks.unplugged=true;local tailRate=servos[3].rate;rate.set(200)
-    for i=0,2 do eq(servos[i].rate,200,"REVIEW Hz applies to every cyclic PWM servo") end
-    eq(servos[3].rate,tailRate,"REVIEW cyclic Hz leaves the tail unchanged")
-    eq(servos[0].mid,mid,"REVIEW Hz preserves calibrated centre")
-    eq(servos[0].max,travel,"REVIEW Hz preserves calibrated travel")
-    eq(servos[0].rpos,scale,"REVIEW Hz preserves output scale")
-    check(w.rebootPending and w.dirty.servo_configurations,"REVIEW custom Hz marks the configuration for restart")
-    eq(c[1].rows[2].get(),4,"REVIEW custom Hz is shown as a custom type")
-    local tail=c[2].rows[3];tail.set(250)
-    eq(servos[3].rate,250,"REVIEW tail Hz has a separate field")
-    eq(servos[0].rate,200,"REVIEW tail Hz leaves cyclic rates unchanged")
-    rate.set(24);rate.set(5001);rate.set(200.5)
-    eq(servos[0].rate,200,"REVIEW out-of-range/fractional Hz cannot be written")
-    servos[1].rate=333;eq(c[1].rows[4].get(),L.mixed,"REVIEW different group settings are explicitly marked mixed")
+    local original=servos[0].rate;cyclic.set(2)
+    eq(servos[0].rate,original,"REVIEW a servo type requires unplugged servos")
+    w.checks.unplugged=true;local tailRate=servos[3].rate;cyclic.set(2)
+    for i=0,2 do eq(servos[i].rate,165,"REVIEW a cyclic type sets every cyclic PWM servo") end
+    eq(servos[3].rate,tailRate,"REVIEW a cyclic type leaves the tail unchanged")
+    check(w.rebootPending and w.dirty.servo_configurations,"REVIEW a new frame rate marks the configuration for restart")
+    eq(cyclic.get(),2,"REVIEW the chosen type is shown")
+    tail.set(2)
+    eq(servos[3].rate,333,"REVIEW the tail has its own types");eq(servos[3].mid,760,"REVIEW Specific digital is a 760 us servo")
+    eq(servos[0].rate,165,"REVIEW a tail type leaves the cyclic servos unchanged")
+    cyclic.set(5);eq(servos[0].rate,165,"REVIEW Custom is shown, not chosen")
+    servos[1].rate=210;eq(cyclic.get(),5,"REVIEW servos matching no type read Custom")
+    eq(c[1].rows[3].get(),L.mixed,"REVIEW different group settings are explicitly marked mixed")
     w.cards=c;w.card=1
     local scene=h.view.new(w,{w=480,h=272},h.diagrams)
     while not scene:step() do end
-    local wave
-    for _,item in ipairs(scene.children) do if item.type=="line" and type(item.pts)=="function" and #item.pts()==50 then wave=item end end
-    check(wave~=nil,"REVIEW custom Hz has a cached pulse reference")
-    local points=wave.pts();local before=points[5][1]
-    h.measure("Hz edit",function() rate.set(250) end);eq(wave.pts(),points,"REVIEW Hz edits retain native point-table identity")
-    check(points[5][1]~=before,"REVIEW custom Hz updates the existing waveform")
-    rate.set(5000);check(not wave.visible(),"REVIEW impossible pulse timing is not drawn as a valid waveform")
-    rate.set(200);check(wave.visible(),"REVIEW supported timing restores the same waveform")
-    eq(c[1].rows[4].get(),L.uniform,"REVIEW group Hz edit resolves mixed rates explicitly")
+    local wave,picture
+    for _,item in ipairs(scene.children) do
+      if item.type=="line" and type(item.pts)=="function" and #item.pts()==50 then wave=item end
+      if item.type=="image" then picture=item end
+    end
+    check(wave~=nil and picture~=nil,"REVIEW the servo card has a picture and a cached waveform")
+    if not wave or not picture then return end
+    w.refreshPulse()
+    check(wave.visible() and not picture.visible(),"REVIEW Custom draws the waveform of what the servos hold")
+    servos[1].rate=165;w.refreshPulse()
+    check(picture.visible() and not wave.visible(),"REVIEW a matching type shows its picture")
+    eq(c[1].rows[3].get(),L.uniform,"REVIEW one type for the group reads uniform")
   end)
   case("S07.geometry-correction",function()
     local w=world();local c=step(w,"servoType");local card=(function() for _,x in ipairs(c) do if x.title==L.geometryCorrection then return x end end end)()
@@ -2066,7 +2065,8 @@ return function(h)
   end)
   case("S07.servo-bands-and-reboot",function()
     local w=world();w.checks.unplugged=true
-    local c=step(w,"servoType");c[1].rows[2].set(3)
+    -- Cyclic types: Analog, Digital, Hi-end digital, Narrow band (the only 760 us one).
+    local c=step(w,"servoType");c[1].rows[2].set(4)
     local s=w.data.servo_configurations.servos[0]
     eq(s.mid,760,"S07 narrow midpoint")
     eq(s.min,-250,"S07 narrow minimum")
@@ -2081,7 +2081,9 @@ return function(h)
     eq(s.rpos,500,"S07 wide scale")
     s.mid=1530;c[1].rows[2].set(1)
     eq(s.mid,1530,"S07 same pulse band preserves centre")
-    w.checks.unplugged=false;c[1].rows[2].set(3)
+    eq(s.rate,50,"S07 analog rate")
+    eq(c[1].rows[2].get(),1,"S07 a trimmed centre keeps the servo type")
+    w.checks.unplugged=false;c[1].rows[2].set(4)
     eq(s.mid,1530,"S07 plugged servos block band change")
   end)
   case("S08.headspeed-and-ramps",function()
@@ -3398,7 +3400,11 @@ return function(h)
       check(wave~=nil,"VISUAL pulse scene retains its custom waveform")
       if wave then
         local points=wave.pts()
-        for _,preset in ipairs({{50,1520,"pulse-50-1520"},{333,1520,"pulse-333-1520"},{560,760,"pulse-560-760"}}) do
+        -- Each group's servo types have their own picture: the servo with its pulse train.
+        local presets=index==1 and {{50,1520,"servo-cyclic-analog"},{165,1520,"servo-cyclic-digital"},
+          {333,1520,"servo-cyclic-hiend-digital"},{560,760,"servo-cyclic-narrow-band"}}
+          or {{200,1520,"servo-tail-digital"},{333,760,"servo-tail-specific-digital"},{560,760,"servo-tail-hiend-specific-digital"}}
+        for _,preset in ipairs(presets) do
           for _,servo in ipairs(card.servoIndices) do
             local member=w.data.servo_configurations.servos[servo]
             member.rate,member.mid,member.max=preset[1],preset[2],preset[2]==760 and 250 or 700
@@ -3406,7 +3412,8 @@ return function(h)
           w.refreshPulse();expect(picture,preset[3])
           check(picture.visible() and not wave.visible(),"VISUAL preset shows only its picture")
           local shapes={}
-          for _,custom in ipairs({{200,preset[2]},{preset[1],preset[2]+10}}) do
+          -- A rate no type has, in either band: Custom draws the waveform of what the servos hold.
+          for _,custom in ipairs({{210,preset[2]},{210,preset[2]==1520 and 760 or 1520}}) do
             local first=w.data.servo_configurations.servos[card.servoIndex]
             first.rate,first.mid=custom[1],custom[2];w.refreshPulse()
             check(not picture.visible() and wave.visible(),"VISUAL custom Hz or width uses the waveform")
@@ -3424,8 +3431,9 @@ return function(h)
           check(picture.visible() and not wave.visible(),"VISUAL restoring a preset restores its picture")
           if #card.servoIndices>1 then
             local member=w.data.servo_configurations.servos[card.servoIndices[2]]
-            member.mid=member.mid+1;w.refreshPulse()
+            member.rate=member.rate+1;w.refreshPulse()
             check(not picture.visible() and wave.visible(),"VISUAL a mixed group cannot show a preset")
+            member.rate=member.rate-1
           end
           eq(#job.children,count,"VISUAL pulse settings retain the scene")
         end

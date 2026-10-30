@@ -87,33 +87,6 @@
       "index": 0
     },
     {
-      "name": "pulse-50-1520",
-      "component": "PulseTrain",
-      "props": {
-        "rate": 50,
-        "width": 1520
-      },
-      "index": 0
-    },
-    {
-      "name": "pulse-333-1520",
-      "component": "PulseTrain",
-      "props": {
-        "rate": 333,
-        "width": 1520
-      },
-      "index": 0
-    },
-    {
-      "name": "pulse-560-760",
-      "component": "PulseTrain",
-      "props": {
-        "rate": 560,
-        "width": 760
-      },
-      "index": 0
-    },
-    {
       "name": "rate-trainer-cyclic",
       "component": "RateCurve",
       "props": {
@@ -513,5 +486,203 @@
     "heli-remove-blades",
     "heli-level",
     "heli-tail-lift"
+  ],
+  "composites": [
+    {
+      "name": "servo-cyclic-analog",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 50,
+            "width": 1520
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ]
+    },
+    {
+      "name": "servo-cyclic-digital",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 165,
+            "width": 1520
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ]
+    },
+    {
+      "name": "servo-cyclic-hiend-digital",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 333,
+            "width": 1520
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ]
+    },
+    {
+      "name": "servo-cyclic-narrow-band",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 560,
+            "width": 760
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ]
+    },
+    {
+      "name": "servo-tail-digital",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 200,
+            "width": 1520
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ]
+    },
+    {
+      "name": "servo-tail-specific-digital",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 333,
+            "width": 760
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ]
+    },
+    {
+      "name": "servo-tail-hiend-specific-digital",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 560,
+            "width": 760
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ]
+    }
   ]
 }

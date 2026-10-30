@@ -52,7 +52,8 @@ for (const entry of provenance.files.filter(entry => entry.file)) {
 assert.equal(imported.length, 15);
 assert(!imported.some(entry => entry.path.endsWith("/HeliSide.svelte")));
 assert.equal(new Set(catalog.exports.map(entry => entry.name)).size, catalog.exports.length);
-const components = new Set(catalog.exports.map(entry => entry.component + ".svelte"));
+const components = new Set([...catalog.exports, ...(catalog.composites || []).flatMap(item => item.parts)]
+  .map(entry => entry.component + ".svelte"));
 assert.deepEqual([...components].sort(), imported.map(entry => path.basename(entry.file)).sort());
 
 await fs.writeFile(path.join(cache, "i18n.mjs"),
@@ -166,6 +167,47 @@ for (const item of catalog.exports) {
     records.push({name:item.name,theme,component:item.component,props:item.props,index:item.index,leverAngle:item.leverAngle,viewPadding:item.viewPadding,svg:svgInfo,png:pngInfo,small});
   }
 }
+// A composite sets parts of the snapshots above into one frame, each fitted into its own box
+// (x, y, width, height in the 220 by 160 frame): the servo-type pictures put a servo type's pulse
+// train above the servo.
+function fitted(markup, box) {
+  const view=markup.match(/\bviewBox="([^"]+)"/);
+  assert(view,"SVG has no viewBox");
+  const [x,y,vw,vh]=view[1].split(/\s+/).map(Number);
+  const [bx,by,bw,bh]=box;
+  assert([x,y,vw,vh,bx,by,bw,bh].every(Number.isFinite)&&vw>0&&vh>0&&bw>0&&bh>0);
+  const scale=Math.min(bw/vw,bh/vh);
+  const tx=bx+(bw-vw*scale)/2-x*scale;
+  const ty=by+(bh-vh*scale)/2-y*scale;
+  const body=markup.replace(/^<svg\b[^>]*>/,"").replace(/<\/svg>$/,"");
+  const rootClass=markup.match(/\bclass="([^"]*)"/)?.[1] || "";
+  return '<g transform="translate('+tx+' '+ty+') scale('+scale+')"><g class="'+rootClass+'">'+body+'</g></g>';
+}
+for (const item of catalog.composites || []) {
+  assert(/^[a-z0-9-]+$/.test(item.name));
+  assert(!catalog.exports.some(entry=>entry.name===item.name),"Composite name taken: "+item.name);
+  const parts=item.parts.map(part=>{
+    const entry=compiled.get(part.component+".svelte");
+    assert(entry,"Unknown component: "+part.component);
+    const svgs=[...render(entry.component,{props:part.props}).body.matchAll(/<svg\b[\s\S]*?<\/svg>/g)].map(match=>match[0]);
+    assert(svgs[part.index||0],"Missing SVG variant: "+item.name);
+    return {markup:fitted(svgs[part.index||0],part.box),css:entry.css};
+  });
+  const css=[...new Set(parts.map(part=>part.css))].join("\n");
+  for (const theme of ["light","dark"]) {
+    const colors=palette(theme==="dark");
+    const svg=('<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" color="'+colors["--color-text-muted"]+'" font-family="Arial, sans-serif">\n'
+      +'<style>'+resolvedCss(css,colors)+'</style>\n'+parts.map(part=>part.markup).join("\n")+'\n</svg>\n')
+      .split("\n").map(line=>line.trimEnd()).join("\n");
+    assert(!/\b(?:NaN|Infinity)\b|\bvar\(/.test(svg), "Unresolved SVG values");
+    const svgInfo=await emit(path.join(ART,"svg",theme,item.name+".svg"),svg);
+    const raster=new Resvg(svg,{font:{loadSystemFonts:true,defaultFontFamily:"Arial"}}).render();
+    assert.equal(raster.width,W);assert.equal(raster.height,H);
+    const pngInfo=RADIO_THEMES.includes(theme) ? await emit(path.join(GFX,theme,item.name+".png"),raster.asPng()) : undefined;
+    const small=theme==="dark" ? await emitSmall(svg,item.name,{font:{loadSystemFonts:true,defaultFontFamily:"Arial"}}) : undefined;
+    records.push({name:item.name,theme,parts:item.parts,svg:svgInfo,png:pngInfo,small});
+  }
+}
 for (const theme of ["light","dark"]) {
   const left=rasterHashes.get(theme+"/switch-left");
   const right=rasterHashes.get(theme+"/switch-right");
@@ -184,6 +226,6 @@ for (const name of catalog.custom) {
   const small=await emitSmall(svg,name,{});
   records.push({name,sourceSha256:hash(data),png:pngInfo,small});
 }
-const manifest={schema:1,sourceCommit:provenance.commit,frame:catalog.frame,smallFrame:catalog.smallFrame,radioThemes:RADIO_THEMES,font:"Arial (system font)",svgComponents:imported.length,variants:catalog.exports.length,svgExports:catalog.exports.length*2,customHelicopters:catalog.custom.length,exports:records};
+const manifest={schema:1,sourceCommit:provenance.commit,frame:catalog.frame,smallFrame:catalog.smallFrame,radioThemes:RADIO_THEMES,font:"Arial (system font)",svgComponents:imported.length,variants:catalog.exports.length,svgExports:catalog.exports.length*2,customHelicopters:catalog.custom.length,composites:(catalog.composites||[]).length,exports:records};
 await emit(path.join(ART,"exports.json"),JSON.stringify(manifest,null,2)+"\n");
 console.log(JSON.stringify({mode:CHECK?"checked":"exported",components:imported.length,variants:catalog.exports.length,svg:catalog.exports.length*2,png:records.filter(item=>item.png).length,small:records.filter(item=>item.small).length,files:writes,frame:catalog.frame,smallFrame:catalog.smallFrame,sourceCorruptionControls:provenance.files.filter(entry=>entry.file).length}));

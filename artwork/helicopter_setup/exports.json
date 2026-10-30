@@ -14,9 +14,10 @@
   ],
   "font": "Arial (system font)",
   "svgComponents": 15,
-  "variants": 56,
-  "svgExports": 112,
+  "variants": 53,
+  "svgExports": 106,
   "customHelicopters": 3,
+  "composites": 7,
   "exports": [
     {
       "name": "esc",
@@ -346,114 +347,6 @@
       "small": {
         "sha256": "fabc62b3003968752c944110f20d9761b91416b82cb9a3b4acf520fc12c6b692",
         "bytes": 3033
-      }
-    },
-    {
-      "name": "pulse-50-1520",
-      "theme": "light",
-      "component": "PulseTrain",
-      "props": {
-        "rate": 50,
-        "width": 1520
-      },
-      "index": 0,
-      "svg": {
-        "sha256": "12429270a4e75e0fb54c46b5122cf11aa2289dde045a2f8a78b4b6e469aa6e6e",
-        "bytes": 502
-      }
-    },
-    {
-      "name": "pulse-50-1520",
-      "theme": "dark",
-      "component": "PulseTrain",
-      "props": {
-        "rate": 50,
-        "width": 1520
-      },
-      "index": 0,
-      "svg": {
-        "sha256": "f94ea5f9d02fd0a4da274a77077386a84a2ffdf4ecec35a7c70b6c7dcad7a204",
-        "bytes": 502
-      },
-      "png": {
-        "sha256": "df9b75774215598bdcaaa5b8d18097354f864de2aeb60417e25ed766469aa4f8",
-        "bytes": 702
-      },
-      "small": {
-        "sha256": "745fff36d875bb730cbf44922042e9cb3aa20fbe26b53f5a76a1a3b8c148f802",
-        "bytes": 515
-      }
-    },
-    {
-      "name": "pulse-333-1520",
-      "theme": "light",
-      "component": "PulseTrain",
-      "props": {
-        "rate": 333,
-        "width": 1520
-      },
-      "index": 0,
-      "svg": {
-        "sha256": "d30958e34e3e3cb898085bbfa9a9f592d29dd31e601076ba902bc55e371c0536",
-        "bytes": 938
-      }
-    },
-    {
-      "name": "pulse-333-1520",
-      "theme": "dark",
-      "component": "PulseTrain",
-      "props": {
-        "rate": 333,
-        "width": 1520
-      },
-      "index": 0,
-      "svg": {
-        "sha256": "137c19ef02e1125b0430f4d3d7947f71c40b277653f0766e1584d5d4ba5ac10c",
-        "bytes": 938
-      },
-      "png": {
-        "sha256": "d234b75ee735013cb96704d70b78233184a588f48102923f916098d1eb3690f8",
-        "bytes": 2724
-      },
-      "small": {
-        "sha256": "799b9719bab2f2893fe227c2f57f982971309d511e141f8253108d0a272b4bc9",
-        "bytes": 1751
-      }
-    },
-    {
-      "name": "pulse-560-760",
-      "theme": "light",
-      "component": "PulseTrain",
-      "props": {
-        "rate": 560,
-        "width": 760
-      },
-      "index": 0,
-      "svg": {
-        "sha256": "a4c40aed2d2f4bff937dc5941eae5a9bc84988666a5efdb1ec51c3e384ae0a94",
-        "bytes": 1376
-      }
-    },
-    {
-      "name": "pulse-560-760",
-      "theme": "dark",
-      "component": "PulseTrain",
-      "props": {
-        "rate": 560,
-        "width": 760
-      },
-      "index": 0,
-      "svg": {
-        "sha256": "d2822b38049f404cf7e785e27be76f4598444aee95c3119e99da222d8a4c054f",
-        "bytes": 1376
-      },
-      "png": {
-        "sha256": "f5d6d637617856d9010581f0cef49e7028ddf07fdf5700a8c1146edc1e8a0e20",
-        "bytes": 3480
-      },
-      "small": {
-        "sha256": "2e638c53b04f8029397affb6a3fc5cd5e514ed37451f9c421bd764531fd88362",
-        "bytes": 610
       }
     },
     {
@@ -2018,6 +1911,524 @@
       "small": {
         "sha256": "77930613d1e89f2293391ea478e3e4e9582601ffb78f40c6daf3b2ff6ef0350e",
         "bytes": 3513
+      }
+    },
+    {
+      "name": "servo-cyclic-analog",
+      "theme": "light",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 50,
+            "width": 1520
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "40a1792865c96b466fece837424def199683f4752be37d4ccf950c81a46435e7",
+        "bytes": 2370
+      }
+    },
+    {
+      "name": "servo-cyclic-analog",
+      "theme": "dark",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 50,
+            "width": 1520
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "8216827f067abc736b9a11727df9522f436661b5e9c926ff2d89d65fbf4adc8f",
+        "bytes": 2372
+      },
+      "png": {
+        "sha256": "8e659e25e879e54302b6bc268c637ff4d360c1fcb835f5f0eca40ad7f571de66",
+        "bytes": 4864
+      },
+      "small": {
+        "sha256": "3e5833cb525ec3efecded70d68d498334323d67c3a1d8e928f0b0633f0d0a852",
+        "bytes": 3770
+      }
+    },
+    {
+      "name": "servo-cyclic-digital",
+      "theme": "light",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 165,
+            "width": 1520
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "f8757f1418320d04de0efeb54887c5b6d601c0b91a0a0faca9addd7fdb97c230",
+        "bytes": 2542
+      }
+    },
+    {
+      "name": "servo-cyclic-digital",
+      "theme": "dark",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 165,
+            "width": 1520
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "6790490526f5634473bf6c639fa4985d2378e3cd5a27e7ce61625cfd335b9b72",
+        "bytes": 2544
+      },
+      "png": {
+        "sha256": "f31d6892f354ec141eacf7d6ac82865faf44596201bb1dfa25160a1ef36abbb0",
+        "bytes": 6322
+      },
+      "small": {
+        "sha256": "2f75629f22a9c7ebedd792f6a73c2bdb58a73dbc76426945e1874188c7329a2b",
+        "bytes": 4555
+      }
+    },
+    {
+      "name": "servo-cyclic-hiend-digital",
+      "theme": "light",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 333,
+            "width": 1520
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "936ed3aa8de04e1d17d54f21888985296c21ead4aed176ed4b1e66471e3e95dc",
+        "bytes": 2806
+      }
+    },
+    {
+      "name": "servo-cyclic-hiend-digital",
+      "theme": "dark",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 333,
+            "width": 1520
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "d3cf18cc272294ad292333e3bf3e5d2a78963926119b1ac2a34f036a4dd643b7",
+        "bytes": 2808
+      },
+      "png": {
+        "sha256": "970974a9b21be3af42320c8dd2048055e7c2a8f8f6e5e14b502e1714bd40c6f9",
+        "bytes": 5775
+      },
+      "small": {
+        "sha256": "250813988fae06a5cc58746d843c2f433d6880e96f85bcc2c43aa6d489b9f226",
+        "bytes": 3963
+      }
+    },
+    {
+      "name": "servo-cyclic-narrow-band",
+      "theme": "light",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 560,
+            "width": 760
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "d7706d5a80721b0c47feca2917b3e9189d627d81a7236e0ad90244de5693fa9b",
+        "bytes": 3244
+      }
+    },
+    {
+      "name": "servo-cyclic-narrow-band",
+      "theme": "dark",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 560,
+            "width": 760
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "2de7ce1f8d36e1808f9418e63894793c996681d2e4cb67b49479c47fe6c91c23",
+        "bytes": 3246
+      },
+      "png": {
+        "sha256": "6f5b2ae87ef9a7fd9ed628e2025414f36de560d8e7e6dd98c50d9d3305967414",
+        "bytes": 9224
+      },
+      "small": {
+        "sha256": "718da6ab3907b0a0a9ffe56580b0aa2447377d9a4cfca7c90c68179c7624accb",
+        "bytes": 4498
+      }
+    },
+    {
+      "name": "servo-tail-digital",
+      "theme": "light",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 200,
+            "width": 1520
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "db94acc5b5f96cb96b5a3c322e21ded16e231bb0aacd5a1ed914558d1b60964e",
+        "bytes": 2468
+      }
+    },
+    {
+      "name": "servo-tail-digital",
+      "theme": "dark",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 200,
+            "width": 1520
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "d64b1269a03c28d0678de559cf53669253a9207ce83ee10dcc3dc5965b3d2658",
+        "bytes": 2470
+      },
+      "png": {
+        "sha256": "5bfff0407cc9e3f4f2f40d52a959098fe3f036939621fbdda40e012167a5870c",
+        "bytes": 5065
+      },
+      "small": {
+        "sha256": "4b117b602b014afa80cef9d3227edbe91158b845c05873485a7e4245037f8a9c",
+        "bytes": 4030
+      }
+    },
+    {
+      "name": "servo-tail-specific-digital",
+      "theme": "light",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 333,
+            "width": 760
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "49adeada56f6afde88a3615d214cf07bd3ac800043961aaba9231fe41a9fb68a",
+        "bytes": 2892
+      }
+    },
+    {
+      "name": "servo-tail-specific-digital",
+      "theme": "dark",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 333,
+            "width": 760
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "7f4c05a3270122c25aa42810443cd7780d43ae3ad1a08897ec3ece91ea2d0702",
+        "bytes": 2894
+      },
+      "png": {
+        "sha256": "4e1eab64f5d66e73c66cda4b15869a3836567a7da2b005e0cadb9a6cd4b62178",
+        "bytes": 5627
+      },
+      "small": {
+        "sha256": "a8b96fb8ba0de06c572be6509b060f1008a1d8ede69ecb14ff674a4e69c6c127",
+        "bytes": 4290
+      }
+    },
+    {
+      "name": "servo-tail-hiend-specific-digital",
+      "theme": "light",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 560,
+            "width": 760
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "d7706d5a80721b0c47feca2917b3e9189d627d81a7236e0ad90244de5693fa9b",
+        "bytes": 3244
+      }
+    },
+    {
+      "name": "servo-tail-hiend-specific-digital",
+      "theme": "dark",
+      "parts": [
+        {
+          "component": "PulseTrain",
+          "props": {
+            "rate": 560,
+            "width": 760
+          },
+          "box": [
+            10,
+            6,
+            200,
+            40
+          ]
+        },
+        {
+          "component": "ServoArt",
+          "props": {},
+          "box": [
+            20,
+            50,
+            180,
+            104
+          ]
+        }
+      ],
+      "svg": {
+        "sha256": "2de7ce1f8d36e1808f9418e63894793c996681d2e4cb67b49479c47fe6c91c23",
+        "bytes": 3246
+      },
+      "png": {
+        "sha256": "6f5b2ae87ef9a7fd9ed628e2025414f36de560d8e7e6dd98c50d9d3305967414",
+        "bytes": 9224
+      },
+      "small": {
+        "sha256": "718da6ab3907b0a0a9ffe56580b0aa2447377d9a4cfca7c90c68179c7624accb",
+        "bytes": 4498
       }
     },
     {

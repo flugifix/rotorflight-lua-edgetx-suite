@@ -226,14 +226,6 @@ local steps = { "sensors","receiver","modes","profiles","rates","swash","servoTy
 local view = load(PATH .. "view.lua")
 local diagrams = load(PATH .. "diagrams.lua")
 for i=1,#arg do if arg[i]=="--view" then view=assert(loadfile(arg[i+1]))() end end
-assert(loadfile("bin/wizard/servo_hz.lua"))()({
-  world=world,view=view,diagrams=diagrams,check=check,eq=eq,L=L,q=q,pump=pump,
-  advance=function(value) ticks=ticks+value end,fixtures=fixtures,api=api
-})
-if arg[1]=="--servo-hz-only" then
-  print(string.format("Wizard: %d assertions, %d failures",assertions,failures))
-  os.exit(failures>0 and 1 or 0)
-end
 local exported = {}
 local function resolve(t)
   local out = {}
@@ -530,8 +522,9 @@ for _,size in ipairs({{480,272},{480,320},{800,480}}) do
     export("tail",mode==2 and "bidirectional" or "motor",function() w.data.mixer_config.tail_rotor_mode=mode end)
   end
   w.data.mixer_config.tail_rotor_mode=0
-  for _,preset in ipairs({{50,1520},{333,1520},{560,760},{200,1520}}) do
-    export("servoType","pulse-"..preset[1].."-"..preset[2],function()
+  -- The cyclic servo types, and a rate no type has (Custom, drawn as the live waveform).
+  for _,preset in ipairs({{50,1520,"analog"},{165,1520,"digital"},{333,1520,"hiend-digital"},{560,760,"narrow-band"},{210,1520,"custom"}}) do
+    export("servoType","type-"..preset[3],function()
       for _,servo in pairs(w.data.servo_configurations.servos) do
         servo.rate,servo.mid,servo.max=preset[1],preset[2],preset[2]==760 and 250 or 700
       end
@@ -557,7 +550,7 @@ for _,size in ipairs({{480,272},{480,320},{800,480}}) do
       w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
     end},
     {name="rates",card=1,group="rates",values={1,2,3},apply=function(value) w.rateStyles[w.rateProfiles[1]]=value end},
-    {name="servoType",card=1,group="pulses",values={50,333,560},apply=function(value)
+    {name="servoType",card=1,group="pulses",values={50,165,333,560},apply=function(value)
       for _,index in ipairs(w.cards[1].servoIndices) do
         local servo=w.data.servo_configurations.servos[index]
         servo.rate,servo.mid,servo.max=value,value==560 and 760 or 1520,value==560 and 250 or 700

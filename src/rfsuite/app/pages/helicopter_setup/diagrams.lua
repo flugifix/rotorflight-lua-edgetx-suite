@@ -148,22 +148,16 @@ function M.append(children, w, card, x, y, width, height)
     local servoIndex=card.servoIndex or 0
     local pts={}
     for i=1,50 do pts[i]={px(10),py(112)} end
-    local caption,windowText,valid="","",false
+    local windowText,valid="",false
     local preset
     local sketchStart=#children+1
     -- Called during scene preparation or a settings edit, never by a native getter.
     w.refreshPulse=function()
       local s=w.data.servo_configurations.servos[servoIndex] or {rate=50,mid=1520,max=700}
-      preset=s.rate==50 and s.mid==1520 and "pulse-50-1520"
-        or s.rate==333 and s.mid==1520 and "pulse-333-1520"
-        or s.rate==560 and s.mid==760 and "pulse-560-760" or nil
-      for _,index in ipairs(card.servoIndices or {servoIndex}) do
-        local member=w.data.servo_configurations.servos[index]
-        if member.rate~=s.rate or member.mid~=s.mid then preset=nil end
-      end
+      -- A servo type the group matches has its own picture; Custom draws what the servos hold.
+      preset=card.servoPicture and card.servoPicture() or nil
       local rate=math.max(1,s.rate)
       local period,window=1000/rate,math.min(20,12000/rate)
-      caption=tostring(s.rate).." Hz / "..tostring(s.mid).." us"
       valid=s.mid>0 and s.mid+s.max>0 and rate<=math.floor(950000/(s.mid+s.max))
       windowText=valid and string.format("%.1f ms",window) or L.pulseLimited
       local index,time=1,0
@@ -182,13 +176,12 @@ function M.append(children, w, card, x, y, width, height)
     local wave=line({{10,112},{210,112}},accent,2)
     wave.pts=function() return pts end
     reactiveLine(wave,function() return not preset and valid end)
-    text(5,29,210,function() return caption end)
     text(5,140,210,function() return windowText end)
     line({{10,120},{210,120}});line({{10,117},{10,124}});line({{210,117},{210,124}})
     for i=sketchStart,#children do
       if children[i]~=wave then children[i].visible=function() return not preset end end
     end
-    local picture=image(function() return preset or "pulse-50-1520" end)
+    local picture=image(function() return preset or "servo-cyclic-analog" end)
     picture.visible=function() return preset~=nil end
   elseif kind == "switch" then
     text(5,0,210,L.move)

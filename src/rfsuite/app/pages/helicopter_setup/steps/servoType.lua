@@ -1,63 +1,90 @@
 return function(w)
   local L = w.L
   local function unplugged() return w.checks.unplugged == true end
+  -- Servo types per group: centre pulse (1520 us wide band, 760 us narrow band) and frame rate.
+  -- The cyclic and the tail group each offer the types made for them; any other setting is Custom.
+  local TYPES = {
+    cyclic = {
+      { key = "analog", name = L.servoAnalog, mid = 1520, rate = 50 },
+      { key = "digital", name = L.servoDigital, mid = 1520, rate = 165 },
+      { key = "hiend-digital", name = L.servoHiendDigital, mid = 1520, rate = 333 },
+      { key = "narrow-band", name = L.servoNarrowBand, mid = 760, rate = 560 },
+    },
+    tail = {
+      { key = "digital", name = L.servoDigital, mid = 1520, rate = 200 },
+      { key = "specific-digital", name = L.servoSpecificDigital, mid = 760, rate = 333 },
+      { key = "hiend-specific-digital", name = L.servoHiendSpecificDigital, mid = 760, rate = 560 },
+    },
+  }
+  local function group(tail) return tail and "tail" or "cyclic" end
   local function apply(tail, kind)
     if not w.checks.unplugged then w.message = L.confirmCheck; return end
-    local rate = ({50,333,560})[kind]
-    if not rate then w.message=L.servoHzQuick;return end
+    local preset = TYPES[group(tail)][kind]
+    if not preset then w.message=L.servoHzQuick;return end
     for _, index in ipairs(w:servos()) do
       if (index == 3) == tail then
         local servo = w.data.servo_configurations.servos[index]
-        local narrow = kind == 3
+        local narrow = preset.mid == 760
         if (servo.mid <= 860) ~= narrow then
           servo.mid, servo.min, servo.max = narrow and 760 or 1520, narrow and -250 or -700, narrow and 250 or 700
           servo.rneg, servo.rpos = narrow and 250 or 500, narrow and 250 or 500
         end
-        if servo.rate ~= rate then w.rebootPending = true end
-        servo.rate = rate
+        if servo.rate ~= preset.rate then w.rebootPending = true end
+        servo.rate = preset.rate
       end
     end
     w:touch("servo_configurations", false, true)
     if w.refreshPulse then w.refreshPulse() end
   end
+  -- The type every servo of the group matches, or 0 when they differ or match none.
   local function current(tail)
     local result
     for _, index in ipairs(w:servos()) do
       if (index == 3) == tail then
         local s = w.data.servo_configurations.servos[index]
-        local kind = s.rate == 50 and s.mid > 860 and 1 or s.rate == 333 and s.mid > 860 and 2 or
-          s.rate == 560 and s.mid <= 860 and 3 or 0
+        local kind = 0
+        for n, preset in ipairs(TYPES[group(tail)]) do
+          if s.rate == preset.rate and (s.mid <= 860) == (preset.mid == 760) then kind = n end
+        end
         if result and result ~= kind then return 0 end
         result = kind
       end
     end
     return result or 0
   end
+  local function custom(tail) return current(tail) == 0 end
+  -- Servos that match no type read Custom; it is shown, not chosen: a type replaces it.
   local function row(tail, label)
-    return { kind = "choice", label = label, enabled = unplugged, values = { L.analog, L.digital, L.narrow,L.customServo },
-      get = function() local v=current(tail);return v==0 and 4 or v end, set = function(v) apply(tail, v) end }
+    local values = {}
+    for n, preset in ipairs(TYPES[group(tail)]) do values[n] = preset.name end
+    values[#values + 1] = L.customServo
+    return { kind = "choice", label = label, enabled = unplugged, values = values,
+      get = function() return custom(tail) and #values or current(tail) end,
+      set = function(v) if v < #values then apply(tail, v) end end }
   end
-  local function rateRow(tail,indices)
-    return {kind="number",label=L.servoHz,min=25,max=5000,enabled=unplugged,
-      get=function() return w.data.servo_configurations.servos[indices[1]].rate end,
-      set=function(v)
-        if not w.checks.unplugged then w.message=L.confirmCheck;return end
-        if type(v)~="number" or v%1~=0 or v<25 or v>5000 then return end
-        local changed=false
-        for _,index in ipairs(indices) do
-          local servo=w.data.servo_configurations.servos[index]
-          if servo.rate~=v then servo.rate=v;changed=true end
-        end
-        if changed then w.rebootPending=true;w:touch("servo_configurations",false,true) end
-        if w.refreshPulse then w.refreshPulse() end
-      end}
+  -- The picture and its caption: the type's servo picture with its name and values, or for
+  -- Custom the live pulse train of what the servos hold. Texts change only with the setting.
+  local function captions(tail, indices)
+    local shownKey, long, short
+    return function(isShort)
+      local first = w.data.servo_configurations.servos[indices[1]]
+      local kind = custom(tail) and 0 or current(tail)
+      local key = (kind * 10000 + first.rate) * 10000 + first.mid
+      if key ~= shownKey then
+        local preset = TYPES[group(tail)][kind]
+        local name = preset and preset.name or L.customServo
+        local values = string.format(L.servoSpec, first.mid, first.rate)
+        shownKey, long, short = key, name .. "\n" .. values, name .. "  " .. values
+      end
+      return isShort and short or long
+    end
   end
   local cards={}
   for _,tail in ipairs({false,true}) do
     local indices={}
     for _,index in ipairs(w:servos()) do if (index==3)==tail then indices[#indices+1]=index end end
     if #indices>0 then
-      local rows={w:check("unplugged",L.servosUnplugged),row(tail,tail and L.tailServo or L.cyclicServos),rateRow(tail,indices),
+      local rows={w:check("unplugged",L.servosUnplugged),row(tail,tail and L.tailServo or L.cyclicServos),
         w:value(L.groupState,function()
           local first=w.data.servo_configurations.servos[indices[1]]
           for _,index in ipairs(indices) do
@@ -69,6 +96,13 @@ return function(w)
       local card=w:cardDef(tail and L.tailServo or L.cyclicServos,L.servoHzHint,rows,nil,"pulses")
       card.summary=function() return unplugged() and L.servoHzQuick or L.servoUnpluggedRequired end
       card.servoIndex,card.servoIndices=indices[1],indices
+      local text = captions(tail, indices)
+      card.caption, card.captionShort = function() return text(false) end, function() return text(true) end
+      -- The type's picture while the group matches a type.
+      card.servoPicture=function()
+        local preset = not custom(tail) and TYPES[group(tail)][current(tail)]
+        return preset and ("servo-" .. group(tail) .. "-" .. preset.key) or nil
+      end
       cards[#cards+1]=card
     end
   end
