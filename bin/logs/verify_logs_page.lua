@@ -1018,11 +1018,13 @@ do
     return G
   end
   local R = freshExtract()
-  local lastTick = 0
-  while R.isBusy() do
+  local lastTick, guard = 0, 0
+  while R.isBusy() and guard < 100000 do
     if R.getPhase() == "extract" then lastTick = lastTick + 1 end
     R.tick()
+    guard = guard + 1
   end
+  check(not R.isBusy(), "end of a window read: the uninterrupted read finishes")
   local refPts = R.getPoints(1)
   local function samePoints(pts)
     if type(pts) ~= "table" or #pts ~= #refPts or #pts == 0 then return false end
@@ -1033,19 +1035,21 @@ do
   end
   local total, bad, firstBad = sweep(function()
     local G = freshExtract()
-    local n = 0
-    while G.isBusy() do
+    local n, guard = 0, 0
+    while G.isBusy() and guard < 100000 do
       if G.getPhase() == "extract" then
         n = n + 1
         if n == lastTick then break end
       end
       G.tick()
+      guard = guard + 1
     end
+    assert(n == lastTick, "end of a window read: setup did not reach the last extract tick")
     return { G = G }
   end, function(st) st.G.tick() end, function(st, stopped)
     settleG(st.G)
     local pts = st.G.getPoints(1)
-    local fine = not st.G.isCurveEmpty(1) and #pts == #refPts and (stopped or samePoints(pts))
+    local fine = not st.G.isBusy() and not st.G.isCurveEmpty(1) and #pts == #refPts and (stopped or samePoints(pts))
     st.G.close()
     return fine, #pts .. " points of " .. #refPts
   end)
