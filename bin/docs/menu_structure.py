@@ -23,6 +23,11 @@ The documentation file of a page follows the rule in `CONTRIBUTING.md` (under
 documented in `docs/pages/setup/power/smartfuel.md`. A page whose file does not exist is
 marked as such, so adding or removing a file under `docs/pages/` changes this page too.
 
+The same tree is drawn above the tables as Mermaid flowcharts -- an overview of the
+sections and menus, then one chart per menu of a section -- coloured by whether an entry
+is a menu, a documented page or a page without documentation. They are generated from the
+same reading, so the charts and the tables cannot disagree.
+
 A source this cannot read -- an unbalanced table, a missing `sections` or `menus`, an
 entry without an `id` or a `menuId`, a title key with no English text -- stops it with
 the line it stopped at, and nothing is written.
@@ -249,6 +254,91 @@ def cell(text):
     return text.replace("|", "\\|")
 
 
+#: Node styles of the diagrams. Only the border is coloured: the fill and the text keep
+#: the colours of the page's light or dark scheme, so a node stays readable in both.
+DIAGRAM_CLASSES = (
+    "classDef section stroke:#78909c,stroke-width:3px,font-weight:bold",
+    "classDef menu stroke:#1e88e5,stroke-width:2px",
+    "classDef documented stroke:#43a047,stroke-width:2px",
+    "classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4",
+    "classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3",
+)
+
+
+def node_label(text):
+    """A title as a quoted Mermaid label; `"`, `&`, `<` and `>` as entity codes."""
+    for char, code in (("&", "#amp;"), ('"', "#quot;"), ("<", "#lt;"), (">", "#gt;")):
+        text = text.replace(char, code)
+    return f'["{text}"]'
+
+
+def build_diagrams(sections, menus, pages, docs_exist, title_of, titles):
+    """The menu tree as Mermaid flowcharts: one overview of the sections and every menu,
+    then one chart per menu of a section with every entry below it. Returns the lines."""
+
+    def submenu(entry):
+        menu = menus.get(entry["menuId"])
+        return menu["entries"] if menu and menu["entries"] else []
+
+    def style(entry):
+        menu_id = entry["menuId"]
+        if menu_id in pages:
+            return "documented" if docs_exist(doc_file(pages[menu_id])) else "undocumented"
+        return "menu" if submenu(entry) else "empty"
+
+    def chart(roots, keep):
+        """One flowchart; `roots` are (label, class, entries) and `keep(entry)` says
+        whether an entry below a root is drawn."""
+        lines, counter = ["```mermaid", "flowchart LR"], [0]
+
+        def node(label, cls):
+            name = f"n{counter[0]}"
+            counter[0] += 1
+            lines.append(f"  {name}{node_label(label)}:::{cls}")
+            return name
+
+        def walk(parent, entries, stack):
+            for entry in entries:
+                if not keep(entry):
+                    continue
+                child = node(title_of(entry, entry["id"]), style(entry))
+                lines.append(f"  {parent} --> {child}")
+                if entry["menuId"] in stack:
+                    raise SourceError(f"{MANIFEST}:{entry['line']}: menu `{entry['menuId']}` contains itself")
+                walk(child, submenu(entry), stack + [entry["menuId"]])
+
+        for label, cls, entries, stack in roots:
+            walk(node(label, cls), entries, stack)
+        return lines + ["  " + c for c in DIAGRAM_CLASSES] + ["```", ""]
+
+    overview = [(titles(s["title"], f"{MANIFEST} (section `{s['id']}`)"), "section", s["entries"], [])
+                for s in sections]
+    top_level = {id(e) for s in sections for e in s["entries"]}
+    lines = [
+        "## Diagrams",
+        "",
+        "The same tree drawn as charts, generated with the tables below. The border says what",
+        "an entry is: blue a menu, green a page that is documented, orange and dashed a page",
+        "with no documentation yet, grey and dotted an entry that opens neither a page file",
+        "nor a menu with entries. A page that also opens a menu is drawn as a page.",
+        "",
+        "### Overview",
+        "",
+        "The sections and every menu in them; the pages of each menu are in the charts that",
+        "follow.",
+        "",
+    ] + chart(overview, lambda e: id(e) in top_level or bool(submenu(e)))
+
+    for section in sections:
+        for entry in section["entries"]:
+            if not submenu(entry):
+                continue
+            name = title_of(entry, entry["id"])
+            lines += [f"### {name}", ""] + chart(
+                [(name, "menu", submenu(entry), [entry["menuId"]])], lambda e: True)
+    return lines
+
+
 def build(root, manifest_text, registry_text, docs_exist, titles):
     """The page as text. `docs_exist(path)` answers whether a documentation file exists."""
     sections, menus = read_manifest(manifest_text)
@@ -324,6 +414,8 @@ def build(root, manifest_text, registry_text, docs_exist, titles):
             "| --- | --- | --- | --- | --- | --- |",
         ] + rows + [""]
 
+    diagrams = build_diagrams(sections, menus, pages, docs_exist, title_of, titles)
+
     loose = []
     for menu_id in list(menus) + [p for p in pages if p not in menus]:
         if menu_id in reached:
@@ -366,7 +458,7 @@ def build(root, manifest_text, registry_text, docs_exist, titles):
         "**%d entries, %d of them open a page, %d of those pages are documented.**" % (
             counts["entries"], counts["pages"], counts["documented"]),
         "",
-    ]
+    ] + diagrams
     tail = [
         "## Not an entry of any menu",
         "",
@@ -471,6 +563,23 @@ def self_test(root):
     computed = manifest.replace(tools_title, 'title = n .. "@i18n(app.modules.tools.name)@", menuId = "tools_menu"', 1)
     numbered_title = "1. " + titles("@i18n(app.modules.tools.name)@", "self-test")
 
+    def charted(text):
+        """'complete' when the charts after the overview draw, besides their root, exactly
+        the entries the tables list below a section's first level; 'short' otherwise."""
+        charts = text.split("```mermaid")[2:]
+        drawn = sum(chart.split("```")[0].count(":::") - 1 for chart in charts)
+        rows = [line for line in text.split("\n") if line.startswith("| ") and "` | `" in line
+                and not line.startswith("| `")]
+        nested = sum(1 for line in rows if "&rsaquo;" in line.split(" | ")[0])
+        return "complete" if drawn == nested else "short"
+
+    def unchart(text):
+        """The page with the first page node of the second chart removed."""
+        head, _, rest = text.partition("```mermaid")
+        overview, _, rest = rest.partition("```mermaid")
+        node = re.search(r"\n  n\d+\[[^\n]*:::documented", rest)
+        return head + "```mermaid" + overview + "```mermaid" + rest[:node.start()] + rest[node.end():]
+
     def verdict(run):
         try:
             return run(), ""
@@ -491,6 +600,11 @@ def self_test(root):
         ("a title assembled from literals is read as one string",
          lambda: "listed" if numbered_title in page(numbered) and numbered_title not in baseline else "missing", "listed"),
         ("a title assembled from a variable fails", lambda: page(computed) and "ok", "error"),
+        ("the menu charts draw every entry once", lambda: charted(baseline), "complete"),
+        ("a chart missing one node is caught", lambda: charted(unchart(baseline)), "short"),
+        ("a label escapes quotes and markup",
+         lambda: "escaped" if node_label('A "b" & <c>') == '["A #quot;b#quot; #amp; #lt;c#gt;"]' else "raw",
+         "escaped"),
     ]
     if manifest in (unbalanced, no_menu_id, without_menus, unknown_key, changed, numbered, computed) \
             or bad_registry == registry:
