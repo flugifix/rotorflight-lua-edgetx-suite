@@ -1002,5 +1002,32 @@ do
   check(total > 5 and bad == 0, "finished-index wakeup stopped at each of " .. total .. " instructions: a rebuild is asked for", firstBad)
 end
 
+-- The line pump: a walk stopped at any instruction hands no row on twice. Twelve rows of about
+-- 900 bytes span three 4 kB chunks, so every chunk change is among the stops. A stop may cost
+-- rows (the read from the card has already moved on); it may never count one twice.
+do
+  local path = "/LOGS/Long-2026-10-01-120000.csv"
+  local nl = string.char(10)
+  local filler = string.rep("x", 880)
+  local out = { "Date,Time,Vbat(V),Note" }
+  for i = 0, 11 do
+    out[#out + 1] = string.format("2026-10-01,12:00:%02d.000,%d,%s", i, 20 + i % 5, filler)
+  end
+  files[path] = table.concat(out, nl) .. nl
+  local total, bad, firstBad = sweep(function()
+    local G = assert(loadfile(GRAPH))()
+    G.open(path, { stats = true })
+    return { G = G, S = find(G.tick, "S") }
+  end, function(st) settleG(st.G) end, function(st)
+    settleG(st.G)
+    local samples = st.S.stats and st.S.stats.totalSamples or 0
+    local lines = st.S.nline or 0
+    st.G.close()
+    return samples <= 12 and lines <= 12, samples .. " samples, " .. lines .. " index lines"
+  end)
+  check(total > 500 and bad == 0, "walk stopped at each of its " .. total .. " instructions: no row counted twice", firstBad)
+  files[path] = nil
+end
+
 print(string.format("Logs page: %d checks, %d failures", checks, failures))
 os.exit(failures == 0 and 0 or 1)

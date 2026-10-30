@@ -203,6 +203,18 @@ end
 -- MAX_LINE_LEN bytes and a carriage return, no line end can make it a line feedLine passes, so it
 -- is dropped there and the pump skips to the next line end instead of copying a growing string on
 -- every refill. The lines it feeds, and their offsets, are the ones it fed before.
+-- Puts `buf` in place as the buffer, read on from `pos`. A plain `S.buf, S.bufpos = buf, pos`
+-- is two assignments, made right to left, and a tick stopped between them left the OLD buffer
+-- with the new position: the next tick handed the old buffer's rows on a second time. Cleared
+-- first, a stop anywhere in here leaves no buffer, and the next tick reads on from the file:
+-- the rows of that chunk are lost rather than counted twice, and the stopped tick is seen
+-- (G.tick), so nothing drawn from it is kept.
+local function setBuf(buf, pos)
+  S.buf = nil
+  S.bufpos = pos
+  S.buf = buf
+end
+
 local function pumpLines(onLine, maxIters)
   local n = maxIters
   while n > 0 do
@@ -230,7 +242,7 @@ local function pumpLines(onLine, maxIters)
       end
       local data = io.read(S.fh, CHUNK_SIZE)
       if data == nil or data == "" then
-        S.buf, S.bufpos = nil, 1
+        setBuf(nil, 1)
         S.skipRow = false
         if rest ~= nil and #rest <= MAX_LINE_LEN then
           onLine(rest, 1, #rest, S.filePos - #rest)   -- a file whose last line has no newline
@@ -242,22 +254,22 @@ local function pumpLines(onLine, maxIters)
       if S.skipRow then
         -- Inside a dropped row: nothing up to its line end is a line.
         if dnl == nil then
-          S.buf, S.bufpos = nil, 1
+          setBuf(nil, 1)
         else
-          S.buf, S.bufpos = data, dnl + 1
+          setBuf(data, dnl + 1)
           S.skipRow = false
         end
       elseif rest == nil then
-        S.buf, S.bufpos = data, 1
+        setBuf(data, 1)
       elseif dnl == nil then
         if #rest + #data > MAX_LINE_LEN + 1 then
           dropRow(S.filePos - #data - #rest)
-          S.buf, S.bufpos = nil, 1
+          setBuf(nil, 1)
         else
-          S.buf, S.bufpos = rest .. data, 1   -- no line ends in this chunk: keep collecting
+          setBuf(rest .. data, 1)             -- no line ends in this chunk: keep collecting
         end
       else
-        S.buf, S.bufpos = data, dnl + 1
+        setBuf(data, dnl + 1)
         n = n - 1
         local line = rest .. string.sub(data, 1, dnl - 1)
         if feedLine(onLine, line, 1, #line, S.filePos - #data - #rest) == false then return "stop" end
@@ -974,7 +986,8 @@ function G.open(path, opts)
         return false
       end
       S.fh = fh
-      S.buf, S.bufpos, S.filePos = nil, 1, 0
+      setBuf(nil, 1)
+      S.filePos = 0
       S.skipRow = false
     end
     return true
@@ -1502,9 +1515,9 @@ tickUnit = function()
       failWith("no_data")
       return true
     end
+    setBuf(nil, 1)
     io.seek(S.fh, e.off)
     S.filePos = e.off
-    S.buf, S.bufpos = nil, 1
     S.skipRow = false
     S.curDate, S.day = e.date, e.day
     S.extPrevT = -HUGE

@@ -1,0 +1,2 @@
+- **Logs reading no longer counts a row twice after an interrupted step (`app/pages/logs/graph.lua`)**:
+  - In the tool opened from the dashboard, a step stopped at the instruction limit while the next part of the log was put in place could hand the previous part's rows on again, so a summary counted rows twice. The read position and its data are now replaced so that a stop leaves no stale data behind.
