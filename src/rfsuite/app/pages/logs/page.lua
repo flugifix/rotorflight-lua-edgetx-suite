@@ -67,6 +67,9 @@ local state = {
   -- pickCurves puts it into its column chooser.
   view = nil,
   pickCurves = false,
+  -- The plot was opened from the list's Graph button rather than from a summary, so Back from
+  -- it returns to the list and the engine holds no summary.
+  direct = false,
   slots = {},
   -- Set when the engine refused the chosen columns, so the view says so instead of drawing
   -- the chooser again.
@@ -273,8 +276,20 @@ local function closeGraph()
   end
   state.view = nil
   state.pickCurves = false
+  state.direct = false
   state.slots = {}
   collectgarbage("collect")
+end
+
+-- The loading notices take these functions rather than a number: the overlay reads a function
+-- again on every refresh, while a number is drawn once, and nothing rebuilds the notice before
+-- the walk has finished. Defined once, so no build creates a closure for them.
+local function readingProgress()
+  return (Graph and state.reading) and Graph.getProgress() or 0
+end
+
+local function graphProgress()
+  return Graph and Graph.getProgress() or 0
 end
 
 local function pageText(i18n, key)
@@ -329,26 +344,29 @@ local function openListing(listBasePath)
   return listing
 end
 
--- Reads at most `budget` entries into the listing and answers how many reads that took: the
--- reads spent, `.` and `..` and the one that ends the directory among them. That last read is
--- what drops the iterator. A name read is held on the listing until it has been taken, so a
--- call stopped in between (see scanCollect) takes it on the next one rather than losing it.
-local function readListing(listing, budget)
-  local spent = 0
-  while listing.iter and spent < budget do
-    if listing.held == nil then
-      listing.held = listing.iter() or false
-      spent = spent + 1
-    end
-    local name = listing.held
-    if name == false then
-      listing.iter = nil
-    elseif name ~= "." and name ~= ".." and name ~= "" then
-      listing.names[#listing.names + 1] = name
-    end
-    listing.held = nil
+-- The next name of a listing, or false once it has none left. A name read is held on the
+-- listing until the caller has dealt with it and dropped it (`listing.held = nil`), so a call
+-- stopped in between deals with it on the next one rather than losing it. The read that ends
+-- the directory is what drops the iterator. A call stopped between the read and `held` can
+-- lose the name; scanStep reads such a directory again.
+local function nextName(listing)
+  local name = listing.held
+  if name ~= nil then return name end
+  if listing.iter then
+    -- Set around the read: a call stopped inside this window may have lost the name, and
+    -- scanStep then reads the directory again.
+    listing.reading = true
+    name = listing.iter() or false
+    listing.held = name
+    listing.reading = nil
+    if name == false then listing.iter = nil end
+  else
+    local j = (listing.j or 0) + 1
+    name = listing.names[j] or false
+    listing.held = name
+    listing.j = j
   end
-  return spent
+  return name
 end
 
 local function formatDateText(date, time, isNarrow, unknownText)
@@ -466,12 +484,23 @@ local SEARCH_PATHS = {
 -- read from a directory, or a name already read being looked at -- for a .csv that is
 -- extractFileInfo, which opens the file only where its name carries no date and time.
 --
--- Each search path is listed and then walked, in the order the paths are given, and a folder
--- among its names is listed and walked when it is reached -- the order the walk always had, so
--- the first path a file is reached by, which decides the folder its model may be named after,
--- is the one it was reached by before. The sort is a phase of its own, so it never shares a
--- wakeup with a last batch of entries.
+-- Each search path is listed in the order the paths are given, and a log among its names is
+-- collected as soon as its name has been read: one unit per name, where reading every name
+-- first and walking the names afterwards paid two. A folder among the names is kept aside and
+-- listed, one at a time, once the path's own listing has ended, so only one directory is open
+-- at any time. A file is reached by one route within a path, and the paths still come one
+-- after the other, so the first path a file is reached by, which decides the folder its model
+-- may be named after, is the one it was reached by before. The sort is a phase of its own, so
+-- it never shares a wakeup with a last batch of entries.
+--
+-- The sort runs table.sort without a comparator, over one string per log, so every comparison
+-- is made in C. A Lua comparator runs once per comparison, and over a few hundred logs that alone
+-- is more than one widget call may spend, so in the tool opened from the dashboard the call was
+-- stopped in the middle of the sort, the next one started it again, and the list never appeared.
+-- Building those strings before the sort and putting the records back in order after it are
+-- linear, and are taken SORT_ENTRIES_PER_UNIT logs per unit of the budget.
 local SCAN_UNIT_ENTRIES = 10
+local SORT_ENTRIES_PER_UNIT = 10
 
 -- How long one wakeup may spend on the scan, in getTime() ticks of 10 ms. A colour radio runs
 -- a tool's run() as one plain call that nothing can interrupt, so until it returns the screen is
@@ -488,8 +517,8 @@ local function newScan()
     phase = "list",
     s = 1,
     listing = nil,
-    names = nil,
-    i = 0,
+    dirs = {},
+    di = 0,
     sub = nil,
     read = 0,
     found = {},
@@ -497,7 +526,7 @@ local function newScan()
   }
 end
 
--- An entry is marked as seen, and the walk's position moved past it (scanStep), only once it is
+-- An entry is marked as seen, and its listing's held name dropped (scanStep), only once it is
 -- done: the tool opened from the dashboard can be stopped in the middle of one, and the next
 -- wakeup then reads it again rather than leaving the log out of the list.
 local function scanCollect(scan, fileName, fullPath, parentFolder)
@@ -511,13 +540,29 @@ local function scanCollect(scan, fileName, fullPath, parentFolder)
   scan.seen[fullPath] = true
 end
 
--- Reads up to `budget` names of a listing and counts them as read: the names added, `.` and
--- `..` not counted, so `scan.read` is not the reads spent. Answers the reads spent.
-local function scanRead(scan, listing, budget)
-  local before = #listing.names
-  local spent = readListing(listing, budget)
-  scan.read = scan.read + #listing.names - before
-  return spent
+-- One name of `listing`, of a folder `base` whose model is `parent` ("" for a search path):
+-- a log is collected, and a folder of a search path is kept aside for the walk. Answers false
+-- once the listing has no name left.
+local function scanName(scan, listing, base, parent)
+  local name = nextName(listing)
+  if name == false then return false end
+  if name ~= "." and name ~= ".." and name ~= "" then
+    if string.match(name, "%.csv$") then
+      scanCollect(scan, name, base .. "/" .. name, parent)
+    elseif parent == "" and not string.match(name, "%.%w+$") then
+      -- Subdirectory (e.g. Model name). `dirs` is the list and, by name, the set of the folders
+      -- kept aside, so a listing read again adds none twice; added before it is marked, so a
+      -- call stopped in between adds it twice at worst, never not at all.
+      local dirs = scan.dirs
+      if not dirs[name] then
+        dirs[#dirs + 1] = name
+        dirs[name] = true
+      end
+    end
+    scan.read = scan.read + 1
+  end
+  listing.held = nil
+  return true
 end
 
 -- Advances the scan by at most `budget` entries and answers true once it is complete, with
@@ -525,78 +570,119 @@ end
 -- nothing and are taken in the same call; the sort is one call on its own. Every step leaves
 -- the scan where its phase can go on from, at any point: a call stopped in the middle of one
 -- (see scanCollect) repeats part of it rather than leaving the scan in a phase it cannot finish.
-local function scanStep(scan, budget)
+local function scanUnits(scan, budget)
   while budget > 0 do
     if scan.phase == "list" then
       if not scan.listing then
         scan.listing = openListing(SEARCH_PATHS[scan.s])
       end
-      budget = budget - scanRead(scan, scan.listing, budget)
-      if not scan.listing.iter then
-        local names = scan.listing.names
-        scan.i = 0
-        scan.names = names
+      if not scanName(scan, scan.listing, SEARCH_PATHS[scan.s], "") then
         scan.listing = nil
+        scan.di = 0
         scan.phase = "walk"
       end
+      budget = budget - 1
     elseif scan.phase == "walk" then
-      local basePath = SEARCH_PATHS[scan.s]
+      -- The folders the path's listing held, each listed and its logs collected as read.
       local sub = scan.sub
       if sub then
-        -- Inside a subdirectory (e.g. a model folder) of a search path: list it, then collect
-        -- its .csv files.
-        if sub.listing.iter then
-          budget = budget - scanRead(scan, sub.listing, budget)
-        else
-          local names = sub.listing.names
-          while budget > 0 and sub.j < #names do
-            local subFile = names[sub.j + 1]
-            if string.match(subFile, "%.csv$") then
-              scanCollect(scan, subFile, sub.path .. "/" .. subFile, sub.parent)
-            end
-            sub.j = sub.j + 1
-            budget = budget - 1
-          end
-          if sub.j >= #names then
-            -- The entry that opened this folder counts as walked, even where the call that
-            -- opened it was stopped before it could move on.
-            if scan.i < sub.at then scan.i = sub.at end
-            scan.sub = nil
-          end
+        if not scanName(scan, sub.listing, sub.path, sub.parent) then
+          -- Dropped before the position moves on: a call stopped in between lists this folder
+          -- again, and scanCollect takes none of its logs twice.
+          scan.sub = nil
+          scan.di = scan.di + 1
         end
-      elseif scan.i < #scan.names then
-        local entry = scan.names[scan.i + 1]
-        if string.match(entry, "%.csv$") then
-          scanCollect(scan, entry, basePath .. "/" .. entry, "")
-        elseif not string.match(entry, "%.%w+$") then
-          -- Subdirectory (e.g. Model name)
-          local modelDir = basePath .. "/" .. entry
-          scan.sub = { listing = openListing(modelDir), path = modelDir, parent = entry, j = 0, at = scan.i + 1 }
-        end
-        scan.i = scan.i + 1
+        budget = budget - 1
+      elseif scan.di < #scan.dirs then
+        local entry = scan.dirs[scan.di + 1]
+        local path = SEARCH_PATHS[scan.s] .. "/" .. entry
+        scan.sub = { listing = openListing(path), path = path, parent = entry }
         budget = budget - 1
       else
         local s = scan.s + 1
         if s > #SEARCH_PATHS then
           -- The walk is over. The sort is left to the next call, so it never runs in the same
           -- call as the walk's last entries.
-          scan.phase = "sort"
-          scan.names = nil
+          scan.phase = "keys"
+          scan.dirs = nil
           return false
         end
+        -- In this order, so a call stopped between two of them lists a path again rather than
+        -- skipping one; scanCollect takes no log twice.
         scan.phase = "list"
+        scan.dirs = {}
         scan.s = s
-        scan.names = nil
       end
+    elseif scan.phase == "keys" then
+      -- Each record's sort key, then its position in `found` in eight digits (no card holds that
+      -- many logs): unique, and "\1" sorts below every
+      -- character a sort key holds, so the order of the sort keys is kept. The table is made here
+      -- rather than where the walk ends, so a call stopped at that change of phase finds it made;
+      -- writing a key again after a stopped call writes the same string.
+      local found = scan.found
+      local keys = scan.keys
+      if keys == nil then
+        keys = {}
+        scan.keys = keys
+      end
+      local k = scan.k or 0
+      local last = math.min(#found, k + budget * SORT_ENTRIES_PER_UNIT)
+      while k < last do
+        k = k + 1
+        keys[k] = found[k].sortKey .. "\1" .. string.format("%08d", k)
+        scan.k = k
+      end
+      if k < #found then return false end
+      scan.phase = "sort"
+      return false
     elseif scan.phase == "sort" then
-      table.sort(scan.found, function(a, b) return a.sortKey > b.sortKey end)
+      table.sort(scan.keys)
+      scan.k = 0
+      scan.phase = "order"
+      return false
+    elseif scan.phase == "order" then
+      -- Newest first: the keys ascend, so the last one names the first record. The records go into
+      -- a new array, and `found` is replaced by it in one assignment once it is complete, so a call
+      -- stopped anywhere in here leaves either the old array whole or the new one.
+      local found, keys = scan.found, scan.keys
+      local sorted = scan.sorted
+      if sorted == nil then
+        sorted = {}
+        scan.sorted = sorted
+      end
+      local n = #keys
+      local k = scan.k or 0
+      local last = math.min(n, k + budget * SORT_ENTRIES_PER_UNIT)
+      while k < last do
+        k = k + 1
+        sorted[k] = found[tonumber(string.sub(keys[n - k + 1], -8))]
+        scan.k = k
+      end
+      if k < n then return false end
+      scan.found = sorted
       scan.phase = "done"
+      scan.keys, scan.sorted, scan.k = nil, nil, nil
       return true
     else
       return true
     end
   end
   return false
+end
+
+-- A call stopped at the instruction limit can lose a name: EdgeTX's directory iterator has moved
+-- past it before the name reaches `listing.held` (see nextName). A listing left in that window
+-- is therefore read again from the start; scanCollect takes no log twice and `dirs` keeps no
+-- folder twice. Each restart is one assignment, and a stop anywhere else restarts nothing, so
+-- calls that are all stopped still move on.
+local function scanStep(scan, budget)
+  local listing, sub = scan.listing, scan.sub
+  if listing and listing.reading then
+    scan.listing = nil
+  elseif sub and sub.listing.reading then
+    scan.sub = { listing = openListing(sub.path), path = sub.path, parent = sub.parent }
+  end
+  return scanUnits(scan, budget)
 end
 
 -- The scan for as long as one wakeup may spend on it; see SCAN_BUDGET_TICKS. Without a clock it
@@ -736,9 +822,19 @@ function M.wakeup(ctx)
       end
       if not Graph.isBusy() then break end
     end
-    if redraw and state.requestRebuild then
-      state.requestRebuild()
+    if redraw then
+      -- Asked for before the flag is cleared: a call stopped in between asks again, never not.
+      if state.requestRebuild then state.requestRebuild() end
+      state.drawnBusy = false
     end
+  end
+
+  -- A view drawn while the engine was busy is drawn again once it is idle, also where the tick
+  -- that finished was stopped before its answer reached the loop above: the loading notice
+  -- would otherwise stay up over a finished index.
+  if state.view == "graph" and state.drawnBusy and Graph and not Graph.isBusy() then
+    if state.requestRebuild then state.requestRebuild() end
+    state.drawnBusy = false
   end
 end
 
@@ -768,8 +864,19 @@ function M.onBack(ctx)
       state.pickCurves = false
       return true
     end
-    closeGraph()
-    return true
+    -- Back to the summary of the same file: the plot's data goes, the engine and its index
+    -- stay until the page leaves the file (the branch below, onReload, onClose), so Graph
+    -- opens again without reading the log. A plot opened from the list has no summary to go
+    -- back to, and leaves the file.
+    if not state.direct and Graph and Graph.releasePlot() then
+      state.view = nil
+      state.pickCurves = false
+      state.slots = {}
+      collectgarbage("collect")
+    elseif not state.direct then
+      closeGraph()
+    end
+    if not state.direct then return true end
   end
 
   if state.selectedFile ~= nil then
@@ -786,16 +893,20 @@ function M.onBack(ctx)
   return false
 end
 
-local function openGraph()
+-- `direct` opens the plot from the list: the engine then indexes the log without the summary,
+-- which is the larger part of a summary walk's cost.
+local function openGraph(direct)
   if not Graph then Graph = loadModule("app/pages/logs/graph.lua") end
   if not Graph then return false end
   state.view = "graph"
   state.pickCurves = false
+  state.direct = direct == true
   state.slots = {}
   state.graphRefused = false
-  -- The statistics view has just had this file walked, and the walk built the index the plot
-  -- needs. Opening it again here is what the engine recognises and answers without reading.
-  Graph.open(state.selectedFilePath, { stats = true })
+  -- The statistics view has had this file walked, and the walk built the index the plot needs;
+  -- Back from the plot keeps it. Opening it again here is what the engine recognises and
+  -- answers without reading.
+  Graph.open(state.selectedFilePath, { stats = not state.direct })
   return true
 end
 
@@ -860,7 +971,7 @@ end
 -- event of its own -- ui/home.lua reads them for its back handling only -- so this focus
 -- movement is how the encoder reaches the list, and every row has a control that can hold it.
 --
--- LIST_WINDOW bounds what a build creates and measures: four LVGL objects and a wrapped label
+-- LIST_WINDOW bounds what a build creates and measures: five LVGL objects and a wrapped label
 -- per row, however many logs the card holds. Twenty-five rows are about a hundred objects, the
 -- list a card of twenty-five logs always built, and at 480x320, with rows of at least 44 px,
 -- some four screens to scroll or turn through. Previous above the window and Next below it
@@ -1054,9 +1165,6 @@ local function buildChart(children, x, y, w, availH, i18n)
 
   local winT0, winT1, sessT0 = Graph.getWindow()
   local windowText = Graph.formatOffset(winT0 - sessT0) .. " - " .. Graph.formatOffset(winT1 - sessT0)
-  if Graph.isBusy() then
-    windowText = windowText .. "   " .. tostring(math.floor(Graph.getProgress() * 100)) .. " %"
-  end
 
   children[#children + 1] = {
     type = "label",
@@ -1209,8 +1317,10 @@ end
 
 local function buildGraphView(children, x, y, w, availH, i18n)
   -- Told once per build, before anything is asked of the engine. A change drops its cached
-  -- windows and starts the current one again; the points it still holds are drawn meanwhile.
+  -- windows and starts the current one again, under the loading notice below.
   Graph.setGeometry(chartRect(x, y, w, availH))
+  -- What this build drew, so the wakeup can draw again once the engine is idle (see M.wakeup).
+  state.drawnBusy = Graph.isBusy()
 
   -- The engine walks a file to the end for the summary whether or not the plot can use it, so
   -- a file the plot cannot draw is only known once the walk is done: one without Date and Time
@@ -1223,7 +1333,9 @@ local function buildGraphView(children, x, y, w, availH, i18n)
   if err == nil and not Graph.isBusy() then
     if not Graph.isTelemetry() then
       err = "not_telemetry"
-    elseif not Graph.hasSummary() then
+    elseif not state.direct and not Graph.hasSummary() then
+      -- Opened from the list the engine reads no summary; a file with no row it can use is
+      -- then refused by the engine itself (getError).
       err = "no_data"
     elseif #Graph.getSessions() == 0 then
       err = "no_time"
@@ -1247,15 +1359,18 @@ local function buildGraphView(children, x, y, w, availH, i18n)
     return
   end
 
-  -- Nothing can be chosen before the index exists, so the scan is the one wait
-  -- this view reports with the overlay the rest of the tool uses.
-  if #Graph.getCurves() == 0 and Graph.isBusy() then
+  -- A read of the card is reported with the overlay the rest of the tool uses: the index pass,
+  -- before anything can be chosen, and every window the cache does not hold -- a new curve
+  -- choice, a zoom, a page step, another flight. The bar is the engine's position in what it
+  -- reads. A window served from the cache reads nothing and leaves the plot up meanwhile.
+  local reading = Graph.getReading()
+  if reading ~= nil then
     if LoadingOverlay then
       LoadingOverlay.append(children, {
         x = x, y = y, w = w, h = availH,
         title = pageText(i18n, "loading_title"),
-        message = pageText(i18n, "graph_scanning"),
-        progress = Graph.getProgress()
+        message = (reading == "index") and pageText(i18n, "graph_scanning") or pageText(i18n, "graph_reading"),
+        progress = graphProgress
       })
     end
     return
@@ -1292,7 +1407,7 @@ function M.build(ctx)
       h = h,
       title = pageText(i18n, "loading_title"),
       message = pageText(i18n, "loading_message"),
-      progress = (Graph and state.reading) and Graph.getProgress() or 0
+      progress = readingProgress
     })
     return
   end
@@ -1511,8 +1626,9 @@ function M.build(ctx)
       filled = true
     }
 
-    -- The statistics answer what the flight came to; the plot answers when. It is
-    -- opened from here rather than from the list, so the log is chosen once.
+    -- The statistics answer what the flight came to; the plot answers when. Opened from here
+    -- it reuses the index the summary walk built; the list's own Graph button reads only that
+    -- index.
     local graphBtnW = 200
     if graphBtnW > w then graphBtnW = w end
     children[#children + 1] = {
@@ -1610,16 +1726,19 @@ function M.build(ctx)
   --
   -- Proportional layout based on available width `w`:
   -- - Date/Time column: ~28-34% of `w` (compacts to `MM-DD HH:MM` on narrow screens < 380px)
-  -- - Action button: 60px on narrow screens, 80px on medium (<480px), 100px on wide screens
+  -- - Action buttons, View and Graph side by side: 56px on narrow screens, 76px on medium (<600px),
+  --   100px on wide screens. Narrower than one button had, so the model and file name keep the room
+  --   their wrapping needs; on 480 px two 100px buttons left half of it and doubled the build.
   -- - Model & filename: space between date column and action button with safe margins
   -- - Row height: follows measured broken lines so wrapped titles cannot overflow into adjacent rows
   local ROW_MIN_H = 44
   local ROW_MAX_LINES = 3
   local isNarrow = w < 380
   local dateColW = isNarrow and math.floor(w * 0.34) or math.min(180, math.floor(w * 0.28))
-  local btnW = isNarrow and 60 or (w < 480 and 80 or 100)
+  local btnW = isNarrow and 56 or (w < 600 and 76 or 100)
   local btnH = 30
-  local btnX = x + w - btnW - 10
+  local graphX = x + w - btnW - 10
+  local btnX = graphX - GRAPH_GAP - btnW
   local labelX = x + dateColW + 15
   local labelW = math.max(40, btnX - labelX - 10)
   local _, labelLineH = textSize("Ag", SMLSIZE)
@@ -1696,6 +1815,28 @@ function M.build(ctx)
         state.summary = nil
         state.loading = true
         state.reading = false
+        if state.requestRebuild then
+          state.requestRebuild()
+        end
+      end
+    }
+
+    -- Graph button: straight to the plot, without the summary.
+    children[#children + 1] = {
+      type = "button",
+      x = graphX,
+      y = itemY + 7,
+      w = btnW,
+      h = btnH,
+      text = pageText(i18n, "graph_open"),
+      press = function()
+        state.selectedFile = item.file
+        state.selectedFilePath = item.path
+        state.selectedModel = item.model
+        state.summary = nil
+        state.loading = false
+        state.reading = false
+        openGraph(true)
         if state.requestRebuild then
           state.requestRebuild()
         end
