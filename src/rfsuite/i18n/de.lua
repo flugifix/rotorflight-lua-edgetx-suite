@@ -515,6 +515,7 @@ return {
         resp_ok = "Folgt dem Knüppel",
         stops_more_fmt = "Mehr Stopps nötig (%d/%d)",
         stops_value_fmt = "%d%% Rückprall",
+        stops_shake_fmt = "Schwingt %d °/s",
         act_fly_roll = "Rollen im Rate-Modus fliegen, danach jeweils den Knüppel zentrieren",
         act_fly_pitch = "Flips im Rate-Modus fliegen, danach jeweils den Knüppel zentrieren",
         act_fly_yaw = "Pirouetten im Rate-Modus fliegen, danach jeweils den Knüppel zentrieren",
@@ -533,6 +534,7 @@ return {
         why_relax = "Nach einem Stopp drückt der I-Anteil den Heli zurück.",
         why_fix_f_fmt = "Stopps prallen %d%% zurück. Zuerst FF korrigieren, dann erneut prüfen.",
         why_brake_fmt = "Stopps prallen %d%% zurück. Mehr P bremst sie (oder B erhöhen).",
+        why_shake_fmt = "Schwingt %d °/s bei Knüppel in der Mitte. Weniger P beruhigt das.",
         why_ok = "Der Heli folgt dem Knüppel wie verlangt.",
         save_question = "Diese Änderungen schreiben?",
         reading = "Lese aktuelle Einstellungen...",
@@ -554,7 +556,7 @@ return {
         journal_failed = "Das Änderungsjournal konnte nicht geschrieben werden.",
         applied = "Übernommen. Neue Einstellungen im Flug prüfen.",
         help_title = "Tuning-Berater",
-        help_message = "Im Rate-Modus fliegen; jede Achse lesen, einmal ändern, erneut fliegen.\n#n oben: Raten-Profil, für das der Rat gilt.\nAchse: Roll, Nick oder Gier; alle Zeilen gelten für diese Achse.\nFlugdaten: gemessener Rate-Flug und ob gerade erfasst wird.\nAnsprechen: Helidrehrate im Vergleich zum Knüppel.\nStopps: Rückprall nach Zentrieren des Knüppels.\nVorgeschlagene Änderungen: nach Seite und Einstellung.\nWarum: Grund jeder Änderung.\n*: löscht gesammelte Daten nach Rückfrage.\nSpeichern (Kopfzeile): schreibt Vorschläge dieser Achse nach Bestätigung."
+        help_message = "Im Rate-Modus fliegen; jede Achse lesen, ihre Änderungen einmal speichern, erneut fliegen.\nAchse: Roll, Nick oder Gier; alle Zeilen gelten für diese Achse.\nFlugdaten: gemessener Rate-Flug und ob gerade erfasst wird.\nAnsprechen: Helidrehrate im Vergleich zum Knüppel.\nStopps: Rückprall nach Zentrieren des Knüppels, oder Schwingen in der Mitte.\nVorgeschlagene Änderungen: nach Seite und Einstellung.\nWarum: Grund jeder Änderung."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
         save_error_title = "Fehler",

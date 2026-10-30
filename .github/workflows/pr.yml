@@ -496,6 +496,14 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y lua5.3
       - run: lua5.3 bin/flight_tuning/verify_save_pid_profile_pages.lua
 
+  tune-advisor-shake:
+    name: Tune Advisor payload and shake rule
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/flight_tuning/verify_tune_advisor_shake.lua
+
   msp-armed-state:
     name: MSP armed state
     runs-on: ubuntu-latest

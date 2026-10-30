@@ -27,6 +27,8 @@ Needs MSP API 12.10; greyed out on an older flight controller. Read-only while t
 The page refreshes every 2 seconds. A flight controller that does not know the Tune Advisor command -- a 12.10
 firmware from before it, or a board built without it -- shows "Needs newer firmware", and the page stops asking;
 Reload asks again. When the link drops for a moment, the last measurements stay on screen until the next answer.
+The page reads both record layouts the flight controller has sent so far: the first one, and the second one that
+adds the shake with the stick centred. A layout it does not know shows the same "Needs newer firmware".
 
 ## Settings
 
@@ -36,7 +38,7 @@ Reload asks again. When the link drops for a moment, the last measurements stay 
 | Axis | Roll, Pitch or Yaw. Everything below is for the chosen axis. |
 | Flight data | Minutes and seconds of rate flight measured, and whether measuring is happening now (collecting) or not (paused). |
 | Response | How fast the heli turns compared with the rate the stick asks for, for example "53% faster than asked". "Needs more flying" shows how much data is still needed; "Too uneven to judge" means the response varies too much. |
-| Stops | How much the heli bounces back after you centre the stick, as a share of the turn rate. Needs 10 stops. |
+| Stops | How much the heli bounces back after you centre the stick, as a share of the turn rate. Needs 10 stops. "Shaking 49 deg/s" instead means the heli oscillates with the stick centred (see the rules below). |
 | Suggested changes | Up to three changes, each named by the page, row and column to change, in the units that page shows, for example *PIDs > Roll > FF: 100 -> 80* and *Rates > Roll > Max Rate: 720 -> 900*. |
 | Why | The reason for each change, and a fact worth knowing when there is room (for example how much faster the heli turns at high collective). |
 | * (header) | Clears the measurements on the flight controller after asking to confirm. |
@@ -44,6 +46,11 @@ Reload asks again. When the link drops for a moment, the last measurements stay 
 
 The suggestions follow these rules:
 
+- **Shakes with the stick centred** (15 deg/s or more, measured over at least 5 s of centred stick): lower P by
+  one step (P / 1.2), and no FF, rate or stop advice for that axis until it is calm. An oscillation also reads
+  as bounce-back after every stop and spoils the response figure, so the other rules would be misled. If
+  lowering P does not calm it, check D and the linkages. Needs a firmware that reports the shake; an older one
+  never shows it.
 - **Turns faster or slower than asked** (more than 15% off): change FF and the rates by the same amount in
   opposite directions, so the stick feel stays the same but the heli flies the rate you ask for. One step
   changes FF by at most 20%. With Actual, Quick and Rotorflight rates the page gives the exact rate values,
@@ -51,8 +58,8 @@ The suggestions follow these rules:
 - **Full stick asks for more rate than the heli reaches** (roll and pitch), with the cyclic at its limit: lower
   the rates to what the heli reaches.
 - **Stops bounce back 12% or more**: if the I-term pushes back, lower *Advanced > PID Controller > Cut-off point*
-  by 20%. If FF does not match yet, fix FF first. Otherwise the controller is barely braking the stop: raise P
-  by 20% (or add B).
+  by 20%. If FF does not match yet, fix FF first. Otherwise raise P by 20%
+  (or add B).
 
 The radio's own confirmation dialog lists the changes, with the No button first. After you confirm,
 the page reads the current PID gains, PID profile settings and rates afresh. It refuses

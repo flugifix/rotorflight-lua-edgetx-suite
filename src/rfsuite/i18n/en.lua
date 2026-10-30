@@ -515,6 +515,7 @@ return {
         resp_ok = "Matches the stick",
         stops_more_fmt = "Needs more stops (%d/%d)",
         stops_value_fmt = "%d%% bounce-back",
+        stops_shake_fmt = "Shaking %d deg/s",
         act_fly_roll = "Fly rolls in rate mode, centre the stick after each",
         act_fly_pitch = "Fly flips in rate mode, centre the stick after each",
         act_fly_yaw = "Fly pirouettes in rate mode, centre the stick after each",
@@ -533,6 +534,7 @@ return {
         why_relax = "After a stop, the I-term pushes the heli back.",
         why_fix_f_fmt = "Stops bounce back %d%%. Fix FF first, then check again.",
         why_brake_fmt = "Stops bounce back %d%%. More P brakes them (or add B).",
+        why_shake_fmt = "Shakes %d deg/s at centre stick. Less P calms it.",
         why_ok = "The heli answers the stick as asked.",
         save_question = "Write these changes?",
         reading = "Reading current settings...",
@@ -554,7 +556,7 @@ return {
         journal_failed = "The change journal could not be written.",
         applied = "Applied. Fly again to check the new settings.",
         help_title = "Tune Advisor",
-        help_message = "Fly in rate mode; read each axis, apply once, then fly again.\n#n (heading): the rate profile the advice is for.\nAxis: Roll, Pitch or Yaw; all lines are for this axis.\nFlight data: rate flight measured and whether collecting now.\nResponse: heli turn rate compared with the stick.\nStops: bounce-back after centring the stick.\nSuggested changes: what to change, by page and setting.\nWhy: reason for each change.\n*: clears collected data after asking.\nSave (header): writes suggested changes for this axis after you confirm."
+        help_message = "Fly in rate mode; read each axis, save its changes once, then fly again.\nAxis: Roll, Pitch or Yaw; all lines are for this axis.\nFlight data: rate flight measured and whether collecting now.\nResponse: heli turn rate compared with the stick.\nStops: bounce-back after centring the stick, or the shake with it centred.\nSuggested changes: what to change, by page and setting.\nWhy: reason for each change."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
         save_error_title = "Error",

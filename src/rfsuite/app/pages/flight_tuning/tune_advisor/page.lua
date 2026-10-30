@@ -20,9 +20,12 @@
 -- - Polar cyclic (roll and pitch): the rate lines and the full-stick rule use the Pitch rates
 --   and name the Rates page's Cyclic row, as the flight controller does.
 -- - |Collective| spread is shown as a fact, last, when there is room.
+-- - Shake: the heli oscillates with the stick centred, usually P too high. Less P, and no F,
+--   rate or stop advice on that axis: an oscillation also reads as bounce-back after every stop
+--   and spoils the F match, so the rules here would otherwise ask for more P and make it worse.
+--   Needs payload version 2; version 1 reports no shake.
 -- - Stick releases: the rebound after a stop. I-term pushing back points at a lower I-term
---   relax cut-off; with F still off, F comes first; otherwise the controller is barely braking,
---   so more P (or B).
+--   relax cut-off; with F still off, F comes first; otherwise more P (or B).
 --
 -- RC tuning is read after the first advisor reply, when the active rate profile changes and
 -- on Reload. It is never sent on a pass that polls and is deferred after a build like the poll.
@@ -118,6 +121,11 @@ local ITERM_PUSH = 0.03         -- I at release, output units
 local P_STEP = 1.2
 local CUTOFF_STEP = 0.8         -- lower cut-off = more relax, less bounce-back
 local CUTOFF_MIN = 1
+
+-- Shake with the stick centred. A tuned heli holds a few deg/s there; an oscillating loop tens,
+-- and its swings also read as bounce-back after every stop.
+local SHAKE_MIN_COUNT = 500     -- 5 s of centred stick
+local SHAKE_RMS = 15            -- deg/s
 
 local MAX_ACTIONS = 3
 local MAX_WHYS = 3
@@ -251,6 +259,7 @@ local function loadTexts(i18n)
     respOk = pageText(i18n, "resp_ok", "Matches the stick"),
     stopsMoreFmt = pageText(i18n, "stops_more_fmt", "Needs more stops (%d/%d)"),
     stopsValueFmt = pageText(i18n, "stops_value_fmt", "%d%% bounce-back"),
+    stopsShakeFmt = pageText(i18n, "stops_shake_fmt", "Shaking %d deg/s"),
 
     actFlyRoll = pageText(i18n, "act_fly_roll", "Fly rolls in rate mode, centre the stick after each"),
     actFlyPitch = pageText(i18n, "act_fly_pitch", "Fly flips in rate mode, centre the stick after each"),
@@ -271,6 +280,7 @@ local function loadTexts(i18n)
     whyRelax = pageText(i18n, "why_relax", "After a stop, the I-term pushes the heli back."),
     whyFixFFmt = pageText(i18n, "why_fix_f_fmt", "Stops bounce back %d%%. Fix FF first, then check again."),
     whyBrakeFmt = pageText(i18n, "why_brake_fmt", "Stops bounce back %d%%. More P brakes them (or add B)."),
+    whyShakeFmt = pageText(i18n, "why_shake_fmt", "Shakes %d deg/s at centre stick. Less P calms it."),
     whyOk = pageText(i18n, "why_ok", "The heli answers the stick as asked."),
     saveQuestion = pageText(i18n, "save_question", "Write these changes?"),
     reading = pageText(i18n, "reading", "Reading current settings..."),
@@ -404,6 +414,7 @@ local function advise(T, a, axis, actions, whys, changes)
     end
   end
   local pidPrefix = "pid_" .. (axis - 1) .. "_"
+  local shaking = a.shakeCount >= SHAKE_MIN_COUNT and a.shakeRms >= SHAKE_RMS
 
   -- Response: feed-forward match
   local response
@@ -418,7 +429,8 @@ local function advise(T, a, axis, actions, whys, changes)
     local g = a.ffGain
     local hot = g > FF_HOT
     response = string.format(hot and T.respFastFmt or T.respSlowFmt, round(math.abs(g - 1) * 100))
-    if a.F > 0 then
+    -- A shaking axis gets no FF advice: the shake comes first (see Stops)
+    if a.F > 0 and not shaking then
       local newF = clamp(round(a.F * clamp(1 / g, 1 - FF_STEP_MAX, 1 + FF_STEP_MAX)), 1, GAIN_MAX)
       local text = string.format(PATH_FMT, T.pidsPage, T.pidsAxis[axis], T.pidsF, a.F, newF)
       local roles = LINEAR_ROLES[rates.ratesType]
@@ -439,13 +451,13 @@ local function advise(T, a, axis, actions, whys, changes)
       end
       why(hot and T.whyFast or T.whySlow)
       why(T.whyKeepFeel)
-    else
+    elseif not shaking then
       why(T.whyNoF)
     end
   else
     response = T.respOk
     local asked = maxRateAsked(rates)
-    if axis ~= AXIS_YAW and asked and a.fullCount >= FULL_MIN_COUNT
+    if not shaking and axis ~= AXIS_YAW and asked and a.fullCount >= FULL_MIN_COUNT
         and a.fullSatCount >= FULL_SAT_SHARE * a.fullCount
         and a.fullMaxRate < FULL_REACH * asked and room(rateActionCount(rates)) then
       rateActions(T, rates, a.fullMaxRate / asked, act, setting)
@@ -455,7 +467,16 @@ local function advise(T, a, axis, actions, whys, changes)
 
   -- Stops: rebound after a release
   local stops
-  if a.releases < STOPS_MIN then
+  if shaking then
+    local rms = round(a.shakeRms)
+    stops = string.format(T.stopsShakeFmt, rms)
+    if a.P > 1 and room(1) then
+      local newP = clamp(round(a.P / P_STEP), 1, a.P - 1)
+      setting(string.format(PATH_FMT, T.pidsPage, T.pidsAxis[axis], T.pidsP, a.P, newP),
+        pidPrefix .. "P", "tuning", a.P, newP, "pid")
+      why(string.format(T.whyShakeFmt, rms))
+    end
+  elseif a.releases < STOPS_MIN then
     stops = string.format(T.stopsMoreFmt, a.releases, STOPS_MIN)
   else
     local rebound = round(a.meanRebound * 100)
@@ -570,7 +591,8 @@ local function apply(data)
   -- Skip the rebuild when nothing new was collected
   local a = data.a
   local signature = ((data.seconds * 2 + (data.collecting and 1 or 0)) * 4 + data.axis) * 31
-    + a.ffCount + a.releases + a.fullCount + a.F + a.P + a.rcRate + a.sRate + a.ratesType + a.relaxCutoff
+    + a.ffCount + a.releases + a.fullCount + a.shakeCount + round(a.shakeRms * 10) + a.F + a.P + a.rcRate
+    + a.sRate + a.ratesType + a.relaxCutoff
   if signature == ui.lastSignature then return end
   ui.lastSignature = signature
   ui.lastData = data

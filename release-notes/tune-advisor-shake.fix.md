@@ -1,0 +1,3 @@
+- **Tune Advisor lowers P on an axis that shakes with the stick centred (`app/pages/flight_tuning/tune_advisor/page.lua`, `tasks/msp/api/tune_advisor.lua`, `docs/pages/flight_tuning/tune_advisor.md`)**:
+  - A heli oscillating with the stick centred also bounces back after every stop, and the stop rule asked for 20% more P. With a firmware that reports the shake, 15 deg/s or more over 5 s of centred stick now shows "Shaking N deg/s" under Stops, suggests P down one step (P / 1.2), and gives that axis no FF, rate or stop advice until it is calm.
+  - The page reads the record's payload version 2 (71 bytes, with the shake) beside version 1. Before, a version 2 reply showed "Needs newer firmware" and the page stopped asking.
