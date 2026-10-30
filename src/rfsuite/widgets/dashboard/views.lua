@@ -103,7 +103,13 @@ local CONDITIONS = {}
 -- `state.inflight` runs only while that surface is open. So the entry is decided from the
 -- preferences of this pass and never from the snapshot: asking for the snapshot would hide
 -- the entry until the surface had been opened, which it then never could be.
+--
+-- It is offered only while the model is disarmed, so a mis-press in the air -- of the entry or
+-- of a key bound to it -- cannot open a surface that changes flight controller parameters. A
+-- surface opened on the ground stays open through arming; one closed in the air (the firmware's
+-- fullscreen exit, a page switch) can be opened again after the landing.
 function CONDITIONS.previewInflightTuning(widget)
+  if widget.state and widget.state.armed == true then return false end
   local prefs = widget.preferences
   local previewOn = prefs and prefs.general and prefs.general.preview_inflight_tuning == true
   local radioOn = prefs and type(prefs.inflight) == "table" and prefs.inflight.enabled == true
@@ -686,7 +692,7 @@ function M.navigate(widget, after)
     -- The same flag the quick menu's IN-FLIGHT TUNING entry raises, under the same condition: a
     -- key bound to it does nothing where the entry would not be offered.
     if not M.condition("previewInflightTuning", widget) then
-      viewLog("in-flight tuning not opened: the overlay is not enabled")
+      viewLog("in-flight tuning not opened: the overlay is not enabled, or the model is armed")
       return
     end
     widget.inflightFullscreen = true

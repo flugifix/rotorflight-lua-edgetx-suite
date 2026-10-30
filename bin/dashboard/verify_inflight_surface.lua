@@ -917,6 +917,11 @@ scenario("the quick-menu entry is offered before the tuning surface was ever ope
   widget.preferences.inflight.enabled = true
   widget.preferences.general.preview_inflight_tuning = false
   check(Views.condition("previewInflightTuning", widget) ~= true, "preview off hides the entry")
+  widget.preferences.general.preview_inflight_tuning = true
+  widget.state.armed = true
+  check(Views.condition("previewInflightTuning", widget) ~= true, "armed hides the entry: it opens on the ground only")
+  widget.state.armed = false
+  check(Views.condition("previewInflightTuning", widget) == true, "disarmed again offers the entry")
 end)
 scenario("a hardware key bound to in-flight tuning opens the surface", function()
   local Views = rfsuite.require("widgets/dashboard/views.lua")
@@ -933,6 +938,13 @@ scenario("a hardware key bound to in-flight tuning opens the surface", function(
   widget.preferences.inflight.enabled = false
   Views.navigate(widget, action)
   check(widget.inflightFullscreen ~= true, "with the overlay disabled the key opens nothing")
+  widget.preferences.inflight.enabled = true
+  widget.state.armed = true
+  Views.navigate(widget, action)
+  check(widget.inflightFullscreen ~= true, "armed, the bound key opens nothing")
+  widget.state.armed = false
+  Views.navigate(widget, action)
+  check(widget.inflightFullscreen == true, "disarmed, the same key opens the surface")
 end)
 -- A fresh loader per visit is essential: the earlier drive fixtures deliberately start warm.
 -- loadScript observes cache misses in the shipped memoizer, including nested dependencies.
@@ -976,7 +988,8 @@ for _, opening in ipairs({"quick_menu", "bound_key", "firmware", "background", "
     widget.preferences.general = {preview_inflight_tuning = true}
     widget.preferences.inflight = {enabled = true}
     widget.preferences.dashboard = {key_tele = "inflight_tuning"}
-    widget.state.armed, widget.state.armedSeen, widget.state.fblConnected = true, true, true
+    -- Opened on the ground, flown armed: the surface is offered only while disarmed.
+    widget.state.armed, widget.state.armedSeen, widget.state.fblConnected = false, true, true
     local builds, writes, loadPasses = 0, 0, 0
     local realBuild, realWrite, realEvent = lvgl.build, model.setGlobalVariable, lvgl.onEvent
     local realTele, realExit = _G.EVT_TELEM_BREAK, _G.EVT_VIRTUAL_EXIT
@@ -1024,14 +1037,23 @@ for _, opening in ipairs({"quick_menu", "bound_key", "firmware", "background", "
       if opening ~= "bound_key" then
         local entry = Menu.entry(widget, "inflight_tuning")
         check(entry and entry.press, "positive control: tuning entry exists")
+        widget.state.armed = true
+        check(Menu.visible(widget, entry) ~= true, "armed, the menu does not offer the entry")
+        widget.state.armed = false
+        check(Menu.visible(widget, entry) == true, "disarmed, the menu offers the entry")
         lvgl.onEvent = function() entry.press() end
         job(widget); refresh(0)
         lvgl.onEvent = realEvent
       else
         _G.EVT_TELEM_BREAK = 9001
+        widget.state.armed = true
+        job(widget); refresh(EVT_TELEM_BREAK)
+        check(widget.inflightFullscreen ~= true and next(loaded) == nil, "armed, the bound key opens and loads nothing")
+        widget.state.armed = false
         job(widget); refresh(EVT_TELEM_BREAK)
       end
       check(widget.inflightFullscreen == true, "positive control: the event opened tuning")
+      widget.state.armed = true
       check(next(loaded) == nil and widget._inflight == nil, "the opening event defers all first loads and drive work")
       if opening ~= "quick_menu" and opening ~= "bound_key" then
         refresh(0); refresh(0)

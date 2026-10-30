@@ -12,7 +12,7 @@ radio and apply to every model on it, so no flight controller has to be connecte
 them. Suggested FC functions and their step sizes are set up from the tuning screen on the ground.
 A model whose board carries tuning slots is tunable while the radio's master switch is on and
 the tuning fullscreen is open in the foreground. Enter the dashboard's fullscreen quick menu
-and choose **In-flight tuning**. The dashboard zone continues to show its theme.
+on the ground and choose **In-flight tuning**; while the model is armed the entry is not offered. The dashboard zone continues to show its theme.
 
 What the overlay itself does in the air is in
 [the dashboard guide](../../../dashboard/inflight-tuning.md).
@@ -137,8 +137,8 @@ remaining in value mode and announcing its name and current value. Ends do not w
 PAGE inputs are refused and spent. RTN leaves value mode; in the air it closes nothing and there is no Close, on the ground it
 closes tuning and returns to the quick menu. X is also available only on the ground. Closing
 retains the session. A firmware fullscreen exit (long RTN) or a page switch in the air pauses
-tuning and clears both variables immediately; reopening from the quick menu in the same flight
-continues at the same group and parameter. Every new flight starts at the first function of the
+tuning and clears both variables immediately; it can be opened again only after the landing,
+because the quick-menu entry and a bound key open tuning only while the model is disarmed. Every new flight starts at the first function of the
 first group. Stored interlock-switch values are ignored.
 Link loss immediately clears both variables but keeps the visit visible with **PAUSED** and
 **No FC link**. The retained visit resumes automatically when link and arm telemetry return,

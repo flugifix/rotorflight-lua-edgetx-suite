@@ -118,10 +118,13 @@ cells. This prevents the FC's clamp from jumping an out-of-range value to a slot
 Open the dashboard in fullscreen and choose **In-flight tuning** from the quick menu, or press a
 hardware key set to **In-flight tuning** under *Settings* → *Dashboard* → *Keys*. What it
 shows follows the flight. Opening releases tuning on that pass, with no switch or debounce.
+Tuning opens only while the model is disarmed: armed, the quick menu does not list the entry and a
+bound key does nothing, so a mis-press in the air cannot open it. A surface opened on the ground
+stays open through arming and the flight.
 On the ground, X or RTN closes tuning and returns to the quick menu; the session persists.
 In the air there is no X, and RTN only leaves value mode. A firmware fullscreen exit (long RTN)
-or a page switch pauses tuning immediately: both variables go to zero. Reopen tuning from the
-quick menu while still armed to continue at the same group and parameter. Link loss removes the
+or a page switch pauses tuning immediately: both variables go to zero, and tuning can be opened
+again only after the landing; the flight's steps stay for the post-flight list. Link loss removes the
 release immediately but keeps the tuning visit open, showing **PAUSED** and **No FC link**
 while tuning. After landing, the post-flight comparison stays visible while the pack is
 unplugged; when the link comes back after a battery change a new session begins (see *Sessions*).
@@ -380,8 +383,8 @@ values, steps and post-flight comparison remain available when tuning is reopene
 Every flight starts at the first function of the first group. The overlay
 owns these release events ahead of pending builds and theme bindings. Navigation stops at list ends and gives end feedback; a request during a pulse or
 cooldown is refused and never queued. Closing clears the variables, cancels pending speech and
-leaves value mode. Opening tuning again from the quick menu releases it immediately. A pause
-within the same flight keeps the selected group and parameter.
+leaves value mode. Opening tuning again from the quick menu on the ground releases it
+immediately. A link-loss pause within the same flight keeps the selected group and parameter.
 
 **Encoder:** rotate to highlight the previous/next function and request its settled name
 announcement. Press once to select it. In value mode, rotate one row to request one signed
@@ -503,7 +506,7 @@ Ordinary in-flight profile announcements remain enabled.
 
 Closing tuning on the ground or in the air keeps the session. Closed on the ground, the surface's
 own code is unloaded and loads again on the next opening, which takes a few passes; closed in the
-air it stays loaded until the landing, so reopening during the flight is immediate. When the
+air it stays loaded until the landing. When the
 session ends (see *Sessions*) while tuning is closed, the session and all of tuning's code leave
 memory at once, unless another dashboard on the radio still shows tuning, holds a session or has
 the configuration tool open; the next opening reads the board and begins a new session. Nothing is unloaded
@@ -529,7 +532,7 @@ After a link interruption on the ground, tuning waits for the flight controller'
 
 Closing fullscreen or backgrounding the widget in flight pauses tuning, clears both variables,
 and retains the flight's steps for the post-flight list, including when the widget returns after
-landing. Reopening during the same flight continues at the same group and parameter. Ground MSP
+landing. Tuning can be opened again after the landing. Ground MSP
 work runs only while tuning is open. The ground model-status sentence updates as setup faults are
 repaired. The session row shows the time its start values were read; the SD snapshot keeps the full date and time, and existing snapshots remain compatible.
 
