@@ -1382,7 +1382,9 @@ tickUnit = function()
       S.progress = (S.filePos - S.progBase) / (S.fsize - S.progBase)
     end
     if r == "eof" or r == "stop" then
-      cacheAdd(S.extEntry)
+      -- A read a stopped tick interrupted can lack rows (see G.tick); it is drawn, but not
+      -- kept to serve a later window.
+      if not S.interrupted then cacheAdd(S.extEntry) end
       S.phase, S.rbSrc, S.rbK, S.extEntry = "rebkt", S.extEntry, 1, nil
     end
     return false
