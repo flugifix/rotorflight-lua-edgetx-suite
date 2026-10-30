@@ -1697,6 +1697,33 @@ return function(h)
     eq(c[1].summary(),L.rateNoMatchShort,"S05 unmatched profile explains rate replacement")
     check(string.find(c[1].detail,L.rateNoMatch,1,true)~=nil,"S05 help includes the full unmatched warning")
   end)
+  case("S05.rates-set-shows-what-is-set",function()
+    local w=world();settle(w);w.step=5
+    local ranges=w.data.adjustment_ranges.adjustment_ranges
+    ranges[1]=H.mapped(2,1,1000,2000,1,3);ranges[2]=H.mapped(1,1,1000,2000,1,3)
+    local c=step(w,"rates");c[1].enter();settle(w)
+    local done=c[#c]
+    eq(done.title,L.ratesSet,"S05 the step closes on Rates set")
+    eq(#done.table.rows,5,"S05 Rates set shows type, roll, pitch, yaw and collective")
+    eq(done.summary(),L.stepUnchanged,"S05 nothing chosen is nothing to store")
+    c[1].rows[3].press()
+    eq(done.table.rows[1].cells[1](),w:apiAtLeast(9) and "Rotorflight" or "Actual","S05 Rates set names the rates type a style writes")
+    eq(done.table.rows[2].cells[1](),string.format(L.rateCell,"180","40"),"S05 Rates set shows the roll rate and expo a style writes")
+    eq(done.table.rows[3].cells[1](),string.format(L.rateCell,"180","40"),"S05 Rates set shows the pitch rate and expo a style writes")
+    eq(done.table.rows[4].cells[1](),string.format(L.rateCell,"270","50"),"S05 Rates set shows the yaw rate and expo a style writes")
+    check(string.find(done.table.rows[5].cells[1](),"0 %",1,true)~=nil,"S05 Rates set shows the collective expo a style writes")
+    eq(done.summary(),L.stepChanged,"S05 a chosen style is something to store")
+  end)
+  case("S06.swashplate-set-shows-what-is-set",function()
+    local w=world();settle(w);w.step=6
+    local c=step(w,"swash");local done=c[4]
+    eq(done.title,L.swashSet,"S06 the step closes on Swashplate set")
+    w.startTail=w.data.mixer_config.tail_rotor_mode
+    eq(done.rows[6].get(),L.unchanged,"S06 TTA is unchanged while the tail kind stays")
+    c[3].rows[1].set(w.data.mixer_config.tail_rotor_mode==0 and 2 or 1)
+    eq(done.rows[6].get(),string.format(L.ttaEvery,w:motorised() and 100 or 0),"S06 a new tail kind names the TTA it writes")
+    eq(done.rows[5].get(),string.format(L.percentValue,w:motorised() and "100" or "25"),"S06 Swashplate set shows the yaw input rate the tail choice sets")
+  end)
   case("S08.card-order-and-save",function()
     local w=world();settle(w);w.step=8;w.data.feature_config.enabledFeatures=0
     local c=step(w,"governor");cardOrder(c,{L.governorMode},"S08 Off")

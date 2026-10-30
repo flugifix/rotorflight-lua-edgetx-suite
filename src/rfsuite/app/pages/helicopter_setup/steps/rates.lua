@@ -56,13 +56,13 @@ return function(w)
   end
   local function number(v) return v and tostring(v) or "--" end
   local function caption(t)
-    local c,y,ce,ye=H.rateValues(t)
+    local c,_,y,ce,_,ye=H.rateValues(t)
     return string.format(L.rateLine,L.cyclic,number(c),L.expo,number(ce)).."\n"..
       string.format(L.rateLine,L.yaw,number(y),L.expo,number(ye)).."\n"..
       L.collective.." "..string.format(L.degreeValue,number(H.collective(t)))
   end
   local function short(t)
-    local c,y=H.rateValues(t)
+    local c,_,y=H.rateValues(t)
     return string.format(L.rateShort,number(c),number(y),number(H.collective(t)))
   end
   local switched=H.profileMode(w.data.adjustment_ranges.adjustment_ranges)==1
@@ -95,22 +95,29 @@ return function(w)
     card.wideText,card.dense=true,#rows>4
     cards[#cards+1]=card
   end
-  -- The step closes on a table: a column per profile, a row per axis, as Save & next will write them.
-  local columns,cyclicRow,yawRow,collectiveRow={},{},{},{}
+  -- The step closes on a table of everything a style sets: a column per profile, the rates type,
+  -- a row per axis with rate and expo, and the collective with its expo, as Save & next will hold them.
+  local TYPES={[4]="Actual",[6]="Rotorflight"}
+  local columns,typeRow,collectiveRow={},{},{}
+  local axisRows={{},{},{}}
   for _,id in ipairs(profiles) do
     columns[#columns+1]=string.format(L.rateProfileTitle,id+1)
-    cyclicRow[#cyclicRow+1]=memo(id,function(t)
-      local c,_,ce=H.rateValues(t);return string.format(L.rateCell,number(c),number(ce))
+    typeRow[#typeRow+1]=memo(id,function(t) return TYPES[t.rates_type] or "--" end)
+    for axis=1,3 do
+      local cells=axisRows[axis]
+      cells[#cells+1]=memo(id,function(t)
+        local v={H.rateValues(t)};return string.format(L.rateCell,number(v[axis]),number(v[axis+3]))
+      end)
+    end
+    collectiveRow[#collectiveRow+1]=memo(id,function(t)
+      return string.format(L.collectiveCell,number(H.collective(t)),number(t.rcExpo_4))
     end)
-    yawRow[#yawRow+1]=memo(id,function(t)
-      local _,y,_,ye=H.rateValues(t);return string.format(L.rateCell,number(y),number(ye))
-    end)
-    collectiveRow[#collectiveRow+1]=memo(id,function(t) return string.format(L.degreeValue,number(H.collective(t))) end)
   end
   local done=w:cardDef(L.ratesSet,L.ratesHint.."\n"..L.rateNoMatch,{},enter)
   done.summary=function() return next(w.rateStyles) and L.stepChanged or L.stepUnchanged end
-  done.table={columns=columns,rows={{label=L.cyclic,cells=cyclicRow},{label=L.yaw,cells=yawRow},
-    {label=L.collective,cells=collectiveRow}},legend=L.rateLegend}
+  done.table={columns=columns,rows={{label=L.ratesType,cells=typeRow},{label=L.roll,cells=axisRows[1]},
+    {label=L.pitch,cells=axisRows[2]},{label=L.yaw,cells=axisRows[3]},{label=L.collective,cells=collectiveRow}},
+    legend=L.rateLegend}
   done.wideText=true
   cards[#cards+1]=done
   return cards

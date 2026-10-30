@@ -392,7 +392,7 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
       if n==6 and c==4 then
         -- The closing card shows every value of the step; nothing is edited on it.
         for _,r in ipairs(card.rows) do check(r.kind=="value","swash set card only shows values") end
-        check(#card.rows==5,"swash set card shows type, rotor, tail, tail output and tail servo")
+        check(#card.rows==6,"swash set card shows type, rotor, tail, tail output, yaw input rate and TTA")
       end
       if n==6 and c<=3 then
         -- Each of the three cards swaps its picture in the existing scene when its value moves.

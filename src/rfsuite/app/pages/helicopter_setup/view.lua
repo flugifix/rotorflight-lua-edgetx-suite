@@ -156,7 +156,7 @@ function M.new(w, ctx, diagrams)
     -- Overview cards (blocks, a table, bars) draw across the full width below the summary.
     local overviewY = rowY
     if card.dense and slots > 0 then
-      rowH = math.min(rowH, math.max(18, math.floor((cardBottom-2-rowY)/slots)))
+      rowH = math.min(rowH, math.max(card.minRowH or 18, math.floor((cardBottom-2-rowY)/slots)))
       rowControlH = math.min(rowControlH, rowH-2)
     end
     -- Rows may sit at the foot of the card, under a full-width overview.
@@ -234,7 +234,7 @@ function M.new(w, ctx, diagrams)
       local cols = #t.columns
       local firstW = math.floor((width-20)*(large and 0.22 or 0.26))
       local cw = math.floor((width-20-firstW)/math.max(1,cols))
-      local lineH = large and 40 or height <= 272 and 20 or 24
+      local lineH = math.min(large and 40 or 24, math.floor((cardBottom-2-overviewY)/(#t.rows+1)))
       local y = overviewY
       for c, head in ipairs(t.columns) do
         all[#all+1] = label(10+firstW+(c-1)*cw, y, cw-6, head)

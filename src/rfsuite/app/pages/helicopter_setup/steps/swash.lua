@@ -75,7 +75,9 @@ return function(w)
     if w.tailPinRefused == expectedOutput() and w.tailPinNotice then return w.tailPinNotice end
     return L.tailTypeHint
   end
-  -- The step closes on what it set: the layout picture beside every value of the three cards.
+  -- The step closes on what it sets: the layout picture beside every value it writes.
+  local shownRate, rateText
+  local ttaMotor, ttaServo = string.format(L.ttaEvery, 100), string.format(L.ttaEvery, 0)
   local swashNames = { L.direct, "120", "135", "140", "90L", "90V" }
   local done = w:cardDef(L.swashSet, L.tailTypeHint, {
     w:value(L.swashType, function() return swashNames[w.data.mixer_config.swash_type] or L.unknown end),
@@ -85,10 +87,20 @@ return function(w)
     w:value(L.tailType, function()
       return ({ L.servoTail, L.motorTail, L.bidirectional })[w.data.mixer_config.tail_rotor_mode + 1] or L.unknown
     end),
-    cards[3].rows[2], cards[3].rows[3]
+    cards[3].rows[2],
+    -- What the tail choice also sets: the yaw input rate and, between servo and motor tail, TTA.
+    w:value(L.yawInputRate, function()
+      local rate = math.abs(w.data.mixer_input.inputs[3].rate)
+      if rate ~= shownRate then shownRate, rateText = rate, string.format(L.percentValue, string.format("%g", rate / 10)) end
+      return rateText
+    end),
+    w:value(L.ttaGain, function()
+      if (w.startTail ~= 0) == w:motorised() then return L.unchanged end
+      return w:motorised() and ttaMotor or ttaServo
+    end)
   }, nil, "swashType")
   done.summary = function() return next(w.dirty) and L.stepChanged or L.stepUnchanged end
-  done.dense = true
+  done.dense, done.minRowH = true, 16
   cards[4] = done
   for _, card in ipairs(cards) do card.wideText = true end
   return cards
