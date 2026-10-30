@@ -231,9 +231,10 @@ return function(w)
   local bars = {}
   for n = 1, 4 do
     local channel, name, percent, shown
+    -- Read in place on every refresh: no closure and no table is made here.
     local function value()
-      local v = mapped(n)()
-      local rc = w.data.rc_config
+      local raw, rc = w.data.rx_channels, w.data.rc_config
+      local v = raw and raw.channels and raw.channels[(w.data.rx_map[keys[n]] or n - 1) + 1]
       if type(v) ~= "number" or not rc then return nil end
       return (v - rc.rc_center) / math.max(1, rc.rc_deflection)
     end

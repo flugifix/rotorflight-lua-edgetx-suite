@@ -79,13 +79,14 @@ return function(w)
   local shownRate, rateText
   local ttaMotor, ttaServo = string.format(L.ttaEvery, 100), string.format(L.ttaEvery, 0)
   local swashNames = { L.direct, "120", "135", "140", "90L", "90V" }
+  local tailNames = { L.servoTail, L.motorTail, L.bidirectional }
   local done = w:cardDef(L.swashSet, L.tailTypeHint, {
     w:value(L.swashType, function() return swashNames[w.data.mixer_config.swash_type] or L.unknown end),
     w:value(L.rotorDirection, function()
       return w.data.mixer_config.main_rotor_dir == 1 and L.counterclockwise or L.clockwise
     end),
     w:value(L.tailType, function()
-      return ({ L.servoTail, L.motorTail, L.bidirectional })[w.data.mixer_config.tail_rotor_mode + 1] or L.unknown
+      return tailNames[w.data.mixer_config.tail_rotor_mode + 1] or L.unknown
     end),
     cards[3].rows[2],
     -- What the tail choice also sets: the yaw input rate and, between servo and motor tail, TTA.
