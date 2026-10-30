@@ -35,7 +35,7 @@
     "src/rfsuite/app/pages/helicopter_setup/steps/rates.lua": "4157b1bd7bcd0136bfa3e744ff6d384595d7fcc246b1798e639ccba93b6d69b8",
     "src/rfsuite/app/pages/helicopter_setup/steps/receiver.lua": "d0af9c9ca4990baa9027bd76d327d5ef1170f07730c5d0be255c626ec7932623",
     "src/rfsuite/app/pages/helicopter_setup/steps/sensors.lua": "d725edcb37c5fcdc9c8ef4ba5bc688875fc7a4c84946dbaafb09860b72fa0df6",
-    "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua": "4e728677fa31acb62385f4a6a1cff58489f7005a38e92c0d2dbf0bd9aa23643c",
+    "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua": "982dc33b5dac99f13736cfa689739b6a7a7afa121d8772cac26cd2b8d4721a48",
     "src/rfsuite/app/pages/helicopter_setup/steps/servos.lua": "a257d4f4a155d6e93a333ce435e1462bbe659ed1ef85252fa415e16fab24124c",
     "src/rfsuite/app/pages/helicopter_setup/steps/swash.lua": "201aa352353dff142883ce0d3980d9dc12e7dfcdbdf85398f872ef496d68d64e",
     "src/rfsuite/app/pages/helicopter_setup/steps/tail.lua": "4810aefafd236621fc3214bcc6361b29e3b5edeecebc9fd4ac362df45c2799f9",
