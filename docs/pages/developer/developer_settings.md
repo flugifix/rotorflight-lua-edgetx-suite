@@ -6,8 +6,9 @@ sidebar_position: 40
 
 # Settings
 
-The suite's logging and diagnostics switches: how much it logs, where the log goes, and whether
-the configuration tool shows and logs its own memory use. These are the settings a report is
+The suite's logging and diagnostics switches: how much it logs, where the log goes, how many
+power-ups of the radio keep their log files, and whether the configuration tool shows its own
+memory use. These are the settings a report is
 usually asked for with; [Collecting logs for a report](../../troubleshooting/collecting-logs.md)
 says what to set and which files to attach.
 
@@ -22,11 +23,11 @@ Not listed at all until *Developer Tools* is switched on under *System* → *Set
 
 | Setting | What it does |
 | --- | --- |
-| Debug Level | How much is logged: *OFF*, *ERROR*, *WARN*, *INFO*, *DEBUG* or *TRACE*, default *OFF*. Errors, warnings and most info lines are logged at every level, *OFF* included: they go to the in-memory list under *Session Logs* and, with *Log Session To Card* on, to the card. The level decides what is added on top: *DEBUG* adds the steps in between, *TRACE* also the raw bytes of every request to and reply from the flight controller. A few info lines, and the log lines printed to the radio's debug output or sent to the serial port, appear only once the level is raised to them. |
-| Continuous Memory Log | The configuration tool logs its Lua memory once a second as an info line: what it holds, the peak, and what is left where the radio reports it. Off by default. |
+| Log Level | How much is logged: *OFF*, *ERROR*, *WARN*, *INFO*, *DEBUG* or *TRACE*, default *OFF*; [what each level adds](../../troubleshooting/collecting-logs.md#what-each-level-adds) is listed with examples. Errors, warnings and the info lines that mark milestones are logged at every level, *OFF* included: they go to the in-memory list under *Session Logs* and, with *Log Session To Card* on, to the card. The level decides what is added on top: *INFO* adds the info lines of in-flight tuning and a few other parts that ask for it first, *DEBUG* the steps in between, *TRACE* also every request to and reply from the flight controller, with its bytes. The log lines printed to the radio's debug output or sent to the serial port appear only once the level is raised to them. Called *Debug Level* in earlier releases. |
 | Show Header Memory | Shows the configuration tool's Lua memory, `LUA: <n>KB`, in the page header. Off by default. |
-| Enable Serial Debug | Also sends every log line the debug level lets through to the radio's serial port. At *OFF* that is none. Off by default. |
-| Log Session To Card | Writes the log to `/SCRIPTS/TOOLS/rfsuite.user/logs/` on the card. Off by default. On its own it already writes the configuration tool's `tool_*` and the widgets' `widget_*` files with errors, warnings and info; the background decoder's `function_*` files also need the debug level at *DEBUG* or above. |
+| Enable Serial Debug | Also sends every log line the log level lets through to the radio's serial port. At *OFF* that is none. Off by default. |
+| Log Session To Card | Writes the log to `/SCRIPTS/TOOLS/rfsuite.user/logs/` on the card, one set of files per power-up of the radio, named after the moment it was switched on. Off by default. On its own it already writes the dashboard's and the configuration tool's files with errors, warnings and info, a state line with the memory figures every five seconds among them; the background decoder's files also need the log level at *DEBUG* or above. |
+| Keep Logs Of | How many power-ups of the radio keep their log files on the card, 1 to 50, default 10. When the radio is next switched on with logging on, the files of older power-ups are deleted; files an older release wrote are left alone. |
 
 Nothing changes until *Save* in the header is pressed.
 
@@ -36,4 +37,4 @@ Nothing changes until *Save* in the header is pressed.
   and which of them to attach.
 - [Session Logs](../tools/diagnostics/session_logs.md) — the in-memory list.
 
-*Documented against RFSuite 0.1.7.*
+*Documented against RFSuite 0.2.2.*

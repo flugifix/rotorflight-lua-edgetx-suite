@@ -48,8 +48,9 @@ to 100 characters before storing it. It belongs to the script that is running �
 tool has one, the dashboard widget has another — so this page shows the tool's, and it is empty
 again the next time the tool is opened.
 
-**Which lines reach it depends on the debug level.** *error*, *warn* and *info* are kept whatever
-*Debug Level* is set to, including *OFF*. *debug* and *trace* lines are only kept once *Debug
+**Which lines reach it depends on the log level.** *error*, *warn* and the *info* lines that mark
+milestones are kept whatever *Log Level* is set to, including *OFF*; the *info* lines of in-flight
+tuning and a few other parts only from *INFO*. *debug* and *trace* lines are only kept once *Log
 Level* is raised to them, under *Developer* → *Settings*. That menu appears once *Developer Tools*
 is switched on under *Settings* → *General*.
 

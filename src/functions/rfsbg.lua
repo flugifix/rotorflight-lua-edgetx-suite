@@ -30,10 +30,15 @@ local initialized = false
 -- killed costs nothing that matters here.
 local PREFERENCES_INTERVAL_SECONDS = 30
 
--- How often the heap line below is written. It is the figure the whole arrangement has to be
+-- How often the heap figure goes into the step file below. It is the figure the whole arrangement has to be
 -- judged on: the firmware sums the script state and the widget state against one Lua memory
 -- ceiling, so work moved from one to the other relieves nothing by itself.
 local HEAP_REPORT_INTERVAL_SECONDS = 30
+
+-- How often the state line is written: the same five seconds as the dashboard's and the tool's,
+-- so the files of one run can be read against each other. It goes to the log only; the step
+-- file keeps the slower cadence above, because every step is a write to the card.
+local STATE_LINE_INTERVAL_SECONDS = 5
 
 -- The card sink takes the longer of its two flush cadences here, unconditionally.
 --
@@ -55,6 +60,7 @@ local WIDGET_STALE_SECONDS = 3.0
 
 local lastPreferencesLoad = nil
 local lastHeapReport = nil
+local lastStateLine = nil
 local widgetValue = nil
 local widgetMovedAt = nil
 local widgetWasMoving = false
@@ -169,14 +175,16 @@ end
 -- raise inside the formatter, where the message would silently come out as its own format
 -- string.
 local function reportHeap(now, sink)
+  if (not lastStateLine or (now - lastStateLine) >= STATE_LINE_INTERVAL_SECONDS)
+    and Log and type(Log.recording) == "function" and Log.recording() then
+    lastStateLine = now
+    Log.emitf("rfsuite.functions", "info", "state: %s", Log.resources())
+  end
+
   if lastHeapReport and (now - lastHeapReport) < HEAP_REPORT_INTERVAL_SECONDS then return end
   lastHeapReport = now
 
   local memKb = math.floor(collectgarbage("count"))
-
-  if Log and type(Log.emitf) == "function" then
-    Log.emitf("rfsuite.functions", "trace", "heap %d kB", memKb)
-  end
 
   -- Once the dashboard widget has been reported gone, the routine line below keeps SAYING so.
   --

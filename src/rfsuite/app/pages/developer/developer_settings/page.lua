@@ -12,11 +12,15 @@ local Log = nil
 
 local CONFIG_SCHEMA = {
   { key = "debug_level", type = "string", default = "off" },
-  { key = "continuous_memory_log", type = "bool", default = false },
   { key = "show_header_memory", type = "bool", default = false },
   { key = "enable_serial_debug", type = "bool", default = false },
-  { key = "log_to_card", type = "bool", default = false }
+  { key = "log_to_card", type = "bool", default = false },
+  { key = "log_runs", type = "number", default = 10 }
 }
+
+-- How many power-ups of the radio keep their files (lib/log_sink.lua clamps to the same range).
+local LOG_RUNS_MIN = 1
+local LOG_RUNS_MAX = 50
 
 -- Mirrors the ladder in lib/log.lua and is replaced by it in ensureDeps(). It is kept as a
 -- literal only so this page still builds if the log module cannot be loaded; log.lua holds the
@@ -140,36 +144,55 @@ local function buildDebugLevelOptions(i18n)
   return options
 end
 
+-- Every row carries its own `?`: ui/controls.lua draws the button and shows `helpText` under
+-- `helpTitle` when no handler of the page's own is given.
 local function buildLogging(cursorY, children, x, w, i18n)
+  local levelLabel = t(i18n, "debug_level", "Log Level")
   cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-    t(i18n, "debug_level", "Debug Level"),
+    levelLabel,
     buildDebugLevelOptions(i18n),
     getValueGetter("debug_level")(),
-    getValueSetter("debug_level")
+    getValueSetter("debug_level"),
+    { helpText = t(i18n, "debug_level_help", "How much is logged; errors, warnings and milestones are kept even at OFF, INFO adds in-flight tuning and more, DEBUG the steps between, TRACE every message to and from the flight controller."), helpTitle = levelLabel }
   )
 
+  local headerLabel = t(i18n, "show_header_memory", "Show Header Memory")
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "continuous_memory_log", "Continuous Memory Log"),
-    ui.runtime.getBoolGetter("continuous_memory_log"),
-    ui.runtime.getBoolSetter("continuous_memory_log")
-  )
-
-  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "show_header_memory", "Show Header Memory"),
+    headerLabel,
     ui.runtime.getBoolGetter("show_header_memory"),
-    ui.runtime.getBoolSetter("show_header_memory")
+    ui.runtime.getBoolSetter("show_header_memory"),
+    { helpText = t(i18n, "show_header_memory_help", "Shows the configuration tool's Lua memory in the page header."), helpTitle = headerLabel }
   )
 
+  local serialLabel = t(i18n, "enable_serial_debug", "Enable Serial Debug")
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "enable_serial_debug", "Enable Serial Debug"),
+    serialLabel,
     ui.runtime.getBoolGetter("enable_serial_debug"),
-    ui.runtime.getBoolSetter("enable_serial_debug")
+    ui.runtime.getBoolSetter("enable_serial_debug"),
+    { helpText = t(i18n, "enable_serial_debug_help", "Also sends the lines the log level lets through to the radio's serial port; at OFF that is none."), helpTitle = serialLabel }
   )
 
+  local cardLabel = t(i18n, "log_to_card", "Log Session To Card")
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "log_to_card", "Log Session To Card"),
+    cardLabel,
     ui.runtime.getBoolGetter("log_to_card"),
-    ui.runtime.getBoolSetter("log_to_card")
+    ui.runtime.getBoolSetter("log_to_card"),
+    { helpText = t(i18n, "log_to_card_help", "Writes the log to the SD card, one set of files per power-up of the radio; the background decoder writes only from DEBUG up."), helpTitle = cardLabel }
+  )
+
+  local runsLabel = t(i18n, "log_runs", "Keep Logs Of")
+  cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w,
+    runsLabel,
+    {
+      min = LOG_RUNS_MIN,
+      max = LOG_RUNS_MAX,
+      step = 1,
+      suffix = t(i18n, "log_runs_suffix", " runs"),
+      get = getValueGetter("log_runs"),
+      set = getValueSetter("log_runs"),
+      helpText = t(i18n, "log_runs_help", "How many power-ups of the radio keep their log files on the card; the oldest are deleted when a new one starts."),
+      helpTitle = runsLabel
+    }
   )
   return cursorY
 end

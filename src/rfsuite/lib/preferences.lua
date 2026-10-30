@@ -92,10 +92,10 @@ local SCHEMA = {
       preview_inflight_tuning      = false,
       -- development
       developer_tools              = false,
-      continuous_memory_log        = false,
       show_header_memory           = false,
       enable_serial_debug          = false,
       log_to_card                  = false,
+      log_runs                     = 10,
       debug_level                  = "off",
     },
     -- Read by the connect tasks that copy the craft's name and parameters onto the radio, and

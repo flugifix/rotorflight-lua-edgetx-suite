@@ -46,7 +46,7 @@ A sensor that has no current value reads `-`.
   The two Smart rows also clear to `-` when the local estimate becomes unavailable and show
   the recovered values when estimation resumes, without rebuilding the page or resetting its scroll.
 - **The page logs what it reads.** A read that fails reaches the *Session Logs* page at any
-  *Debug Level*; the start and end of each load and each read it queues and receives, from *DEBUG*
+  *Log Level*; the start and end of each load and each read it queues and receives, from *DEBUG*
   up, so opening the page leaves nothing in the log while logging is off.
 
 ## Related
