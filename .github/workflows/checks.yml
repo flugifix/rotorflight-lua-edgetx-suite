@@ -383,15 +383,35 @@ jobs:
 
   esc-yge-flag-bit3:
     name: YGE flags bit 3
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/esc/verify_yge_flag_bit3.lua
 
   flight-tuning-pids-governor-saves:
     name: Flight Tuning saves (PIDs, Governor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/flight_tuning/verify_save_pids_governor_pages.lua
 
   flight-tuning-rescue-filters-saves:
     name: Flight Tuning saves (Rescue, Filters)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/flight_tuning/verify_save_rescue_filters_pages.lua
 
   flight-tuning-rates-saves:
     name: Flight Tuning saves (Rates)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/flight_tuning/verify_save_rates_pages.lua
 
   flight-tuning-tail-rotor-saves:
     name: Flight Tuning saves (Tail Rotor)
@@ -399,7 +419,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y lua5.3
-      - run: lua5.3 bin/esc/verify_yge_flag_bit3.lua
+      - run: lua5.3 bin/flight_tuning/verify_save_tail_rotor_page.lua
 
   msp-refused-error:
     name: MSP refused and silent boards
@@ -424,7 +444,19 @@ jobs:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y lua5.3
       - run: lua5.3 bin/msp/verify_msp_armed_state.lua
-      - run: lua5.3 bin/flight_tuning/verify_save_pids_governor_pages.lua
-      - run: lua5.3 bin/flight_tuning/verify_save_rescue_filters_pages.lua
-      - run: lua5.3 bin/flight_tuning/verify_save_rates_pages.lua
-      - run: lua5.3 bin/flight_tuning/verify_save_tail_rotor_page.lua
+
+  diagnostic-logs:
+    name: Diagnostic logs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/tests/verify_log_runs.lua
+
+  model-template:
+    name: Model template wizard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/templates/verify_rotorflight_template.lua

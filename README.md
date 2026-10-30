@@ -27,8 +27,9 @@ Documentation can be found at [doc.rotorflight.org](https://doc.rotorflight.org/
 on the [Rotorflight website](https://www.rotorflight.org/).
 
 The page-by-page reference for the tool itself, what each configuration page does, its
-settings, and when a page is hidden or read-only, is in [docs/](docs/README.md). Every page
-also carries a short explanation in the tool, behind the `?` button in its header.
+settings, and when a page is hidden or read-only, is in [docs/](docs/README.md), and the same
+pages are published with search as the [RFSuite documentation site](https://rotorflight.github.io/rotorflight-lua-edgetx-suite/). Every
+page also carries a short explanation in the tool, behind the `?` button in its header.
 
 
 ## Requirements
@@ -91,6 +92,35 @@ preferences and any user dashboard themes live in `/SCRIPTS/TOOLS/rfsuite.user/`
 release archive does not write to.
 
 
+## Quick start
+
+After installing, put one of the two RFSuite widgets on a screen of each model you fly with
+RFSuite. The suite's background work — the link to the flight controller, the custom telemetry
+sensors, the connect events and the voice announcements — only runs while the tool is open or
+one of the widgets is running. EdgeTX keeps screen layouts per model, so this is done once per
+model.
+
+**If you want the dashboard:**
+
+1. In the model's screen setup, add a screen (a full-screen layout suits the dashboard best).
+2. Choose **RFSuite** as the widget for it.
+3. Optionally pick a theme in the tool under *System* → *Settings* → *Dashboard* → *Theme*.
+
+The dashboard runs the background work itself, also while its screen is not shown. There is
+nothing else to set up. Do not add *RFSuite Service* as well: both would run the same background
+work, twice.
+
+**If you do not use the dashboard:**
+
+Add **RFSuite Service** instead — this is recommended. Place it in a small zone on a screen you
+do not use; it only draws a small status tile. Without it, the link and the announcements stop
+as soon as the tool is closed.
+
+After the first install or an update, restart the radio when the suite asks for it; until then
+the widgets do not connect. What runs the background work, what the service tile shows and what
+to avoid is described in [docs/dashboard/service-widget.md](docs/dashboard/service-widget.md).
+
+
 ## Usage
 
 Start the tool from the *Tools* menu of your transmitter. The home screen shows the connection
@@ -111,36 +141,56 @@ Two widgets come with the installation:
 
 ## Features
 
+An overview of every feature, with a link to its page, is on the
+[documentation site](https://rotorflight.github.io/rotorflight-lua-edgetx-suite/features/)
+and in [docs/features.md](docs/features.md). In short:
+
 * Flight tuning: PIDs, rates, governor, filters, PID controller and bandwidth, autolevel,
   main and tail rotor, rescue, and the advanced rate tables
+* Tune Advisor: suggestions for each axis from the flight controller's own rate-flight
+  measurements, applied with *Save* and recorded in a change journal on the SD card
 * Setup: general configuration, radio configuration, telemetry, accelerometer, board
-  alignment, ports, and the model's name and pilot configuration
+  alignment with auto-align, ports, GPS, and the model's name and pilot configuration
 * Mixer: swash, swash geometry, tail and trims
 * Servos: PWM servos and bus servos
 * Controls: modes, adjustments, failsafe, beepers, blackbox and flight statistics
 * Power: battery, alerts, sources, SmartFuel and per-model preferences
-* ESC configuration for AM32, BLHeli_S, Bluejay, Flyrotor, Hobbywing Platinum V5, OMP,
-  Scorpion, XDFly, YGE and ZTW, unlocked automatically for the ESC telemetry protocol that
-  the flight controller reports
+* Governor: general, ramp time, filters and bypass curve
+* ESC & Motors: throttle, ESC telemetry with wiring detection, RPM, and ESC configuration for
+  AM32, BLHeli_S, Bluejay, Flyrotor, Hobbywing Platinum V5, OMP, Scorpion, XDFly, YGE and
+  ZTW, unlocked automatically for the ESC telemetry protocol that the flight controller reports
 * Motor Override, for spooling up main and tail motors on the bench behind an explicit disarm
   confirmation, an arming switch check and a deadman timeout
-* Dashboard widgets with selectable themes, per flight phase and per model, and support for
-  user-supplied themes
+* Dashboard widget with ten shipped themes (among them Urban, Grid and Deck), separate
+  preflight, inflight and postflight screens, and user-supplied themes
+* Customizable dashboards: choose what each value tile shows before the flight, in flight and
+  in the post-flight statistics, bind the full-screen keys per theme, show any of the radio's
+  telemetry sensors by name on Urban, Grid and Deck, and set colours and gauge ranges — as
+  standard values for every model, or per model
+* An event log on the Urban status page: arming, connection, governor and ESC state changes
+  with the radio's time
+* Dashboard in full screen: a quick menu, a standby screen before the flight controller
+  connects, and radio-wide keys
+* In-flight tuning overlay (preview feature, off by default) that drives the flight
+  controller's adjustment functions from the dashboard
 * Diagnostics: flight controller status, RF status, ELRS link, sensor validation, SmartFuel,
-  session logs and system information
-* A flight log browser that reads the transmitter's own telemetry CSV files on the radio and
+  CRSF sensors, System Status, session logs and system information
+* Flight Log: one line per flight with its model, pack, armed time and telemetry extremes,
+  browsable by flight, model and pack; a battery registry that counts each pack's cycles, the
+  pack picked on the dashboard after connecting, and optionally the matching battery profile
+  set on the flight controller
+* A log browser that reads the transmitter's own telemetry CSV files on the radio and
   plots channels against flight time
-* Voice announcements for arming state, flight and rate profiles, in-flight adjustments,
-  battery and fuel
+* Voice announcements for connect, arming, governor, voltage, profiles, ESC and MCU
+  temperature, adjustments, SmartFuel, link quality and rescue, with a Volume page
 * Copying and selecting flight and rate profiles
 * English and German user interface
-
 
 ## Audio
 
 The release archive installs the announcement pack under `/SOUNDS/rf/`, so no extra copying is
 needed. Which events are spoken is configured in the tool under *System* → *Settings* →
-*Audio* → *Audio Events*; some announcements are off by default.
+*Audio* → *Events*; some announcements are off by default.
 
 To have your model announced by name, place a `.wav` file directly in `/SOUNDS/` on the SD
 card, named after the model name reported by the flight controller — or after the transmitter's

@@ -286,7 +286,7 @@ function Queue:add(message)
   -- messages keeps its own value.
   message.client = message.client or self.defaultClient
   qpush(self.queue, message)
-  self.logf("debug", "queued cmd=%s rw=%s client=%s from=%s depth=%d",
+  self.logf("trace", "queued cmd=%s rw=%s client=%s from=%s depth=%d",
     tostring(message.command),
     isWriteMessage(message) and "W" or "R",
     tostring(message.client),
@@ -511,9 +511,6 @@ function Queue:processQueue(now)
     if self.wanted("trace") then
       self.logf("trace", "rx cmd=%s src=cache len=%s client=%s %s",
         tostring(msg.command), tostring(bufLen(buf)), tostring(msg.client), self.hex(buf))
-    else
-      self.logf("debug", "rx cmd=%s src=cache len=%s client=%s",
-        tostring(msg.command), tostring(bufLen(buf)), tostring(msg.client))
     end
     -- A handler belongs to whoever queued the message -- often a page that has closed since --
     -- and the message is released whatever the handler does. Called bare, a raise left the
@@ -585,9 +582,6 @@ function Queue:processQueue(now)
         self.logf("trace", "rx cmd=%s src=sim len=%s client=%s %s",
           tostring(msg.command), tostring(bufLen(msg.buf)), tostring(msg.client),
           self.hex(msg.buf))
-      else
-        self.logf("debug", "rx cmd=%s src=sim len=%s client=%s",
-          tostring(msg.command), tostring(bufLen(msg.buf)), tostring(msg.client))
       end
       if type(msg.processReply) == "function" then
         local ok, herr = pcall(msg.processReply, msg, msg.buf)
@@ -675,9 +669,6 @@ function Queue:processQueue(now)
       self.logf("trace", "rx cmd=%s src=wire len=%s client=%s attempt=%d dt=%.2f err=%s %s",
         tostring(cmd), tostring(bufLen(buf)), tostring(msg.client), self.retryCount, elapsed,
         tostring(err), self.hex(buf))
-    else
-      self.logf("debug", "rx cmd=%s src=wire len=%s client=%s attempt=%d dt=%.2f",
-        tostring(cmd), tostring(bufLen(buf)), tostring(msg.client), self.retryCount, elapsed)
     end
     local cache = getCache()
     if cache and not isWriteMessage(msg) then
@@ -741,7 +732,10 @@ function Queue:processQueue(now)
         self.logf("trace", "tx cmd=%s rw=%s client=%s attempt=%d/%d len=%s %s",
           tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
           self.retryCount, maxRetries + 1, tostring(bufLen(payload)), self.hex(payload))
-      else
+      elseif self.retryCount > 1 then
+        -- Every request and every reply is TRACE: at DEBUG they were most of a log. A request
+        -- that is being sent AGAIN is the exception -- a retry is the start of a failure, and
+        -- DEBUG is where the steps towards one are kept.
         self.logf("debug", "tx cmd=%s rw=%s client=%s attempt=%d/%d len=%s",
           tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
           self.retryCount, maxRetries + 1, tostring(bufLen(payload)))

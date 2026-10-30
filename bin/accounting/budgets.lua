@@ -338,7 +338,9 @@ return {
     ["page.developer_api_tester_page.build"] = { target = 2100, measured = 1669 },
     ["page.developer_msp_experiments_page.build"] = { target = 5600, measured = 4448 },
     ["page.developer_msp_speed_page.build"] = { target = 4150, measured = 3318 },
-    ["page.developer_settings_page.build"] = { target = 3250, measured = 2593 },
+    -- Raised when every row of the page got its own help button and the page a fifth row (Keep Logs Of):
+    -- measured x 1.25, rounded up to 50.
+    ["page.developer_settings_page.build"] = { target = 4600, measured = 3644 },
     -- Raised when the tool's colours moved into ui/palette.lua: the row stood 9 under its target
     -- before, and reading the palette costs every page a few instructions. Measured x 1.25,
     -- rounded up to the next 50; `proposed` keeps the previous target.
@@ -398,8 +400,6 @@ return {
     -- Priced on the Default theme's Before flight page (measure.lua, SETTINGS_THEME/SETTINGS_PAGE):
     -- the heaviest of its pages, which reads a phase module and lists its tiles.
     ["page.settings_dashboard_settings_page.build"] = { target = 18650, measured = 12895 },
-    -- the heaviest of its pages, which reads a phase module and lists its tiles. Look measured 12926.
-    ["page.settings_dashboard_settings_page.build"] = { target = 18650, measured = 14895 },
     ["page.settings_dashboard_standby_page.build"] = { target = 14900, measured = 11763 },
     ["page.settings_dashboard_theme_page.build"] = { target = 13250, measured = 10585 },
     ["page.settings_general_page.build"] = { target = 2200, measured = 1747 },

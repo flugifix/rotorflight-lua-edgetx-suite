@@ -46,7 +46,7 @@ local LogSink = requireModule("lib/log_sink.lua")
 if LogSink and type(LogSink.configure) == "function" then
   -- This state's ring and this state's files. The tool holds a ring of its own and names its
   -- own pair, so neither state appends to a file the other one has open.
-  LogSink.configure("widget")
+  LogSink.configure("dashboard")
 end
 
 -- Tasks read their settings from rfsuite.preferences, and that table is per Lua state: the tool
