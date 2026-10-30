@@ -313,7 +313,7 @@ mah_drawn, rssi) are decoded by its existing API but not consumed by this block.
 `S11.power-*` contracts cover field ranges, version gates, optional failures,
 source identity and freshness, warnings, all capacity slots, complete-record
 save/discard bytes, failure before EEPROM, English/German help limits and card
-geometry down to 320x240 (including 480x320). The `battery-slots` negative control
+geometry on 480x272, 480x320 and 800x480. The `battery-slots` negative control
 drops a capacity field and must fail the complete-record assertions. These are
 offline checks; no physical FC/radio behaviour was measured.
 

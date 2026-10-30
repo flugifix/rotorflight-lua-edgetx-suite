@@ -99,11 +99,10 @@ return function(w)
   -- The step closes on a table of everything a style sets: a column per profile, the rates type,
   -- a row per axis with rate and expo, and the collective with its expo, as Save & next will hold them.
   local TYPES={[4]="Actual",[6]="Rotorflight"}
-  local columns,shortColumns,typeRow,curveRow,collectiveRow={},{},{},{},{}
+  local columns,typeRow,curveRow,collectiveRow={},{},{},{}
   local axisRows={{},{},{}}
   for _,id in ipairs(profiles) do
     columns[#columns+1]=string.format(L.rateProfileTitle,id+1)
-    shortColumns[#shortColumns+1]=string.format(L.profileShort,id+1)
     typeRow[#typeRow+1]=memo(id,function(t) return TYPES[t.rates_type] or "--" end)
     -- A style also writes the Rotorflight curve shape, or the Actual centre rates.
     curveRow[#curveRow+1]=memo(id,function(t)
@@ -130,7 +129,7 @@ return function(w)
     local chosen=w.rateStyles
     return chosen and next(chosen) and L.stepChanged or L.stepUnchanged
   end
-  done.table={columns=columns,columnsShort=shortColumns,rows={{label=L.ratesType,cells=typeRow},
+  done.table={columns=columns,rows={{label=L.ratesType,cells=typeRow},
     {label=L.curveShape,cells=curveRow},{label=L.roll,cells=axisRows[1]},{label=L.pitch,cells=axisRows[2]},
     {label=L.yaw,cells=axisRows[3]},{label=L.collective,cells=collectiveRow}},legend=L.rateLegend}
   done.wideText=true

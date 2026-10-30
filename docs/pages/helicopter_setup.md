@@ -561,7 +561,6 @@ desktop fonts. They are not native EdgeTX screenshots or radio acceptance eviden
 [Compact live orientation](../images/helicopter_setup/01-small-task-4.png) ·
 [Compact roll movement](../images/helicopter_setup/motion-attitude-roll-small.gif) ·
 [Compact pitch movement](../images/helicopter_setup/motion-attitude-pitch-small.gif) ·
-[320×240 roll movement](../images/helicopter_setup/motion-attitude-roll-narrow.gif) ·
 [800×480 orientation](../images/helicopter_setup/01-large-task-4.png) ·
 [Swash layout](../images/helicopter_setup/06-small.png) ·
 [Rotor direction](../images/helicopter_setup/06-small-task-2.png) ·
@@ -577,11 +576,9 @@ desktop fonts. They are not native EdgeTX screenshots or radio acceptance eviden
 [Cyclic servo Hz](../images/helicopter_setup/07-small.png) ·
 [Tail servo Hz](../images/helicopter_setup/07-small-task-2.png)
 
-[320×240 illustrated tasks](../images/helicopter_setup/illustrations-narrow.png) ·
 [480×272 illustrated tasks](../images/helicopter_setup/illustrations-small.png) ·
 [800×480 illustrated tasks](../images/helicopter_setup/illustrations-large.png)
 
-[320×240 all steps](../images/helicopter_setup/overview-narrow.png) ·
 [Small-display preview sheet](../images/helicopter_setup/overview-small.png) ·
 [Large-display preview sheet](../images/helicopter_setup/overview-large.png)
 

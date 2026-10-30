@@ -156,7 +156,7 @@ function M.new(w, ctx, diagrams)
     -- Overview cards (blocks, a table, bars) draw across the full width below the summary.
     local overviewY = rowY
     if card.dense and slots > 0 then
-      rowH = math.min(rowH, math.max(card.minRowH or 18, math.floor((cardBottom-2-rowY)/slots)))
+      rowH = math.min(rowH, math.max(18, math.floor((cardBottom-2-rowY)/slots)))
       rowControlH = math.min(rowControlH, rowH-2)
     end
     -- Rows may sit at the foot of the card, under a full-width overview.
@@ -236,7 +236,7 @@ function M.new(w, ctx, diagrams)
       local cw = math.floor((width-20-firstW)/math.max(1,cols))
       local lineH = math.min(large and 40 or 24, math.floor((cardBottom-2-overviewY)/(#t.rows+1)))
       local y = overviewY
-      for c, head in ipairs(not large and t.columnsShort or t.columns) do
+      for c, head in ipairs(t.columns) do
         all[#all+1] = label(10+firstW+(c-1)*cw, y, cw-6, head)
         all[#all].h, all[#all].color = lineH-4, palette.muted
       end
@@ -260,10 +260,8 @@ function M.new(w, ctx, diagrams)
       local n = #card.bars
       local top, bottom = overviewY, rowY-4
       local lineH = math.max(14, math.floor((bottom-top)/math.max(1,n)))
-      -- Narrow screens leave the direction words to the prompt above the bars.
-      local words = width >= 400
-      local nameW = math.floor(width*(large and 0.2 or words and 0.24 or 0.38))
-      local wordW = words and math.floor(width*(large and 0.12 or 0.14)) or 0
+      local nameW = math.floor(width*(large and 0.2 or 0.24))
+      local wordW = math.floor(width*(large and 0.12 or 0.14))
       local pctW = math.floor(width*(large and 0.09 or 0.12))
       local barX = 10+nameW+wordW
       local barW = width-20-nameW-2*wordW-pctW
@@ -272,10 +270,8 @@ function M.new(w, ctx, diagrams)
         local mid = y+math.floor(lineH/2)
         all[#all+1] = label(10, y, nameW-4, bar.name)
         all[#all].h = lineH-2
-        if words then
         all[#all+1] = label(10+nameW, y, wordW-4, bar.left)
         all[#all].h, all[#all].color = lineH-2, palette.muted
-        end
         all[#all+1] = { type = "line", pts = {{barX,mid},{barX+barW-1,mid}}, color = palette.border, thickness = 2 }
         local centre = barX+math.floor(barW/2)
         all[#all+1] = { type = "line", pts = {{centre,mid-4},{centre,mid+4}}, color = palette.muted, thickness = 2 }
@@ -290,10 +286,8 @@ function M.new(w, ctx, diagrams)
           end
           return pts
         end }
-        if words then
         all[#all+1] = label(barX+barW+6, y, wordW-4, bar.right)
         all[#all].h, all[#all].color = lineH-2, palette.muted
-        end
         all[#all+1] = label(width-10-pctW, y, pctW, bar.percent)
         all[#all].h = lineH-2
         all[#all].color = function() return bar.done() and palette.accent or palette.text end

@@ -255,7 +255,7 @@ local historyPreview=world()
 load(PATH.."history.lua").attach(historyPreview,load(PATH.."history_store.lua"))
 load(PATH.."feedback.lua").attach(historyPreview,load("lib/system_state.lua"),{})
 historyPreview.history:publish(1)
-for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+for _,size in ipairs({{480,272},{480,320},{800,480}}) do
   local loadingPage=load(PATH.."page.lua")
   local loadingCtx={w=size[1],h=size[2],children={},requestRebuild=function() end}
   loadingPage.build(loadingCtx)
@@ -314,7 +314,7 @@ for t,keys in pairs({label="color,font,h,pos,text,type,visible,w,x,y,align",
   image="file,h,type,visible,w,x,y"}) do
   RADIO_PROPS[t]={};for k in string.gmatch(keys,"[^,]+") do RADIO_PROPS[t][k]=true end
 end
-for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
+for _, size in ipairs({ {480,272},{480,320},{800,480} }) do
   for n,name in ipairs(steps) do
     w.step, w.stepKey, w.rebootPending, w.transition = n,name,nil,nil
     w.wideScreen = size[1] >= 700
@@ -481,7 +481,7 @@ do
   w.overview = nil
 end
 -- Additional picture variants use the same card definitions as the normal walk.
-for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+for _,size in ipairs({{480,272},{480,320},{800,480}}) do
   local function export(name,task,prepare,card)
     w.rebootPending=nil
     if prepare then prepare() end
@@ -539,7 +539,7 @@ for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
   end
 end
 -- Multi-frame previews prove that parameter/live bindings update one scene.
-for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+for _,size in ipairs({{480,272},{480,320},{800,480}}) do
   local samples={
     {name="direction",card=1,group="command",values={-500,0,500,0},apply=function(value)
       w.data.rc_command={commands={value,0,0,0,0}}

@@ -107,7 +107,7 @@ def main():
     args.output.mkdir(parents=True,exist_ok=True)
     scenes = json.loads(args.scenes.read_text(encoding="utf-8"))
     pictures = animations = 0
-    for width,height,label in ((320,240,'narrow'),(480,272,'small'),(480,320,'medium'),(800,480,'large')):
+    for width,height,label in ((480,272,'small'),(480,320,'medium'),(800,480,'large')):
         selected = [s for s in scenes if s['width']==width and s['height']==height and 'motion' not in s]
         names=set()
         for s in selected:

@@ -803,7 +803,6 @@ return {
         clockwiseDegrees = "CW limit (deg)",
         counterclockwiseDegrees = "CCW limit (deg)",
         curveShape = "Shape / centre",
-        profileShort = "Profile %d",
         yawInputRate = "Yaw input rate",
         ttaGain = "TTA gain",
         ttaEvery = "%d on every PID profile",

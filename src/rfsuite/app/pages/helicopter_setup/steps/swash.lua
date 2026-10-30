@@ -101,7 +101,7 @@ return function(w)
     end)
   }, nil, "swashType")
   done.summary = function() return next(w.dirty) and L.stepChanged or L.stepUnchanged end
-  done.dense, done.minRowH = true, 16
+  done.dense = true
   cards[4] = done
   for _, card in ipairs(cards) do card.wideText = true end
   return cards

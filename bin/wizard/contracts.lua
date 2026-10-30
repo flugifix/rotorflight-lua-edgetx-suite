@@ -623,7 +623,7 @@ return function(h)
       local ok,err=pcall(h.resolve,scene.children)
       check(ok,"VISUAL retained scene survives "..phase..(ok and "" or ": "..tostring(err)))
     end
-    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+    for _,size in ipairs({{480,272},{480,320},{800,480}}) do
       for index,name in ipairs(h.stepNames) do
         local w=world();settle(w);w.step=index;w.wideScreen=size[1]>=700;step(w,name)
         local scenes={}
@@ -699,7 +699,7 @@ return function(h)
     end
   end)
   case("VISUAL.live-orientation-model",function()
-    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+    for _,size in ipairs({{480,272},{480,320},{800,480}}) do
       local w=world();settle(w);step(w,"sensors");w.card=4
       local scene=h.view.new(w,{w=size[1],h=size[2]},h.diagrams)
       while not scene:step() do end
@@ -889,7 +889,7 @@ return function(h)
     check(not w.validate(),"S01 physical direction answer required")
   end)
   case("VISUAL.stick-bars",function()
-    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+    for _,size in ipairs({{480,272},{480,320},{800,480}}) do
       local w=world();settle(w);w.step=2;local cards=step(w,"receiver");w.card=3
       w.data.rc_config.rc_center,w.data.rc_config.rc_deflection=1500,500
       local function sample(value)
@@ -1294,7 +1294,7 @@ return function(h)
       eq(choices[#choices][1],pick.kind,"S02 picker selects the requested field")
       eq(choices[#choices][2],pick.index,"S02 picker uses the correct module option index")
     end
-    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+    for _,size in ipairs({{480,272},{480,320},{800,480}}) do
       for _,i in ipairs({index}) do
         w.card=i
         local card=w.cards[i]
@@ -1988,7 +1988,7 @@ return function(h)
     eq(servos[0].rate,200,"REVIEW out-of-range/fractional Hz cannot be written")
     servos[1].rate=333;eq(c[1].rows[4].get(),L.mixed,"REVIEW different group settings are explicitly marked mixed")
     w.cards=c;w.card=1
-    local scene=h.view.new(w,{w=320,h=240},h.diagrams)
+    local scene=h.view.new(w,{w=480,h=272},h.diagrams)
     while not scene:step() do end
     local wave
     for _,item in ipairs(scene.children) do if item.type=="line" and type(item.pts)=="function" and #item.pts()==50 then wave=item end end
@@ -2575,7 +2575,7 @@ return function(h)
     check(not w.calibratedEsc,"S12 revisiting requires fresh ESC procedure")
   end)
   case("S13.intro-hold-lifecycle",function()
-    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+    for _,size in ipairs({{480,272},{480,320},{800,480}}) do
       for _,single in ipairs({false,true}) do
         local w=world();settle(w);w.wideScreen=size[1]>=700
         local command=h.api("servo_override").writeCommand
@@ -2667,7 +2667,7 @@ return function(h)
       for _,code in utf8.codes(text) do width=width+assert(font[code],"S13 missing font glyph "..code.." in "..text) end
       return width
     end
-    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+    for _,size in ipairs({{480,272},{480,320},{800,480}}) do
       for _,motorTail in ipairs({false,true}) do
         local w=world();settle(w);w.step=13
         if motorTail then w.data.mixer_config.tail_rotor_mode=1 end
@@ -2784,7 +2784,7 @@ return function(h)
     end
   end)
   case("S13.named-validation",function()
-    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+    for _,size in ipairs({{480,272},{480,320},{800,480}}) do
       local w=world();settle(w);w.step=13
       local cards=step(w,"servos")
       for _,index in ipairs(w:servos()) do
@@ -2949,7 +2949,7 @@ return function(h)
     check(not w.validate(),"S19 final physical acknowledgement required")
   end)
   case("CORE.loading-scene",function()
-    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+    for _,size in ipairs({{480,272},{480,320},{800,480}}) do
       local page=load("app/pages/helicopter_setup/page.lua")
       local builds=0
       local ctx={w=size[1],h=size[2],children={},requestRebuild=function() builds=builds+1 end}
@@ -3294,7 +3294,7 @@ return function(h)
     local view=load("app/pages/helicopter_setup/view.lua")
     local function scene(name,card)
       w.cards=step(w,name);w.card=card or 1
-      local job=view.new(w,{w=320,h=240},diagrams)
+      local job=view.new(w,{w=480,h=272},diagrams)
       while not job.done do job:step() end
       return job.children
     end
@@ -3434,7 +3434,7 @@ return function(h)
   end)
   case("VISUAL.wizard-intro-pictures",function()
     local prefix="/SCRIPTS/TOOLS/rfsuite-core/app/pages/helicopter_setup/gfx/"
-    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
+    for _,size in ipairs({{480,272},{480,320},{800,480}}) do
       local w=world();settle(w);w.wideScreen=size[1]>=700
       local function scene(name,index)
         w.cards=step(w,name);w.card=index or 1
@@ -3676,7 +3676,6 @@ return function(h)
       q.messages,q.sent,loaded={},{},{}
       local page=load("app/pages/helicopter_setup/page.lua")
       local closed=false
-      local servoCards={}
       local ctx={children={},w=width or 480,h=height or 272,menu={getCurrentMenuId=function() return id end},
         requestClose=function() closed=true end,requestRebuild=function() end}
       page.build(ctx)
@@ -3725,19 +3724,6 @@ return function(h)
           end)
           h.pump();h.advance(1)
           if closed then break end
-          if width==320 then
-            local card,nudges=nil,0
-            for _,item in ipairs(ctx.children) do
-              if item.type=="label" and type(item.text)=="string" then
-                card=tonumber(string.match(item.text,"^(%d+)/%d+$")) or card
-              end
-              if item.type=="button" and type(item.text)=="string" and tonumber(item.text) then
-                nudges=nudges+1
-                check(item.w>=33 and item.h>=26,"S13 actual narrow page keeps tappable nudge targets")
-              end
-            end
-            if card and nudges>0 then servoCards[card]=nudges/4 end
-          end
           for _,item in ipairs(ctx.children) do
             local active=type(item.active)~="function" or item.active()
             if active and item.type=="button" and type(item.text)=="function" and
@@ -3752,12 +3738,6 @@ return function(h)
           end
         end
         check(closed,"CORE direct Suite step completes back to its menu "..number)
-        if width==320 then
-          eq(servoCards[2],1,"S13 actual narrow page puts one servo on card two")
-          eq(servoCards[3],1,"S13 actual narrow page continues the second swash servo")
-          eq(servoCards[4],1,"S13 actual narrow page continues the third swash servo")
-          eq(servoCards[5],1,"S13 actual narrow page keeps the tail card")
-        end
         for _,path in ipairs(loaded) do
           check(string.find(path,"/steps/"..h.stepNames[number]..".lua",1,true)~=nil,"CORE individual visit loads no other step")
         end
@@ -3774,7 +3754,6 @@ return function(h)
     end
     entry("helicopter_setup_page",1)
     for index=1,19 do entry(string.format("helicopter_setup_step_%02d_page",index),index) end
-    entry("helicopter_setup_step_13_page",13,false,320,240)
     entry("helicopter_setup_history_page",nil,true)
     local recorded=load("app/pages/helicopter_setup/history_store.lua").new("test-board");recorded:load()
     eq(recorded.mask,(1<<19)-1,"CORE all nineteen individual Suite visits record their validated completion")
@@ -4252,7 +4231,7 @@ return function(h)
     escRead(w,h.api("esc_parameters_yge").simulatorResponse)
     w.rangeChoice="esc_link"
     local cards=step(w,"escTelemetry")
-    for _,size in ipairs({{480,320},{480,272},{320,240},{800,480}}) do
+    for _,size in ipairs({{480,320},{480,272},{800,480}}) do
       w.wideScreen=size[1]>=700
       for i,card in ipairs(cards) do
         w.cards,w.card=cards,i
@@ -4627,7 +4606,7 @@ return function(h)
       local w=world();settle(w);w.step=11
       w.i18n=load("i18n/init.lua").new(locale)
       local cards=step(w,"escTelemetry")
-      for _,size in ipairs({{480,320},{480,272},{320,240},{800,480}}) do
+      for _,size in ipairs({{480,320},{480,272},{800,480}}) do
         for i,card in ipairs(cards) do if card.power then
           check(#card.rows<=3,"POWER card has at most three rows")
           w.cards,w.card=cards,i
@@ -4698,8 +4677,7 @@ return function(h)
     w.data.tail_motor_output={output=0,result=0};w.tailPinRefused=1
     eq(row.get(),L.servo4,"TAIL a refused move reads the current pin")
     w.tailPinRefused=nil
-    -- Every tail output text fits the value column in both languages. The 320 pixel wide layout
-    -- gives the value 93 px, less than these texts need in either language, so it is not checked.
+    -- Every tail output text fits the value column in both languages, on every supported screen.
     local fonts=assert(loadfile("bin/dashboard/edgetx_font_widths.lua"))()
     w.data.mixer_config.tail_rotor_mode=1;w.data.tail_motor_output={output=0,result=0}
     w.cards,w.card=cards,3

@@ -803,7 +803,6 @@ return {
         clockwiseDegrees = "CW-Grenze (Grad)",
         counterclockwiseDegrees = "CCW-Grenze (Grad)",
         curveShape = "Form / Zentrum",
-        profileShort = "Profil %d",
         yawInputRate = "Gier-Eingangsrate",
         ttaGain = "TTA-Gain",
         ttaEvery = "%d in jedem PID-Profil",
