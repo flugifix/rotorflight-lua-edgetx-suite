@@ -424,6 +424,43 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
     end
   end
 end
+-- Step code leaves with its step: once every step has been visited and left, nothing the
+-- controller still reaches (tables, and the upvalues of functions) is code from a step file.
+-- Answers and measurements may stay for the whole visit; closures over a step's locals may not.
+do
+  local function stepCode(f)
+    local source = debug.getinfo(f, "S").source
+    return string.find(source, "/steps/", 1, true) ~= nil
+  end
+  local seen, found = {}, {}
+  local function scan(v, path)
+    if seen[v] then return end
+    if type(v) == "table" then
+      seen[v] = true
+      for key, value in pairs(v) do
+        if type(value) == "table" or type(value) == "function" then scan(value, path .. "." .. tostring(key)) end
+      end
+    elseif type(v) == "function" then
+      seen[v] = true
+      if stepCode(v) then found[#found + 1] = path; return end
+      -- The harness's own stubs reach its exported scenes; only shipped code is followed.
+      if string.find(debug.getinfo(v, "S").source, "src/rfsuite/", 1, true) == nil then return end
+      for i = 1, 255 do
+        local name, value = debug.getupvalue(v, i)
+        if not name then break end
+        if type(value) == "table" or type(value) == "function" then scan(value, path .. "^" .. name) end
+      end
+    end
+  end
+  w.validate, w.onLive, w.commit, w.cards, w.card, w.overview = nil, nil, nil, nil, 1, true
+  local job = view.new(w, { w = 480, h = 272 }, diagrams)
+  while not job.done do job:step() end
+  seen[w.L], seen[_G] = true, true
+  scan(w, "w")
+  for _, path in ipairs(found) do check(false, "step code outlives its step: " .. path) end
+  check(#found == 0, "no step code is reachable after every step was left")
+  w.overview = nil
+end
 -- Additional picture variants use the same card definitions as the normal walk.
 for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
   local function export(name,task,prepare,card)

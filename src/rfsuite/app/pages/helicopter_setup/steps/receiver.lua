@@ -29,6 +29,9 @@ return function(w)
     for n = 1, 4 do parts[#parts + 1] = tostring(map[keys[n]]) end
     return table.concat(parts, ",")
   end
+  -- The guide's next end stop. A local of this visit, never kept on w.rx: the measurement
+  -- stays for the whole wizard, the step's code leaves with the step.
+  local target
   w.onLive = function(api, d)
     if api ~= "rx_channels" then return end
     local map = w.data.rx_map
@@ -52,7 +55,7 @@ return function(w)
     -- a stick still at the end stop just reached, or a collective parked low, is not a wrong move,
     -- while the same stick brought back and moved again is.
     local axis, dir
-    if r.target then axis, dir = r.target() end
+    if target then axis, dir = target() end
     local key = axis and axis * 10 + dir or 0
     if key ~= r.guideKey then r.guideKey, r.guideRest, r.guideBest = key, {}, nil end
     local rest = r.guideRest
@@ -155,13 +158,13 @@ return function(w)
   -- The guided stick check asks for the first end stop not yet reached: right/forward/up first.
   local GUIDE = { {1,1},{1,-1},{2,1},{2,-1},{3,1},{3,-1},{4,1},{4,-1} }
   local words = { {L.dirRight,L.dirLeft},{L.dirForward,L.dirBack},{L.dirRight,L.dirLeft},{L.dirUp,L.dirDown} }
-  r.target = function()
+  target = function()
     for _, g in ipairs(GUIDE) do
       if r.travel[g[1]][g[2] > 0 and 2 or 1] < TRAVEL then return g[1], g[2] end
     end
   end
   local function prompt()
-    local axis, dir = r.target()
+    local axis, dir = target()
     if not axis then return L.sticksDone end
     return string.format(L.stickGuide, names[axis], words[axis][dir > 0 and 1 or 2])
   end
@@ -228,6 +231,7 @@ return function(w)
   end
   cards[3].summary=function() return r.wrong or prompt() end
   cards[3].summaryColor, cards[3].summaryBold = "accent", true
+  cards[3].target = target
   cards[3].dense = true
   -- Four travel rows and the reset button must end above the feedback line on 480x272 too.
   cards[3].fitRows = true

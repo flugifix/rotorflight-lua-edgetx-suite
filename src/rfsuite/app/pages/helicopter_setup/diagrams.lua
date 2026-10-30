@@ -123,7 +123,7 @@ function M.append(children, w, card, x, y, width, height)
     local names={L.roll,L.pitch,L.yaw,L.collective}
     local keys={"aileron","elevator","rudder","collective"}
     local words={{L.dirLeft,L.dirRight},{L.dirBack,L.dirForward},{L.dirLeft,L.dirRight},{L.dirDown,L.dirUp}}
-    local function axis() local rx=w.rx;return rx and rx.target and rx.target() or nil end
+    local function axis() return card.target and card.target() or nil end
     local guideStart=#children+1
     local heading=text(5,10,210,function() local a=axis();return a and names[a] or L.sticksDone end)
     heading.font=MIDSIZE
