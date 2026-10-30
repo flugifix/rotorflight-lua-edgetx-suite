@@ -640,5 +640,137 @@ do
   check(total > 500 and bad == 0, "card scan stopped at each of its " .. total .. " instructions: every log once", firstBad)
 end
 
+-- #970: the log's clock. Rows as EdgeTX writes them, from (date, seconds) pairs.
+local function rowsLog(rows)
+  local out = { "Date,Time,Vbat(V),Curr(A)" }
+  for i, r in ipairs(rows) do
+    local t = r[2]
+    out[#out + 1] = string.format("%s,%02d:%02d:%02d.%03d,%.2f,%.2f", r[1],
+      math.floor(t / 3600), math.floor(t / 60) % 60, math.floor(t) % 60, math.floor(t * 1000 + 0.5) % 1000,
+      (r[3] or 20) + i % 7, 5 + i % 3)
+  end
+  return table.concat(out, string.char(10)) .. string.char(10)
+end
+
+-- 512 rows from `firstStart` and then 512 rows from `secondStart`, ten a second, one date; the
+-- first block's voltage is 30 to 36, the second's 10 to 16.
+local function twoBlocks(firstStart, secondStart)
+  local rows = {}
+  for i = 0, 511 do rows[#rows + 1] = { "2026-10-01", firstStart + i / 10, 30 } end
+  for i = 0, 511 do rows[#rows + 1] = { "2026-10-01", secondStart + i / 10, 10 } end
+  return rowsLog(rows)
+end
+
+for _, case in ipairs({ { "clock set back", 12 * 3600 + 600, 12 * 3600 }, { "control: forward", 12 * 3600, 12 * 3600 + 1200 } }) do
+  local path = "/LOGS/Clock-2026-10-01-120000.csv"
+  files[path] = twoBlocks(case[2], case[3])
+  local G = indexedGraph(path)
+  check(#G.getSessions() == 2, case[1] .. ": two sessions", #G.getSessions())
+  for i = 1, 2 do
+    G.selectSession(i)
+    plot(G, { 3, 4 })
+    check(not G.isCurveEmpty(1) and not G.isCurveEmpty(2), case[1] .. ": session " .. i .. " plotted")
+    local lo, hi = G.getCurveRange(1)
+    local own
+    if i == 1 then own = lo ~= nil and lo > 25 else own = hi ~= nil and hi < 20 end
+    check(own, case[1] .. ": session " .. i .. " reads only its own rows",
+      tostring(lo) .. ".." .. tostring(hi))
+  end
+  G.close()
+  files[path] = nil
+end
+
+-- Across midnight: the summary counts on into the next day. Control: the same ten seconds on one
+-- day.
+for _, case in ipairs({
+  { "midnight", { { "2026-10-01", 86395 }, { "2026-10-02", 5 } } },
+  { "control: one day", { { "2026-10-01", 3600 }, { "2026-10-01", 3610 } } }
+}) do
+  local path = "/LOGS/Night-2026-10-01-235955.csv"
+  files[path] = rowsLog(case[2])
+  local G = assert(loadfile(GRAPH))()
+  check(G.open(path, { stats = true }), case[1] .. ": opens")
+  local n = 0
+  while G.isBusy() and n < 1000 do G.tick(); n = n + 1 end
+  local summary = G.getSummary()
+  check(summary ~= nil and summary.durationStr == "00:10 min", case[1] .. ": ten seconds", summary and summary.durationStr)
+  G.close()
+  files[path] = nil
+end
+
+-- #970: a row the chosen columns do not match still ends its session. The session 1 rows read
+-- 24, a short row with no voltage sets the clock back, and the session 2 row after it reads 48.
+do
+  local path = "/LOGS/Short-2026-10-01-120000.csv"
+  local nl = string.char(10)
+  files[path] = "Date,Time,Vbat(V)" .. nl
+    .. "2026-10-01,12:00:00.000,24" .. nl .. "2026-10-01,12:00:10.000,24" .. nl
+    .. "2026-10-01,12:00:05.000" .. nl .. "2026-10-01,12:00:10.000,48" .. nl
+  local G = indexedGraph(path)
+  check(#G.getSessions() == 2, "short rollback row: two sessions", #G.getSessions())
+  G.selectSession(1)
+  plot(G, { 3 })
+  local lo, hi = G.getCurveRange(1)
+  check(hi ~= nil and hi < 30, "short rollback row: session 1 reads only its own rows", tostring(lo) .. ".." .. tostring(hi))
+  G.close()
+  files[path] = nil
+end
+
+-- #970: a stop at the change of date counts no day twice: midnight, stopped at every
+-- instruction the summary walk runs inside scanLine, never more than the ten seconds. (A stop in
+-- the line pump can hand a chunk's rows on twice; that is the pump's, and not judged here.)
+do
+  local path = "/LOGS/Night-2026-10-01-235955.csv"
+  files[path] = rowsLog({ { "2026-10-01", 86395 }, { "2026-10-02", 0 }, { "2026-10-02", 5 } })
+  local function walk(G)
+    local n = 0
+    while G.isBusy() and n < 1000 do G.tick(); n = n + 1 end
+  end
+  local total = 0
+  do
+    local G = assert(loadfile(GRAPH))()
+    G.open(path, { stats = true })
+    debug.sethook(function() total = total + 1 end, "", 1)
+    walk(G)
+    debug.sethook()
+    G.close()
+  end
+  local bad, firstBad, inside = 0, nil, 0
+  for stopAt = 1, total do
+    local G = assert(loadfile(GRAPH))()
+    G.open(path, { stats = true })
+    local scanLine = debug.getinfo(find(G.tick, "scanLine"), "S")
+    local n, inScanLine = 0, false
+    pcall(function()
+      debug.sethook(function()
+        n = n + 1
+        if n == stopAt then
+          local f = debug.getinfo(2, "Sl")
+          inScanLine = f.source == scanLine.source and f.currentline >= scanLine.linedefined
+            and f.currentline <= scanLine.lastlinedefined
+          debug.sethook()
+          error("stop", 0)
+        end
+      end, "", 1)
+      walk(G)
+      debug.sethook()
+    end)
+    debug.sethook()
+    walk(G)
+    local summary = G.getSummary()
+    local text = summary and summary.durationStr
+    -- A stop inside the line pump can drop a row, so a shorter duration is possible; a longer
+    -- one means a day was counted twice.
+    if inScanLine then inside = inside + 1 end
+    if inScanLine and text ~= nil and text ~= "00:10 min" and text ~= "00:05 min" and text ~= "00:00 min" then
+      bad = bad + 1
+      firstBad = firstBad or (stopAt .. ": " .. tostring(text))
+    end
+    G.close()
+  end
+  check(inside > 50 and bad == 0, "midnight walk stopped at each of its " .. inside .. " instructions in scanLine: no day counted twice", firstBad)
+  files[path] = nil
+end
+
 print(string.format("Logs page: %d checks, %d failures", checks, failures))
 os.exit(failures == 0 and 0 or 1)

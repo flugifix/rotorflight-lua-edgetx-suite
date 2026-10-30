@@ -111,6 +111,12 @@ local function resetState()
   S.day = 0
   S.prevT = 0
   S.nline = 0
+  S.extEndOff = HUGE
+  S.extPrevT = -HUGE
+  -- The date the index pass is on and the day it counts for it, replaced as one table so a
+  -- call stopped at a change of date counts no day twice. A day is a change of date, which is
+  -- what a log that runs on past midnight has.
+  S.scanDate = { day = 0 }
 
   S.stats = nil
   S.statCol = nil
@@ -479,6 +485,7 @@ local function statsLine(str, s, e)
   if time then
     local tSec = parseTimeSec(time)
     if tSec then
+      tSec = tSec + S.day * 86400           -- a log across midnight keeps counting forward
       if not st.startTimeSec then st.startTimeSec = tSec end
       st.endTimeSec = tSec
     end
@@ -552,35 +559,51 @@ local function statsLine(str, s, e)
 end
 
 local function scanLine(str, first, last, off)
-  if S.stats then statsLine(str, first, last) end
   local date, ts = string.match(str, "^([^,\n]*),([^,\n]*)", first)
-  if date == nil then return end
-  local tcs = parseTimeCs(ts)
-  if tcs == nil then return end             -- a header or a malformed row
-  if date ~= S.curDate then
-    if S.curDate ~= nil then S.day = S.day + 1 end
-    S.curDate = date
+  local tcs = date and parseTimeCs(ts)
+  -- The day moves before the summary reads the row, so a row after midnight counts its time
+  -- on the new day there too.
+  if tcs ~= nil then
+    local dd = S.scanDate
+    if date ~= dd.date then
+      dd = { date = date, day = (dd.date == nil) and 0 or (dd.day + 1) }
+      S.scanDate = dd
+    end
+    S.day = dd.day
   end
+  if S.stats then statsLine(str, first, last) end
+  if tcs == nil then return end             -- a header or a malformed row
   local t = S.day * DAY_CS + tcs
   local sessions = S.sessions
   local s = sessions[#sessions]
+  local index = S.index
+  S.nline = S.nline + 1
   if s == nil or t < S.prevT or (t - S.prevT) > SESSION_GAP_CS then
-    s = { t0 = t, t1 = t, lines = 0 }
+    -- Every session starts with an index entry of its own and keeps the range of entries
+    -- inside it, so a clock set back between two sessions cannot send a seek into the other.
+    -- The session before ends where this one starts in the file, which is where an extraction
+    -- of it stops (extractLine): a row that the session's columns do not match still ends it.
+    if s ~= nil then s.endOff = off end
+    index[#index + 1] = { off = off, t = t, day = S.day, date = date }
+    s = { t0 = t, t1 = t, lines = 0, idx0 = #index, idx1 = #index }
     sessions[#sessions + 1] = s
+  elseif S.nline % IDX_EVERY == 1 then
+    index[#index + 1] = { off = off, t = t, day = S.day, date = date }
+    s.idx1 = #index
   end
   s.t1 = t
   s.lines = s.lines + 1
   S.prevT = t
-  S.nline = S.nline + 1
-  if S.nline % IDX_EVERY == 1 then
-    S.index[#S.index + 1] = { off = off, t = t, day = S.day, date = date }
-  end
 end
 
--- Last sparse-index entry at or before t.
+-- Last sparse-index entry at or before t, among the entries of the session shown; within a
+-- session the time only moves forward.
 local function indexBefore(t0)
   local idx = S.index
-  local lo, hi, best = 1, #idx, idx[1]
+  local s = S.sessions[S.sessionIndex]
+  local lo, hi = 1, #idx
+  if s and s.idx0 then lo, hi = s.idx0, s.idx1 end
+  local best = idx[lo]
   while lo <= hi do
     local mid = math.floor((lo + hi) / 2)
     if idx[mid].t <= t0 then
@@ -634,7 +657,8 @@ local function accumulate(wi, bi, s)
   if v > bmax[bi] then bmax[bi] = v end
 end
 
-local function extractLine(str, s)
+local function extractLine(str, s, _, off)
+  if off >= S.extEndOff then return false end   -- the next session: the pass is done
   local date, ts, s1, s2, s3, s4 = string.match(str, S.xpat, s)
   if date == nil then return end
   local tcs = parseTimeCs(ts)
@@ -644,6 +668,10 @@ local function extractLine(str, s)
     S.curDate = date
   end
   local t = S.day * DAY_CS + tcs
+  -- Time running backwards starts another session. The end offset above is where the index
+  -- saw that happen; this catches it where an index pass stopped at that row did not.
+  if t < S.extPrevT then return false end
+  S.extPrevT = t
   if t < S.extT0 then return end
   if t > S.extStopT then return false end   -- past the window: the pass is done
   -- Float arithmetic on purpose: a long session in centiseconds leaves the range an
@@ -774,6 +802,7 @@ local function beginExtract(t0, t1)
   S.extNbF, S.extShift = nb - 1.0, false
   S.extO, S.extOff, S.extLoB, S.extHiB = e0, 0, 1, nb
   S.seekTo = indexBefore(e0)
+  S.extEndOff = (S.sessions[S.sessionIndex] or {}).endOff or HUGE
   S.progBase = S.seekTo and S.seekTo.off or 0
   S.resetK = 1
   S.progress = 0
@@ -821,6 +850,7 @@ local function beginShift(cur, d)
   S.extO, S.extOff, S.extLoB, S.extHiB = cur.o, off, lo, hi
   S.shiftSrc, S.shiftD = cur, d
   S.seekTo = indexBefore(S.extT0)
+  S.extEndOff = (S.sessions[S.sessionIndex] or {}).endOff or HUGE
   S.progBase = S.seekTo and S.seekTo.off or 0
   S.resetK = 1
   S.progress = 0
@@ -1477,6 +1507,7 @@ tickUnit = function()
     S.buf, S.bufpos = nil, 1
     S.skipRow = false
     S.curDate, S.day = e.date, e.day
+    S.extPrevT = -HUGE
     S.phase = "extract"
     return false
   end

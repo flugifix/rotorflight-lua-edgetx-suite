@@ -1,0 +1,2 @@
+- **Logs handle a clock set back and a log across midnight (`app/pages/logs/graph.lua`)**:
+  - A flight logged after the radio's clock was set back, in the same file, was offered but plotted empty; each flight is now read from its own part of the file. A log that runs past midnight showed a flight time guessed from the row count; it now counts on into the next day (#970).
