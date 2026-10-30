@@ -86,6 +86,7 @@ telemetry page, and the next log has one column of each name.
 the offered sets (*Power*, *Battery*, *Link*, *Governor*, whichever this log can serve), and
 press *Show*. Zoom, page and a cursor readout work on the plotted flight; where the log holds
 more than one flight, the chooser also offers which one.
+A column chosen in more than one slot is plotted once.
 
 Changing the curves while a plot is still being read is safe. If the tool reaches its
 instruction limit in the middle of a change, the plot stays empty instead of the page failing

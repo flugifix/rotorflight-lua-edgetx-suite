@@ -1071,12 +1071,16 @@ function G.applyColumns(colIndices)
   local s = S.sessions[S.sessionIndex]
   if s == nil then return false end
 
-  local curves = {}
+  -- A column chosen in two slots is plotted once. prepareWanted builds one capture per column
+  -- and steps through the wanted list once per column, so a repeat would take the capture of
+  -- the next column and leave the repeat and every later curve without samples.
+  local curves, taken = {}, {}
   for i = 1, #colIndices do
     if #curves >= G.MAX_CURVES then break end
     local c = colIndices[i]
     local col = S.columns[c]
-    if col then
+    if col and not taken[c] then
+      taken[c] = true
       curves[#curves + 1] = { col = c, name = col.name, unit = col.unit }
     end
   end

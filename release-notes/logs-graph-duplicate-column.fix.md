@@ -1,0 +1,2 @@
+- **Logs graph plots every chosen column when one is chosen twice (`app/pages/logs/graph.lua`)**:
+  - The same column in two curve slots left that curve and every later one empty. A repeated column is now plotted once and the other curves are drawn (#963).

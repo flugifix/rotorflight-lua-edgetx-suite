@@ -261,5 +261,39 @@ for _, isHosted in ipairs({ true, false }) do
   page.onClose()
 end
 
+-- The engine on LOG, indexed and sized for a plot, the way the graph view leaves it.
+local function indexedGraph(path)
+  local G = assert(loadfile(GRAPH))()
+  check(G.open(path or LOG, { stats = false }), "engine opens " .. tostring(path or LOG))
+  local n = 0
+  while G.isBusy() and n < 100000 do G.tick(); n = n + 1 end
+  G.setGeometry(0, 0, 760, 200)
+  return G
+end
+
+local function plot(G, cols)
+  local ok = G.applyColumns(cols)
+  local n = 0
+  while G.isBusy() and n < 100000 do G.tick(); n = n + 1 end
+  return ok
+end
+
+-- #963: a column chosen in two slots. Columns 3 and 4 are Vbat and Curr.
+do
+  local C = indexedGraph()
+  check(plot(C, { 3, 4 }), "duplicate control {3,4}: applied")
+  check(#C.getCurves() == 2 and not C.isCurveEmpty(1) and not C.isCurveEmpty(2), "duplicate control {3,4}: both curves drawn")
+  C.close()
+  -- On an engine of its own, so the choice is extracted rather than taken as the plot shown.
+  local G = indexedGraph()
+  check(plot(G, { 3, 3, 4 }), "duplicate {3,3,4}: applied")
+  local curves = G.getCurves()
+  check(#curves == 2, "duplicate {3,3,4}: the repeat is plotted once", #curves)
+  local drawn = true
+  for k = 1, #curves do if G.isCurveEmpty(k) then drawn = false end end
+  check(drawn and curves[1].col == 3 and curves[#curves].col == 4, "duplicate {3,3,4}: Vbat and Curr both drawn")
+  G.close()
+end
+
 print(string.format("Logs page: %d checks, %d failures", checks, failures))
 os.exit(failures == 0 and 0 or 1)
