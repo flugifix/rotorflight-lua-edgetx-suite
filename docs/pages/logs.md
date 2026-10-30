@@ -22,7 +22,10 @@ Function *SD Logs*. Without it there is nothing for this page to list.
 
 The page searches `/LOGS/`, `/LOGS/rfsuite/` and `/LOGS/rfsuite/telemetry/`, each at its top
 level and one folder down, and lists every `.csv` file it finds there that is a telemetry log,
-newest first. *View* opens the summary of that log.
+newest first. *View* opens the summary of that log. *Graph* beside it opens the log's plot
+straight away: it reads only what the plot needs and not the summary, so for a long log the plot
+is there sooner, most of all in the tool opened from the dashboard. Back from that plot returns to
+the list.
 
 While it searches, the page shows how many folder entries it has read and how many logs it has
 found so far. It shows no bar: how many entries a folder holds is not known before they have
@@ -32,9 +35,11 @@ Opened from the dashboard, the tool runs inside the dashboard widget, and the ra
 do only a limited amount of work each time it draws. There the search, the reading of a log for
 its summary and the drawing of its graph are done in smaller steps than in the tool started from
 the radio's menu, so on a card with many logs, or for a long log, they take longer.
+Putting the found logs in order is split up the same way, so a card with several hundred logs
+is listed there too.
 
-The list shows 25 logs at a time. Scroll it by touch, or turn the rotary encoder to step from
-one log's *View* to the next. Where there are more logs, *Previous* above the list and *Next*
+The list shows 25 logs at a time. Scroll it by touch, or turn the rotary encoder to step through
+the logs' *View* and *Graph* buttons. Where there are more logs, *Previous* above the list and *Next*
 below it show the 25 before or after, with which logs are shown out of how many beside them.
 Coming back from a log's summary finds the list on the same 25.
 
@@ -49,6 +54,9 @@ opened, and is listed only if its first line begins with the `Date,Time` header 
 a spreadsheet or another program's CSV file in the same folder is left out.
 
 ## The summary
+
+While *View* reads the log, a bar shows how much of the file has been read so far. The plot's
+own loading notice shows the same.
 
 | Row | What it shows |
 | --- | --- |
@@ -77,17 +85,34 @@ telemetry page, and the next log has one column of each name.
 
 ## The graph
 
-*Graph* opens a plot of the log over time. Choose up to four columns, one per *Curve*, or one of
+*Graph*, on the summary or in the list, opens a plot of the log over time. Choose up to four
+columns, one per *Curve*, or one of
 the offered sets (*Power*, *Battery*, *Link*, *Governor*, whichever this log can serve), and
 press *Show*. Zoom, page and a cursor readout work on the plotted flight; where the log holds
 more than one flight, the chooser also offers which one.
+A column chosen in more than one slot is plotted once.
+*Show* with the curves already plotted keeps the plot as it is, zoom included. Back from the plot
+to the summary keeps the log read, so *Graph* opens again without reading the file a second time;
+only the curves are chosen again.
+Paging a zoomed plot moves it by about half a window. Where the window on screen was read at the
+screen's resolution, the part both windows share is kept and only the newly shown part is read;
+at either end of the flight the window is read whole.
+Whenever the plot reads the file -- its index when opened from the list, after *Show* with other curves
+or another flight, and on a zoom or page step whose window has not been read yet -- the plot gives
+way to the loading notice, with a bar for how far that read has got. A window the plot still holds
+from an earlier read (it keeps the last few) is drawn again without the notice.
+
+Changing the curves while a plot is still being read is safe. If the tool reaches its
+instruction limit in the middle of a change, the plot stays empty instead of the page failing
+on every pass. Choose the curves again and press *Show* to draw it.
 
 The graph needs the `Date` and `Time` columns and at least one row whose time it can read, written
 the way EdgeTX writes it (`HH:MM:SS.mmm`). A file that lacks either says so instead of offering
 columns: *Not an EdgeTX telemetry log* without the two columns, *No row carries a time the graph
 can read* where no row's time has that form. The summary also reads a time without the
 milliseconds, so such a file can have a summary and still no graph. A log without any data rows
-has no summary, and its *Graph* button is not offered.
+has no summary, and the summary offers no *Graph* button. The list's *Graph* opens every listed
+log; one without a row the graph can read then says *The log file carries no data rows*.
 
 ## Related
 

@@ -111,6 +111,13 @@ local function resetState()
   S.day = 0
   S.prevT = 0
   S.nline = 0
+  S.extEndOff = HUGE
+  S.progEnd = 0
+  S.extPrevT = -HUGE
+  -- The date the index pass is on and the day it counts for it, replaced as one table so a
+  -- call stopped at a change of date counts no day twice. A day is a change of date, which is
+  -- what a log that runs on past midnight has.
+  S.scanDate = { day = 0 }
 
   S.stats = nil
   S.statCol = nil
@@ -140,6 +147,11 @@ local function resetState()
   S.curveEmpty = {}
   S.curveLo, S.curveHi = {}, {}
   S.grid = {}
+  -- True once the points of the curves held were finished for the window shown by ticks none
+  -- of which was stopped; any new extraction clears it first. See G.applyColumns and G.tick.
+  S.plotted = false
+  S.tickOpen = false
+  S.interrupted = false
 end
 
 resetState()
@@ -192,6 +204,18 @@ end
 -- MAX_LINE_LEN bytes and a carriage return, no line end can make it a line feedLine passes, so it
 -- is dropped there and the pump skips to the next line end instead of copying a growing string on
 -- every refill. The lines it feeds, and their offsets, are the ones it fed before.
+-- Puts `buf` in place as the buffer, read on from `pos`. A plain `S.buf, S.bufpos = buf, pos`
+-- is two assignments, made right to left, and a tick stopped between them left the OLD buffer
+-- with the new position: the next tick handed the old buffer's rows on a second time. Cleared
+-- first, a stop anywhere in here leaves no buffer, and the next tick reads on from the file:
+-- the rows of that chunk are lost rather than counted twice, and the stopped tick is seen
+-- (G.tick), so nothing drawn from it is kept.
+local function setBuf(buf, pos)
+  S.buf = nil
+  S.bufpos = pos
+  S.buf = buf
+end
+
 local function pumpLines(onLine, maxIters)
   local n = maxIters
   while n > 0 do
@@ -219,7 +243,7 @@ local function pumpLines(onLine, maxIters)
       end
       local data = io.read(S.fh, CHUNK_SIZE)
       if data == nil or data == "" then
-        S.buf, S.bufpos = nil, 1
+        setBuf(nil, 1)
         S.skipRow = false
         if rest ~= nil and #rest <= MAX_LINE_LEN then
           onLine(rest, 1, #rest, S.filePos - #rest)   -- a file whose last line has no newline
@@ -231,22 +255,22 @@ local function pumpLines(onLine, maxIters)
       if S.skipRow then
         -- Inside a dropped row: nothing up to its line end is a line.
         if dnl == nil then
-          S.buf, S.bufpos = nil, 1
+          setBuf(nil, 1)
         else
-          S.buf, S.bufpos = data, dnl + 1
+          setBuf(data, dnl + 1)
           S.skipRow = false
         end
       elseif rest == nil then
-        S.buf, S.bufpos = data, 1
+        setBuf(data, 1)
       elseif dnl == nil then
         if #rest + #data > MAX_LINE_LEN + 1 then
           dropRow(S.filePos - #data - #rest)
-          S.buf, S.bufpos = nil, 1
+          setBuf(nil, 1)
         else
-          S.buf, S.bufpos = rest .. data, 1   -- no line ends in this chunk: keep collecting
+          setBuf(rest .. data, 1)             -- no line ends in this chunk: keep collecting
         end
       else
-        S.buf, S.bufpos = data, dnl + 1
+        setBuf(data, dnl + 1)
         n = n - 1
         local line = rest .. string.sub(data, 1, dnl - 1)
         if feedLine(onLine, line, 1, #line, S.filePos - #data - #rest) == false then return "stop" end
@@ -474,6 +498,7 @@ local function statsLine(str, s, e)
   if time then
     local tSec = parseTimeSec(time)
     if tSec then
+      tSec = tSec + S.day * 86400           -- a log across midnight keeps counting forward
       if not st.startTimeSec then st.startTimeSec = tSec end
       st.endTimeSec = tSec
     end
@@ -547,35 +572,51 @@ local function statsLine(str, s, e)
 end
 
 local function scanLine(str, first, last, off)
-  if S.stats then statsLine(str, first, last) end
   local date, ts = string.match(str, "^([^,\n]*),([^,\n]*)", first)
-  if date == nil then return end
-  local tcs = parseTimeCs(ts)
-  if tcs == nil then return end             -- a header or a malformed row
-  if date ~= S.curDate then
-    if S.curDate ~= nil then S.day = S.day + 1 end
-    S.curDate = date
+  local tcs = date and parseTimeCs(ts)
+  -- The day moves before the summary reads the row, so a row after midnight counts its time
+  -- on the new day there too.
+  if tcs ~= nil then
+    local dd = S.scanDate
+    if date ~= dd.date then
+      dd = { date = date, day = (dd.date == nil) and 0 or (dd.day + 1) }
+      S.scanDate = dd
+    end
+    S.day = dd.day
   end
+  if S.stats then statsLine(str, first, last) end
+  if tcs == nil then return end             -- a header or a malformed row
   local t = S.day * DAY_CS + tcs
   local sessions = S.sessions
   local s = sessions[#sessions]
+  local index = S.index
+  S.nline = S.nline + 1
   if s == nil or t < S.prevT or (t - S.prevT) > SESSION_GAP_CS then
-    s = { t0 = t, t1 = t, lines = 0 }
+    -- Every session starts with an index entry of its own and keeps the range of entries
+    -- inside it, so a clock set back between two sessions cannot send a seek into the other.
+    -- The session before ends where this one starts in the file, which is where an extraction
+    -- of it stops (extractLine): a row that the session's columns do not match still ends it.
+    if s ~= nil then s.endOff = off end
+    index[#index + 1] = { off = off, t = t, day = S.day, date = date }
+    s = { t0 = t, t1 = t, lines = 0, idx0 = #index, idx1 = #index }
     sessions[#sessions + 1] = s
+  elseif S.nline % IDX_EVERY == 1 then
+    index[#index + 1] = { off = off, t = t, day = S.day, date = date }
+    s.idx1 = #index
   end
   s.t1 = t
   s.lines = s.lines + 1
   S.prevT = t
-  S.nline = S.nline + 1
-  if S.nline % IDX_EVERY == 1 then
-    S.index[#S.index + 1] = { off = off, t = t, day = S.day, date = date }
-  end
 end
 
--- Last sparse-index entry at or before t.
+-- Last sparse-index entry at or before t, among the entries of the session shown; within a
+-- session the time only moves forward.
 local function indexBefore(t0)
   local idx = S.index
-  local lo, hi, best = 1, #idx, idx[1]
+  local s = S.sessions[S.sessionIndex]
+  local lo, hi = 1, #idx
+  if s and s.idx0 then lo, hi = s.idx0, s.idx1 end
+  local best = idx[lo]
   while lo <= hi do
     local mid = math.floor((lo + hi) / 2)
     if idx[mid].t <= t0 then
@@ -586,6 +627,29 @@ local function indexBefore(t0)
     end
   end
   return best
+end
+
+-- Where in the file a read that stops past t1 ends, at the latest: the offset of the first
+-- index entry of the session after t1, else the session's end, else the end of the file. The
+-- loading bar of a window read is measured against it, so it fills over the part being read
+-- rather than over the rest of the file.
+local function readEndOff(t1)
+  local idx = S.index
+  local s = S.sessions[S.sessionIndex]
+  local lo, hi = 1, #idx
+  if s and s.idx0 then lo, hi = s.idx0, s.idx1 end
+  local off = (s and s.endOff) or S.fsize
+  while lo <= hi do
+    local mid = math.floor((lo + hi) / 2)
+    if idx[mid].t > t1 then
+      if idx[mid].off < off then off = idx[mid].off end
+      hi = mid - 1
+    else
+      lo = mid + 1
+    end
+  end
+  if off > S.fsize then off = S.fsize end
+  return off
 end
 
 -- One precompiled pattern pulls Date, Time and the wanted columns out of a line
@@ -629,7 +693,8 @@ local function accumulate(wi, bi, s)
   if v > bmax[bi] then bmax[bi] = v end
 end
 
-local function extractLine(str, s)
+local function extractLine(str, s, _, off)
+  if off >= S.extEndOff then return false end   -- the next session: the pass is done
   local date, ts, s1, s2, s3, s4 = string.match(str, S.xpat, s)
   if date == nil then return end
   local tcs = parseTimeCs(ts)
@@ -639,22 +704,44 @@ local function extractLine(str, s)
     S.curDate = date
   end
   local t = S.day * DAY_CS + tcs
+  -- Time running backwards starts another session. The end offset above is where the index
+  -- saw that happen; this catches it where an index pass stopped at that row did not.
+  if t < S.extPrevT then return false end
+  S.extPrevT = t
   if t < S.extT0 then return end
   if t > S.extStopT then return false end   -- past the window: the pass is done
-  -- Float arithmetic on purpose: a long session in centiseconds leaves the range
-  -- an integer bucket index could be computed in safely.
-  local bi = math.floor(((t - S.extT0) / S.extSpan) * (S.extNb - 1)) + 1
-  if bi < 1 then bi = 1 elseif bi > S.extNb then bi = S.extNb end
+  -- Float arithmetic on purpose: a long session in centiseconds leaves the range an
+  -- integer bucket index could be computed in safely (a radio's Lua has 32-bit integers),
+  -- so S.extNbF is a float and the product is one. It comes before the division, which
+  -- makes the index the exact floor of the quotient: a sample on a bucket edge lands in the
+  -- same bucket however far the window's start lies from the origin.
+  local bi = math.floor((t - S.extO) * S.extNbF / S.extSpan) - S.extOff + 1
+  if bi < S.extLoB then return end
+  if bi > S.extHiB then
+    if S.extShift then return false end     -- past the buckets a pan reads: the pass is done
+    bi = S.extHiB
+  end
   if s1 ~= nil then accumulate(1, bi, s1) end
   if s2 ~= nil then accumulate(2, bi, s2) end
   if s3 ~= nil then accumulate(3, bi, s3) end
   if s4 ~= nil then accumulate(4, bi, s4) end
 end
 
+-- Bucket i of an entry covers the times whose index (t - o) * (nb - 1) / span floors to
+-- off + i - 1. A window that is read fresh starts its own grid (o = t0, off = 0); a window a
+-- pan has shifted keeps the grid of the one it came from, which is what lets the buckets the
+-- two share be copied rather than read again (beginShift).
+-- The start of bucket b of the grid of entry e (b = off for its first bucket). The product is
+-- taken in floats, as in extractLine, so every caller gets the same value for the same bucket.
+local function gridT(e, b)
+  return e.o + b * (e.span + 0.0) / (e.nb - 1)
+end
+
 local function cacheAlloc(t0, t1, nb)
   local e = {
     t0 = t0, t1 = t1, nb = nb,
     span = (t1 - t0 > 0) and (t1 - t0) or 1,
+    o = t0, off = 0,
     min = {}, max = {}
   }
   for k = 1, #S.curves do e.min[k] = {}; e.max[k] = {} end
@@ -718,15 +805,19 @@ end
 local function beginExtract(t0, t1)
   local s = S.sessions[S.sessionIndex]
   if s == nil or S.nbuckets < 2 then return end
+  S.phase = nil
+  S.plotted = false
+  S.interrupted, S.tickOpen = false, false
   S.winT0, S.winT1 = t0, t1
   S.winSpan = (t1 - t0 > 0) and (t1 - t0) or 1
   S.extEntry = nil
+  S.shiftSrc, S.shiftD = nil, 0
 
   local src = cacheFind(t0, t1)
   if src ~= nil then
     S.rbSrc, S.rbK = src, 1
-    S.phase = "rebkt"
     S.progress = 0
+    S.phase = "rebkt"
     return
   end
 
@@ -744,16 +835,65 @@ local function beginExtract(t0, t1)
   S.extSpan = (e1 - e0 > 0) and (e1 - e0) or 1
   S.extNb = nb
   S.extStopT = e1
+  S.extNbF, S.extShift = nb - 1.0, false
+  S.extO, S.extOff, S.extLoB, S.extHiB = e0, 0, 1, nb
   S.seekTo = indexBefore(e0)
+  S.extEndOff = (S.sessions[S.sessionIndex] or {}).endOff or HUGE
   S.progBase = S.seekTo and S.seekTo.off or 0
+  S.progEnd = readEndOff(S.extStopT)
   S.resetK = 1
-  S.phase = "reset"
   S.progress = 0
   -- The bucket set the last re-bucketing read from is not read again: the extraction ends by
   -- assigning the next one. Kept until then, it would sit beside the new set whenever the
-  -- caller had emptied the cache. Released only after the phase has moved on, so a call
-  -- stopped in here never leaves "rebkt" without its source.
+  -- caller had emptied the cache. Released while idle, before the new phase starts.
   S.rbSrc = nil
+  S.phase = "reset"
+end
+
+-- A pan by d whole buckets of the window `cur` shows (d > 0 moves right): the new window keeps
+-- cur's grid, its buckets that cur also covers are copied from cur by the reset phase, and only
+-- the buckets the pan exposes are read from the file.
+--
+-- A window's buckets 1 .. nb-1 hold every sample of their times. The last one holds only a
+-- sample at exactly t1, because a read stops past t1; it is never copied. Moving right, it is
+-- read with the exposed buckets. Moving left, it stays empty, which is what a read gives when
+-- t1 is not a whole centisecond; G.pan reads the window afresh when it is.
+local function beginShift(cur, d)
+  local nb = cur.nb
+  local off = cur.off + d
+  local t0 = gridT(cur, off)
+  local t1 = gridT(cur, off + nb - 1)
+  S.phase = nil
+  S.plotted = false
+  S.interrupted, S.tickOpen = false, false
+  S.winT0, S.winT1 = t0, t1
+  S.winSpan = (t1 - t0 > 0) and (t1 - t0) or 1
+  S.extEntry = nil
+
+  local lo, hi
+  if d > 0 then lo, hi = nb - d, nb else lo, hi = 1, -d end
+  local e = cacheAlloc(t0, t1, nb)
+  e.o, e.off, e.span = cur.o, off, cur.span
+  S.extEntry = e
+  S.tgtMin, S.tgtMax = e.min, e.max
+  -- The times of buckets lo..hi: the pass starts one centisecond early, where the bucket index
+  -- decides, and stops past t1 moving right, past bucket hi moving left.
+  local r0 = gridT(cur, off + lo - 1)
+  S.extT0 = math.floor(r0) - 1
+  S.extSpan = cur.span
+  S.extNb = nb
+  S.extStopT = (d > 0) and t1 or gridT(cur, off + hi)
+  S.extNbF, S.extShift = nb - 1.0, true
+  S.extO, S.extOff, S.extLoB, S.extHiB = cur.o, off, lo, hi
+  S.shiftSrc, S.shiftD = cur, d
+  S.seekTo = indexBefore(S.extT0)
+  S.extEndOff = (S.sessions[S.sessionIndex] or {}).endOff or HUGE
+  S.progBase = S.seekTo and S.seekTo.off or 0
+  S.progEnd = readEndOff(S.extStopT)
+  S.resetK = 1
+  S.progress = 0
+  S.rbSrc = nil
+  S.phase = "reset"
 end
 
 -- A min/max envelope: two points per bucket, so a spike between two samples is
@@ -872,7 +1012,8 @@ function G.open(path, opts)
         return false
       end
       S.fh = fh
-      S.buf, S.bufpos, S.filePos = nil, 1, 0
+      setBuf(nil, 1)
+      S.filePos = 0
       S.skipRow = false
     end
     return true
@@ -905,9 +1046,48 @@ function G.close()
   S.extEntry = nil
 end
 
+-- Leaving the plot for the summary: drops what the plot holds -- the curves, the bucket cache,
+-- the scratch arrays and the points -- and keeps what the walk built, the index, the sessions
+-- and the summary, so the next G.open of this file reads nothing. The file handle stays open
+-- with them. Answers false, having closed the engine, where the walk itself has not finished,
+-- since nothing worth keeping is held then.
+function G.releasePlot()
+  local ph = S.phase
+  if ph == "header" or ph == "hparse" or ph == "scan" then
+    G.close()
+    return false
+  end
+  S.phase = nil
+  S.plotted = false
+  S.curves = {}
+  S.wantCols, S.wantK, S.xpat = nil, nil, nil
+  S.cache = {}
+  S.scrMin, S.scrMax = {}, {}
+  S.tgtMin, S.tgtMax = nil, nil
+  S.extEntry, S.rbSrc, S.shiftSrc = nil, nil, nil
+  S.points, S.curveEmpty = {}, {}
+  S.curveLo, S.curveHi = {}, {}
+  S.grid = {}
+  S.cursorT = nil
+  return true
+end
+
 function G.isOpen() return S.path ~= nil end
 function G.isBusy() return S.phase ~= nil end
 function G.isTelemetry() return S.isTelemetry end
+
+-- What the engine is reading from the card: "index" for the pass over the whole file, "window"
+-- for the read of a window the cache does not hold, nil otherwise. The two phases after a read
+-- (re-bucketing and building the points) and a window served from the cache read nothing and
+-- take a few ticks, so they answer nil and a caller can leave the current plot up for them.
+local INDEX_PHASES = { header = true, hparse = true, scan = true }
+local WINDOW_PHASES = { reset = true, seek = true, extract = true }
+function G.getReading()
+  local ph = S.phase
+  if INDEX_PHASES[ph] then return "index" end
+  if WINDOW_PHASES[ph] then return "window" end
+  return nil
+end
 
 --- Whether getSummary() would return a summary, answered without building one. getSummary
 --- keys its nil on this, so the two cannot disagree.
@@ -1020,6 +1200,11 @@ function G.getSessionIndex() return S.sessionIndex end
 function G.selectSession(i)
   local s = S.sessions[i]
   if not s then return false end
+  -- Before the flight changes, so a call stopped in between leaves no plot of the old flight
+  -- counted as the plot of the new one (see G.applyColumns): a pass still running for the old
+  -- flight is dropped, and the plot no longer counts as finished.
+  S.phase = nil
+  S.plotted = false
   S.sessionIndex = i
   S.cache = {}
   S.cursorT = nil
@@ -1071,22 +1256,42 @@ function G.applyColumns(colIndices)
   local s = S.sessions[S.sessionIndex]
   if s == nil then return false end
 
-  local curves = {}
+  -- A column chosen in two slots is plotted once. prepareWanted builds one capture per column
+  -- and steps through the wanted list once per column, so a repeat would take the capture of
+  -- the next column and leave the repeat and every later curve without samples.
+  local curves, taken = {}, {}
   for i = 1, #colIndices do
     if #curves >= G.MAX_CURVES then break end
     local c = colIndices[i]
     local col = S.columns[c]
-    if col then
+    if col and not taken[c] then
+      taken[c] = true
       curves[#curves + 1] = { col = c, name = col.name, unit = col.unit }
     end
   end
   if #curves == 0 then return false end
 
+  -- The same columns, in the same order, as the plot already shows in full: nothing to read.
+  -- Checked before any state changes, so a press stopped in here leaves the plot as it was.
+  if S.plotted and S.phase == nil and #curves == #S.curves then
+    local same = true
+    for k = 1, #curves do
+      if curves[k].col ~= S.curves[k].col then same = false end
+    end
+    if same then return true end
+  end
+
+  S.plotted = false
+  S.phase = nil
+  -- The old curves' points and cursor go before the new curves arrive, so a press stopped in
+  -- between leaves an empty plot rather than the old traces or readings under the new names.
+  S.cursorT = nil
+  S.curveEmpty = {}
+  S.points = {}
+  S.curveLo, S.curveHi = {}, {}
   S.curves = curves
   prepareWanted()
   S.scrMin, S.scrMax = {}, {}
-  S.points, S.curveEmpty = {}, {}
-  S.curveLo, S.curveHi = {}, {}
   S.cache, S.extEntry = {}, nil
   for k = 1, #curves do
     S.scrMin[k], S.scrMax[k] = {}, {}
@@ -1128,7 +1333,7 @@ function G.getReadout()
   for k = 1, #S.curves do
     local c = S.curves[k]
     local v = S.tgtMax and S.tgtMax[k] and S.tgtMax[k][bi] or nil
-    if S.curveEmpty[k] or v == nil or v == -HUGE then v = nil end
+    if S.curveEmpty[k] ~= false or v == nil or v == -HUGE then v = nil end
     out[k] = { name = c.name, unit = c.unit, value = v }
   end
   return out
@@ -1189,6 +1394,34 @@ function G.pan(dir)
     t0 = t1 - span
   end
   if t0 == S.winT0 then return end
+  -- Half a window in whole buckets of the window shown, when that window was read at the
+  -- display's resolution and the pan stays inside the session: then the half it shares with
+  -- the new one is copied, not read. Clamped at an end of the session, or with no such window,
+  -- the new window is read as before.
+  local cur = S.rbSrc
+  local nb = S.nbuckets
+  if cur ~= nil and S.plotted and cur.nb == nb and cur.t0 == S.winT0 and cur.t1 == S.winT1 then
+    local d = math.floor((nb - 1) / 2) * dir
+    local n0 = gridT(cur, cur.off + d)
+    local n1 = gridT(cur, cur.off + d + nb - 1)
+    if d < -1 and n1 == math.floor(n1) then
+      -- Moving left, a new t1 on a whole centisecond would need its last bucket read (see
+      -- beginShift); one bucket less does not land on one unless every bucket edge does.
+      d = d + 1
+      n0 = gridT(cur, cur.off + d)
+      n1 = gridT(cur, cur.off + d + nb - 1)
+    end
+    if d ~= 0 and n0 >= s.t0 and n1 <= s.t1 then
+      if cacheFind(n0, n1) ~= nil then
+        beginExtract(n0, n1)
+        return
+      end
+      if d > 0 or n1 ~= math.floor(n1) then
+        beginShift(cur, d)
+        return
+      end
+    end
+  end
   beginExtract(t0, t1)
 end
 
@@ -1209,7 +1442,20 @@ function G.setCursorFraction(f)
 end
 
 -- One capped unit of work. Returns true when the page has something new to draw.
+local tickUnit
+
+-- A tick stopped at the instruction limit can have moved past lines it never handed on, so a
+-- plot finished after one may lack samples; it is not counted as plotted, and the same choice
+-- pressed again reads it anew. A tick that finds the previous one still open was stopped.
 function G.tick()
+  if S.tickOpen then S.interrupted = true end
+  S.tickOpen = true
+  local r = tickUnit()
+  S.tickOpen = false
+  return r
+end
+
+tickUnit = function()
   local ph = S.phase
   if ph == nil or S.fh == nil then return false end
 
@@ -1277,13 +1523,24 @@ function G.tick()
   if ph == "reset" then
     local k = S.resetK or 1
     local bmin, bmax = S.tgtMin[k], S.tgtMax[k]
-    for i = 1, S.extNb do
-      bmin[i] = HUGE
-      bmax[i] = -HUGE
+    local src, d = S.shiftSrc, S.shiftD
+    local lo, hi = S.extLoB, S.extHiB
+    local smn, smx = src and src.min[k], src and src.max[k]
+    local nb = S.extNb
+    for i = 1, nb do
+      if smn and i < nb and (i < lo or i > hi) then
+        bmin[i], bmax[i] = smn[i + d], smx[i + d]
+      else
+        bmin[i] = HUGE
+        bmax[i] = -HUGE
+      end
     end
     if k >= #S.curves then
-      S.resetK = nil
+      -- The phase first: a call stopped after it goes on with the seek, not with a reset of
+      -- curve 1 that no longer has the pan's source to copy from.
       S.phase = "seek"
+      S.resetK = nil
+      S.shiftSrc = nil
     else
       S.resetK = k + 1
     end
@@ -1291,41 +1548,54 @@ function G.tick()
   end
 
   if ph == "seek" then
+    S.shiftSrc = nil                        -- also where the reset's own release was stopped
     local e = S.seekTo
     if e == nil then
       failWith("no_data")
       return true
     end
+    setBuf(nil, 1)
     io.seek(S.fh, e.off)
     S.filePos = e.off
-    S.buf, S.bufpos = nil, 1
     S.skipRow = false
     S.curDate, S.day = e.date, e.day
+    S.extPrevT = -HUGE
     S.phase = "extract"
     return false
   end
 
   if ph == "extract" then
     local r = pumpLines(extractLine, EXTRACT_LINES_TICK)
-    if S.fsize > S.progBase then
-      S.progress = (S.filePos - S.progBase) / (S.fsize - S.progBase)
+    if S.progEnd > S.progBase then
+      S.progress = (S.filePos - S.progBase) / (S.progEnd - S.progBase)
     end
     if r == "eof" or r == "stop" then
-      cacheAdd(S.extEntry)
-      S.rbSrc, S.rbK, S.extEntry = S.extEntry, 1, nil
+      -- A read a stopped tick interrupted can lack rows (see G.tick); it is drawn, but not
+      -- kept to serve a later window.
+      if not S.interrupted then cacheAdd(S.extEntry) end
+      -- One field per statement, the phase after the bucket set it hands over and before the
+      -- entry is let go: a multiple assignment stores right to left, so a stop inside it could
+      -- leave the extraction running without its entry, and then hand nothing to the
+      -- re-bucketing. A stop between these statements repeats the end of the read or goes on
+      -- with the re-bucketing, which both find what they need.
+      S.rbSrc = S.extEntry
+      S.rbK = 1
       S.phase = "rebkt"
+      S.extEntry = nil
     end
     return false
   end
 
   if ph == "rebkt" then
-    local k = S.rbK
-    if k > #S.curves then
+    local k, src = S.rbK, S.rbSrc
+    if src == nil or (k <= #S.curves and (src.min[k] == nil or src.max[k] == nil)) then
+      S.phase = nil
+    elseif k > #S.curves then
       S.tgtMin, S.tgtMax = S.scrMin, S.scrMax
       S.ptsK = 1
       S.phase = "pts"
     else
-      rebucketCurve(S.rbSrc, k)
+      rebucketCurve(src, k)
       S.rbK = k + 1
     end
     return false
@@ -1338,6 +1608,7 @@ function G.tick()
       updateCursor(S.cursorT or (S.winT0 + math.floor(S.winSpan / 2)))
       S.phase = nil
       S.progress = 1
+      S.plotted = not S.interrupted
       return true                           -- the page redraws with the new points
     end
     buildPoints(k)

@@ -1,0 +1,2 @@
+- **Logs list opens a log's plot without its summary (`app/pages/logs/page.lua`)**:
+  - Each log in the list has a *Graph* button beside *View*. It reads only the index the plot needs, not the flight summary, so the plot of a long log appears sooner, most of all in the tool opened from the dashboard. Back from that plot returns to the list (#969).
