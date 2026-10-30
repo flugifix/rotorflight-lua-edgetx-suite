@@ -1,2 +1,0 @@
-- **Logs graph pages a zoomed plot by reading only the new half (`app/pages/logs/graph.lua`)**:
-  - A page step moved the window by half its width but read the whole new window from the file. Where the window on screen was read at the screen's resolution, the part both windows share is now copied from it and only the newly shown part is read (#967).

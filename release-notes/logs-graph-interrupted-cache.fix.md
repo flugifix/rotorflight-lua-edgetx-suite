@@ -1,2 +1,0 @@
-- **Logs graph no longer keeps a window it read incompletely (`app/pages/logs/graph.lua`)**:
-  - In the tool opened from the dashboard, a read stopped at the instruction limit can miss rows. Such a window was kept in the bucket cache and served every later zoom or pan into it with those rows missing; it is now drawn once and read again when needed.

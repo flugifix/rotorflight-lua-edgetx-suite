@@ -1,2 +1,0 @@
-- **Logs graph recovers from interrupted curve changes (`app/pages/logs/graph.lua`)**:
-  - An instruction-limit stop while changing curves or finishing an extraction no longer leaves the graph raising errors on every pass. Choosing the same curves again restarts an interrupted change (#794).
