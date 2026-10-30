@@ -1,0 +1,2 @@
+- **Logs list appears on a card with many logs in the tool opened from the dashboard (`app/pages/logs/page.lua`)**:
+  - Sorting the found logs no longer runs a Lua comparison per pair in one call, which the radio stopped from a few hundred logs on, so the list never appeared. The records are sorted by one string each in C and put in order in steps (#607).

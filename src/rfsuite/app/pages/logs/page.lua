@@ -471,7 +471,15 @@ local SEARCH_PATHS = {
 -- the first path a file is reached by, which decides the folder its model may be named after,
 -- is the one it was reached by before. The sort is a phase of its own, so it never shares a
 -- wakeup with a last batch of entries.
+--
+-- The sort runs table.sort without a comparator, over one string per log, so every comparison
+-- is made in C. A Lua comparator runs once per comparison, and over a few hundred logs that alone
+-- is more than one widget call may spend, so in the tool opened from the dashboard the call was
+-- stopped in the middle of the sort, the next one started it again, and the list never appeared.
+-- Building those strings before the sort and putting the records back in order after it are
+-- linear, and are taken SORT_ENTRIES_PER_UNIT logs per unit of the budget.
 local SCAN_UNIT_ENTRIES = 10
+local SORT_ENTRIES_PER_UNIT = 10
 
 -- How long one wakeup may spend on the scan, in getTime() ticks of 10 ms. A colour radio runs
 -- a tool's run() as one plain call that nothing can interrupt, so until it returns the screen is
@@ -580,7 +588,7 @@ local function scanStep(scan, budget)
         if s > #SEARCH_PATHS then
           -- The walk is over. The sort is left to the next call, so it never runs in the same
           -- call as the walk's last entries.
-          scan.phase = "sort"
+          scan.phase = "keys"
           scan.names = nil
           return false
         end
@@ -588,9 +596,55 @@ local function scanStep(scan, budget)
         scan.s = s
         scan.names = nil
       end
+    elseif scan.phase == "keys" then
+      -- Each record's sort key, then its position in `found` in eight digits (no card holds that
+      -- many logs): unique, and "\1" sorts below every
+      -- character a sort key holds, so the order of the sort keys is kept. The table is made here
+      -- rather than where the walk ends, so a call stopped at that change of phase finds it made;
+      -- writing a key again after a stopped call writes the same string.
+      local found = scan.found
+      local keys = scan.keys
+      if keys == nil then
+        keys = {}
+        scan.keys = keys
+      end
+      local k = scan.k or 0
+      local last = math.min(#found, k + budget * SORT_ENTRIES_PER_UNIT)
+      while k < last do
+        k = k + 1
+        keys[k] = found[k].sortKey .. "\1" .. string.format("%08d", k)
+        scan.k = k
+      end
+      if k < #found then return false end
+      scan.phase = "sort"
+      return false
     elseif scan.phase == "sort" then
-      table.sort(scan.found, function(a, b) return a.sortKey > b.sortKey end)
+      table.sort(scan.keys)
+      scan.k = 0
+      scan.phase = "order"
+      return false
+    elseif scan.phase == "order" then
+      -- Newest first: the keys ascend, so the last one names the first record. The records go into
+      -- a new array, and `found` is replaced by it in one assignment once it is complete, so a call
+      -- stopped anywhere in here leaves either the old array whole or the new one.
+      local found, keys = scan.found, scan.keys
+      local sorted = scan.sorted
+      if sorted == nil then
+        sorted = {}
+        scan.sorted = sorted
+      end
+      local n = #keys
+      local k = scan.k or 0
+      local last = math.min(n, k + budget * SORT_ENTRIES_PER_UNIT)
+      while k < last do
+        k = k + 1
+        sorted[k] = found[tonumber(string.sub(keys[n - k + 1], -8))]
+        scan.k = k
+      end
+      if k < n then return false end
+      scan.found = sorted
       scan.phase = "done"
+      scan.keys, scan.sorted, scan.k = nil, nil, nil
       return true
     else
       return true
