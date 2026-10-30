@@ -386,7 +386,7 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
         w.data.attitude={roll=0,pitch=0,yaw=0};w.attitudeAt=getTime()
         w.attitudeView:update(w.data.attitude,w.attitudeAt,getTime(),true)
       end
-      if ((n==5 or n==8 or n==9 or n==10 or n==11 or n==12) and c>1) or (n==1 and c>1) or (n==2 and c>1) or (n==6 and c>1) or (n==7 and c==2) or ((n==15 or n==16 or n==17) and c==2) or (n==13 and c>1) or ((n==14 or n==18) and c>1) then
+      if ((n==3 or n==5 or n==8 or n==9 or n==10 or n==11 or n==12) and c>1) or (n==1 and c>1) or (n==2 and c>1) or (n==6 and c>1) or (n==7 and c==2) or ((n==15 or n==16 or n==17) and c==2) or (n==13 and c>1) or ((n==14 or n==18) and c>1) then
         exported[#exported+1] = {step=n,name=name,task=c,width=size[1],height=size[2],children=resolve(job.children)}
       end
       if n==6 and c==4 then
