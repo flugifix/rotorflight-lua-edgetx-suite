@@ -1,0 +1,2 @@
+- **Logs list search takes one step per folder entry (`app/pages/logs/page.lua`)**:
+  - The search read every name of a folder first and went through the names a second time. Each name is now handled as it is read, which roughly halves the steps of the search in the tool opened from the dashboard, and the folder's names are no longer held while it is searched (#966).

@@ -497,5 +497,148 @@ do
   F.close()
 end
 
+-- #966: a name is collected as it is read, so a log costs one unit of the scan, not two.
+-- Wakeups as the dashboard drives the scan, three units each, until the sort.
+do
+  local page = loadPage()
+  local newScan = find(page.build, "newScan")
+  local scanForAWhile = find(page.wakeup, "scanForAWhile")
+  for _, count in ipairs({ 300, 600 }) do
+    listingStub(count)
+    local scan = newScan()
+    local wakeups = 0
+    while scan.phase ~= "keys" and scan.phase ~= "sort" and wakeups < 5000 do
+      scanForAWhile(scan, 3)
+      wakeups = wakeups + 1
+    end
+    local bound = math.ceil(count / 30) + 4
+    check(wakeups <= bound, "scan " .. count .. " logs: one unit per name, " .. bound .. " wakeups at most", wakeups)
+  end
+end
+
+-- The same logs as before, by the same routes: every search path, a model folder in each, a
+-- file reached by two paths, logs without a date in their name, files that are not logs.
+local function cardStub()
+  local listings = {
+    ["/LOGS"] = { ".", "..", "Heli-2026-10-01-120000.csv", "Plane", "rfsuite", "notes.txt", "Old.csv", "Sheet.csv" },
+    ["/LOGS/Plane"] = { "Plane-2026-10-02-090000.csv", "x.txt", "flight.csv" },
+    ["/LOGS/rfsuite"] = { "telemetry", "Goblin" },
+    ["/LOGS/rfsuite/telemetry"] = { "Top-2026-10-03-100000.csv" },
+    ["/LOGS/rfsuite/Goblin"] = { "Goblin-2026-10-04-110000.csv", "Goblin-2026-10-05-110000.csv" }
+  }
+  files["/LOGS/Old.csv"] = "Date,Time,Vbat(V)" .. string.char(10) .. "2026-09-30,08:00:00.000,24.0" .. string.char(10)
+  files["/LOGS/Sheet.csv"] = "Name,Value" .. string.char(10) .. "a,1" .. string.char(10)
+  -- No date in its name: listed by its header, its model from the folder.
+  files["/LOGS/Plane/flight.csv"] = "Date,Time,Vbat(V)" .. string.char(10) .. "2026-10-02,10:00:00.000,24.0" .. string.char(10)
+  dir = function(path)
+    local names, i = listings[path] or {}, 0
+    return function() i = i + 1; return names[i] end
+  end
+end
+
+local CARD = {
+  ["/LOGS/rfsuite/telemetry/Top-2026-10-03-100000.csv"] = "Top",
+  ["/LOGS/rfsuite/Goblin/Goblin-2026-10-04-110000.csv"] = "Goblin",
+  ["/LOGS/rfsuite/Goblin/Goblin-2026-10-05-110000.csv"] = "Goblin",
+  ["/LOGS/Heli-2026-10-01-120000.csv"] = "Heli",
+  ["/LOGS/Plane/Plane-2026-10-02-090000.csv"] = "Plane",
+  ["/LOGS/Old.csv"] = false,
+  ["/LOGS/Plane/flight.csv"] = "Plane"
+}
+
+local function cardResult(scan, label)
+  local seen, n, ok = {}, 0, true
+  for _, info in ipairs(scan.found) do
+    local want = CARD[info.path]
+    if want == nil or seen[info.path] or (want or nil) ~= info.model then
+      ok = false
+      print("  unexpected " .. tostring(info.path) .. " model " .. tostring(info.model))
+    end
+    seen[info.path] = true
+    n = n + 1
+  end
+  check(ok and n == 7, label .. ": the seven logs, each once, with their models", n)
+  local ordered = true
+  for i = 2, #scan.found do
+    if scan.found[i - 1].sortKey < scan.found[i].sortKey then ordered = false end
+  end
+  check(ordered, label .. ": newest first")
+end
+
+do
+  local page = loadPage()
+  local newScan = find(page.build, "newScan")
+  local scanForAWhile = find(page.wakeup, "scanForAWhile")
+  cardStub()
+  local scan = newScan()
+  local n = 0
+  while not scanForAWhile(scan, 3) and n < 1000 do n = n + 1 end
+  cardResult(scan, "card scan")
+  check(scan.read == 17, "card scan: every name counted as read once", scan.read)
+  for _, low in ipairs({ 150, 300, 700 }) do
+    cardStub()
+    scan = newScan()
+    local calls, done, stops = 0, false, 0
+    while not done and calls < 100000 do
+      calls = calls + 1
+      CEILING = (calls % 2 == 1) and (low + (calls * 37) % low) or 20000
+      local ok, _, res = ceilingCall(scanForAWhile, scan, 3)
+      CEILING = 20000
+      if ok then done = res else stops = stops + 1 end
+    end
+    check(done and stops > 0, "card scan stopped at " .. low .. ": finished after stops", stops)
+    cardResult(scan, "card scan stopped at " .. low)
+  end
+end
+
+-- The whole card scan stopped once at every instruction it executes, each in a scan of its own:
+-- the next calls finish it, and every log is listed once with its model. A stop between the
+-- directory iterator's read and the name being held is among them.
+do
+  local page = loadPage()
+  local newScan = find(page.build, "newScan")
+  local scanStep = find(page.wakeup, "scanStep")
+  local function finish(scan)
+    local n = 0
+    while not scanStep(scan, 10) do n = n + 1; if n > 100000 then error("scan does not finish") end end
+  end
+  cardStub()
+  local total = 0
+  local probe = newScan()
+  debug.sethook(function() total = total + 1 end, "", 1)
+  finish(probe)
+  debug.sethook()
+  local bad, firstBad = 0, nil
+  for stopAt = 1, total do
+    cardStub()
+    local scan = newScan()
+    local n = 0
+    local ok, err = pcall(function()
+      debug.sethook(function()
+        n = n + 1
+        if n == stopAt then debug.sethook(); error("stop", 0) end
+      end, "", 1)
+      finish(scan)
+      debug.sethook()
+    end)
+    debug.sethook()
+    local ok2, err2 = pcall(finish, scan)
+    local fine = (ok or err == "stop") and ok2 and #scan.found == 7
+    if fine then
+      local seen = {}
+      for _, info in ipairs(scan.found) do
+        local want = CARD[info.path]
+        if want == nil or seen[info.path] or (want or nil) ~= info.model then fine = false end
+        seen[info.path] = true
+      end
+    end
+    if not fine then
+      bad = bad + 1
+      firstBad = firstBad or (stopAt .. ": " .. tostring(err2 or err) .. " found " .. #scan.found)
+    end
+  end
+  check(total > 500 and bad == 0, "card scan stopped at each of its " .. total .. " instructions: every log once", firstBad)
+end
+
 print(string.format("Logs page: %d checks, %d failures", checks, failures))
 os.exit(failures == 0 and 0 or 1)

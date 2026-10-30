@@ -340,26 +340,29 @@ local function openListing(listBasePath)
   return listing
 end
 
--- Reads at most `budget` entries into the listing and answers how many reads that took: the
--- reads spent, `.` and `..` and the one that ends the directory among them. That last read is
--- what drops the iterator. A name read is held on the listing until it has been taken, so a
--- call stopped in between (see scanCollect) takes it on the next one rather than losing it.
-local function readListing(listing, budget)
-  local spent = 0
-  while listing.iter and spent < budget do
-    if listing.held == nil then
-      listing.held = listing.iter() or false
-      spent = spent + 1
-    end
-    local name = listing.held
-    if name == false then
-      listing.iter = nil
-    elseif name ~= "." and name ~= ".." and name ~= "" then
-      listing.names[#listing.names + 1] = name
-    end
-    listing.held = nil
+-- The next name of a listing, or false once it has none left. A name read is held on the
+-- listing until the caller has dealt with it and dropped it (`listing.held = nil`), so a call
+-- stopped in between deals with it on the next one rather than losing it. The read that ends
+-- the directory is what drops the iterator. A call stopped between the read and `held` can
+-- lose the name; scanStep reads such a directory again.
+local function nextName(listing)
+  local name = listing.held
+  if name ~= nil then return name end
+  if listing.iter then
+    -- Set around the read: a call stopped inside this window may have lost the name, and
+    -- scanStep then reads the directory again.
+    listing.reading = true
+    name = listing.iter() or false
+    listing.held = name
+    listing.reading = nil
+    if name == false then listing.iter = nil end
+  else
+    local j = (listing.j or 0) + 1
+    name = listing.names[j] or false
+    listing.held = name
+    listing.j = j
   end
-  return spent
+  return name
 end
 
 local function formatDateText(date, time, isNarrow, unknownText)
@@ -477,11 +480,14 @@ local SEARCH_PATHS = {
 -- read from a directory, or a name already read being looked at -- for a .csv that is
 -- extractFileInfo, which opens the file only where its name carries no date and time.
 --
--- Each search path is listed and then walked, in the order the paths are given, and a folder
--- among its names is listed and walked when it is reached -- the order the walk always had, so
--- the first path a file is reached by, which decides the folder its model may be named after,
--- is the one it was reached by before. The sort is a phase of its own, so it never shares a
--- wakeup with a last batch of entries.
+-- Each search path is listed in the order the paths are given, and a log among its names is
+-- collected as soon as its name has been read: one unit per name, where reading every name
+-- first and walking the names afterwards paid two. A folder among the names is kept aside and
+-- listed, one at a time, once the path's own listing has ended, so only one directory is open
+-- at any time. A file is reached by one route within a path, and the paths still come one
+-- after the other, so the first path a file is reached by, which decides the folder its model
+-- may be named after, is the one it was reached by before. The sort is a phase of its own, so
+-- it never shares a wakeup with a last batch of entries.
 --
 -- The sort runs table.sort without a comparator, over one string per log, so every comparison
 -- is made in C. A Lua comparator runs once per comparison, and over a few hundred logs that alone
@@ -507,8 +513,8 @@ local function newScan()
     phase = "list",
     s = 1,
     listing = nil,
-    names = nil,
-    i = 0,
+    dirs = {},
+    di = 0,
     sub = nil,
     read = 0,
     found = {},
@@ -516,7 +522,7 @@ local function newScan()
   }
 end
 
--- An entry is marked as seen, and the walk's position moved past it (scanStep), only once it is
+-- An entry is marked as seen, and its listing's held name dropped (scanStep), only once it is
 -- done: the tool opened from the dashboard can be stopped in the middle of one, and the next
 -- wakeup then reads it again rather than leaving the log out of the list.
 local function scanCollect(scan, fileName, fullPath, parentFolder)
@@ -530,13 +536,29 @@ local function scanCollect(scan, fileName, fullPath, parentFolder)
   scan.seen[fullPath] = true
 end
 
--- Reads up to `budget` names of a listing and counts them as read: the names added, `.` and
--- `..` not counted, so `scan.read` is not the reads spent. Answers the reads spent.
-local function scanRead(scan, listing, budget)
-  local before = #listing.names
-  local spent = readListing(listing, budget)
-  scan.read = scan.read + #listing.names - before
-  return spent
+-- One name of `listing`, of a folder `base` whose model is `parent` ("" for a search path):
+-- a log is collected, and a folder of a search path is kept aside for the walk. Answers false
+-- once the listing has no name left.
+local function scanName(scan, listing, base, parent)
+  local name = nextName(listing)
+  if name == false then return false end
+  if name ~= "." and name ~= ".." and name ~= "" then
+    if string.match(name, "%.csv$") then
+      scanCollect(scan, name, base .. "/" .. name, parent)
+    elseif parent == "" and not string.match(name, "%.%w+$") then
+      -- Subdirectory (e.g. Model name). `dirs` is the list and, by name, the set of the folders
+      -- kept aside, so a listing read again adds none twice; added before it is marked, so a
+      -- call stopped in between adds it twice at worst, never not at all.
+      local dirs = scan.dirs
+      if not dirs[name] then
+        dirs[#dirs + 1] = name
+        dirs[name] = true
+      end
+    end
+    scan.read = scan.read + 1
+  end
+  listing.held = nil
+  return true
 end
 
 -- Advances the scan by at most `budget` entries and answers true once it is complete, with
@@ -544,55 +566,33 @@ end
 -- nothing and are taken in the same call; the sort is one call on its own. Every step leaves
 -- the scan where its phase can go on from, at any point: a call stopped in the middle of one
 -- (see scanCollect) repeats part of it rather than leaving the scan in a phase it cannot finish.
-local function scanStep(scan, budget)
+local function scanUnits(scan, budget)
   while budget > 0 do
     if scan.phase == "list" then
       if not scan.listing then
         scan.listing = openListing(SEARCH_PATHS[scan.s])
       end
-      budget = budget - scanRead(scan, scan.listing, budget)
-      if not scan.listing.iter then
-        local names = scan.listing.names
-        scan.i = 0
-        scan.names = names
+      if not scanName(scan, scan.listing, SEARCH_PATHS[scan.s], "") then
         scan.listing = nil
+        scan.di = 0
         scan.phase = "walk"
       end
+      budget = budget - 1
     elseif scan.phase == "walk" then
-      local basePath = SEARCH_PATHS[scan.s]
+      -- The folders the path's listing held, each listed and its logs collected as read.
       local sub = scan.sub
       if sub then
-        -- Inside a subdirectory (e.g. a model folder) of a search path: list it, then collect
-        -- its .csv files.
-        if sub.listing.iter then
-          budget = budget - scanRead(scan, sub.listing, budget)
-        else
-          local names = sub.listing.names
-          while budget > 0 and sub.j < #names do
-            local subFile = names[sub.j + 1]
-            if string.match(subFile, "%.csv$") then
-              scanCollect(scan, subFile, sub.path .. "/" .. subFile, sub.parent)
-            end
-            sub.j = sub.j + 1
-            budget = budget - 1
-          end
-          if sub.j >= #names then
-            -- The entry that opened this folder counts as walked, even where the call that
-            -- opened it was stopped before it could move on.
-            if scan.i < sub.at then scan.i = sub.at end
-            scan.sub = nil
-          end
+        if not scanName(scan, sub.listing, sub.path, sub.parent) then
+          -- Dropped before the position moves on: a call stopped in between lists this folder
+          -- again, and scanCollect takes none of its logs twice.
+          scan.sub = nil
+          scan.di = scan.di + 1
         end
-      elseif scan.i < #scan.names then
-        local entry = scan.names[scan.i + 1]
-        if string.match(entry, "%.csv$") then
-          scanCollect(scan, entry, basePath .. "/" .. entry, "")
-        elseif not string.match(entry, "%.%w+$") then
-          -- Subdirectory (e.g. Model name)
-          local modelDir = basePath .. "/" .. entry
-          scan.sub = { listing = openListing(modelDir), path = modelDir, parent = entry, j = 0, at = scan.i + 1 }
-        end
-        scan.i = scan.i + 1
+        budget = budget - 1
+      elseif scan.di < #scan.dirs then
+        local entry = scan.dirs[scan.di + 1]
+        local path = SEARCH_PATHS[scan.s] .. "/" .. entry
+        scan.sub = { listing = openListing(path), path = path, parent = entry }
         budget = budget - 1
       else
         local s = scan.s + 1
@@ -600,12 +600,14 @@ local function scanStep(scan, budget)
           -- The walk is over. The sort is left to the next call, so it never runs in the same
           -- call as the walk's last entries.
           scan.phase = "keys"
-          scan.names = nil
+          scan.dirs = nil
           return false
         end
+        -- In this order, so a call stopped between two of them lists a path again rather than
+        -- skipping one; scanCollect takes no log twice.
         scan.phase = "list"
+        scan.dirs = {}
         scan.s = s
-        scan.names = nil
       end
     elseif scan.phase == "keys" then
       -- Each record's sort key, then its position in `found` in eight digits (no card holds that
@@ -662,6 +664,21 @@ local function scanStep(scan, budget)
     end
   end
   return false
+end
+
+-- A call stopped at the instruction limit can lose a name: EdgeTX's directory iterator has moved
+-- past it before the name reaches `listing.held` (see nextName). A listing left in that window
+-- is therefore read again from the start; scanCollect takes no log twice and `dirs` keeps no
+-- folder twice. Each restart is one assignment, and a stop anywhere else restarts nothing, so
+-- calls that are all stopped still move on.
+local function scanStep(scan, budget)
+  local listing, sub = scan.listing, scan.sub
+  if listing and listing.reading then
+    scan.listing = nil
+  elseif sub and sub.listing.reading then
+    scan.sub = { listing = openListing(sub.path), path = sub.path, parent = sub.parent }
+  end
+  return scanUnits(scan, budget)
 end
 
 -- The scan for as long as one wakeup may spend on it; see SCAN_BUDGET_TICKS. Without a clock it
