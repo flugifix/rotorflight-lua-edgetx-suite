@@ -122,7 +122,8 @@ local function onPush(frameType, payload)
 
   if #rx.data >= rx.len then
     rx.active = false
-    local reply = FC.replies[rx.cmd]
+    if rx.cmd == 210 and FC.profileSelection then FC.profileSelection(rx.data[1]) end
+    local reply = FC.dynamicReply and FC.dynamicReply(rx.cmd, rx.data) or FC.replies[rx.cmd]
     if reply == nil then
       -- Answered empty rather than left to time out: a request nobody answers costs the
       -- queue a retry ladder, and a pass spent waiting is not the pass this gate is about.

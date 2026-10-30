@@ -25,7 +25,7 @@ so it matches the code it was generated from.
   an entry (`id`, `title`, `menuId`, `icon`, `row`, `col`) are left out. What a condition
   does is not explained here.
 
-**120 entries, 99 of them open a page, 63 of those pages are documented.**
+**119 entries, 98 of them open a page, 62 of those pages are documented.**
 
 ## Diagrams
 
@@ -195,66 +195,64 @@ flowchart LR
   n22 --> n25
   n26["Stats"]:::undocumented
   n15 --> n26
-  n27["In-Flight Tuning"]:::documented
-  n15 --> n27
-  n28["Power"]:::menu
-  n0 --> n28
-  n29["Battery"]:::documented
-  n28 --> n29
-  n30["Alerts"]:::undocumented
-  n28 --> n30
-  n31["Sources"]:::documented
-  n28 --> n31
-  n32["SmartFuel"]:::documented
-  n28 --> n32
-  n33["Preferences"]:::documented
-  n28 --> n33
-  n34["ESC #amp; Motors"]:::menu
-  n0 --> n34
-  n35["Throttle"]:::documented
-  n34 --> n35
-  n36["Telemetry"]:::documented
-  n34 --> n36
-  n37["RPM"]:::undocumented
-  n34 --> n37
-  n38["ESC Tools"]:::menu
-  n34 --> n38
-  n39["AM32"]:::documented
-  n38 --> n39
-  n40["BLHeli_S"]:::documented
-  n38 --> n40
-  n41["Bluejay"]:::documented
-  n38 --> n41
-  n42["Flyrotor"]:::documented
-  n38 --> n42
-  n43["Hobbywing V5"]:::documented
-  n38 --> n43
-  n44["OMP"]:::documented
-  n38 --> n44
-  n45["Scorpion"]:::documented
-  n38 --> n45
-  n46["XDFly"]:::documented
-  n38 --> n46
-  n47["YGE"]:::documented
-  n38 --> n47
-  n48["ZTW"]:::documented
-  n38 --> n48
-  n49["Motor Override"]:::undocumented
-  n34 --> n49
-  n50["Governor"]:::menu
-  n0 --> n50
-  n51["General"]:::documented
-  n50 --> n51
-  n52["Ramp Time"]:::documented
-  n50 --> n52
-  n53["Filters"]:::undocumented
-  n50 --> n53
-  n54["Bypass Curve"]:::undocumented
-  n50 --> n54
-  n55["Model"]:::documented
+  n27["Power"]:::menu
+  n0 --> n27
+  n28["Battery"]:::documented
+  n27 --> n28
+  n29["Alerts"]:::undocumented
+  n27 --> n29
+  n30["Sources"]:::documented
+  n27 --> n30
+  n31["SmartFuel"]:::documented
+  n27 --> n31
+  n32["Preferences"]:::documented
+  n27 --> n32
+  n33["ESC #amp; Motors"]:::menu
+  n0 --> n33
+  n34["Throttle"]:::documented
+  n33 --> n34
+  n35["Telemetry"]:::documented
+  n33 --> n35
+  n36["RPM"]:::undocumented
+  n33 --> n36
+  n37["ESC Tools"]:::menu
+  n33 --> n37
+  n38["AM32"]:::documented
+  n37 --> n38
+  n39["BLHeli_S"]:::documented
+  n37 --> n39
+  n40["Bluejay"]:::documented
+  n37 --> n40
+  n41["Flyrotor"]:::documented
+  n37 --> n41
+  n42["Hobbywing V5"]:::documented
+  n37 --> n42
+  n43["OMP"]:::documented
+  n37 --> n43
+  n44["Scorpion"]:::documented
+  n37 --> n44
+  n45["XDFly"]:::documented
+  n37 --> n45
+  n46["YGE"]:::documented
+  n37 --> n46
+  n47["ZTW"]:::documented
+  n37 --> n47
+  n48["Motor Override"]:::undocumented
+  n33 --> n48
+  n49["Governor"]:::menu
+  n0 --> n49
+  n50["General"]:::documented
+  n49 --> n50
+  n51["Ramp Time"]:::documented
+  n49 --> n51
+  n52["Filters"]:::undocumented
+  n49 --> n52
+  n53["Bypass Curve"]:::undocumented
+  n49 --> n53
+  n54["Model"]:::documented
+  n0 --> n54
+  n55["GPS"]:::undocumented
   n0 --> n55
-  n56["GPS"]:::undocumented
-  n0 --> n56
   classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
   classDef menu stroke:#1e88e5,stroke-width:2px
   classDef documented stroke:#43a047,stroke-width:2px
@@ -430,7 +428,7 @@ Section `configuration`.
 | Setup &rsaquo; Servos | `servos` | `servos_menu` | menu, 2 entries | &mdash; | &mdash; |
 | Setup &rsaquo; Servos &rsaquo; PWM Output | `pwm` | `setup_servos_pwm_page` | `setup/servos/pwm` | **none** | `lockedWhileArmed = true` |
 | Setup &rsaquo; Servos &rsaquo; BUS Output | `bus` | `setup_servos_bus_page` | `setup/servos/bus` | **none** | `lockedWhileArmed = true` |
-| Setup &rsaquo; Controls | `controls` | `controls_menu` | menu, 7 entries | &mdash; | &mdash; |
+| Setup &rsaquo; Controls | `controls` | `controls_menu` | menu, 6 entries | &mdash; | &mdash; |
 | Setup &rsaquo; Controls &rsaquo; Modes | `modes` | `setup_controls_modes_page` | `setup/controls/modes` | [setup/controls/modes.md](../pages/setup/controls/modes.md) | `lockedWhileArmed = true` |
 | Setup &rsaquo; Controls &rsaquo; Adjustments | `adjustments` | `setup_controls_adjustments_page` | `setup/controls/adjustments` | [setup/controls/adjustments.md](../pages/setup/controls/adjustments.md) | `lockedWhileArmed = true` |
 | Setup &rsaquo; Controls &rsaquo; Failsafe | `failsafe` | `setup_controls_failsafe_page` | `setup/controls/failsafe` | [setup/controls/failsafe.md](../pages/setup/controls/failsafe.md) | `lockedWhileArmed = true` |
@@ -442,7 +440,6 @@ Section `configuration`.
 | Setup &rsaquo; Controls &rsaquo; Blackbox &rsaquo; Logging | `logging` | `setup_controls_blackbox_logging_page` | `setup/controls/blackbox/logging` | **none** | `lockedWhileArmed = true` |
 | Setup &rsaquo; Controls &rsaquo; Blackbox &rsaquo; Status | `status` | `setup_controls_blackbox_status_page` | `setup/controls/blackbox/status` | [setup/controls/blackbox/status.md](../pages/setup/controls/blackbox/status.md) | `lockedWhileArmed = true` |
 | Setup &rsaquo; Controls &rsaquo; Stats | `stats` | `setup_controls_stats_page` | `setup/controls/stats` | **none** | `lockedWhileArmed = true` |
-| Setup &rsaquo; Controls &rsaquo; In-Flight Tuning | `inflight` | `setup_controls_inflight_page` | `setup/controls/inflight` | [setup/controls/inflight.md](../pages/setup/controls/inflight.md) | `enabledWhen = "fblConnected"`, `visibleWhen = "previewInflightTuning"`, `lockedWhileArmed = true` |
 | Setup &rsaquo; Power | `power` | `power_menu` | menu, 5 entries | &mdash; | &mdash; |
 | Setup &rsaquo; Power &rsaquo; Battery | `battery` | `setup_power_battery_page` | `setup/power/battery` | [setup/power/battery.md](../pages/setup/power/battery.md) | `lockedWhileArmed = true` |
 | Setup &rsaquo; Power &rsaquo; Alerts | `alerts` | `setup_power_alerts_page` | `setup/power/alerts` | **none** | &mdash; |

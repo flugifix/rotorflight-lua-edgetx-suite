@@ -156,6 +156,10 @@ return {
     -- new target is the measurement with the 10 % floor named above, rounded up to the next hundred.
     ["pass.tuning.prime"] = { target = 16900, measured = 15139, proposed = 16700 },
     ["pass.job.tuning"] = { target = 15700, measured = 13155, proposed = 10600 },
+    -- New setup rows use the measured pass.job.build margin (6200 / 5574), rounded up
+    -- to the next hundred. Existing tuning targets remain unchanged.
+    ["pass.job.tuning_setup"] = { target = 10300, measured = 9178 },
+    ["pass.tuning.setup"] = { target = 19200, measured = 17251 },
 
     ----------------------------------------------------------------------------
     -- The ceiling, and the row that carries the safety argument: the worst pass of
@@ -414,7 +418,6 @@ return {
     ["page.setup_controls_blackbox_logging_page.build"] = { target = 7050, measured = 5620 },
     ["page.setup_controls_blackbox_status_page.build"] = { target = 3800, measured = 3007 },
     ["page.setup_controls_failsafe_page.build"] = { target = 6750, measured = 5396 },
-    ["page.setup_controls_inflight_page.build"] = { target = 9950, measured = 7930 },
     ["page.setup_controls_modes_page.build"] = { target = 4650, measured = 3703 },
     ["page.setup_controls_stats_page.build"] = { target = 3750, measured = 2964 },
     ["page.setup_esc_motors_esc_tools_am32_page.build"] = { target = 6200, measured = 4944 },

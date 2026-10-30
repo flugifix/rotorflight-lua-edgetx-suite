@@ -309,6 +309,16 @@ legacy migration, settings invalidation and disabled inputs. Run
 `lua5.3 bin/dashboard/verify_inflight_trims.lua`. Pass `--drive <file>` with the previous drive
 implementation to prove the repeated-lookup check goes red.
 
+The grouped in-flight tuning check runs beside it:
+`lua5.3 bin/dashboard/verify_inflight_groups.lua`. It checks Standard/Custom groups and hidden
+addresses, missing flight-list ids, unread/unknown profile refusals and automatic return-to-read
+resume, replaceable 700 ms speech, encoder callback deduplication/busy refusal and RTN level-back.
+The companion profile verifier checks staged ground publication, crossed profiles, arming and per-profile delta caching.
+Native LVGL focus/scroll delivery and physical callbacks per detent still require a bench run.
+
+`lua5.3 bin/dashboard/verify_inflight_flightlist.lua` checks the real flight-list controls,
+MCU-keyed save/refusal, missing IDs, all/subset round trips and both help sheets' length limits.
+
 ## Documentation
 
 `docs/` holds the user-facing reference: one file per configuration page under `docs/pages/`,
@@ -345,3 +355,8 @@ and telemetry pages can be worked on without a flight controller. It writes per-
 files into the simulator target and supports fixed values, sliders, dropdowns and random
 variance. Its own notes are in `bin/sensors/README.md`; rebuild it with the
 `Sensors: Build Tool` task.
+
+The multi-profile inflight verifier (`lua5.3 bin/dashboard/verify_inflight_profiles.lua`)
+models ground-only selection/read/restore, sliced SD snapshots, FC identity refusal,
+per-profile report ownership and original-pair return on aborts. It also checks actual
+API read/modify/write field round trips. Native FC/SD acceptance remains a bench check.
