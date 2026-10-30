@@ -524,8 +524,8 @@ for _,size in ipairs({{480,272},{480,320},{800,480}}) do
     export("tail",mode==2 and "bidirectional" or "motor",function() w.data.mixer_config.tail_rotor_mode=mode end)
   end
   w.data.mixer_config.tail_rotor_mode=0
-  -- The cyclic servo types, and a rate no type has (Custom, drawn as the live waveform).
-  for _,preset in ipairs({{50,1520,"analog"},{165,1520,"digital"},{333,1520,"hiend-digital"},{560,760,"narrow-band"},{210,1520,"custom"}}) do
+  -- The cyclic servo types, and a rate no type has (no type chosen, drawn as the live waveform).
+  for _,preset in ipairs({{50,1520,"analog"},{165,1520,"digital"},{333,1520,"hiend-digital"},{560,760,"narrow-band"},{210,1520,"none"}}) do
     export("servoType","type-"..preset[3],function()
       for _,servo in pairs(w.data.servo_configurations.servos) do
         servo.rate,servo.mid,servo.max=preset[1],preset[2],preset[2]==760 and 250 or 700

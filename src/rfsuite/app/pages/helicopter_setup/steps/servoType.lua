@@ -2,7 +2,7 @@ return function(w)
   local L = w.L
   local function unplugged() return w.checks.unplugged == true end
   -- Servo types per group: centre pulse (1520 us wide band, 760 us narrow band) and frame rate.
-  -- The cyclic and the tail group each offer the types made for them; any other setting is Custom.
+  -- The cyclic and the tail group each offer the types made for them; nothing else is offered.
   local TYPES = {
     cyclic = {
       { key = "analog", name = L.servoAnalog, mid = 1520, rate = 50 },
@@ -52,94 +52,76 @@ return function(w)
     end
     return result or 0
   end
-  local function custom(tail) return current(tail) == 0 end
-  -- Servos that match no type read Custom; it is shown, not chosen: a type replaces it.
+  -- Servos that match no type open the list on its neutral placeholder; nothing is written until
+  -- a type is chosen.
   local function row(tail, label)
     local values = {}
     for n, preset in ipairs(TYPES[group(tail)]) do values[n] = preset.name end
-    values[#values + 1] = L.customServo
-    return { kind = "choice", label = label, enabled = unplugged, values = values,
-      get = function() return custom(tail) and #values or current(tail) end,
-      set = function(v) if v < #values then apply(tail, v) end end }
+    return { kind = "choice", label = label, enabled = unplugged, values = values, allowUnset = true,
+      get = function() return current(tail) end,
+      set = function(v) if values[v] then apply(tail, v) end end }
   end
-  -- The picture and its caption: the type's servo picture with its name and values, or for
-  -- Custom the live pulse train of what the servos hold. Texts change only with the setting.
+  -- The picture and its caption: the type's servo picture with its name and values, or, while no
+  -- type is chosen, the live pulse train of what the servos hold. Texts change only with the setting.
   local function captions(tail, indices)
     local shownKey, long, short
     return function(isShort)
       local first = w.data.servo_configurations.servos[indices[1]]
-      local kind = custom(tail) and 0 or current(tail)
+      local kind = current(tail)
       local key = (kind * 10000 + first.rate) * 10000 + first.mid
       if key ~= shownKey then
         local preset = TYPES[group(tail)][kind]
-        local name = preset and preset.name or L.customServo
+        local name = preset and preset.name or L.servoNoType
         local values = string.format(L.servoSpec, first.mid, first.rate)
         shownKey, long, short = key, name .. "\n" .. values, name .. "  " .. values
       end
       return isShort and short or long
     end
   end
+  -- Geometry correction is bit 1; bit 0 reverses the servo. The firmware reads it on every servo
+  -- update, so it is written without a restart. A group whose servos disagree has no single
+  -- answer: the list then opens on its placeholder.
+  local function geometryRow(indices)
+    return {kind="choice",label=L.geometryCorrection,values={L.off,L.on},allowUnset=true,
+      get=function()
+        local result
+        for _,index in ipairs(indices) do
+          local on=(w.data.servo_configurations.servos[index].flags & 2)~=0 and 2 or 1
+          if result and result~=on then return 0 end
+          result=on
+        end
+        return result or 0
+      end,
+      set=function(v)
+        if v~=1 and v~=2 then return end
+        for _,index in ipairs(indices) do
+          local s=w.data.servo_configurations.servos[index]
+          s.flags=v==2 and (s.flags | 2) or (s.flags & ~2)
+        end
+        w:touch("servo_configurations",false,true)
+      end}
+  end
+  -- One card per group: the servo type and its geometry correction (a motorised tail has neither).
   local cards={}
   for _,tail in ipairs({false,true}) do
     local indices={}
     for _,index in ipairs(w:servos()) do if (index==3)==tail then indices[#indices+1]=index end end
-    if #indices>0 then
-      local rows={w:check("unplugged",L.servosUnplugged),row(tail,tail and L.tailServo or L.cyclicServos),
-        w:value(L.groupState,function()
-          local first=w.data.servo_configurations.servos[indices[1]]
-          for _,index in ipairs(indices) do
-            local s=w.data.servo_configurations.servos[index]
-            if s.rate~=first.rate or (s.mid<=860)~=(first.mid<=860) then return L.mixed end
-          end
-          return L.uniform
-        end)}
-      local card=w:cardDef(tail and L.tailServo or L.cyclicServos,L.servoHzHint,rows,nil,"pulses")
-      card.summary=function() return unplugged() and L.servoHzQuick or L.servoUnpluggedRequired end
+    if #indices>0 and not (tail and w:motorised()) then
+      local rows={w:check("unplugged",L.servosUnplugged),row(tail,tail and L.tailServo or L.cyclicServos),geometryRow(indices)}
+      local card=w:cardDef(tail and L.tailServo or L.cyclicServos,L.servoHzHint.."\n"..L.geometryHint,rows,nil,"pulses")
+      card.summary=function() return unplugged() and L.servoCardQuick or L.servoUnpluggedRequired end
       card.servoIndex,card.servoIndices=indices[1],indices
       local text = captions(tail, indices)
       card.caption, card.captionShort = function() return text(false) end, function() return text(true) end
       card.captionLines, card.wideText = 2, true
       -- The type's picture while the group matches a type.
       card.servoPicture=function()
-        local preset = not custom(tail) and TYPES[group(tail)][current(tail)]
+        local preset = TYPES[group(tail)][current(tail)]
         return preset and ("servo-" .. group(tail) .. "-" .. preset.key) or nil
       end
       cards[#cards+1]=card
     end
   end
-  -- Geometry correction is bit 1; bit 0 reverses the servo. The firmware reads it
-  -- on every servo update, so each group can change it without a restart.
-  local function geometryCard(indices, title, art)
-    local card=w:cardDef(title,L.geometryHint,{
-      -- A group whose servos disagree has no single answer: the list then opens on a placeholder.
-      {kind="choice",label=L.geometryCorrection,values={L.off,L.on},allowUnset=true,
-        get=function()
-          local result
-          for _,index in ipairs(indices) do
-            local on=(w.data.servo_configurations.servos[index].flags & 2)~=0 and 2 or 1
-            if result and result~=on then return 0 end
-            result=on
-          end
-          return result or 0
-        end,
-        set=function(v)
-          if v~=1 and v~=2 then return end
-          for _,index in ipairs(indices) do
-            local s=w.data.servo_configurations.servos[index]
-            s.flags=v==2 and (s.flags | 2) or (s.flags & ~2)
-          end
-          w:touch("servo_configurations",false,true)
-        end}
-    }, nil, art)
-    card.summary=L.geometryQuick
-    cards[#cards+1]=card
-  end
-  local cyclic,tail={},{}
-  for _,index in ipairs(w:servos()) do
-    if index==3 then tail[#tail+1]=index else cyclic[#cyclic+1]=index end
-  end
-  if #cyclic>0 then geometryCard(cyclic,L.geometryCorrection,"servo") end
-  if #tail>0 and not w:motorised() then geometryCard(tail,L.tailGeometryCorrection,#cyclic==0 and "servo" or nil) end
   if #cards==0 then cards[1]=w:cardDef(L.servoType,L.servoTypeHint,{w:value(L.servo,function() return L.unavailable end)},nil,"servo") end
   return cards
 end

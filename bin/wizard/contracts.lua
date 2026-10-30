@@ -1965,10 +1965,11 @@ return function(h)
     local w=world();local c=step(w,"servoType")
     local cyclic,tail=c[1].rows[2],c[2].rows[2]
     for _,r in ipairs(c[1].rows) do check(r.kind~="number","REVIEW servo type has no frame-rate field") end
-    eq(table.concat(cyclic.values,"|"),table.concat({L.servoAnalog,L.servoDigital,L.servoHiendDigital,L.servoNarrowBand,L.customServo},"|"),
-      "REVIEW cyclic servo types")
-    eq(table.concat(tail.values,"|"),table.concat({L.servoDigital,L.servoSpecificDigital,L.servoHiendSpecificDigital,L.customServo},"|"),
-      "REVIEW tail servo types")
+    eq(table.concat(cyclic.values,"|"),table.concat({L.servoAnalog,L.servoDigital,L.servoHiendDigital,L.servoNarrowBand},"|"),
+      "REVIEW cyclic servo types, and nothing else")
+    eq(table.concat(tail.values,"|"),table.concat({L.servoDigital,L.servoSpecificDigital,L.servoHiendSpecificDigital},"|"),
+      "REVIEW tail servo types, and nothing else")
+    check(cyclic.allowUnset and tail.allowUnset,"REVIEW servos matching no type open on the neutral placeholder")
     local servos=w.data.servo_configurations.servos
     local original=servos[0].rate;cyclic.set(2)
     eq(servos[0].rate,original,"REVIEW a servo type requires unplugged servos")
@@ -1980,9 +1981,8 @@ return function(h)
     tail.set(2)
     eq(servos[3].rate,333,"REVIEW the tail has its own types");eq(servos[3].mid,760,"REVIEW Specific digital is a 760 us servo")
     eq(servos[0].rate,165,"REVIEW a tail type leaves the cyclic servos unchanged")
-    cyclic.set(5);eq(servos[0].rate,165,"REVIEW Custom is shown, not chosen")
-    servos[1].rate=210;eq(cyclic.get(),5,"REVIEW servos matching no type read Custom")
-    eq(c[1].rows[3].get(),L.mixed,"REVIEW different group settings are explicitly marked mixed")
+    cyclic.set(0);cyclic.set(5);eq(servos[0].rate,165,"REVIEW only a listed type is written")
+    servos[1].rate=210;eq(cyclic.get(),0,"REVIEW servos matching no type show no type")
     w.cards=c;w.card=1
     local scene=h.view.new(w,{w=480,h=272},h.diagrams)
     while not scene:step() do end
@@ -1994,15 +1994,19 @@ return function(h)
     check(wave~=nil and picture~=nil,"REVIEW the servo card has a picture and a cached waveform")
     if not wave or not picture then return end
     w.refreshPulse()
-    check(wave.visible() and not picture.visible(),"REVIEW Custom draws the waveform of what the servos hold")
+    check(wave.visible() and not picture.visible(),"REVIEW without a type the waveform shows what the servos hold")
     servos[1].rate=165;w.refreshPulse()
     check(picture.visible() and not wave.visible(),"REVIEW a matching type shows its picture")
-    eq(c[1].rows[3].get(),L.uniform,"REVIEW one type for the group reads uniform")
+    eq(cyclic.get(),2,"REVIEW one type for the group reads that type")
   end)
   case("S07.geometry-correction",function()
-    local w=world();local c=step(w,"servoType");local card=(function() for _,x in ipairs(c) do if x.title==L.geometryCorrection then return x end end end)()
-    eq(card.title,L.geometryCorrection,"S07 geometry correction has a card of its own")
-    local row=card.rows[1];local servos=w.data.servo_configurations.servos
+    -- Geometry correction is a row of each servo type card.
+    local w=world();local c=step(w,"servoType")
+    local function geometry(card) for _,r in ipairs(card.rows) do if r.label==L.geometryCorrection then return r end end end
+    eq(c[1].title,L.cyclicServos,"S07 the swash servo card comes first")
+    local row=geometry(c[1]);check(row~=nil,"S07 geometry correction is on the swash servo card")
+    if not row then return end
+    local servos=w.data.servo_configurations.servos
     servos[0].flags=1;servos[1].flags=0;servos[2].flags=0;servos[3].flags=0
     eq(row.get(),1,"S07 geometry correction reads off")
     row.set(2)
@@ -2015,11 +2019,12 @@ return function(h)
     eq(row.get(),1,"S07 geometry correction reads off again")
   end)
   case("S07.tail-geometry-correction",function()
-    local w=world();local c=step(w,"servoType");local tail
-    for _,card in ipairs(c) do if L.tailGeometryCorrection and card.title==L.tailGeometryCorrection then tail=card end end
-    check(tail~=nil,"S07 servo tail has its own geometry choice")
-    if tail then
-      local row=tail.rows[1];local servos=w.data.servo_configurations.servos
+    local w=world();local c=step(w,"servoType");local tail,row
+    local function geometry(card) for _,r in ipairs(card.rows) do if r.label==L.geometryCorrection then return r end end end
+    for _,card in ipairs(c) do if card.title==L.tailServo then tail=card;row=geometry(card) end end
+    check(tail~=nil and row~=nil,"S07 servo tail has its own geometry choice on its card")
+    if tail and row then
+      local servos=w.data.servo_configurations.servos
       servos[0].flags=5;servos[1].flags=2;servos[2].flags=0
       for _,flags in ipairs({0,1,4,5}) do
         servos[3].flags=flags
@@ -2033,13 +2038,13 @@ return function(h)
       eq(servos[2].flags,0,"S07 tail geometry leaves cyclic servo 2 alone")
       check(w.dirty.servo_configurations and w.live.servo_configurations and not w.rebootPending,
         "S07 tail geometry is live without a restart")
-      check(tail.detail==L.geometryHint and tail.summary==L.geometryQuick,"S07 tail geometry carries the shared explanation")
+      check(string.find(tail.detail,L.geometryHint,1,true)~=nil,"S07 tail geometry carries the shared explanation")
     end
     for _,mode in ipairs({1,2}) do
       w.data.mixer_config.tail_rotor_mode=mode;c=step(w,"servoType")
       local count=0
       for _,card in ipairs(c) do
-        if L.tailGeometryCorrection and card.title==L.tailGeometryCorrection then count=count+1 end
+        if card.title==L.tailServo and geometry(card) then count=count+1 end
       end
       eq(count,0,"S07 motorised tail has no tail geometry choice")
     end
@@ -2055,12 +2060,9 @@ return function(h)
         "S07 "..locale.." geometry help explains when to leave it off")
       check(string.find(labels.geometryHint,locale=="en" and "tail limits" or "Hecklimits",1,true)~=nil,
         "S07 "..locale.." geometry help asks for limit checks")
-      local lines=0
-      for line in string.gmatch(labels.geometryQuick,"[^\n]+") do
-        lines=lines+1
-        check(utf8.len(line)<=28,"S07 "..locale.." geometry summary fits the left column")
-      end
-      check(lines<=2,"S07 "..locale.." geometry summary uses at most two lines")
+      check(utf8.len(labels.servoCardQuick)<=160,"S07 "..locale.." servo card summary stays two lines on 480 pixels")
+      check(string.find(labels.servoCardQuick,locale=="en" and "Geometry correction" or "Geometrie-Korrektur",1,true)~=nil,
+        "S07 "..locale.." servo card summary says what geometry correction does")
     end
   end)
   case("S07.servo-bands-and-reboot",function()
@@ -3163,7 +3165,7 @@ return function(h)
     if h.mutation=="drop-stale-edit" then
       w.applyEdit=function(self,fn) if self:usable() then fn() end end
     end
-    local c=step(w,"servoType");local row=(function() for _,x in ipairs(c) do if x.title==L.geometryCorrection then return x end end end)().rows[1]
+    local c=step(w,"servoType");local row=(function() for _,r in ipairs(c[1].rows) do if r.label==L.geometryCorrection then return r end end end)()
     local servos=w.data.servo_configurations.servos
     for _,i in ipairs({0,1,2}) do servos[i].flags=0 end
     w.statusAt=getTime()-301
@@ -3177,7 +3179,7 @@ return function(h)
     w:fail("status",L.stale);drain(w)
     eq(servos[0].flags,2,"CORE a failure drops the held edit")
     -- The scene control routes through the same path.
-    w.error=nil;w.locked=true;settle(w);w.cards=c;for i,x in ipairs(c) do if x.title==L.geometryCorrection then w.card=i end end
+    w.error=nil;w.locked=true;settle(w);w.cards=c;w.card=1
     local job=h.view.new(w,{w=800,h=480},h.diagrams);while not job.done do job:step() end
     local choice
     for _,item in ipairs(job.children) do if item.type=="choice" and item.title==L.geometryCorrection then choice=item end end
@@ -3473,8 +3475,11 @@ return function(h)
         job,picture=scene("throttle")
         expect(picture,"dark/esc",protocol==0 and "PWM full throttle intro" or "battery connection intro")
       end
-      job,picture=scene("servoType",3)
-      expect(picture,"dark/servo","cyclic geometry servo intro")
+      -- The servo drawing now comes with each type's picture: the swash card shows its type.
+      local servos=w.data.servo_configurations.servos
+      for i=0,2 do servos[i].rate,servos[i].mid=333,1520 end
+      job,picture=scene("servoType",1)
+      expect(picture,"dark/servo-cyclic-hiend-digital","swash servo type picture")
       -- The existing pulse pictures stay on the two group cards.
       for index=1,2 do
         job,picture=scene("servoType",index)
@@ -3501,8 +3506,9 @@ return function(h)
       end
       local swashType=w.data.mixer_config.swash_type
       w.data.mixer_config.swash_type=0
-      job,picture=scene("servoType",2)
-      expect(picture,"dark/servo","tail-only geometry servo intro")
+      servos[3].rate,servos[3].mid=200,1520
+      job,picture=scene("servoType",1)
+      expect(picture,"dark/servo-tail-digital","tail-only servo type picture")
       w.data.mixer_config.swash_type=swashType
       local servoCount=w.data.servo_configurations.servo_count
       w.data.servo_configurations.servo_count=0
