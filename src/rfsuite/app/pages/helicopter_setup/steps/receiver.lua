@@ -160,10 +160,16 @@ return function(w)
       if r.travel[g[1]][g[2] > 0 and 2 or 1] < TRAVEL then return g[1], g[2] end
     end
   end
+  -- The prompt is formatted again only when the asked end stop changes.
+  local promptKey, promptText
   local function prompt()
     local axis, dir = target()
     if not axis then return L.sticksDone end
-    return string.format(L.stickGuide, names[axis], words[axis][dir > 0 and 1 or 2])
+    local key = axis * 10 + dir
+    if key ~= promptKey then
+      promptKey, promptText = key, string.format(L.stickGuide, names[axis], words[axis][dir > 0 and 1 or 2])
+    end
+    return promptText
   end
   local function throttleNow()
     local v = mapped(5)(); if type(v) ~= "number" then return "--" end
@@ -230,7 +236,8 @@ return function(w)
   -- percent of the FC's stick range, accented once both end stops are reached.
   local bars = {}
   for n = 1, 4 do
-    local channel, name, percent, shown
+    -- false, not nil: the first refresh without a reading must still produce its placeholder.
+    local channel, name, percent, shown = nil, nil, nil, false
     -- Read in place on every refresh: no closure and no table is made here.
     local function value()
       local raw, rc = w.data.rx_channels, w.data.rc_config

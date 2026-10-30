@@ -35,7 +35,8 @@ return function(w)
   local function shown(index)
     local t=w.rateTunings and w.rateTunings[index]
     if not t then return nil end
-    local s=w.rateStyles[index]
+    -- Discard clears the styles while the closing card may still be drawn.
+    local s=w.rateStyles and w.rateStyles[index]
     if not s then return t end
     local p=previews[index]
     if not p or p.style~=s or p.base~=t then
@@ -98,11 +99,22 @@ return function(w)
   -- The step closes on a table of everything a style sets: a column per profile, the rates type,
   -- a row per axis with rate and expo, and the collective with its expo, as Save & next will hold them.
   local TYPES={[4]="Actual",[6]="Rotorflight"}
-  local columns,typeRow,collectiveRow={},{},{}
+  local columns,short,typeRow,curveRow,collectiveRow={},{},{},{},{}
   local axisRows={{},{},{}}
   for _,id in ipairs(profiles) do
     columns[#columns+1]=string.format(L.rateProfileTitle,id+1)
+    short[#short+1]=string.format(L.profileShort,id+1)
     typeRow[#typeRow+1]=memo(id,function(t) return TYPES[t.rates_type] or "--" end)
+    -- A style also writes the Rotorflight curve shape, or the Actual centre rates.
+    curveRow[#curveRow+1]=memo(id,function(t)
+      if t.rates_type==6 then
+        local a,b,c,d=t.rates_1,t.rates_2,t.rates_3,t.rates_4
+        if a==b and b==c and c==d then return tostring(a) end
+        return string.format("%s/%s/%s/%s",a,b,c,d)
+      end
+      if t.rates_type==4 then return string.format("%s/%s/%s",t.rcRates_1*10,t.rcRates_2*10,t.rcRates_3*10) end
+      return "--"
+    end)
     for axis=1,3 do
       local cells=axisRows[axis]
       cells[#cells+1]=memo(id,function(t)
@@ -114,10 +126,13 @@ return function(w)
     end)
   end
   local done=w:cardDef(L.ratesSet,L.ratesHint.."\n"..L.rateNoMatch,{},enter)
-  done.summary=function() return next(w.rateStyles) and L.stepChanged or L.stepUnchanged end
-  done.table={columns=columns,rows={{label=L.ratesType,cells=typeRow},{label=L.roll,cells=axisRows[1]},
-    {label=L.pitch,cells=axisRows[2]},{label=L.yaw,cells=axisRows[3]},{label=L.collective,cells=collectiveRow}},
-    legend=L.rateLegend}
+  done.summary=function()
+    local styles=w.rateStyles
+    return styles and next(styles) and L.stepChanged or L.stepUnchanged
+  end
+  done.table={columns=columns,columnsShort=short,rows={{label=L.ratesType,cells=typeRow},
+    {label=L.curveShape,cells=curveRow},{label=L.roll,cells=axisRows[1]},{label=L.pitch,cells=axisRows[2]},
+    {label=L.yaw,cells=axisRows[3]},{label=L.collective,cells=collectiveRow}},legend=L.rateLegend}
   done.wideText=true
   cards[#cards+1]=done
   return cards

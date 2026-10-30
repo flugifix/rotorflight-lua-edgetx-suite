@@ -44,14 +44,22 @@ return function(w)
   end
   w.validate = function() if not assigned(0) then w.message = L.armRequired; return false end; return true end
   local cards, blocks = {}, {}
-  local function range(id)
-    local _, r = assigned(id)
-    return r and string.format(L.rangeUs, r.range.start, r.range["end"]) or ""
+  -- A text built from a mode's assignment, formatted again only when the assignment changes.
+  local function slotText(id, format, none)
+    local aux, lo, hi, text = false
+    return function()
+      local _, r = assigned(id)
+      if not r then return none end
+      local channel = w:channelNumber(r.auxChannelIndex)
+      if channel ~= aux or r.range.start ~= lo or r.range["end"] ~= hi then
+        aux, lo, hi = channel, r.range.start, r.range["end"]
+        text = format(channel, lo, hi)
+      end
+      return text
+    end
   end
-  local function channel(id)
-    local _, r = assigned(id)
-    return r and string.format("CH%d", w:channelNumber(r.auxChannelIndex)) or L.notAssigned
-  end
+  local function range(id) return slotText(id, function(_, lo, hi) return string.format(L.rangeUs, lo, hi) end, "") end
+  local function channel(id) return slotText(id, function(c) return string.format("CH%d", c) end, L.notAssigned) end
   for _, mode in ipairs(modes) do
     local id, label, name = mode[1], mode[2], mode[3]
     local present = false; for _, value in ipairs(w.data.boxids.box_ids) do if value == id then present = true end end
@@ -67,19 +75,17 @@ return function(w)
       end
       local function word() local v = state(); return v == true and L.stateOn or v == false and L.stateOff or nil end
       -- What the switch does where it stands now; for ARM that is whether arming would be on.
+      local onText = id == 0 and string.format(L.armState, L.stateOn) or string.format(L.modeState, name, L.stateOn)
+      local offText = id == 0 and string.format(L.armState, L.stateOff) or string.format(L.modeState, name, L.stateOff)
       local function now()
-        local v = word()
-        if not v then return assigned(id) and L.unavailable or L.notAssigned end
-        return id == 0 and string.format(L.armState, v) or string.format(L.modeState, name, v)
+        local v = state()
+        if v == nil then return assigned(id) and L.unavailable or L.notAssigned end
+        return v and onText or offText
       end
       local function role() return state() == true and "accent" or "text" end
       local card = w:cardDef(label, L.modeHint, {
         { kind = "value", fullWidth = true, get = now, color = role },
-        w:value(L.assigned, function()
-          local _, r = assigned(id)
-          if not r then return L.no end
-          return string.format("CH%d  %d-%d", w:channelNumber(r.auxChannelIndex), r.range.start, r.range["end"])
-        end),
+        w:value(L.assigned, slotText(id, function(c, lo, hi) return string.format("CH%d  %d-%d", c, lo, hi) end, L.no)),
         w:button(function() return s.id==id and L.cancelDetect or L.assign end,function()
           if s.id==id then s.id=nil;w.message=L.ready;return end
           local baseline=w:channelSnapshot("rc")
@@ -96,7 +102,7 @@ return function(w)
       card.badge = id == 0 and L.required or nil
       card.wideText = true
       cards[#cards + 1] = card
-      blocks[#blocks + 1] = { title = name, lines = { function() return channel(id) end, function() return range(id) end,
+      blocks[#blocks + 1] = { title = name, lines = { channel(id), range(id),
         function() return word() or "" end }, colors = { nil, nil, role } }
     end
   end

@@ -236,7 +236,7 @@ function M.new(w, ctx, diagrams)
       local cw = math.floor((width-20-firstW)/math.max(1,cols))
       local lineH = math.min(large and 40 or 24, math.floor((cardBottom-2-overviewY)/(#t.rows+1)))
       local y = overviewY
-      for c, head in ipairs(t.columns) do
+      for c, head in ipairs(not large and t.columnsShort or t.columns) do
         all[#all+1] = label(10+firstW+(c-1)*cw, y, cw-6, head)
         all[#all].h, all[#all].color = lineH-4, palette.muted
       end

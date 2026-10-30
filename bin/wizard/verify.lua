@@ -470,6 +470,14 @@ do
   scan(w, "w")
   for _, path in ipairs(found) do check(false, "step code outlives its step: " .. path) end
   check(#found == 0, "no step code is reachable after every step was left")
+  -- Positive control: a step function planted on a table that outlives the step is found.
+  w.rx = w.rx or {}
+  w.rx.control = loadfile(ROOT .. PATH .. "steps/receiver.lua")
+  seen, found = {}, {}
+  seen[w.L], seen[_G] = true, true
+  scan(w, "w")
+  check(#found == 1 and found[1] == "w.rx.control", "the step-code scan finds a planted step function")
+  w.rx.control = nil
   w.overview = nil
 end
 -- Additional picture variants use the same card definitions as the normal walk.

@@ -1672,8 +1672,14 @@ return function(h)
     check(c[1].rows[1].enabled(),"S05 three switch positions enable Suggest")
     c[1].rows[1].press()
     for i=1,3 do eq(w.rateStyles[i-1],i,"S05 Suggest follows switch position "..i) end
-    w.rateTunings[0].rcRates_4=80;w.rateTunings[1].rcRates_4=120
-    check(c[1].caption()~=c[2].caption(),"S05 rate readout belongs to its profile")
+    -- Read replies replace a profile's table; the readout follows the table it holds.
+    local function with(t,v) local copy={};for k,x in pairs(t) do copy[k]=x end;copy.rcRates_4=v;return copy end
+    w.rateTunings[0]=with(w.rateTunings[0],80);w.rateTunings[1]=with(w.rateTunings[1],120)
+    check(string.find(c[1].caption(),string.format(L.degreeValue,tostring(H.collective(w.rateTunings[0]))),1,true)~=nil,
+      "S05 the first card reads its own profile's collective")
+    check(string.find(c[2].caption(),string.format(L.degreeValue,tostring(H.collective(w.rateTunings[1]))),1,true)~=nil,
+      "S05 the second card reads its own profile's collective")
+    check(H.collective(w.rateTunings[0])~=H.collective(w.rateTunings[1]),"S05 the two profiles' collectives differ")
     c[1].rows[2].press();c[2].rows[4].press();c[3].rows[2].press()
     eq(w.rateStyles[0],nil,"S05 Keep current leaves the first profile unwritten")
     eq(w.rateStyles[1],3,"S05 second card edits only profile two")
@@ -1704,15 +1710,24 @@ return function(h)
     local c=step(w,"rates");c[1].enter();settle(w)
     local done=c[#c]
     eq(done.title,L.ratesSet,"S05 the step closes on Rates set")
-    eq(#done.table.rows,5,"S05 Rates set shows type, roll, pitch, yaw and collective")
+    eq(#done.table.rows,6,"S05 Rates set shows type, curve, roll, pitch, yaw and collective")
     eq(done.summary(),L.stepUnchanged,"S05 nothing chosen is nothing to store")
     c[1].rows[3].press()
     eq(done.table.rows[1].cells[1](),w:apiAtLeast(9) and "Rotorflight" or "Actual","S05 Rates set names the rates type a style writes")
-    eq(done.table.rows[2].cells[1](),string.format(L.rateCell,"180","40"),"S05 Rates set shows the roll rate and expo a style writes")
-    eq(done.table.rows[3].cells[1](),string.format(L.rateCell,"180","40"),"S05 Rates set shows the pitch rate and expo a style writes")
-    eq(done.table.rows[4].cells[1](),string.format(L.rateCell,"270","50"),"S05 Rates set shows the yaw rate and expo a style writes")
-    check(string.find(done.table.rows[5].cells[1](),"0 %",1,true)~=nil,"S05 Rates set shows the collective expo a style writes")
+    eq(done.table.rows[2].cells[1](),w:apiAtLeast(9) and "12" or "140/140/200","S05 Rates set shows the curve shape or centre rates a style writes")
+    eq(done.table.rows[3].cells[1](),string.format(L.rateCell,"180","40"),"S05 Rates set shows the roll rate and expo a style writes")
+    eq(done.table.rows[4].cells[1](),string.format(L.rateCell,"180","40"),"S05 Rates set shows the pitch rate and expo a style writes")
+    eq(done.table.rows[5].cells[1](),string.format(L.rateCell,"270","50"),"S05 Rates set shows the yaw rate and expo a style writes")
+    check(string.find(done.table.rows[6].cells[1](),string.format(L.collectiveCell,"",0),1,true)~=nil
+      or string.find(done.table.rows[6].cells[1](),"0%",1,true)~=nil,"S05 Rates set shows the collective expo a style writes")
     eq(done.summary(),L.stepChanged,"S05 a chosen style is something to store")
+    w.rateStyles=nil
+    eq(done.summary(),L.stepUnchanged,"S05 Rates set survives a discard that clears the styles")
+    check(type(done.table.rows[3].cells[1]())=="string","S05 a cleared style leaves the readout drawable")
+    -- Actual rates: a centre sensitivity above the maximum raises the full-stick rate.
+    local actual={rates_type=4,rcRates_1=40,rates_1=20,rcRates_2=10,rates_2=20,rcRates_3=10,rates_3=30,rcExpo_1=0,rcExpo_2=0,rcExpo_3=0}
+    local roll,pitch,yaw=H.rateValues(actual)
+    eq(roll,400,"S05 an Actual centre above the maximum raises the roll rate");eq(pitch,200,"S05 Actual pitch at its maximum");eq(yaw,300,"S05 Actual yaw at its maximum")
   end)
   case("S06.swashplate-set-shows-what-is-set",function()
     local w=world();settle(w);w.step=6

@@ -61,7 +61,11 @@ end
 -- Roll, pitch and yaw rate in degrees per second at full stick, then their expo in percent.
 function M.rateValues(t)
   if t.rates_type == 6 then return t.rcRates_1 * 5, t.rcRates_2 * 5, t.rcRates_3 * 5, t.rcExpo_1, t.rcExpo_2, t.rcExpo_3 end
-  if t.rates_type == 4 then return t.rates_1 * 10, t.rates_2 * 10, t.rates_3 * 10, t.rcExpo_1, t.rcExpo_2, t.rcExpo_3 end
+  if t.rates_type == 4 then
+    -- A centre sensitivity above the maximum raises the full-stick rate, as for the collective.
+    return math.max(t.rcRates_1, t.rates_1) * 10, math.max(t.rcRates_2, t.rates_2) * 10,
+      math.max(t.rcRates_3, t.rates_3) * 10, t.rcExpo_1, t.rcExpo_2, t.rcExpo_3
+  end
 end
 function M.setCollective(t, degrees)
   if t.rates_type == 6 then t.rcRates_4 = M.round(degrees * 8)
