@@ -3328,6 +3328,7 @@ return {
         graph_full = "Ganz",
         graph_curves = "Sensoren",
         graph_scanning = "Telemetrie-Log wird indiziert...\nDie Datei wird einmal ganz gelesen, damit Zoomen und Blättern es nicht müssen.",
+        graph_reading = "Die gewählten Kurven werden aus dem Log gelesen...",
         graph_no_columns = "Dieses Log enthält keine darstellbaren Spalten.",
         graph_err_open = "Die Logdatei kann nicht geöffnet werden.",
         graph_err_empty = "Die Logdatei ist leer.",

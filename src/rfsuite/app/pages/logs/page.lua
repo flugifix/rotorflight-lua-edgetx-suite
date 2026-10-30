@@ -1165,9 +1165,6 @@ local function buildChart(children, x, y, w, availH, i18n)
 
   local winT0, winT1, sessT0 = Graph.getWindow()
   local windowText = Graph.formatOffset(winT0 - sessT0) .. " - " .. Graph.formatOffset(winT1 - sessT0)
-  if Graph.isBusy() then
-    windowText = windowText .. "   " .. tostring(math.floor(Graph.getProgress() * 100)) .. " %"
-  end
 
   children[#children + 1] = {
     type = "label",
@@ -1320,7 +1317,7 @@ end
 
 local function buildGraphView(children, x, y, w, availH, i18n)
   -- Told once per build, before anything is asked of the engine. A change drops its cached
-  -- windows and starts the current one again; the points it still holds are drawn meanwhile.
+  -- windows and starts the current one again, under the loading notice below.
   Graph.setGeometry(chartRect(x, y, w, availH))
   -- What this build drew, so the wakeup can draw again once the engine is idle (see M.wakeup).
   state.drawnBusy = Graph.isBusy()
@@ -1362,14 +1359,17 @@ local function buildGraphView(children, x, y, w, availH, i18n)
     return
   end
 
-  -- Nothing can be chosen before the index exists, so the scan is the one wait
-  -- this view reports with the overlay the rest of the tool uses.
-  if #Graph.getCurves() == 0 and Graph.isBusy() then
+  -- A read of the card is reported with the overlay the rest of the tool uses: the index pass,
+  -- before anything can be chosen, and every window the cache does not hold -- a new curve
+  -- choice, a zoom, a page step, another flight. The bar is the engine's position in what it
+  -- reads. A window served from the cache reads nothing and leaves the plot up meanwhile.
+  local reading = Graph.getReading()
+  if reading ~= nil then
     if LoadingOverlay then
       LoadingOverlay.append(children, {
         x = x, y = y, w = w, h = availH,
         title = pageText(i18n, "loading_title"),
-        message = pageText(i18n, "graph_scanning"),
+        message = (reading == "index") and pageText(i18n, "graph_scanning") or pageText(i18n, "graph_reading"),
         progress = graphProgress
       })
     end

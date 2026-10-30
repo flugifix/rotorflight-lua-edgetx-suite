@@ -1050,6 +1050,19 @@ function G.isOpen() return S.path ~= nil end
 function G.isBusy() return S.phase ~= nil end
 function G.isTelemetry() return S.isTelemetry end
 
+-- What the engine is reading from the card: "index" for the pass over the whole file, "window"
+-- for the read of a window the cache does not hold, nil otherwise. The two phases after a read
+-- (re-bucketing and building the points) and a window served from the cache read nothing and
+-- take a few ticks, so they answer nil and a caller can leave the current plot up for them.
+local INDEX_PHASES = { header = true, hparse = true, scan = true }
+local WINDOW_PHASES = { reset = true, seek = true, extract = true }
+function G.getReading()
+  local ph = S.phase
+  if INDEX_PHASES[ph] then return "index" end
+  if WINDOW_PHASES[ph] then return "window" end
+  return nil
+end
+
 --- Whether getSummary() would return a summary, answered without building one. getSummary
 --- keys its nil on this, so the two cannot disagree.
 function G.hasSummary()

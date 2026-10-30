@@ -3333,6 +3333,7 @@ return {
         graph_full = "Full",
         graph_curves = "Sensors",
         graph_scanning = "Indexing telemetry log...\nThis reads the whole file once so that zooming and paging do not have to.",
+        graph_reading = "Reading the chosen curves from the log...",
         graph_no_columns = "This log carries no plottable columns.",
         graph_err_open = "Cannot open the log file.",
         graph_err_empty = "The log file is empty.",

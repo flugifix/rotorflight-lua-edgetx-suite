@@ -1029,5 +1029,61 @@ do
   files[path] = nil
 end
 
+-- The plot view reports every read of the card with the loading notice, its bar following the
+-- engine, and draws the plot once the read is done: the index pass, the chosen curves, a zoom to
+-- a window not read yet. Control: a zoom back to the window already read reads nothing and
+-- leaves the plot up.
+do
+  local page, st, ctx = listPage(true)
+  button(ctx, "graph_open").press()
+  local function rebuildView() ctx.children = {}; page.build(ctx) end
+  local function notice()
+    for _, c in ipairs(ctx.children) do
+      if c.title == "loading_title" then return c end
+    end
+    return nil
+  end
+  local G = find(page.wakeup, "Graph")
+  local function settle() local k = 0; while G.isBusy() and k < 100000 do page.wakeup(ctx); k = k + 1 end end
+  rebuildView()
+  local n = notice()
+  check(n ~= nil and n.message == "graph_scanning" and type(n.progress) == "function",
+    "plot view: the index pass shows the loading notice", n and n.message)
+  settle()
+  rebuildView()
+  check(notice() == nil, "plot view: the chooser follows the index")
+  check(G.applyColumns({ 3, 4 }), "plot view: curves applied")
+  st.pickCurves = false
+  rebuildView()
+  n = notice()
+  check(n ~= nil and n.message == "graph_reading", "plot view: reading the chosen curves shows the loading notice", n and n.message)
+  local p0 = n and n.progress() or 1
+  local k = 0
+  while n and G.getReading() == "window" and n.progress() <= p0 and k < 100000 do G.tick(); k = k + 1 end
+  check(n ~= nil and G.getReading() == "window" and n.progress() > p0, "plot view: the notice's bar follows the read")
+  settle()
+  rebuildView()
+  check(notice() == nil and button(ctx, "graph_full") ~= nil, "plot view: the plot is drawn once the read is done")
+  local zooms = 0
+  repeat
+    button(ctx, "+").press()
+    zooms = zooms + 1
+    rebuildView()
+    n = notice()
+    if n == nil then settle(); rebuildView() end
+  until n ~= nil or zooms >= 6
+  check(n ~= nil and n.message == "graph_reading", "plot view: a zoom to a window not read yet shows the notice", zooms)
+  settle()
+  rebuildView()
+  check(notice() == nil, "plot view: the zoomed plot is drawn once its window is read")
+  local before = reads.bytes
+  button(ctx, "graph_full").press()
+  rebuildView()
+  check(notice() == nil and reads.bytes == before, "plot view: a zoom back to the window already read keeps the plot up")
+  settle()
+  check(reads.bytes == before, "plot view: and reads nothing", reads.bytes - before)
+  page.onClose()
+end
+
 print(string.format("Logs page: %d checks, %d failures", checks, failures))
 os.exit(failures == 0 and 0 or 1)
