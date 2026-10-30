@@ -321,6 +321,11 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
     -- Rendered with a host that opens pages, so the extra buttons are laid out too.
     w.openPage = function() end
     measure("definition",function() w.cards = load(PATH .. "steps/" .. name .. ".lua")(w) end)
+    if n==5 then
+      -- The previews show the values a profile read from the FC holds, not placeholders.
+      local tuning=load("tasks/msp/api/rc_tuning.lua");w.rateTunings=w.rateTunings or {}
+      for _,p in ipairs(w.rateProfiles) do w.rateTunings[p]=w.rateTunings[p] or tuning.parse(tuning.simulatorResponse) end
+    end
     if n==2 then
       w.data.rx_channels={channels={1500,1500,1500,1500,1500,1500,1500,1500}}
       w.data.rx_channels.channels[w.data.rx_map.throttle+1]=1000
@@ -503,6 +508,8 @@ for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
     export("rates","profile-"..card,function()
       ranges[1]=H.mapped(2,1,1000,2000,1,3);ranges[2]=H.mapped(1,1,1000,2000,1,3)
       w.rateStyles={[0]=1,[1]=2,[2]=3}
+      local tuning=load("tasks/msp/api/rc_tuning.lua");w.rateTunings=w.rateTunings or {}
+      for p=0,2 do w.rateTunings[p]=w.rateTunings[p] or tuning.parse(tuning.simulatorResponse) end
     end,card)
   end
   ranges[1],ranges[2]=pid,rate;w.rateStyles={}
