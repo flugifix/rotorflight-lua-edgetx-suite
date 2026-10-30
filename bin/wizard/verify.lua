@@ -454,7 +454,7 @@ do
     elseif type(v) == "function" then
       seen[v] = true
       if stepCode(v) then found[#found + 1] = path; return end
-      -- The harness's own stubs reach its exported scenes; only shipped code is followed.
+      -- The test stubs reach the exported scenes; only shipped code is followed.
       if string.find(debug.getinfo(v, "S").source, "src/rfsuite/", 1, true) == nil then return end
       for i = 1, 255 do
         local name, value = debug.getupvalue(v, i)
