@@ -52,6 +52,9 @@ a spreadsheet or another program's CSV file in the same folder is left out.
 
 ## The summary
 
+While *View* reads the log, a bar shows how much of the file has been read so far. The plot's
+own loading notice shows the same.
+
 | Row | What it shows |
 | --- | --- |
 | Flight Time | The time from the first to the last row of the log, and the number of rows. |

@@ -1,0 +1,2 @@
+- **Logs loading bar follows the reading of the log (`app/pages/logs/page.lua`)**:
+  - The bar of the summary's and the plot's loading notice was handed a number once and stayed at 0 % until the log had been read. It now reads the engine's position on every refresh (#962).

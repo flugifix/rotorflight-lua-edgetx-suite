@@ -277,6 +277,17 @@ local function closeGraph()
   collectgarbage("collect")
 end
 
+-- The loading notices take these functions rather than a number: the overlay reads a function
+-- again on every refresh, while a number is drawn once, and nothing rebuilds the notice before
+-- the walk has finished. Defined once, so no build creates a closure for them.
+local function readingProgress()
+  return (Graph and state.reading) and Graph.getProgress() or 0
+end
+
+local function graphProgress()
+  return Graph and Graph.getProgress() or 0
+end
+
 local function pageText(i18n, key)
   if t then
     local translated = t(i18n, key)
@@ -1309,7 +1320,7 @@ local function buildGraphView(children, x, y, w, availH, i18n)
         x = x, y = y, w = w, h = availH,
         title = pageText(i18n, "loading_title"),
         message = pageText(i18n, "graph_scanning"),
-        progress = Graph.getProgress()
+        progress = graphProgress
       })
     end
     return
@@ -1346,7 +1357,7 @@ function M.build(ctx)
       h = h,
       title = pageText(i18n, "loading_title"),
       message = pageText(i18n, "loading_message"),
-      progress = (Graph and state.reading) and Graph.getProgress() or 0
+      progress = readingProgress
     })
     return
   end

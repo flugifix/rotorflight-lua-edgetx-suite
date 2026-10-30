@@ -68,6 +68,53 @@ local function ceilingCall(fn, ...)
   return res[1], used, res[2]
 end
 
+-- An in-memory card for the files a log view reads, through EdgeTX's call forms.
+local files = {}
+local reads = { bytes = 0 }
+io = {
+  open = function(path) if files[path] then return { path = path, pos = 0 } end return nil end,
+  read = function(h, n)
+    local s = string.sub(files[h.path], h.pos + 1, h.pos + n)
+    h.pos = h.pos + #s
+    reads.bytes = reads.bytes + #s
+    if s == "" then return nil end
+    return s
+  end,
+  seek = function(h, off) h.pos = off; return off end,
+  close = function() end
+}
+fstat = function(path) if files[path] then return { size = #files[path] } end return nil end
+
+-- A telemetry log as EdgeTX writes it: ten rows a second, every column moving.
+local function makeLog(rows, startSec)
+  local out = { "Date,Time,Vbat(V),Curr(A),Hspd(rpm),EscT(C),1RSS(dB),RQly(%),Capa(mAh)" }
+  for i = 0, rows - 1 do
+    local t = startSec + i / 10
+    out[#out + 1] = string.format("2026-10-01,%02d:%02d:%02d.%03d,%.2f,%.2f,%d,%d,%d,%d,%d",
+      math.floor(t / 3600), math.floor(t / 60) % 60, math.floor(t) % 60, (i % 10) * 100,
+      24 - (i % 100) / 100, 10 + (i % 37) / 10, 1800 + i % 101, 30 + i % 11, -70 + i % 13, 90 + i % 11, i)
+  end
+  return table.concat(out, string.char(10)) .. string.char(10)
+end
+
+local LOG = "/LOGS/Heli-2026-10-01-120000.csv"
+files[LOG] = makeLog(3000, 12 * 3600)
+
+-- A page with LOG chosen for its summary, built once as the list's View button leaves it.
+local function openSummary(page, isHosted)
+  hosted = isHosted
+  local st = find(page.wakeup, "state")
+  st.selectedFile = "Heli-2026-10-01-120000.csv"
+  st.selectedFilePath = LOG
+  st.selectedModel = "Heli"
+  st.summary = nil
+  st.loading = true
+  st.reading = false
+  local ctx = { children = {}, x = 0, y = 0, w = 800, h = 430, requestRebuild = function() end }
+  page.build(ctx)
+  return st, ctx
+end
+
 local function loadPage()
   return assert(loadfile(PAGE))()
 end
@@ -193,6 +240,25 @@ end
   end
   check(done and #scan.found == 301 and unique and ordered, "sort stopped at a low ceiling: complete, unique, ordered",
     tostring(done) .. " " .. #scan.found)
+end
+
+-- #962: the summary's loading bar follows the walk. The notice is built before the walk starts
+-- and not rebuilt until it ends, so the bar moves only if it reads the engine on every refresh.
+for _, isHosted in ipairs({ true, false }) do
+  local page = loadPage()
+  local st, ctx = openSummary(page, isHosted)
+  local notice = ctx.children[1]
+  local label = "summary bar " .. (isHosted and "hosted" or "tool")
+  check(notice ~= nil and type(notice.progress) == "function", label .. ": the bar reads a function", notice and type(notice.progress))
+  for _ = 1, 3 do page.wakeup(ctx) end
+  local g = find(page.wakeup, "Graph")
+  local shown = notice and type(notice.progress) == "function" and notice.progress() or (notice and notice.progress)
+  check(g ~= nil and g.getProgress() > 0, label .. ": the walk has moved")
+  check(g ~= nil and shown == g.getProgress() and shown > 0, label .. ": the bar shows the walk's position", shown)
+  local n = 0
+  while st.loading and n < 10000 do page.wakeup(ctx); n = n + 1 end
+  check(st.summary ~= nil, label .. ": summary read")
+  page.onClose()
 end
 
 print(string.format("Logs page: %d checks, %d failures", checks, failures))
