@@ -112,6 +112,7 @@ local function resetState()
   S.prevT = 0
   S.nline = 0
   S.extEndOff = HUGE
+  S.progEnd = 0
   S.extPrevT = -HUGE
   -- The date the index pass is on and the day it counts for it, replaced as one table so a
   -- call stopped at a change of date counts no day twice. A day is a change of date, which is
@@ -628,6 +629,29 @@ local function indexBefore(t0)
   return best
 end
 
+-- Where in the file a read that stops past t1 ends, at the latest: the offset of the first
+-- index entry of the session after t1, else the session's end, else the end of the file. The
+-- loading bar of a window read is measured against it, so it fills over the part being read
+-- rather than over the rest of the file.
+local function readEndOff(t1)
+  local idx = S.index
+  local s = S.sessions[S.sessionIndex]
+  local lo, hi = 1, #idx
+  if s and s.idx0 then lo, hi = s.idx0, s.idx1 end
+  local off = (s and s.endOff) or S.fsize
+  while lo <= hi do
+    local mid = math.floor((lo + hi) / 2)
+    if idx[mid].t > t1 then
+      if idx[mid].off < off then off = idx[mid].off end
+      hi = mid - 1
+    else
+      lo = mid + 1
+    end
+  end
+  if off > S.fsize then off = S.fsize end
+  return off
+end
+
 -- One precompiled pattern pulls Date, Time and the wanted columns out of a line
 -- in a single call. Columns that are not wanted are skipped without a capture,
 -- which is what keeps a curve on column 90 as cheap as one on column 4.
@@ -816,6 +840,7 @@ local function beginExtract(t0, t1)
   S.seekTo = indexBefore(e0)
   S.extEndOff = (S.sessions[S.sessionIndex] or {}).endOff or HUGE
   S.progBase = S.seekTo and S.seekTo.off or 0
+  S.progEnd = readEndOff(S.extStopT)
   S.resetK = 1
   S.progress = 0
   -- The bucket set the last re-bucketing read from is not read again: the extraction ends by
@@ -864,6 +889,7 @@ local function beginShift(cur, d)
   S.seekTo = indexBefore(S.extT0)
   S.extEndOff = (S.sessions[S.sessionIndex] or {}).endOff or HUGE
   S.progBase = S.seekTo and S.seekTo.off or 0
+  S.progEnd = readEndOff(S.extStopT)
   S.resetK = 1
   S.progress = 0
   S.rbSrc = nil
@@ -1540,14 +1566,22 @@ tickUnit = function()
 
   if ph == "extract" then
     local r = pumpLines(extractLine, EXTRACT_LINES_TICK)
-    if S.fsize > S.progBase then
-      S.progress = (S.filePos - S.progBase) / (S.fsize - S.progBase)
+    if S.progEnd > S.progBase then
+      S.progress = (S.filePos - S.progBase) / (S.progEnd - S.progBase)
     end
     if r == "eof" or r == "stop" then
       -- A read a stopped tick interrupted can lack rows (see G.tick); it is drawn, but not
       -- kept to serve a later window.
       if not S.interrupted then cacheAdd(S.extEntry) end
-      S.phase, S.rbSrc, S.rbK, S.extEntry = "rebkt", S.extEntry, 1, nil
+      -- One field per statement, the phase after the bucket set it hands over and before the
+      -- entry is let go: a multiple assignment stores right to left, so a stop inside it could
+      -- leave the extraction running without its entry, and then hand nothing to the
+      -- re-bucketing. A stop between these statements repeats the end of the read or goes on
+      -- with the re-bucketing, which both find what they need.
+      S.rbSrc = S.extEntry
+      S.rbK = 1
+      S.phase = "rebkt"
+      S.extEntry = nil
     end
     return false
   end

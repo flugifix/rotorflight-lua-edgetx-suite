@@ -1,5 +1,7 @@
--- Host checks for the Logs page (app/pages/logs/page.lua), driven the way the tool opened from
--- the dashboard drives it: the page's own wakeup steps under a 20 000-instruction ceiling.
+-- Host checks for the Logs page (app/pages/logs/page.lua) and its engine (graph.lua), mostly in
+-- the hosted mode of the tool opened from the dashboard. The checks that are about the
+-- instruction limit run a call under a 20 000-instruction ceiling (ceilingCall) or stop it at
+-- every instruction (sweep); the others call the page and the engine without a limit.
 -- Run from the repository root: lua5.3 bin/logs/verify_logs_page.lua
 local checks, failures = 0, 0
 local function check(ok, label, detail)
@@ -1002,6 +1004,55 @@ do
   check(total > 5 and bad == 0, "finished-index wakeup stopped at each of " .. total .. " instructions: a rebuild is asked for", firstBad)
 end
 
+-- The tick that ends a window read, stopped at each of its instructions: the read's bucket set is
+-- handed to the re-bucketing, so a plot of the window is drawn, never an empty one. A stop may
+-- cost the row the tick was on (the pump has moved past it), so only an unstopped tick has to
+-- draw exactly the uninterrupted read's points.
+do
+  local function freshExtract()
+    local G = assert(loadfile(GRAPH))()
+    G.open(LOG, { stats = false })
+    settleG(G)
+    G.setGeometry(0, 0, 760, 200)
+    G.applyColumns({ 3, 4 })
+    return G
+  end
+  local R = freshExtract()
+  local lastTick = 0
+  while R.isBusy() do
+    if R.getPhase() == "extract" then lastTick = lastTick + 1 end
+    R.tick()
+  end
+  local refPts = R.getPoints(1)
+  local function samePoints(pts)
+    if type(pts) ~= "table" or #pts ~= #refPts or #pts == 0 then return false end
+    for i = 1, #pts do
+      if pts[i][1] ~= refPts[i][1] or pts[i][2] ~= refPts[i][2] then return false end
+    end
+    return true
+  end
+  local total, bad, firstBad = sweep(function()
+    local G = freshExtract()
+    local n = 0
+    while G.isBusy() do
+      if G.getPhase() == "extract" then
+        n = n + 1
+        if n == lastTick then break end
+      end
+      G.tick()
+    end
+    return { G = G }
+  end, function(st) st.G.tick() end, function(st, stopped)
+    settleG(st.G)
+    local pts = st.G.getPoints(1)
+    local fine = not st.G.isCurveEmpty(1) and #pts == #refPts and (stopped or samePoints(pts))
+    st.G.close()
+    return fine, #pts .. " points of " .. #refPts
+  end)
+  check(lastTick > 1 and #refPts > 0 and total > 50 and bad == 0,
+    "end of a window read stopped at each of its " .. total .. " instructions: the window's plot is drawn", firstBad)
+end
+
 -- The line pump: a walk stopped at any instruction hands no row on twice. Twelve rows of about
 -- 900 bytes span three 4 kB chunks, so every chunk change is among the stops. A stop may cost
 -- rows (the read from the card has already moved on); it may never count one twice.
@@ -1030,28 +1081,41 @@ do
 end
 
 -- The plot view reports every read of the card with the loading notice, its bar following the
--- engine, and draws the plot once the read is done: the index pass, the chosen curves, a zoom to
--- a window not read yet. Control: a zoom back to the window already read reads nothing and
--- leaves the plot up.
+-- engine, and the plot comes back once the read is done. The view is built only when the page
+-- asks for it, as the host does: the index pass, the chosen curves, a zoom to a window not read
+-- yet, and a read whose finishing tick lost its answer. Control: a zoom back to the window
+-- already read reads nothing and leaves the plot up.
 do
   local page, st, ctx = listPage(true)
-  button(ctx, "graph_open").press()
-  local function rebuildView() ctx.children = {}; page.build(ctx) end
+  local pending = false
+  ctx.requestRebuild = function() pending = true end
+  local function rebuildView() pending = false; ctx.children = {}; page.build(ctx) end
+  local function untilRebuild()
+    local k = 0
+    pending = false
+    while not pending and k < 20000 do page.wakeup(ctx); k = k + 1 end
+    return pending
+  end
   local function notice()
     for _, c in ipairs(ctx.children) do
       if c.title == "loading_title" then return c end
     end
     return nil
   end
-  local G = find(page.wakeup, "Graph")
-  local function settle() local k = 0; while G.isBusy() and k < 100000 do page.wakeup(ctx); k = k + 1 end end
+  local G
+  local function plotted()
+    return notice() == nil and not G.isBusy() and not G.isCurveEmpty(1) and #G.getPoints(1) > 0
+  end
+  rebuildView()
+  button(ctx, "graph_open").press()
+  G = find(page.wakeup, "Graph")
   rebuildView()
   local n = notice()
   check(n ~= nil and n.message == "graph_scanning" and type(n.progress) == "function",
     "plot view: the index pass shows the loading notice", n and n.message)
-  settle()
+  check(untilRebuild(), "plot view: the page asks for a build once the index is done")
   rebuildView()
-  check(notice() == nil, "plot view: the chooser follows the index")
+  check(notice() == nil and not G.isBusy(), "plot view: the chooser follows the index")
   check(G.applyColumns({ 3, 4 }), "plot view: curves applied")
   st.pickCurves = false
   rebuildView()
@@ -1061,27 +1125,39 @@ do
   local k = 0
   while n and G.getReading() == "window" and n.progress() <= p0 and k < 100000 do G.tick(); k = k + 1 end
   check(n ~= nil and G.getReading() == "window" and n.progress() > p0, "plot view: the notice's bar follows the read")
-  settle()
+  check(untilRebuild(), "plot view: the page asks for a build once the curves are read")
   rebuildView()
-  check(notice() == nil and button(ctx, "graph_full") ~= nil, "plot view: the plot is drawn once the read is done")
+  check(plotted(), "plot view: the plot is drawn once the read is done")
   local zooms = 0
   repeat
     button(ctx, "+").press()
     zooms = zooms + 1
     rebuildView()
     n = notice()
-    if n == nil then settle(); rebuildView() end
+    if n == nil then untilRebuild(); rebuildView() end
   until n ~= nil or zooms >= 6
   check(n ~= nil and n.message == "graph_reading", "plot view: a zoom to a window not read yet shows the notice", zooms)
-  settle()
+  check(untilRebuild(), "plot view: the page asks for a build once the zoomed window is read")
   rebuildView()
-  check(notice() == nil, "plot view: the zoomed plot is drawn once its window is read")
+  check(plotted(), "plot view: the zoomed plot is drawn once its window is read")
   local before = reads.bytes
   button(ctx, "graph_full").press()
+  check(pending, "plot view: a zoom back asks for a build")
   rebuildView()
   check(notice() == nil and reads.bytes == before, "plot view: a zoom back to the window already read keeps the plot up")
-  settle()
-  check(reads.bytes == before, "plot view: and reads nothing", reads.bytes - before)
+  untilRebuild()
+  rebuildView()
+  check(plotted() and reads.bytes == before, "plot view: and draws it without reading", reads.bytes - before)
+  -- The tick that finishes a window read answers true; where that answer is lost, the next
+  -- wakeup still asks for the build that takes the notice down.
+  check(G.applyColumns({ 5 }), "lost window completion: other curves applied")
+  rebuildView()
+  check(notice() ~= nil, "lost window completion: the notice is up")
+  k = 0
+  while G.isBusy() and k < 100000 do G.tick(); k = k + 1 end
+  check(untilRebuild(), "lost window completion: the next wakeup asks for a build")
+  rebuildView()
+  check(plotted(), "lost window completion: the plot is drawn")
   page.onClose()
 end
 

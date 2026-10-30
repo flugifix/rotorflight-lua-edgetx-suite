@@ -97,10 +97,10 @@ only the curves are chosen again.
 Paging a zoomed plot moves it by about half a window. Where the window on screen was read at the
 screen's resolution, the part both windows share is kept and only the newly shown part is read;
 at either end of the flight the window is read whole.
-Whenever the plot reads the file -- the first time it is opened, after *Show* with other curves
+Whenever the plot reads the file -- its index when opened from the list, after *Show* with other curves
 or another flight, and on a zoom or page step whose window has not been read yet -- the plot gives
-way to the loading notice, with a bar for how much of the part being read is done. A zoom back to
-a window that was already read is drawn at once.
+way to the loading notice, with a bar for how far that read has got. A window the plot still holds
+from an earlier read (it keeps the last few) is drawn again without the notice.
 
 Changing the curves while a plot is still being read is safe. If the tool reaches its
 instruction limit in the middle of a change, the plot stays empty instead of the page failing
