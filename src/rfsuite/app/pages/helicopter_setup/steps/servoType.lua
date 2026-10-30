@@ -17,12 +17,16 @@ return function(w)
     },
   }
   local function group(tail) return tail and "tail" or "cyclic" end
+  -- The servos of each group, read once: the swash layout cannot change within this step, and
+  -- w:servos() builds a new list, too costly for a getter the screen calls on every refresh.
+  local members = { [false] = {}, [true] = {} }
+  for _, index in ipairs(w:servos()) do local list = members[index == 3]; list[#list + 1] = index end
   local function apply(tail, kind)
     if not w.checks.unplugged then w.message = L.confirmCheck; return end
     local preset = TYPES[group(tail)][kind]
     if not preset then w.message=L.servoHzQuick;return end
-    for _, index in ipairs(w:servos()) do
-      if (index == 3) == tail then
+    for _, index in ipairs(members[tail]) do
+      do
         local servo = w.data.servo_configurations.servos[index]
         local narrow = preset.mid == 760
         if (servo.mid <= 860) ~= narrow then
@@ -39,8 +43,8 @@ return function(w)
   -- The type every servo of the group matches, or 0 when they differ or match none.
   local function current(tail)
     local result
-    for _, index in ipairs(w:servos()) do
-      if (index == 3) == tail then
+    for _, index in ipairs(members[tail]) do
+      do
         local s = w.data.servo_configurations.servos[index]
         local kind = 0
         for n, preset in ipairs(TYPES[group(tail)]) do
@@ -104,8 +108,7 @@ return function(w)
   -- One card per group: the servo type and its geometry correction (a motorised tail has neither).
   local cards={}
   for _,tail in ipairs({false,true}) do
-    local indices={}
-    for _,index in ipairs(w:servos()) do if (index==3)==tail then indices[#indices+1]=index end end
+    local indices=members[tail]
     if #indices>0 and not (tail and w:motorised()) then
       local rows={w:check("unplugged",L.servosUnplugged),row(tail,tail and L.tailServo or L.cyclicServos),geometryRow(indices)}
       local card=w:cardDef(tail and L.tailServo or L.cyclicServos,L.servoHzHint.."\n"..L.geometryHint,rows,nil,"pulses")
