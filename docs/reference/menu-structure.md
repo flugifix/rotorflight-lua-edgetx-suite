@@ -27,6 +27,369 @@ so it matches the code it was generated from.
 
 **119 entries, 98 of them open a page, 62 of those pages are documented.**
 
+## Diagrams
+
+The same tree drawn as charts, generated with the tables below. The border says what
+an entry is: blue a menu, green a page that is documented, orange and dashed a page
+with no documentation yet, grey and dotted an entry that opens neither a page file
+nor a menu with entries. A page that also opens a menu is drawn as a page.
+
+### Overview
+
+The sections and every menu in them; the pages of each menu are in the charts that
+follow.
+
+```mermaid
+flowchart LR
+  n0["Configuration"]:::section
+  n1["Flight Tuning"]:::menu
+  n0 --> n1
+  n2["Advanced"]:::menu
+  n1 --> n2
+  n3["Rates (Advanced)"]:::menu
+  n2 --> n3
+  n4["Setup"]:::menu
+  n0 --> n4
+  n5["Mixer"]:::menu
+  n4 --> n5
+  n6["Servos"]:::menu
+  n4 --> n6
+  n7["Controls"]:::menu
+  n4 --> n7
+  n8["Beepers"]:::menu
+  n7 --> n8
+  n9["Blackbox"]:::menu
+  n7 --> n9
+  n10["Power"]:::menu
+  n4 --> n10
+  n11["ESC #amp; Motors"]:::menu
+  n4 --> n11
+  n12["ESC Tools"]:::menu
+  n11 --> n12
+  n13["Governor"]:::menu
+  n4 --> n13
+  n14["Wizards"]:::menu
+  n0 --> n14
+  n15["System"]:::section
+  n16["Tools"]:::menu
+  n15 --> n16
+  n17["Diagnostics"]:::menu
+  n16 --> n17
+  n18["Logs"]:::documented
+  n15 --> n18
+  n19["Settings"]:::menu
+  n15 --> n19
+  n20["Dashboard"]:::menu
+  n19 --> n20
+  n21["Audio"]:::undocumented
+  n19 --> n21
+  n22["Events"]:::undocumented
+  n21 --> n22
+  n23["Developer"]:::menu
+  n15 --> n23
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
+### Flight Tuning
+
+```mermaid
+flowchart LR
+  n0["Flight Tuning"]:::menu
+  n1["PIDs"]:::documented
+  n0 --> n1
+  n2["Rates"]:::documented
+  n0 --> n2
+  n3["Tune Advisor"]:::documented
+  n0 --> n3
+  n4["Governor"]:::documented
+  n0 --> n4
+  n5["Advanced"]:::menu
+  n0 --> n5
+  n6["Filters"]:::documented
+  n5 --> n6
+  n7["PID Controller"]:::documented
+  n5 --> n7
+  n8["PID Bandwidth"]:::documented
+  n5 --> n8
+  n9["Autolevel"]:::documented
+  n5 --> n9
+  n10["Main Rotor"]:::documented
+  n5 --> n10
+  n11["Tail Rotor"]:::documented
+  n5 --> n11
+  n12["Rescue"]:::documented
+  n5 --> n12
+  n13["Rates (Advanced)"]:::menu
+  n5 --> n13
+  n14["Advanced"]:::documented
+  n13 --> n14
+  n15["Cyclic Behaviour"]:::documented
+  n13 --> n15
+  n16["Rate Table"]:::documented
+  n13 --> n16
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
+### Setup
+
+```mermaid
+flowchart LR
+  n0["Setup"]:::menu
+  n1["Configuration"]:::undocumented
+  n0 --> n1
+  n2["Radio Config"]:::undocumented
+  n0 --> n2
+  n3["Telemetry"]:::documented
+  n0 --> n3
+  n4["Accelerometer"]:::documented
+  n0 --> n4
+  n5["Alignment"]:::documented
+  n0 --> n5
+  n6["Ports"]:::documented
+  n0 --> n6
+  n7["Mixer"]:::menu
+  n0 --> n7
+  n8["Swash"]:::undocumented
+  n7 --> n8
+  n9["Geometry"]:::undocumented
+  n7 --> n9
+  n10["Tail"]:::undocumented
+  n7 --> n10
+  n11["Trims"]:::undocumented
+  n7 --> n11
+  n12["Servos"]:::menu
+  n0 --> n12
+  n13["PWM Output"]:::undocumented
+  n12 --> n13
+  n14["BUS Output"]:::undocumented
+  n12 --> n14
+  n15["Controls"]:::menu
+  n0 --> n15
+  n16["Modes"]:::documented
+  n15 --> n16
+  n17["Adjustments"]:::documented
+  n15 --> n17
+  n18["Failsafe"]:::documented
+  n15 --> n18
+  n19["Beepers"]:::menu
+  n15 --> n19
+  n20["Configuration"]:::undocumented
+  n19 --> n20
+  n21["ESC Beacon"]:::undocumented
+  n19 --> n21
+  n22["Blackbox"]:::menu
+  n15 --> n22
+  n23["Configuration"]:::undocumented
+  n22 --> n23
+  n24["Logging"]:::undocumented
+  n22 --> n24
+  n25["Status"]:::documented
+  n22 --> n25
+  n26["Stats"]:::undocumented
+  n15 --> n26
+  n27["Power"]:::menu
+  n0 --> n27
+  n28["Battery"]:::documented
+  n27 --> n28
+  n29["Alerts"]:::undocumented
+  n27 --> n29
+  n30["Sources"]:::documented
+  n27 --> n30
+  n31["SmartFuel"]:::documented
+  n27 --> n31
+  n32["Preferences"]:::documented
+  n27 --> n32
+  n33["ESC #amp; Motors"]:::menu
+  n0 --> n33
+  n34["Throttle"]:::documented
+  n33 --> n34
+  n35["Telemetry"]:::documented
+  n33 --> n35
+  n36["RPM"]:::undocumented
+  n33 --> n36
+  n37["ESC Tools"]:::menu
+  n33 --> n37
+  n38["AM32"]:::documented
+  n37 --> n38
+  n39["BLHeli_S"]:::documented
+  n37 --> n39
+  n40["Bluejay"]:::documented
+  n37 --> n40
+  n41["Flyrotor"]:::documented
+  n37 --> n41
+  n42["Hobbywing V5"]:::documented
+  n37 --> n42
+  n43["OMP"]:::documented
+  n37 --> n43
+  n44["Scorpion"]:::documented
+  n37 --> n44
+  n45["XDFly"]:::documented
+  n37 --> n45
+  n46["YGE"]:::documented
+  n37 --> n46
+  n47["ZTW"]:::documented
+  n37 --> n47
+  n48["Motor Override"]:::undocumented
+  n33 --> n48
+  n49["Governor"]:::menu
+  n0 --> n49
+  n50["General"]:::documented
+  n49 --> n50
+  n51["Ramp Time"]:::documented
+  n49 --> n51
+  n52["Filters"]:::undocumented
+  n49 --> n52
+  n53["Bypass Curve"]:::undocumented
+  n49 --> n53
+  n54["Model"]:::documented
+  n0 --> n54
+  n55["GPS"]:::undocumented
+  n0 --> n55
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
+### Wizards
+
+```mermaid
+flowchart LR
+  n0["Wizards"]:::menu
+  n1["Full initial setup"]:::undocumented
+  n0 --> n1
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
+### Tools
+
+```mermaid
+flowchart LR
+  n0["Tools"]:::menu
+  n1["Copy Profiles"]:::documented
+  n0 --> n1
+  n2["Select Profile"]:::documented
+  n0 --> n2
+  n3["Flight Log"]:::documented
+  n0 --> n3
+  n4["Diagnostics"]:::menu
+  n0 --> n4
+  n5["FBL Status"]:::undocumented
+  n4 --> n5
+  n6["Rotorflight Status"]:::undocumented
+  n4 --> n6
+  n7["ELRS Link"]:::documented
+  n4 --> n7
+  n8["Validate Sensors"]:::documented
+  n4 --> n8
+  n9["SmartFuel"]:::documented
+  n4 --> n9
+  n10["CRSF Sensors"]:::documented
+  n4 --> n10
+  n11["System Status"]:::documented
+  n4 --> n11
+  n12["Session Logs"]:::documented
+  n4 --> n12
+  n13["Info"]:::documented
+  n4 --> n13
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
+### Settings
+
+```mermaid
+flowchart LR
+  n0["Settings"]:::menu
+  n1["General"]:::undocumented
+  n0 --> n1
+  n2["Dashboard"]:::menu
+  n0 --> n2
+  n3["Theme"]:::documented
+  n2 --> n3
+  n4["Settings"]:::empty
+  n2 --> n4
+  n5["Quick Settings"]:::documented
+  n2 --> n5
+  n6["Keys"]:::documented
+  n2 --> n6
+  n7["Standby screen"]:::documented
+  n2 --> n7
+  n8["In-Flight Tuning"]:::documented
+  n2 --> n8
+  n9["Localization"]:::documented
+  n0 --> n9
+  n10["Audio"]:::undocumented
+  n0 --> n10
+  n11["Volume"]:::documented
+  n10 --> n11
+  n12["Events"]:::undocumented
+  n10 --> n12
+  n13["On Connect"]:::undocumented
+  n12 --> n13
+  n14["Arming"]:::undocumented
+  n12 --> n14
+  n15["Governor"]:::undocumented
+  n12 --> n15
+  n16["Voltage"]:::undocumented
+  n12 --> n16
+  n17["Profiles"]:::undocumented
+  n12 --> n17
+  n18["ESC"]:::undocumented
+  n12 --> n18
+  n19["Adjustments"]:::undocumented
+  n12 --> n19
+  n20["SmartFuel"]:::undocumented
+  n12 --> n20
+  n21["Link"]:::undocumented
+  n12 --> n21
+  n22["Rescue"]:::documented
+  n12 --> n22
+  n23["Shortcuts"]:::empty
+  n0 --> n23
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
+### Developer
+
+```mermaid
+flowchart LR
+  n0["Developer"]:::menu
+  n1["MSP Speed"]:::documented
+  n0 --> n1
+  n2["API Tester"]:::undocumented
+  n0 --> n2
+  n3["MSP Experiments"]:::undocumented
+  n0 --> n3
+  n4["Settings"]:::documented
+  n0 --> n4
+  classDef section stroke:#78909c,stroke-width:3px,font-weight:bold
+  classDef menu stroke:#1e88e5,stroke-width:2px
+  classDef documented stroke:#43a047,stroke-width:2px
+  classDef undocumented stroke:#fb8c00,stroke-width:2px,stroke-dasharray:5 4
+  classDef empty stroke:#9e9e9e,stroke-width:2px,stroke-dasharray:2 3
+```
+
 ## Configuration
 
 Section `configuration`.

@@ -151,15 +151,6 @@ def get_theme_metadata(theme_dir, source_name):
         for page in pages:
             if page.get("icon") and not os.path.isfile(os.path.join(theme_dir, page["icon"])):
                 page["icon"] = None
-    # Every icon the row names is checked here, against the staged tree, and the row says so:
-    # the radio then takes a shipped theme's icons as named instead of opening each one in its
-    # theme scan (app/pages/settings/dashboard/lib.lua, appendTheme). An icon that is not there
-    # is left out, which is what the lookup on the radio would have concluded.
-    pages = parse_theme_pages(content)
-    if source_name == "system":
-        for page in pages:
-            if page.get("icon") and not os.path.isfile(os.path.join(theme_dir, page["icon"])):
-                page["icon"] = None
     return {
         "name": name_m.group(1),
         "source": source_name,
