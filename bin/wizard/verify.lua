@@ -388,7 +388,12 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
       if ((n==5 or n==8 or n==9 or n==10 or n==11 or n==12) and c>1) or (n==1 and c>1) or (n==2 and c>1) or (n==6 and c>1) or (n==7 and c==2) or ((n==15 or n==16 or n==17) and c==2) or (n==13 and c>1) or ((n==14 or n==18) and c>1) then
         exported[#exported+1] = {step=n,name=name,task=c,width=size[1],height=size[2],children=resolve(job.children)}
       end
-      if n==6 then
+      if n==6 and c==4 then
+        -- The closing card shows every value of the step; nothing is edited on it.
+        for _,r in ipairs(card.rows) do check(r.kind=="value","swash set card only shows values") end
+        check(#card.rows==5,"swash set card shows type, rotor, tail, tail output and tail servo")
+      end
+      if n==6 and c<=3 then
         -- Each of the three cards swaps its picture in the existing scene when its value moves.
         local m=w.data.mixer_config
         local field=({"swash_type","main_rotor_dir","tail_rotor_mode"})[c]

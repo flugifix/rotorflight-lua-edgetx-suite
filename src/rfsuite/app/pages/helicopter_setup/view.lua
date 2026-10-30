@@ -136,6 +136,19 @@ function M.new(w, ctx, diagrams)
     local formX = large and math.floor(width * 0.43) or illustrated and math.floor(width * 0.35)+4 or 10
     if attitudeCard then formX=large and math.floor(width*.64) or 10;rowY=large and 166 or height-3*controlH-10 end
     local formW = width-formX-(large and 16 or 10)
+    -- The status line's top: everything a card draws ends above it.
+    local cardBottom = height-controlH-(large and 40 or 27)
+    -- A wide-text card gives its summary the full width on large screens; picture and controls
+    -- move down below it. Smaller screens already run the summary across the full width.
+    local wideText = card.wideText and large
+    if wideText then rowY = 156 end
+    -- Overview cards (blocks, a table, bars) draw across the full width below the summary.
+    local overviewY = rowY
+    if card.dense and card.rows and #card.rows > 0 then
+      rowH = math.min(rowH, math.max(18, math.floor((cardBottom-2-rowY)/#card.rows)))
+    end
+    -- Rows may sit at the foot of the card, under a full-width overview.
+    if card.rowsAtFoot then rowY = cardBottom-2-#card.rows*rowH end
     if attitudeCard then
       all[#all+1]=label(10,large and 58 or 30,width-20,w.L.orientationModelHint)
       all[#all].h=large and 32 or 23;all[#all].color=palette.muted
@@ -145,9 +158,19 @@ function M.new(w, ctx, diagrams)
     -- The title sits above the form rows, so on large screens it takes the full width instead of
     -- wrapping into the summary below it.
     all[#all + 1] = label(10, large and 50 or 27, width-20, card.title, large and MIDSIZE or SMLSIZE)
+    if card.badge then
+      -- A short tag such as Required, at the right end of the title band.
+      local bw = (large and 10 or 7)*#card.badge+(large and 20 or 12)
+      local bh = large and 30 or 18
+      all[#all+1] = { type = "rectangle", x = width-bw-12, y = large and 54 or 28, w = bw, h = bh,
+        filled = true, color = palette.warning }
+      all[#all+1] = label(width-bw-12+(large and 10 or 6), large and 56 or 28, bw-(large and 12 or 8), card.badge)
+      all[#all].h, all[#all].color = bh-2, palette.accentText
+      all[#all-2].w = width-bw-34
+    end
     if not card.servo and not (card.instructions and width<400) then
-    all[#all + 1] = label(10, large and 94 or 48, large and formX-30 or width-20, card.summary or card.detail)
-    all[#all].h = large and (illustrated and 98 or height-controlH-154) or rowY-52
+    all[#all + 1] = label(10, large and 94 or 48, large and not wideText and formX-30 or width-20, card.summary or card.detail)
+    all[#all].h = wideText and rowY-100 or large and (illustrated and 98 or height-controlH-154) or rowY-52
     all[#all].color = palette.muted
     -- A card may lead with a warning or a live prompt instead of a muted summary.
     if card.summaryColor then all[#all].color = palette[card.summaryColor] or all[#all].color end
@@ -158,11 +181,105 @@ function M.new(w, ctx, diagrams)
         -- The picture shares the title band so all three instructions fit below it.
         diagrams.append(all, w, card, width-76, 27, 66, 48)
       else
-        local artY = large and 204 or rowY+4
-        local artH = large and 174 or height-controlH-35-artY
+        local artY = wideText and rowY or large and 204 or rowY+4
+        local artH = wideText and cardBottom-6-artY or large and 174 or height-controlH-35-artY
+        -- A caption under the picture carries the values the picture stands for.
+        if card.caption then
+          local lines = large and 3 or 1
+          local lineH = large and 24 or 16
+          artH = artH-lines*lineH
+          all[#all+1] = label(10, artY+artH+2, formX-20, large and card.caption or card.captionShort or card.caption)
+          all[#all].h, all[#all].color = lines*lineH, palette.muted
+        end
         diagrams.append(all, w, card, 6, artY, formX-18, artH)
       end
     end
+    end
+    if card.blocks then
+      -- One framed block per item, side by side, each a title and live lines below it.
+      local n, gap = #card.blocks, 8
+      local bw = math.floor((width-20-(n-1)*gap)/math.max(1,n))
+      local lineH = large and 26 or height <= 272 and 16 or 18
+      local bh = math.min(cardBottom-4-overviewY, (#card.blocks[1].lines+1)*lineH+12)
+      for i, block in ipairs(card.blocks) do
+        local x = 10+(i-1)*(bw+gap)
+        all[#all+1] = { type = "rectangle", x = x, y = overviewY, w = bw, h = bh, color = palette.border, thickness = 2 }
+        all[#all+1] = label(x+6, overviewY+4, bw-12, block.title, large and MIDSIZE or SMLSIZE)
+        all[#all].h = lineH
+        for j, line in ipairs(block.lines) do
+          all[#all+1] = label(x+6, overviewY+4+j*lineH, bw-12, line)
+          all[#all].h = lineH
+          if block.colors and block.colors[j] then
+            local role = block.colors[j]
+            all[#all].color = function() return palette[role()] or palette.text end
+          end
+        end
+      end
+    end
+    if card.table then
+      -- A grid: a header row, then one row per quantity with a cell per column.
+      local t = card.table
+      local cols = #t.columns
+      local firstW = math.floor((width-20)*(large and 0.22 or 0.26))
+      local cw = math.floor((width-20-firstW)/math.max(1,cols))
+      local lineH = large and 40 or height <= 272 and 20 or 24
+      local y = overviewY
+      for c, head in ipairs(t.columns) do
+        all[#all+1] = label(10+firstW+(c-1)*cw, y, cw-6, head)
+        all[#all].h, all[#all].color = lineH-4, palette.muted
+      end
+      for _, row in ipairs(t.rows) do
+        y = y+lineH
+        all[#all+1] = { type = "rectangle", x = 10, y = y-3, w = width-20, h = 1, filled = true, color = palette.border }
+        all[#all+1] = label(10, y, firstW-6, row.label)
+        all[#all].h = lineH-4
+        for c, cell in ipairs(row.cells) do
+          all[#all+1] = label(10+firstW+(c-1)*cw, y, cw-6, cell)
+          all[#all].h = lineH-4
+        end
+      end
+      if t.legend and y+lineH+lineH <= cardBottom then
+        all[#all+1] = label(10, y+lineH, width-20, t.legend)
+        all[#all].h, all[#all].color = math.min(2*lineH, cardBottom-y-lineH-2), palette.muted
+      end
+    end
+    if card.bars then
+      -- One live bar per control: name, the two directions at the ends, the reading in percent.
+      local n = #card.bars
+      local top, bottom = overviewY, rowY-4
+      local lineH = math.max(14, math.floor((bottom-top)/math.max(1,n)))
+      local nameW = math.floor(width*(large and 0.2 or 0.24))
+      local wordW = math.floor(width*(large and 0.1 or 0.12))
+      local pctW = math.floor(width*(large and 0.1 or 0.13))
+      local barX = 10+nameW+wordW
+      local barW = width-20-nameW-2*wordW-pctW
+      for i, bar in ipairs(card.bars) do
+        local y = top+(i-1)*lineH
+        local mid = y+math.floor(lineH/2)
+        all[#all+1] = label(10, y, nameW-4, bar.name)
+        all[#all].h = lineH-2
+        all[#all+1] = label(10+nameW, y, wordW-4, bar.left)
+        all[#all].h, all[#all].color = lineH-2, palette.muted
+        all[#all+1] = { type = "line", pts = {{barX,mid},{barX+barW-1,mid}}, color = palette.border, thickness = 2 }
+        local centre = barX+math.floor(barW/2)
+        all[#all+1] = { type = "line", pts = {{centre,mid-4},{centre,mid+4}}, color = palette.muted, thickness = 2 }
+        -- The marker's points are rewritten in place and only when the reading moves.
+        local pts, last = {{centre,mid-7},{centre,mid+7}}, nil
+        all[#all+1] = { type = "line", color = palette.accent, thickness = 4, pts = function()
+          local value = bar.value()
+          value = value and math.max(-1, math.min(1, value)) or 0
+          if value ~= last then
+            local x = barX+math.floor((barW-1)*(value+1)/2+0.5)
+            pts[1][1], pts[2][1], last = x, x, value
+          end
+          return pts
+        end }
+        all[#all+1] = label(barX+barW+6, y, wordW-4, bar.right)
+        all[#all].h, all[#all].color = lineH-2, palette.muted
+        all[#all+1] = label(width-10-pctW, y, pctW, bar.percent)
+        all[#all].h = lineH-2
+        all[#all].color = function() return bar.done() and palette.accent or palette.text end
+      end
     end
     if card.instructions then
       local instructionY = width<400 and 82 or rowY
@@ -178,6 +295,18 @@ function M.new(w, ctx, diagrams)
         all[#all+1]=label(formX,y+3,formW,r.get)
         all[#all].h=math.min(rowControlH,rowH-3)
         all[#all].visible=function() return r.get()~="" end
+      elseif r.kind == "tile" then
+        -- One of several choices drawn as full-width tiles: the chosen one in the accent colour.
+        -- Two buttons per tile, one shown at a time, so no native colour has to change live.
+        local function press()
+          if enabled() and w:usable() then w:applyEdit(function() if editable() then r.press() end end) end
+        end
+        for _, chosen in ipairs({ false, true }) do
+          button(formX, y, formW, r.label, press, enabled)
+          all[#all].h = rowControlH
+          if chosen then all[#all].color, all[#all].textColor = palette.accent, palette.accentText end
+          all[#all].visible = function() return (r.selected() == true) == chosen end
+        end
       elseif r.kind == "button" or r.kind == "hold" then
         button(formX, y, formW, r.label, function() if enabled() and w:usable() then r.press() end end, enabled,
           r.kind == "hold" and "momentaryButton" or "button", r.release)

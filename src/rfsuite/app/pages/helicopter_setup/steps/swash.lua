@@ -75,5 +75,21 @@ return function(w)
     if w.tailPinRefused == expectedOutput() and w.tailPinNotice then return w.tailPinNotice end
     return L.tailTypeHint
   end
+  -- The step closes on what it set: the layout picture beside every value of the three cards.
+  local swashNames = { L.direct, "120", "135", "140", "90L", "90V" }
+  local done = w:cardDef(L.swashSet, L.tailTypeHint, {
+    w:value(L.swashType, function() return swashNames[w.data.mixer_config.swash_type] or L.unknown end),
+    w:value(L.rotorDirection, function()
+      return w.data.mixer_config.main_rotor_dir == 1 and L.counterclockwise or L.clockwise
+    end),
+    w:value(L.tailType, function()
+      return ({ L.servoTail, L.motorTail, L.bidirectional })[w.data.mixer_config.tail_rotor_mode + 1] or L.unknown
+    end),
+    cards[3].rows[2], cards[3].rows[3]
+  }, nil, "swashType")
+  done.summary = function() return next(w.dirty) and L.stepChanged or L.stepUnchanged end
+  done.dense = true
+  cards[4] = done
+  for _, card in ipairs(cards) do card.wideText = true end
   return cards
 end
