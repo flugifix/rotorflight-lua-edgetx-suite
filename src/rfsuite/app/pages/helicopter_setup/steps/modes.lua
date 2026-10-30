@@ -1,6 +1,8 @@
 return function(w)
   local L, H = w.L, w.math
-  local modes = { {0, L.arm}, {53, L.rescue}, {47, L.trainer} }
+  -- Box id, card title, short name, what the mode does (the Configurator's sentences).
+  local modes = { {0, L.arm, L.armName, L.armHelp}, {53, L.rescue, L.rescueName, L.rescueHelp},
+    {47, L.trainer, L.trainerName, L.trainerHelp} }
   w.modeListen = w.modeListen or {}
   local s = w.modeListen
   local function assigned(id)
@@ -41,9 +43,17 @@ return function(w)
     if w.logInfo then w:keyMessage("switchDetected") end
   end
   w.validate = function() if not assigned(0) then w.message = L.armRequired; return false end; return true end
-  local cards = {}
+  local cards, blocks = {}, {}
+  local function range(id)
+    local _, r = assigned(id)
+    return r and string.format(L.rangeUs, r.range.start, r.range["end"]) or ""
+  end
+  local function channel(id)
+    local _, r = assigned(id)
+    return r and string.format("CH%d", w:channelNumber(r.auxChannelIndex)) or L.notAssigned
+  end
   for _, mode in ipairs(modes) do
-    local id, label = mode[1], mode[2]
+    local id, label, name = mode[1], mode[2], mode[3]
     local present = false; for _, value in ipairs(w.data.boxids.box_ids) do if value == id then present = true end end
     if present then
       local function state()
@@ -55,7 +65,16 @@ return function(w)
         if not v then return nil end
         return v>=r.range.start and v<r.range["end"]
       end
-      cards[#cards + 1] = w:cardDef(label, L.modeHint, {
+      local function word() local v = state(); return v == true and L.stateOn or v == false and L.stateOff or nil end
+      -- What the switch does where it stands now; for ARM that is whether arming would be on.
+      local function now()
+        local v = word()
+        if not v then return assigned(id) and L.unavailable or L.notAssigned end
+        return id == 0 and string.format(L.armState, v) or string.format(L.modeState, name, v)
+      end
+      local function role() return state() == true and "accent" or "text" end
+      local card = w:cardDef(label, L.modeHint, {
+        { kind = "value", fullWidth = true, get = now, color = role },
         w:value(L.assigned, function()
           local _, r = assigned(id)
           if not r then return L.no end
@@ -70,15 +89,21 @@ return function(w)
         end),
         w:button(L.remove, function()
           local i, r = assigned(id); if i then r.range.start, r.range["end"] = 1500, 1500; send(i) end
-        end),
-        w:value(L.active, function()
-          local v=state();return v==true and L.switchOn or v==false and L.switchOff or L.unavailable
         end)
       }, nil, "switch")
-      cards[#cards].rows[4].color=function() return state()==true and "accent" or "text" end
-      cards[#cards].switchState=state
-      cards[#cards].summary=L.modeQuick
+      card.switchState = state
+      card.summary = mode[4]
+      card.badge = id == 0 and L.required or nil
+      card.wideText = true
+      cards[#cards + 1] = card
+      blocks[#blocks + 1] = { title = name, lines = { function() return channel(id) end, function() return range(id) end,
+        function() return word() or "" end }, colors = { nil, nil, role } }
     end
   end
+  -- The step closes on one block per mode: its channel, its range and where the switch is now.
+  local done = w:cardDef(L.switchesDone, L.modeHint, {})
+  done.summary = function() return w.dirty.mode_ranges and L.stepChanged or L.stepUnchanged end
+  done.blocks, done.wideText = blocks, true
+  cards[#cards + 1] = done
   return cards
 end

@@ -118,31 +118,6 @@ function M.append(children, w, card, x, y, width, height)
       end)
     end
     line({{5,149},{210,149}},ink,1)
-  elseif kind == "stickGuide" then
-    -- One large meter for the control the guided check asks for, with both end stops named.
-    local names={L.roll,L.pitch,L.yaw,L.collective}
-    local keys={"aileron","elevator","rudder","collective"}
-    local words={{L.dirLeft,L.dirRight},{L.dirBack,L.dirForward},{L.dirLeft,L.dirRight},{L.dirDown,L.dirUp}}
-    local function axis() return card.target and card.target() or nil end
-    local guideStart=#children+1
-    local heading=text(5,10,210,function() local a=axis();return a and names[a] or L.sticksDone end)
-    heading.font=MIDSIZE
-    line({{10,92},{210,92}},ink,2)
-    line({{10,78},{10,106}},ink,2);line({{210,78},{210,106}},ink,2);line({{110,84},{110,100}},ink,1)
-    meter(10,92,200,function()
-      local a=axis();if not a then return 0 end
-      local channel=w.data.rx_map[keys[a]] or a-1
-      local value=w.data.rx_channels and w.data.rx_channels.channels[channel+1]
-      return value and (value-w.data.rc_config.rc_center)/math.max(1,w.data.rc_config.rc_deflection) or 0
-    end)
-    text(5,116,95,function() local a=axis();return a and words[a][1] or "" end)
-    text(150,116,65,function() local a=axis();return a and words[a][2] or "" end)
-    -- The summary keeps the completed message; hide the drawing so its heading cannot cover the meter.
-    local function visible() return axis()~=nil end
-    for i=guideStart,#children do
-      local item=children[i]
-      if type(item.pts)=="function" then reactiveLine(item,visible) else item.visible=visible end
-    end
   elseif kind == "rates" then
     local function style() return card.rateStyle and card.rateStyle() end
     local sketchStart=#children+1

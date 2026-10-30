@@ -336,7 +336,8 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
       for _,item in ipairs(job.children) do
         if item.y and item.h then check(item.y+item.h<=size[2],name.." fits height") end
         if size[1]>=700 and item.type=="label" and item.y==50 and item.text==card.title and card.art~="attitude" then
-          check(item.w>=size[1]-40,name.." card title spans the full width on large screens")
+          -- A badge (Required) takes the right end of the title band.
+          check(item.w>=size[1]-40-(card.badge and 160 or 0),name.." card title spans the full width on large screens")
         end
         local known=RADIO_PROPS[item.type]
         check(known~=nil,name.." widget type "..tostring(item.type).." is known on the radio")

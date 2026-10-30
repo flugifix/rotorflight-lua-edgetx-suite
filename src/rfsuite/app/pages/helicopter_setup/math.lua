@@ -58,6 +58,11 @@ function M.collective(t)
   if t.rates_type == 6 then return M.round(t.rcRates_4 * 1.25) / 10 end
   if t.rates_type == 4 then return M.round(math.max(t.rcRates_4, t.rates_4) * 2.5) / 10 end
 end
+-- Cyclic and yaw rate in degrees per second at full stick, and their expo in percent.
+function M.rateValues(t)
+  if t.rates_type == 6 then return t.rcRates_1 * 5, t.rcRates_3 * 5, t.rcExpo_1, t.rcExpo_3 end
+  if t.rates_type == 4 then return t.rates_1 * 10, t.rates_3 * 10, t.rcExpo_1, t.rcExpo_3 end
+end
 function M.setCollective(t, degrees)
   if t.rates_type == 6 then t.rcRates_4 = M.round(degrees * 8)
   elseif t.rates_type == 4 then

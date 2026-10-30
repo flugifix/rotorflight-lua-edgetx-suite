@@ -774,9 +774,9 @@ return function(h)
     local rescue=w.cards[2]
     w.data.mode_ranges.mode_ranges[2]={id=53,auxChannelIndex=1,range={start=1800,["end"]=2100}}
     w.data.status.flight_mode_flags=0;eq(rescue.switchState(),false,"VISUAL Rescue reads the FC mode flag")
-    eq(rescue.rows[4].color(),"text","VISUAL an OFF switch reads in the text colour")
+    eq(rescue.rows[1].color(),"text","VISUAL an OFF switch reads in the text colour")
     w.data.status.flight_mode_flags=2;eq(rescue.switchState(),true,"VISUAL Rescue follows an active FC flag")
-    eq(rescue.rows[4].color(),"accent","VISUAL an ON switch is accented")
+    eq(rescue.rows[1].color(),"accent","VISUAL an ON switch is accented")
     w.data.mode_ranges.mode_ranges[2].range["end"]=1800
     eq(rescue.switchState(),nil,"VISUAL unassigned mode stays neutral")
   end)
@@ -888,8 +888,8 @@ return function(h)
     check(w.rebootPending and w.dirty.board_alignment_config,"S01 alignment deferred to reboot gate")
     check(not w.validate(),"S01 physical direction answer required")
   end)
-  case("VISUAL.stick-guide-completion",function()
-    for _,size in ipairs({{480,272},{480,320},{800,480}}) do
+  case("VISUAL.stick-bars",function()
+    for _,size in ipairs({{320,240},{480,272},{480,320},{800,480}}) do
       local w=world();settle(w);w.step=2;local cards=step(w,"receiver");w.card=3
       w.data.rc_config.rc_center,w.data.rc_config.rc_deflection=1500,500
       local function sample(value)
@@ -899,22 +899,27 @@ return function(h)
       end
       sample(1500)
       local scene=h.view.new(w,{w=size[1],h=size[2]},h.diagrams);while not scene:step() do end
-      local function shown(item) return type(item.visible)~="function" or item.visible() end
-      local art={}
+      local count=#scene.children
+      local markers,percents={},{}
       for _,item in ipairs(scene.children) do
-        if item.type=="line" or (item.type=="label" and type(item.text)=="function" and item.font==MIDSIZE) then
-          art[#art+1]=item
-          -- Read points before visibility, as required for native reactive lines.
-          if type(item.pts)=="function" then item.pts() end
-          check(shown(item),"VISUAL unfinished stick guide remains visible at "..size[1].."x"..size[2])
-        end
+        if item.type=="line" and type(item.pts)=="function" then markers[#markers+1]=item end
+        if item.type=="label" and type(item.text)=="function" and type(item.color)=="function" then percents[#percents+1]=item end
       end
-      check(#art>=8,"VISUAL positive control finds stick heading, scale and travel marker")
-      sample(1025);sample(1975)
+      eq(#markers,4,"VISUAL one live marker per control at "..size[1].."x"..size[2])
+      eq(#percents,4,"VISUAL one live reading per control at "..size[1].."x"..size[2])
+      if #markers<4 or #percents<4 then return end
+      local centre=markers[1].pts()[1][1]
+      eq(percents[1].text(),"0 %","VISUAL a centred stick reads 0 %")
+      sample(1975)
+      check(markers[1].pts()[1][1]>centre,"VISUAL the marker follows the stick")
+      eq(percents[1].text(),string.format(L.percent,95),"VISUAL the reading follows the stick")
+      eq(percents[1].color(),w.palette.text,"VISUAL one end stop alone is not the whole travel")
+      sample(1025)
       eq(cards[3].summary(),L.sticksDone,"VISUAL completed message stays unabridged in summary")
-      for _,item in ipairs(art) do check(not shown(item),"VISUAL completed guide cannot overlap its meter at "..size[1].."x"..size[2]) end
-      cards[3].rows[5].press()
-      for _,item in ipairs(art) do check(shown(item),"VISUAL Measure again restores the guide without rebuilding") end
+      eq(percents[1].color(),w.palette.accent,"VISUAL both end stops reached accent the reading")
+      cards[3].rows[1].press()
+      eq(percents[1].color(),w.palette.text,"VISUAL Measure again clears the accent without rebuilding")
+      eq(#scene.children,count,"VISUAL stick readings retain the scene")
     end
   end)
   case("S02.detection-restarts-travel",function()
@@ -935,7 +940,7 @@ return function(h)
       end
       check(not w.rx.detect and w.dirty.rx_map,"S02 detection completes before travel assertions")
       for n=1,4 do
-        eq(cards[3].rows[n].get(),string.format(L.travelPair,0,0),"S02 detection clears both travel sides even for an unchanged map")
+        eq(string.format(L.travelPair,w.rx.travel[n][1],w.rx.travel[n][2]),string.format(L.travelPair,0,0),"S02 detection clears both travel sides even for an unchanged map")
       end
       for i=1,8 do values[i]=1500 end;reply()
       eq(cards[3].summary(),string.format(L.stickGuide,L.roll,L.dirRight),"S02 fresh guided check starts at the first end stop")
@@ -988,9 +993,9 @@ return function(h)
     -- Stick travel: percent of the FC's stick range, both ways, per control.
     w.data.rc_config.rc_center,w.data.rc_config.rc_deflection=1500,500
     eq(cards[3].title,L.checkSticks,"S02 the guided stick check measures the travel")
-    cards[3].rows[5].press()
+    cards[3].rows[1].press()
     for i=1,4 do values[i]=1500 end;w.onLive("rx_channels",raw())
-    eq(cards[3].rows[1].get(),string.format(L.travelPair,0,0),"S02 centred sticks have no travel yet")
+    eq(string.format(L.travelPair,w.rx.travel[1][1],w.rx.travel[1][2]),string.format(L.travelPair,0,0),"S02 centred sticks have no travel yet")
     eq(cards[3].summary(),string.format(L.stickGuide,L.roll,L.dirRight),"S02 the guided check asks for roll right first")
     values[w.data.rx_map.aileron+1]=1000;w.onLive("rx_channels",raw())
     eq(cards[3].summary(),L.stickReversed,"S02 roll moved left while right is asked names the reversed channel")
@@ -1009,8 +1014,8 @@ return function(h)
     values[w.data.rx_map.elevator+1]=1500;values[w.data.rx_map.collective+1]=1500;w.onLive("rx_channels",raw())
     for i=1,4 do values[i]=1000 end;w.onLive("rx_channels",raw())
     for i=1,4 do values[i]=2000 end;values[w.data.rx_map.collective+1]=1950;w.onLive("rx_channels",raw())
-    eq(cards[3].rows[1].get(),string.format(L.travelPair,100,100),"S02 full roll travel reads 100 both ways")
-    eq(cards[3].rows[4].get(),string.format(L.travelPair,100,90),"S02 a collective short of its end reads its travel")
+    eq(string.format(L.travelPair,w.rx.travel[1][1],w.rx.travel[1][2]),string.format(L.travelPair,100,100),"S02 full roll travel reads 100 both ways")
+    eq(string.format(L.travelPair,w.rx.travel[4][1],w.rx.travel[4][2]),string.format(L.travelPair,100,90),"S02 a collective short of its end reads its travel")
     eq(cards[3].summary(),string.format(L.stickGuide,L.collective,L.dirUp),"S02 the guided check asks for the missing end stop")
     w.rx.detect=nil;w.data.status.arming_disable_flags=0
     check(not w.validate() and w.message==L.sticksShort,"S02 a control under 95 percent keeps the step open")
@@ -1031,8 +1036,8 @@ return function(h)
     w.step=3;w:navigate(2,1)
     check(w.rx.travel==nil,"S02 every visit to the receiver step measures the travel anew")
     w.step=2;cards=step(w,"receiver")
-    cards[3].rows[5].press()
-    eq(cards[3].rows[2].get(),string.format(L.travelPair,0,0),"S02 measure again clears the travel")
+    cards[3].rows[1].press()
+    eq(string.format(L.travelPair,w.rx.travel[2][1],w.rx.travel[2][2]),string.format(L.travelPair,0,0),"S02 measure again clears the travel")
     -- The guided check measures each control from where it rested since the prompt appeared.
     for i=1,4 do values[i]=1500 end;w.onLive("rx_channels",raw())
     values[w.data.rx_map.aileron+1]=2000;w.onLive("rx_channels",raw());w.onLive("rx_channels",raw())
@@ -1046,13 +1051,13 @@ return function(h)
     values[w.data.rx_map.collective+1]=2000;w.onLive("rx_channels",raw())
     eq(cards[3].summary(),string.format(L.stickWrongChannel,L.collective),"S02 the parked collective centred and moved up is named")
     values[w.data.rx_map.collective+1]=1500;w.onLive("rx_channels",raw())
-    cards[3].rows[5].press()
+    cards[3].rows[1].press()
     -- Link-affecting receiver settings stay locked; throttle range stays available.
     check(not cards[1].rows[2].enabled() and not cards[1].rows[4].enabled() and not cards[2].rows[1].enabled()
       and not cards[2].rows[2].enabled(),"S02 receiver configuration is locked until Advanced is on")
     for i=2,4 do check(cards[4].rows[i].enabled==nil,"S02 throttle range row stays usable without Advanced") end
     eq(cards[4].summary(),L.throttleQuick,"S02 throttle summary does not ask for Advanced")
-    check(cards[3].rows[5].enabled==nil and cards[1].rows[3].enabled==nil,"S02 the stick check and the USB hint stay usable")
+    check(cards[3].rows[1].enabled==nil and cards[1].rows[3].enabled==nil,"S02 the stick check and the USB hint stay usable")
     cards[1].rows[1].set(2)
     check(cards[1].rows[2].enabled() and cards[1].rows[4].enabled() and cards[2].rows[1].enabled()
       and cards[2].rows[2].enabled(),
@@ -1063,7 +1068,7 @@ return function(h)
   case("REVIEW.mode-first-flick",function()
     local w=world();settle(w);w.step=3;w.data.boxids.box_ids={0}
     w.data.rc={channels={1500,1500,1500,1500,1000,1000}};w.rcAt=getTime()
-    local cards=step(w,"modes");cards[1].rows[2].press()
+    local cards=step(w,"modes");cards[1].rows[3].press()
     local nextValue={channels={1500,1500,1500,1500,1000,2000}}
     w.data.rc=nextValue;w.rcAt=getTime();w.onLive("rc",nextValue)
     h.advance(40);h.measure("mode learning",function() w.onLive("rc",nextValue) end)
@@ -1075,9 +1080,9 @@ return function(h)
       "REVIEW detection message names the stored range, not the raw samples")
     local copy=w:channelSnapshot("rc");w.data.rc.channels[6]=1000
     eq(copy[6],2000,"REVIEW click baseline is a snapshot, not a mutable packet alias")
-    w.rcAt=nil;w.rxChannelsAt=getTime();cards[1].rows[2].press()
+    w.rcAt=nil;w.rxChannelsAt=getTime();cards[1].rows[3].press()
     check(w.modeListen.id==nil and w.message==L.waitChannels,"REVIEW raw-RX freshness cannot substitute for missing RC freshness")
-    w.rcAt=getTime()-201;cards[1].rows[2].press()
+    w.rcAt=getTime()-201;cards[1].rows[3].press()
     check(w.modeListen.id==nil,"REVIEW stale FC channels cannot start learning")
     w.rcAt=getTime();w.step=4;w.profile=nil
     local profiles=step(w,"profiles");profiles[1].rows[1].set(1);profiles[1].rows[2].press()
@@ -1513,20 +1518,20 @@ return function(h)
     local c=step(w,"modes")
     w.data.rx_map.aux1=4
     eq(w:channelNumber(0),5,"S03 displayed receiver channel follows RX_MAP")
-    check(string.find(c[1].rows[1].get(),"CH5",1,true)~=nil,"S03 switch assignment names physical receiver channel")
-    eq(c[1].rows[4].get(),L.switchOn,"S03 ARM shows switch position despite arming inhibit")
-    eq(c[2].rows[4].get(),L.switchOff,"S03 rescue requires actual mode flag")
+    check(string.find(c[1].rows[2].get(),"CH5",1,true)~=nil,"S03 switch assignment names physical receiver channel")
+    eq(c[1].rows[1].get(),string.format(L.armState,L.stateOn),"S03 ARM shows switch position despite arming inhibit")
+    eq(c[2].rows[1].get(),string.format(L.modeState,L.rescueName,L.stateOff),"S03 rescue requires actual mode flag")
     w.data.status.flight_mode_flags=2
-    eq(c[2].rows[4].get(),L.switchOn,"S03 actual rescue mode flag")
-    c[2].rows[3].press();check(w.dirty.mode_ranges,"S03 remove live write")
+    eq(c[2].rows[1].get(),string.format(L.modeState,L.rescueName,L.stateOn),"S03 actual rescue mode flag")
+    c[2].rows[4].press();check(w.dirty.mode_ranges,"S03 remove live write")
     eq(w.data.mode_ranges.mode_ranges[2].range.start,1500,"S03 remove disables slot")
     check(w.validate(),"S03 ARM assignment required and present")
-    c[1].rows[3].press();check(not w.validate(),"S03 missing ARM blocks advance")
+    c[1].rows[4].press();check(not w.validate(),"S03 missing ARM blocks advance")
   end)
   case("S03.switch-settle",function()
     local w=world();w.data.boxids.box_ids={0}
     w.data.rc={channels={1500,1500,1500,1500,1000,1000}};w.rcAt=getTime()
-    local c=step(w,"modes");c[1].rows[2].press()
+    local c=step(w,"modes");c[1].rows[3].press()
     w.onLive("rc",{channels={1500,1500,1500,1500,1000,1000}})
     w.onLive("rc",{channels={1500,1500,1500,1500,1000,2000}})
     h.advance(39);w.onLive("rc",{channels={1500,1500,1500,1500,1000,2000}})
@@ -1662,14 +1667,14 @@ return function(h)
     ranges[1]=H.mapped(2,1,1000,2000,1,3);ranges[2]=H.mapped(1,1,1000,2000,1,3)
     local c=step(w,"rates")
     cardOrder(c,{string.format(L.switchRateProfile,1,1),string.format(L.switchRateProfile,2,2),
-      string.format(L.switchRateProfile,3,3)},"S05")
+      string.format(L.switchRateProfile,3,3),L.ratesSet},"S05")
     c[1].enter();settle(w)
     check(c[1].rows[1].enabled(),"S05 three switch positions enable Suggest")
     c[1].rows[1].press()
     for i=1,3 do eq(w.rateStyles[i-1],i,"S05 Suggest follows switch position "..i) end
     w.rateTunings[0].rcRates_4=80;w.rateTunings[1].rcRates_4=120
-    check(c[1].rows[3].get()~=c[2].rows[2].get(),"S05 collective readout belongs to its profile")
-    c[1].rows[2].set(1);c[2].rows[1].set(4);c[3].rows[1].set(2)
+    check(c[1].caption()~=c[2].caption(),"S05 rate readout belongs to its profile")
+    c[1].rows[2].press();c[2].rows[4].press();c[3].rows[2].press()
     eq(w.rateStyles[0],nil,"S05 Keep current leaves the first profile unwritten")
     eq(w.rateStyles[1],3,"S05 second card edits only profile two")
     eq(w.rateStyles[2],1,"S05 third card edits only profile three")
@@ -1686,8 +1691,8 @@ return function(h)
     end
     eq(count,2,"S05 only the two selected profiles are saved")
     ranges[1],ranges[2]=nil,nil;c=step(w,"rates")
-    cardOrder(c,{string.format(L.rateProfileTitle,w.data.status.current_control_rate_profile_index+1)},"S05 active")
-    eq(c[1].rows[1].label,L.flyingStyle,"S05 active profile has no selector or Suggest")
+    cardOrder(c,{string.format(L.rateProfileTitle,w.data.status.current_control_rate_profile_index+1),L.ratesSet},"S05 active")
+    eq(c[1].rows[1].label,L.styleCustom,"S05 active profile has no selector or Suggest")
     w.rateStyles={};w.rateMatched={}
     eq(c[1].summary(),L.rateNoMatchShort,"S05 unmatched profile explains rate replacement")
     check(string.find(c[1].detail,L.rateNoMatch,1,true)~=nil,"S05 help includes the full unmatched warning")
@@ -1879,7 +1884,7 @@ return function(h)
     eq(table.concat(w.rateProfiles,","),"1,2","S05 only mapped rate profiles offered")
     check(w.rateTunings[1] and w.rateTunings[2] and not w.rateTunings[0],"S05 profiles read individually")
     check(not c[1].rows[1].enabled(),"S05 suggest only offered for three positions")
-    c[1].rows[2].set(2)
+    c[1].rows[3].press()
     q.sent={};w:save();settle(w)
     local writes=0;local selections={}
     for _,m in ipairs(q.sent) do
@@ -5154,7 +5159,7 @@ return function(h)
     if kind=="mode" then
       w.step=3;local c=step(w,"modes")
       local channels={1500,1500,1500,1500,1000,1000,1000,1000}
-      w.data.rc={channels=clone(channels)};w.rcAt=getTime();c[1].rows[2].press()
+      w.data.rc={channels=clone(channels)};w.rcAt=getTime();c[1].rows[3].press()
       channels[6]=2000;w.onLive("rc",{channels=channels});h.advance(40)
       w.onLive("rc",{channels=channels});drain(w)
     else

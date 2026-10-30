@@ -135,9 +135,6 @@ return function(w)
       return channels[(w.data.rx_map[keys[n]] or n - 1) + 1] or "--"
     end
   end
-  local function travel(n)
-    return function() return string.format(L.travelPair, r.travel[n][1], r.travel[n][2]) end
-  end
   -- Receiver configuration stays locked until the pilot unlocks it: a wrong setting can cut
   -- the link this wizard talks over. Throttle range and limits do not change that link.
   local function unlocked() return r.advanced == true end
@@ -198,10 +195,8 @@ return function(w)
         end, enabled=unlocked }
     }, nil, "stickDetect"),
     w:cardDef(L.checkSticks, L.stickGuideHint, {
-      w:value(L.travelRoll, travel(1)), w:value(L.travelPitch, travel(2)), w:value(L.travelYaw, travel(3)),
-      w:value(L.travelCollective, travel(4)),
       w:button(L.travelReset, function() r.travel, r.guideKey = { {0, 0}, {0, 0}, {0, 0}, {0, 0} }, nil end)
-    }, nil, "stickGuide"),
+    }),
     w:cardDef(L.throttleRange, L.throttleCardHint, {
       w:value(L.throttle, throttleNow),
       w:button(function() return r.record and L.useRange or L.record end, function()
@@ -231,10 +226,35 @@ return function(w)
   end
   cards[3].summary=function() return r.wrong or prompt() end
   cards[3].summaryColor, cards[3].summaryBold = "accent", true
-  cards[3].target = target
-  cards[3].dense = true
-  -- Four travel rows and the reset button must end above the feedback line on 480x272 too.
-  cards[3].fitRows = true
+  -- One live bar per control, as the radio sends it: its channel, both directions, the reading in
+  -- percent of the FC's stick range, accented once both end stops are reached.
+  local bars = {}
+  for n = 1, 4 do
+    local channel, name, percent, shown
+    local function value()
+      local v = mapped(n)()
+      local rc = w.data.rc_config
+      if type(v) ~= "number" or not rc then return nil end
+      return (v - rc.rc_center) / math.max(1, rc.rc_deflection)
+    end
+    bars[n] = {
+      name = function()
+        local c = (w.data.rx_map[keys[n]] or n - 1) + 1
+        if c ~= channel then channel, name = c, string.format(L.barName, names[n], c) end
+        return name
+      end,
+      left = words[n][2], right = words[n][1], value = value,
+      percent = function()
+        local v = value()
+        local p = v and H.round(v * 100) or nil
+        if p ~= shown then shown, percent = p, p == 0 and "0 %" or p and string.format(L.percent, p) or "--" end
+        return percent
+      end,
+      -- Navigation clears the measurement before the next scene replaces this one.
+      done = function() local t = r.travel; return t ~= nil and t[n][1] >= TRAVEL and t[n][2] >= TRAVEL end
+    }
+  end
+  cards[3].bars, cards[3].rowsAtFoot, cards[3].wideText = bars, true, true
   cards[4].summary=function()
     if r.record then return r.high>0 and string.format(L.throttleRecording, r.low, r.high) or L.throttleSwitchRange end
     return L.throttleQuick

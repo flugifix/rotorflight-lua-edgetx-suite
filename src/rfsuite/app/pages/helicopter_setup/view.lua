@@ -26,9 +26,20 @@ function M.new(w, ctx, diagrams)
   if card and card.link=="overview" and not large then
     rowH=math.min(rowH,math.floor((height-2*controlH-31-rowY)/4))
   end
+  -- Row slots: below the large layout, tiles go two to a slot.
+  local slotOf, slots, tileCol = {}, 0, 0
+  for i, r in ipairs(card and card.rows or {}) do
+    if r.kind == "tile" and not large then
+      if tileCol == 0 then slots = slots + 1 end
+      slotOf[i], tileCol = { slots, tileCol }, (tileCol + 1) % 2
+    else
+      slots, tileCol = slots + 1, 0
+      slotOf[i] = { slots }
+    end
+  end
   -- A dense card fits all of its rows above the status line; its value rows shrink to the font.
-  if card and card.dense and card.rows and #card.rows>0 then
-    rowH=math.min(rowH,math.max(18,math.floor((height-controlH-(large and 40 or 27)-2-rowY)/#card.rows)))
+  if card and card.dense and slots>0 then
+    rowH=math.min(rowH,math.max(18,math.floor((height-controlH-(large and 40 or 27)-2-rowY)/slots)))
   end
   local rowControlH = controlH
   -- Only opted-in cards on medium displays compress their rows and controls.
@@ -144,11 +155,12 @@ function M.new(w, ctx, diagrams)
     if wideText then rowY = 156 end
     -- Overview cards (blocks, a table, bars) draw across the full width below the summary.
     local overviewY = rowY
-    if card.dense and card.rows and #card.rows > 0 then
-      rowH = math.min(rowH, math.max(18, math.floor((cardBottom-2-rowY)/#card.rows)))
+    if card.dense and slots > 0 then
+      rowH = math.min(rowH, math.max(18, math.floor((cardBottom-2-rowY)/slots)))
+      rowControlH = math.min(rowControlH, rowH-2)
     end
     -- Rows may sit at the foot of the card, under a full-width overview.
-    if card.rowsAtFoot then rowY = cardBottom-2-#card.rows*rowH end
+    if card.rowsAtFoot then rowY = cardBottom-2-slots*rowH end
     if attitudeCard then
       all[#all+1]=label(10,large and 58 or 30,width-20,w.L.orientationModelHint)
       all[#all].h=large and 32 or 23;all[#all].color=palette.muted
@@ -248,9 +260,11 @@ function M.new(w, ctx, diagrams)
       local n = #card.bars
       local top, bottom = overviewY, rowY-4
       local lineH = math.max(14, math.floor((bottom-top)/math.max(1,n)))
-      local nameW = math.floor(width*(large and 0.2 or 0.24))
-      local wordW = math.floor(width*(large and 0.1 or 0.12))
-      local pctW = math.floor(width*(large and 0.1 or 0.13))
+      -- Narrow screens leave the direction words to the prompt above the bars.
+      local words = width >= 400
+      local nameW = math.floor(width*(large and 0.2 or words and 0.24 or 0.38))
+      local wordW = words and math.floor(width*(large and 0.12 or 0.14)) or 0
+      local pctW = math.floor(width*(large and 0.09 or 0.12))
       local barX = 10+nameW+wordW
       local barW = width-20-nameW-2*wordW-pctW
       for i, bar in ipairs(card.bars) do
@@ -258,8 +272,10 @@ function M.new(w, ctx, diagrams)
         local mid = y+math.floor(lineH/2)
         all[#all+1] = label(10, y, nameW-4, bar.name)
         all[#all].h = lineH-2
+        if words then
         all[#all+1] = label(10+nameW, y, wordW-4, bar.left)
         all[#all].h, all[#all].color = lineH-2, palette.muted
+        end
         all[#all+1] = { type = "line", pts = {{barX,mid},{barX+barW-1,mid}}, color = palette.border, thickness = 2 }
         local centre = barX+math.floor(barW/2)
         all[#all+1] = { type = "line", pts = {{centre,mid-4},{centre,mid+4}}, color = palette.muted, thickness = 2 }
@@ -274,8 +290,10 @@ function M.new(w, ctx, diagrams)
           end
           return pts
         end }
+        if words then
         all[#all+1] = label(barX+barW+6, y, wordW-4, bar.right)
         all[#all].h, all[#all].color = lineH-2, palette.muted
+        end
         all[#all+1] = label(width-10-pctW, y, pctW, bar.percent)
         all[#all].h = lineH-2
         all[#all].color = function() return bar.done() and palette.accent or palette.text end
@@ -288,7 +306,7 @@ function M.new(w, ctx, diagrams)
     end
     if card.servo then w.newServoCard(all, w, card, width, height, large, current, diagrams) end
     for i, r in ipairs(card.rows) do
-      local y = rowY + (i-1)*rowH
+      local y = rowY + (slotOf[i][1]-1)*rowH
       local function editable() return current() and (not r.enabled or r.enabled()) end
       local function enabled() return w.canEdit == true and editable() end
       if r.kind == "notice" then
@@ -301,8 +319,13 @@ function M.new(w, ctx, diagrams)
         local function press()
           if enabled() and w:usable() then w:applyEdit(function() if editable() then r.press() end end) end
         end
+        local tileX, tileW = formX, formW
+        if not large then
+          tileW = math.floor((formW-4)/2)
+          tileX = formX + slotOf[i][2]*(tileW+4)
+        end
         for _, chosen in ipairs({ false, true }) do
-          button(formX, y, formW, r.label, press, enabled)
+          button(tileX, y, tileW, r.label, press, enabled)
           all[#all].h = rowControlH
           if chosen then all[#all].color, all[#all].textColor = palette.accent, palette.accentText end
           all[#all].visible = function() return (r.selected() == true) == chosen end
