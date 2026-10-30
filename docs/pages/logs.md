@@ -90,6 +90,9 @@ A column chosen in more than one slot is plotted once.
 *Show* with the curves already plotted keeps the plot as it is, zoom included. Back from the plot
 to the summary keeps the log read, so *Graph* opens again without reading the file a second time;
 only the curves are chosen again.
+Paging a zoomed plot moves it by about half a window. Where the window on screen was read at the
+screen's resolution, the part both windows share is kept and only the newly shown part is read;
+at either end of the flight the window is read whole.
 
 Changing the curves while a plot is still being read is safe. If the tool reaches its
 instruction limit in the middle of a change, the plot stays empty instead of the page failing

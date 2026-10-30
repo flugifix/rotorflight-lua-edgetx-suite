@@ -371,5 +371,131 @@ do
   files[TWO] = nil
 end
 
+-- #967: a pan copies the buckets the old window shares with the new one and reads only the
+-- edge. An oracle computes every bucket of the shown window from LOG's rows directly: bucket i
+-- of an entry holds the rows whose (t - o) * (nb - 1) / span floors to off + i - 1, the last
+-- bucket only a row at exactly t1, as a read that stops past t1 leaves it.
+local function rowsOf(path, cols)
+  local rows = {}
+  for line in string.gmatch(files[path], "[^" .. string.char(10) .. "]+") do
+    local f = {}
+    for v in string.gmatch(line, "[^,]+") do f[#f + 1] = v end
+    local h, mi, se, ms = string.match(f[2] or "", "^(%d%d):(%d%d):(%d%d)%.(%d%d%d)$")
+    if h then
+      local r = { t = ((tonumber(h) * 60 + tonumber(mi)) * 60 + tonumber(se)) * 100 + tonumber(ms) // 10 }
+      for k = 1, #cols do r[k] = tonumber(f[cols[k]]) end
+      rows[#rows + 1] = r
+    end
+  end
+  return rows
+end
+
+local function oracleMismatch(e, rows, ncurves, day)
+  local nb, bad = e.nb, 0
+  local mn, mx = {}, {}
+  for k = 1, ncurves do mn[k], mx[k] = {}, {} end
+  for _, r in ipairs(rows) do
+    local t = r.t + day * 8640000            -- one date: the day the index gives it
+    if t >= e.t0 and t <= e.t1 then
+      local i = math.floor((t - (e.o or e.t0)) * (nb - 1) / e.span) - (e.off or 0) + 1
+      if i >= 1 and i <= nb then
+        for k = 1, ncurves do
+          local v = r[k]
+          if mn[k][i] == nil or v < mn[k][i] then mn[k][i] = v end
+          if mx[k][i] == nil or v > mx[k][i] then mx[k][i] = v end
+        end
+      end
+    end
+  end
+  for k = 1, ncurves do
+    for i = 1, nb do
+      local a, b = e.min[k][i], e.max[k][i]
+      if a == math.huge then a = nil end
+      if b == -math.huge then b = nil end
+      if a ~= mn[k][i] or b ~= mx[k][i] then bad = bad + 1 end
+    end
+  end
+  return bad
+end
+
+-- A longer flight, so a zoomed window spans many index entries: 2 000 s, 20 000 rows.
+local LONG = "/LOGS/Heli-2026-10-01-130000.csv"
+files[LONG] = makeLog(20000, 13 * 3600)
+
+do
+  local G = indexedGraph(LONG)
+  local S = find(G.tick, "S")
+  -- A second engine on the same log reads each window the pan arrives at afresh, for the
+  -- byte comparison.
+  local F = indexedGraph(LONG)
+  local FS = find(F.tick, "S")
+  local freshRead = find(F.pan, "beginExtract")
+  check(plot(F, { 3, 4 }), "pan: fresh engine plotted")
+  local rows = rowsOf(LONG, { 3, 4 })
+  check(plot(G, { 3, 4 }), "pan: plot applied")
+  local function settle() local n = 0; while G.isBusy() and n < 100000 do G.tick(); n = n + 1 end end
+  local day = S.index[1].day
+  for _ = 1, 3 do G.zoom(1); settle() end
+  local e = S.rbSrc
+  check(e ~= nil and e.nb == S.nbuckets and e.t0 == S.winT0, "pan: zoom 3 read a window at the display's resolution")
+  check(e ~= nil and oracleMismatch(e, rows, 2, day) == 0, "pan: the fresh window matches the oracle (control)", e and oracleMismatch(e, rows, 2, day))
+  for _, dir in ipairs({ 1, 1, -1, -1, -1 }) do
+    local before = reads.bytes
+    local w0 = S.winT0
+    G.pan(dir)
+    settle()
+    local spent = reads.bytes - before
+    FS.cache = { FS.cache[1] }                -- the session copy only, too coarse to serve it
+    before = reads.bytes
+    freshRead(S.winT0, S.winT1)
+    local n = 0
+    while F.isBusy() and n < 100000 do F.tick(); n = n + 1 end
+    local fresh = reads.bytes - before
+    e = S.rbSrc
+    local label = "pan " .. (dir > 0 and "right" or "left") .. " from " .. string.format("%.1f", w0)
+    check(e ~= nil and (S.winT0 - w0) * dir > 0, label .. ": the window moved")
+    check(e ~= nil and e.t0 == S.winT0 and e.t1 == S.winT1, label .. ": the window shown is the entry read")
+    check(e ~= nil and oracleMismatch(e, rows, 2, day) == 0, label .. ": every bucket matches the oracle", e and oracleMismatch(e, rows, 2, day))
+    check(not G.isCurveEmpty(1) and not G.isCurveEmpty(2), label .. ": both curves drawn")
+    check(fresh > 0 and spent <= 0.75 * fresh, label .. ": reads at most three quarters of a fresh read",
+      spent .. " of " .. fresh .. " bytes")
+  end
+
+  -- Pans whose calls are stopped at a low ceiling every other call, at points that move from
+  -- round to round: no error but the ceiling's, and a plot that counts as finished matches the
+  -- oracle; one that does not is read afresh by the next pan.
+  for _, low in ipairs({ 150, 400, 1200, 3500 }) do
+    local errors, stops, call = 0, 0, 0
+    local function nextCall(fn, ...)
+      call = call + 1
+      CEILING = (call % 2 == 1) and (low + (call * 37) % low) or 20000
+      local ok = ceilingCall(fn, ...)
+      CEILING = 20000
+      if not ok then stops = stops + 1 end
+    end
+    for _, dir in ipairs({ 1, -1, 1, 1 }) do
+      nextCall(G.pan, dir)
+      local n = 0
+      while G.isBusy() and n < 200000 do nextCall(G.tick); n = n + 1 end
+      if G.isBusy() then errors = errors + 1 end
+    end
+    local e = S.rbSrc
+    local label = "pan stopped at " .. low
+    check(errors == 0, label .. ": every pan finished")
+    check(stops > 0, label .. ": the ceiling stopped calls", stops)
+    check(not S.plotted or (e ~= nil and oracleMismatch(e, rows, 2, day) == 0), label .. ": a finished plot matches the oracle")
+    local cachedBad = 0
+    for _, c in ipairs(S.cache) do
+      if c.nb == S.nbuckets and oracleMismatch(c, rows, 2, day) > 0 then cachedBad = cachedBad + 1 end
+    end
+    check(cachedBad == 0, label .. ": no window in the cache misses rows", cachedBad)
+    G.pan(-1); settle(); G.pan(1); settle()
+    e = S.rbSrc
+    check(S.plotted and e ~= nil and oracleMismatch(e, rows, 2, day) == 0, label .. ": the next pans match the oracle")
+  end
+  G.close()
+  F.close()
+end
+
 print(string.format("Logs page: %d checks, %d failures", checks, failures))
 os.exit(failures == 0 and 0 or 1)

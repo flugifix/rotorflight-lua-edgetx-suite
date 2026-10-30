@@ -646,20 +646,38 @@ local function extractLine(str, s)
   local t = S.day * DAY_CS + tcs
   if t < S.extT0 then return end
   if t > S.extStopT then return false end   -- past the window: the pass is done
-  -- Float arithmetic on purpose: a long session in centiseconds leaves the range
-  -- an integer bucket index could be computed in safely.
-  local bi = math.floor(((t - S.extT0) / S.extSpan) * (S.extNb - 1)) + 1
-  if bi < 1 then bi = 1 elseif bi > S.extNb then bi = S.extNb end
+  -- Float arithmetic on purpose: a long session in centiseconds leaves the range an
+  -- integer bucket index could be computed in safely (a radio's Lua has 32-bit integers),
+  -- so S.extNbF is a float and the product is one. It comes before the division, which
+  -- makes the index the exact floor of the quotient: a sample on a bucket edge lands in the
+  -- same bucket however far the window's start lies from the origin.
+  local bi = math.floor((t - S.extO) * S.extNbF / S.extSpan) - S.extOff + 1
+  if bi < S.extLoB then return end
+  if bi > S.extHiB then
+    if S.extShift then return false end     -- past the buckets a pan reads: the pass is done
+    bi = S.extHiB
+  end
   if s1 ~= nil then accumulate(1, bi, s1) end
   if s2 ~= nil then accumulate(2, bi, s2) end
   if s3 ~= nil then accumulate(3, bi, s3) end
   if s4 ~= nil then accumulate(4, bi, s4) end
 end
 
+-- Bucket i of an entry covers the times whose index (t - o) * (nb - 1) / span floors to
+-- off + i - 1. A window that is read fresh starts its own grid (o = t0, off = 0); a window a
+-- pan has shifted keeps the grid of the one it came from, which is what lets the buckets the
+-- two share be copied rather than read again (beginShift).
+-- The start of bucket b of the grid of entry e (b = off for its first bucket). The product is
+-- taken in floats, as in extractLine, so every caller gets the same value for the same bucket.
+local function gridT(e, b)
+  return e.o + b * (e.span + 0.0) / (e.nb - 1)
+end
+
 local function cacheAlloc(t0, t1, nb)
   local e = {
     t0 = t0, t1 = t1, nb = nb,
     span = (t1 - t0 > 0) and (t1 - t0) or 1,
+    o = t0, off = 0,
     min = {}, max = {}
   }
   for k = 1, #S.curves do e.min[k] = {}; e.max[k] = {} end
@@ -729,6 +747,7 @@ local function beginExtract(t0, t1)
   S.winT0, S.winT1 = t0, t1
   S.winSpan = (t1 - t0 > 0) and (t1 - t0) or 1
   S.extEntry = nil
+  S.shiftSrc, S.shiftD = nil, 0
 
   local src = cacheFind(t0, t1)
   if src ~= nil then
@@ -752,6 +771,8 @@ local function beginExtract(t0, t1)
   S.extSpan = (e1 - e0 > 0) and (e1 - e0) or 1
   S.extNb = nb
   S.extStopT = e1
+  S.extNbF, S.extShift = nb - 1.0, false
+  S.extO, S.extOff, S.extLoB, S.extHiB = e0, 0, 1, nb
   S.seekTo = indexBefore(e0)
   S.progBase = S.seekTo and S.seekTo.off or 0
   S.resetK = 1
@@ -759,6 +780,50 @@ local function beginExtract(t0, t1)
   -- The bucket set the last re-bucketing read from is not read again: the extraction ends by
   -- assigning the next one. Kept until then, it would sit beside the new set whenever the
   -- caller had emptied the cache. Released while idle, before the new phase starts.
+  S.rbSrc = nil
+  S.phase = "reset"
+end
+
+-- A pan by d whole buckets of the window `cur` shows (d > 0 moves right): the new window keeps
+-- cur's grid, its buckets that cur also covers are copied from cur by the reset phase, and only
+-- the buckets the pan exposes are read from the file.
+--
+-- A window's buckets 1 .. nb-1 hold every sample of their times. The last one holds only a
+-- sample at exactly t1, because a read stops past t1; it is never copied. Moving right, it is
+-- read with the exposed buckets. Moving left, it stays empty, which is what a read gives when
+-- t1 is not a whole centisecond; G.pan reads the window afresh when it is.
+local function beginShift(cur, d)
+  local nb = cur.nb
+  local off = cur.off + d
+  local t0 = gridT(cur, off)
+  local t1 = gridT(cur, off + nb - 1)
+  S.phase = nil
+  S.plotted = false
+  S.interrupted, S.tickOpen = false, false
+  S.winT0, S.winT1 = t0, t1
+  S.winSpan = (t1 - t0 > 0) and (t1 - t0) or 1
+  S.extEntry = nil
+
+  local lo, hi
+  if d > 0 then lo, hi = nb - d, nb else lo, hi = 1, -d end
+  local e = cacheAlloc(t0, t1, nb)
+  e.o, e.off, e.span = cur.o, off, cur.span
+  S.extEntry = e
+  S.tgtMin, S.tgtMax = e.min, e.max
+  -- The times of buckets lo..hi: the pass starts one centisecond early, where the bucket index
+  -- decides, and stops past t1 moving right, past bucket hi moving left.
+  local r0 = gridT(cur, off + lo - 1)
+  S.extT0 = math.floor(r0) - 1
+  S.extSpan = cur.span
+  S.extNb = nb
+  S.extStopT = (d > 0) and t1 or gridT(cur, off + hi)
+  S.extNbF, S.extShift = nb - 1.0, true
+  S.extO, S.extOff, S.extLoB, S.extHiB = cur.o, off, lo, hi
+  S.shiftSrc, S.shiftD = cur, d
+  S.seekTo = indexBefore(S.extT0)
+  S.progBase = S.seekTo and S.seekTo.off or 0
+  S.resetK = 1
+  S.progress = 0
   S.rbSrc = nil
   S.phase = "reset"
 end
@@ -930,7 +995,7 @@ function G.releasePlot()
   S.cache = {}
   S.scrMin, S.scrMax = {}, {}
   S.tgtMin, S.tgtMax = nil, nil
-  S.extEntry, S.rbSrc = nil, nil
+  S.extEntry, S.rbSrc, S.shiftSrc = nil, nil, nil
   S.points, S.curveEmpty = {}, {}
   S.curveLo, S.curveHi = {}, {}
   S.grid = {}
@@ -1247,6 +1312,34 @@ function G.pan(dir)
     t0 = t1 - span
   end
   if t0 == S.winT0 then return end
+  -- Half a window in whole buckets of the window shown, when that window was read at the
+  -- display's resolution and the pan stays inside the session: then the half it shares with
+  -- the new one is copied, not read. Clamped at an end of the session, or with no such window,
+  -- the new window is read as before.
+  local cur = S.rbSrc
+  local nb = S.nbuckets
+  if cur ~= nil and S.plotted and cur.nb == nb and cur.t0 == S.winT0 and cur.t1 == S.winT1 then
+    local d = math.floor((nb - 1) / 2) * dir
+    local n0 = gridT(cur, cur.off + d)
+    local n1 = gridT(cur, cur.off + d + nb - 1)
+    if d < -1 and n1 == math.floor(n1) then
+      -- Moving left, a new t1 on a whole centisecond would need its last bucket read (see
+      -- beginShift); one bucket less does not land on one unless every bucket edge does.
+      d = d + 1
+      n0 = gridT(cur, cur.off + d)
+      n1 = gridT(cur, cur.off + d + nb - 1)
+    end
+    if d ~= 0 and n0 >= s.t0 and n1 <= s.t1 then
+      if cacheFind(n0, n1) ~= nil then
+        beginExtract(n0, n1)
+        return
+      end
+      if d > 0 or n1 ~= math.floor(n1) then
+        beginShift(cur, d)
+        return
+      end
+    end
+  end
   beginExtract(t0, t1)
 end
 
@@ -1348,13 +1441,24 @@ tickUnit = function()
   if ph == "reset" then
     local k = S.resetK or 1
     local bmin, bmax = S.tgtMin[k], S.tgtMax[k]
-    for i = 1, S.extNb do
-      bmin[i] = HUGE
-      bmax[i] = -HUGE
+    local src, d = S.shiftSrc, S.shiftD
+    local lo, hi = S.extLoB, S.extHiB
+    local smn, smx = src and src.min[k], src and src.max[k]
+    local nb = S.extNb
+    for i = 1, nb do
+      if smn and i < nb and (i < lo or i > hi) then
+        bmin[i], bmax[i] = smn[i + d], smx[i + d]
+      else
+        bmin[i] = HUGE
+        bmax[i] = -HUGE
+      end
     end
     if k >= #S.curves then
-      S.resetK = nil
+      -- The phase first: a call stopped after it goes on with the seek, not with a reset of
+      -- curve 1 that no longer has the pan's source to copy from.
       S.phase = "seek"
+      S.resetK = nil
+      S.shiftSrc = nil
     else
       S.resetK = k + 1
     end
@@ -1362,6 +1466,7 @@ tickUnit = function()
   end
 
   if ph == "seek" then
+    S.shiftSrc = nil                        -- also where the reset's own release was stopped
     local e = S.seekTo
     if e == nil then
       failWith("no_data")
