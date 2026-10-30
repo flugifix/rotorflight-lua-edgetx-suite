@@ -87,6 +87,9 @@ the offered sets (*Power*, *Battery*, *Link*, *Governor*, whichever this log can
 press *Show*. Zoom, page and a cursor readout work on the plotted flight; where the log holds
 more than one flight, the chooser also offers which one.
 A column chosen in more than one slot is plotted once.
+*Show* with the curves already plotted keeps the plot as it is, zoom included. Back from the plot
+to the summary keeps the log read, so *Graph* opens again without reading the file a second time;
+only the curves are chosen again.
 
 Changing the curves while a plot is still being read is safe. If the tool reaches its
 instruction limit in the middle of a change, the plot stays empty instead of the page failing

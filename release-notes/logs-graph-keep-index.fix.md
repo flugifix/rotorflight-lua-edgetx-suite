@@ -1,0 +1,2 @@
+- **Logs graph opens again without re-reading the log (`app/pages/logs/graph.lua`, `app/pages/logs/page.lua`)**:
+  - Back from the plot released the engine and its index, so the next *Graph* read the whole file again; it now drops only the plot's data and keeps the index until the page leaves the file. *Show* with the curves already plotted no longer reads the flight again (#961).

@@ -140,6 +140,11 @@ local function resetState()
   S.curveEmpty = {}
   S.curveLo, S.curveHi = {}, {}
   S.grid = {}
+  -- True once the points of the curves held were finished for the window shown by ticks none
+  -- of which was stopped; any new extraction clears it first. See G.applyColumns and G.tick.
+  S.plotted = false
+  S.tickOpen = false
+  S.interrupted = false
 end
 
 resetState()
@@ -719,6 +724,8 @@ local function beginExtract(t0, t1)
   local s = S.sessions[S.sessionIndex]
   if s == nil or S.nbuckets < 2 then return end
   S.phase = nil
+  S.plotted = false
+  S.interrupted, S.tickOpen = false, false
   S.winT0, S.winT1 = t0, t1
   S.winSpan = (t1 - t0 > 0) and (t1 - t0) or 1
   S.extEntry = nil
@@ -905,6 +912,32 @@ function G.close()
   S.extEntry = nil
 end
 
+-- Leaving the plot for the summary: drops what the plot holds -- the curves, the bucket cache,
+-- the scratch arrays and the points -- and keeps what the walk built, the index, the sessions
+-- and the summary, so the next G.open of this file reads nothing. The file handle stays open
+-- with them. Answers false, having closed the engine, where the walk itself has not finished,
+-- since nothing worth keeping is held then.
+function G.releasePlot()
+  local ph = S.phase
+  if ph == "header" or ph == "hparse" or ph == "scan" then
+    G.close()
+    return false
+  end
+  S.phase = nil
+  S.plotted = false
+  S.curves = {}
+  S.wantCols, S.wantK, S.xpat = nil, nil, nil
+  S.cache = {}
+  S.scrMin, S.scrMax = {}, {}
+  S.tgtMin, S.tgtMax = nil, nil
+  S.extEntry, S.rbSrc = nil, nil
+  S.points, S.curveEmpty = {}, {}
+  S.curveLo, S.curveHi = {}, {}
+  S.grid = {}
+  S.cursorT = nil
+  return true
+end
+
 function G.isOpen() return S.path ~= nil end
 function G.isBusy() return S.phase ~= nil end
 function G.isTelemetry() return S.isTelemetry end
@@ -1020,6 +1053,11 @@ function G.getSessionIndex() return S.sessionIndex end
 function G.selectSession(i)
   local s = S.sessions[i]
   if not s then return false end
+  -- Before the flight changes, so a call stopped in between leaves no plot of the old flight
+  -- counted as the plot of the new one (see G.applyColumns): a pass still running for the old
+  -- flight is dropped, and the plot no longer counts as finished.
+  S.phase = nil
+  S.plotted = false
   S.sessionIndex = i
   S.cache = {}
   S.cursorT = nil
@@ -1086,6 +1124,17 @@ function G.applyColumns(colIndices)
   end
   if #curves == 0 then return false end
 
+  -- The same columns, in the same order, as the plot already shows in full: nothing to read.
+  -- Checked before any state changes, so a press stopped in here leaves the plot as it was.
+  if S.plotted and S.phase == nil and #curves == #S.curves then
+    local same = true
+    for k = 1, #curves do
+      if curves[k].col ~= S.curves[k].col then same = false end
+    end
+    if same then return true end
+  end
+
+  S.plotted = false
   S.phase = nil
   -- The old curves' points and cursor go before the new curves arrive, so a press stopped in
   -- between leaves an empty plot rather than the old traces or readings under the new names.
@@ -1218,7 +1267,20 @@ function G.setCursorFraction(f)
 end
 
 -- One capped unit of work. Returns true when the page has something new to draw.
+local tickUnit
+
+-- A tick stopped at the instruction limit can have moved past lines it never handed on, so a
+-- plot finished after one may lack samples; it is not counted as plotted, and the same choice
+-- pressed again reads it anew. A tick that finds the previous one still open was stopped.
 function G.tick()
+  if S.tickOpen then S.interrupted = true end
+  S.tickOpen = true
+  local r = tickUnit()
+  S.tickOpen = false
+  return r
+end
+
+tickUnit = function()
   local ph = S.phase
   if ph == nil or S.fh == nil then return false end
 
@@ -1348,6 +1410,7 @@ function G.tick()
       updateCursor(S.cursorT or (S.winT0 + math.floor(S.winSpan / 2)))
       S.phase = nil
       S.progress = 1
+      S.plotted = not S.interrupted
       return true                           -- the page redraws with the new points
     end
     buildPoints(k)

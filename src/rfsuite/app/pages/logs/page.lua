@@ -833,7 +833,17 @@ function M.onBack(ctx)
       state.pickCurves = false
       return true
     end
-    closeGraph()
+    -- Back to the summary of the same file: the plot's data goes, the engine and its index
+    -- stay until the page leaves the file (the branch below, onReload, onClose), so Graph
+    -- opens again without reading the log.
+    if Graph and Graph.releasePlot() then
+      state.view = nil
+      state.pickCurves = false
+      state.slots = {}
+      collectgarbage("collect")
+    else
+      closeGraph()
+    end
     return true
   end
 
@@ -858,8 +868,9 @@ local function openGraph()
   state.pickCurves = false
   state.slots = {}
   state.graphRefused = false
-  -- The statistics view has just had this file walked, and the walk built the index the plot
-  -- needs. Opening it again here is what the engine recognises and answers without reading.
+  -- The statistics view has had this file walked, and the walk built the index the plot needs;
+  -- Back from the plot keeps it. Opening it again here is what the engine recognises and
+  -- answers without reading.
   Graph.open(state.selectedFilePath, { stats = true })
   return true
 end

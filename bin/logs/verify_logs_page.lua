@@ -295,5 +295,81 @@ do
   G.close()
 end
 
+-- #961: back from the plot to the summary keeps the index, and Show with the curves already
+-- plotted reads nothing. Controls: the first plot and a changed choice do read.
+for _, isHosted in ipairs({ true, false }) do
+  local page = loadPage()
+  local st, ctx = openSummary(page, isHosted)
+  local n = 0
+  while st.loading and n < 100000 do page.wakeup(ctx); n = n + 1 end
+  local label = "reentry " .. (isHosted and "hosted" or "tool")
+  local openGraph = find(page.build, "openGraph")
+  check(openGraph ~= nil and openGraph(), label .. ": graph opens")
+  local G = find(page.wakeup, "Graph")
+  check(G ~= nil and not G.isBusy(), label .. ": the summary's index serves the first graph")
+  G.setGeometry(0, 0, 760, 200)
+  local before = reads.bytes
+  check(plot(G, { 3, 4 }), label .. ": plot applied")
+  check(reads.bytes > before, label .. ": the first plot reads (control)")
+  before = reads.bytes
+  check(plot(G, { 3, 4 }) and reads.bytes == before, label .. ": Show unchanged reads nothing", reads.bytes - before)
+  G.zoom(1)
+  local n = 0
+  while G.isBusy() and n < 100000 do G.tick(); n = n + 1 end
+  local w0, w1 = G.getWindow()
+  before = reads.bytes
+  check(plot(G, { 3, 4 }) and reads.bytes == before, label .. ": Show unchanged after a zoom reads nothing")
+  local z0, z1 = G.getWindow()
+  check(z0 == w0 and z1 == w1, label .. ": and keeps the zoomed window")
+  check(not G.isCurveEmpty(1) and not G.isCurveEmpty(2), label .. ": the plot stays drawn")
+  check(plot(G, { 3, 5 }) and reads.bytes > before, label .. ": a changed choice reads (control)")
+  page.onBack(ctx)
+  check(st.view == nil and find(page.wakeup, "Graph") == G, label .. ": back to the summary keeps the engine")
+  check(#G.getCurves() == 0, label .. ": the plot's curves are released")
+  before = reads.bytes
+  check(openGraph() and find(page.wakeup, "Graph") == G and not G.isBusy() and reads.bytes == before,
+    label .. ": graph again reads nothing", reads.bytes - before)
+  check(plot(G, { 3, 4 }) and not G.isCurveEmpty(1), label .. ": a plot after re-entry is drawn")
+  page.onBack(ctx)
+  page.onBack(ctx)
+  check(st.selectedFile == nil and find(page.wakeup, "Graph") == nil, label .. ": leaving the file releases the engine")
+  page.onClose()
+end
+
+-- #961: a change of flight stopped at any of its instructions, then Show with the same curves:
+-- the plot shown afterwards is of the flight selected, never the other one's left in place.
+do
+  local TWO = "/LOGS/Two-2026-10-01-120000.csv"
+  local second = makeLog(300, 12 * 3600 + 600)
+  files[TWO] = makeLog(300, 12 * 3600) .. string.sub(second, string.find(second, string.char(10), 1, true) + 1)
+  local G = indexedGraph(TWO)
+  local S = find(G.tick, "S")
+  check(#G.getSessions() == 2, "flight change: two flights", #G.getSessions())
+  local function settle() local n = 0; while G.isBusy() and n < 100000 do G.tick(); n = n + 1 end end
+  local bad, total = 0, 0
+  for stopAt = 1, 60 do
+    G.selectSession(1); settle()
+    plot(G, { 3, 4 })
+    local n = 0
+    local stopped = not pcall(function()
+      debug.sethook(function()
+        n = n + 1
+        if n == stopAt then debug.sethook(); error("stop", 0) end
+      end, "", 1)
+      G.selectSession(2)
+      debug.sethook()
+    end)
+    debug.sethook()
+    if stopped then total = total + 1 end
+    plot(G, { 3, 4 })
+    local s = G.getSessions()[G.getSessionIndex()]
+    local w0, w1 = G.getWindow()
+    if G.isCurveEmpty(1) or w0 < s.t0 or w1 > s.t1 then bad = bad + 1 end
+  end
+  check(total > 5 and bad == 0, "flight change stopped at each instruction: Show plots the selected flight", bad .. " of " .. total)
+  G.close()
+  files[TWO] = nil
+end
+
 print(string.format("Logs page: %d checks, %d failures", checks, failures))
 os.exit(failures == 0 and 0 or 1)
