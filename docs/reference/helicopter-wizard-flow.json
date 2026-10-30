@@ -6,7 +6,7 @@
     "bin/wizard/source-map.json": "577933568f45c41540aa45e1dfc82d87b55a565400a7dac1f7c1cb8ad8987962",
     "src/rfsuite/app/pages/helicopter_setup/attitude_view.lua": "d67a1e1cde6b46fc7e33f500e2085fe2e391b021cb96df69dfce03c194744faa",
     "src/rfsuite/app/pages/helicopter_setup/controller.lua": "8cd7c33b9dcb51f93d4fe46050ad0d00a67d132d0dfca3e12240df765e0b32f7",
-    "src/rfsuite/app/pages/helicopter_setup/diagrams.lua": "7a20316f77edd0a7bf802cbeec13a119ab28110f530c969a583160ba3246bfae",
+    "src/rfsuite/app/pages/helicopter_setup/diagrams.lua": "423c1537425961b491e7de34eb8e0173a557d746f5ac5bec148c6a215bb7251e",
     "src/rfsuite/app/pages/helicopter_setup/elrs_link.lua": "2da65f54ecf424df2a75e37bdf7c4f8618429eb3c623a1bdf0939a21579431bf",
     "src/rfsuite/app/pages/helicopter_setup/esc_link.lua": "281da481f9e8406e760fc9c5d94809d661cb2df4060b05a3fb1430b5380ec71d",
     "src/rfsuite/app/pages/helicopter_setup/feedback.lua": "4f73ebe86a8b140a8960ec3d0af6d9e29373994545bb48afaf2827ca6a8a661e",
@@ -14,8 +14,8 @@
     "src/rfsuite/app/pages/helicopter_setup/help.lua": "210bc647674c7bdf88e1ac00cf623c53858bb0721623f089caa1f95465ac2c46",
     "src/rfsuite/app/pages/helicopter_setup/history.lua": "d5f7b4799e1a93821b1ebfaecf5e458a054e7cf904bdc5435ae8e985bea3350b",
     "src/rfsuite/app/pages/helicopter_setup/history_store.lua": "e98250cf48a8a360541abd967a4663d09fd33c7f936a94cf13ea67233442cda8",
-    "src/rfsuite/app/pages/helicopter_setup/labels.lua": "78774f8ef13b9449550b071c9ecdc93a01cb99a3d1cb79ab0c76b18d93a976a7",
-    "src/rfsuite/app/pages/helicopter_setup/math.lua": "5ef5e4d338382635a7841c6328a91877bc8183ab3b068b3e93b5d8a9ea61c8d3",
+    "src/rfsuite/app/pages/helicopter_setup/labels.lua": "8b15296820157817d04f02a915fa740ff80ee033d5047d1abdc0517a4f6df4bb",
+    "src/rfsuite/app/pages/helicopter_setup/math.lua": "d5f7630317a265e83a596eafd553bcdcd721ae9f5d5d823b6dae76079daed35c",
     "src/rfsuite/app/pages/helicopter_setup/navigation.lua": "1e54a9965742d66c7454f7fe0e32ad7512fce7dfed931aee47353757b95ae4d3",
     "src/rfsuite/app/pages/helicopter_setup/page.lua": "5b90895498d7cd91784b8ca10aa736c9aa72f90f7696318bc7c58f49838c186b",
     "src/rfsuite/app/pages/helicopter_setup/palette.lua": "520252a85efdf156bc6b325b2f15331f433c76b7783fa18ef8a1d415d4c70a80",
@@ -28,26 +28,26 @@
     "src/rfsuite/app/pages/helicopter_setup/steps/governor.lua": "0aa1440982868497d1353553b6e74a15c9dda57d94784a74da7f18dd25593c34",
     "src/rfsuite/app/pages/helicopter_setup/steps/gyro.lua": "c9751a300b355d699fc3689c61f379e0f20610dadaf9383573fff229d9a9c402",
     "src/rfsuite/app/pages/helicopter_setup/steps/level.lua": "8433f8d0799153b4c5a9c4dbd8c930e115e7c26486c9fb5cc19c936ebd54f3f5",
-    "src/rfsuite/app/pages/helicopter_setup/steps/modes.lua": "8c215f7849e573da688ef3b517d73cc6964bf9a0860ed8d4bac0c56518315530",
+    "src/rfsuite/app/pages/helicopter_setup/steps/modes.lua": "e1a4e9024fcc392b3a333bdbc504a29d695f9216fcbc0a1bbc7380c39b6d674e",
     "src/rfsuite/app/pages/helicopter_setup/steps/motor.lua": "b951deeb3e02f542a592a0c7487208b38ef4aa9e8c7ca0d133dbb2bdeea571d9",
     "src/rfsuite/app/pages/helicopter_setup/steps/pitch.lua": "687354e0d60624d22e10ccd17e210cf6a6060319d30339cb2abbf0b9aa028fa3",
     "src/rfsuite/app/pages/helicopter_setup/steps/profiles.lua": "041f133ac6675869aed50b88d815ba6f74184691fd2db4b6c4a5e0aa6a0094a6",
-    "src/rfsuite/app/pages/helicopter_setup/steps/rates.lua": "c8384a0d9f83b0d4b5772f187ddbc595b51098aa14e28c74b937740cb4f1289e",
-    "src/rfsuite/app/pages/helicopter_setup/steps/receiver.lua": "40308de4a945bda4aca050c2a612507adf9c96a4d75dcbfef589b217eb0ec9d8",
+    "src/rfsuite/app/pages/helicopter_setup/steps/rates.lua": "f24d819f28a53897a61c06a2515e99bda0e7f1b0faf56690a1a4840046d6a394",
+    "src/rfsuite/app/pages/helicopter_setup/steps/receiver.lua": "2766a593dd22fcdc5dea713d9067199ac23d0da0ea2128c4666281427b416ff4",
     "src/rfsuite/app/pages/helicopter_setup/steps/sensors.lua": "d725edcb37c5fcdc9c8ef4ba5bc688875fc7a4c84946dbaafb09860b72fa0df6",
     "src/rfsuite/app/pages/helicopter_setup/steps/servoType.lua": "ca50e8999ee91065ae82d59bbbc01c1e8d448623cee969700eb19bc71ff01925",
     "src/rfsuite/app/pages/helicopter_setup/steps/servos.lua": "a257d4f4a155d6e93a333ce435e1462bbe659ed1ef85252fa415e16fab24124c",
-    "src/rfsuite/app/pages/helicopter_setup/steps/swash.lua": "3b93770d10dbcb45fbccdc2228278cf1318cd7af5098e6474576486caf4ac1e4",
+    "src/rfsuite/app/pages/helicopter_setup/steps/swash.lua": "5622d41b981996c698b8dd16927efa33e555f1b38a271bacf0de2bedbd1b7ab4",
     "src/rfsuite/app/pages/helicopter_setup/steps/tail.lua": "4810aefafd236621fc3214bcc6361b29e3b5edeecebc9fd4ac362df45c2799f9",
     "src/rfsuite/app/pages/helicopter_setup/steps/throttle.lua": "477a6a94493f0ef71b1ce5c941f5e0fd6577a881583b891a8b3ce523efd4dd07",
     "src/rfsuite/app/pages/helicopter_setup/transport.lua": "a75fa8705f5c2c82eca0c356fc5d085e723d487fc9243ce3a1127a65805d1c91",
-    "src/rfsuite/app/pages/helicopter_setup/view.lua": "d27800ed633114aa00f4cc0e5b4488fb35412b669cacd4689cbdb3a85687cf84",
+    "src/rfsuite/app/pages/helicopter_setup/view.lua": "bff567bdded6a64d9723c7f6925ead0e2bf1c16a3cceadb953de8bb30b7a45a4",
     "src/rfsuite/app/pages/helicopter_setup/workflow.lua": "d7a24987575021a428756b724dc4b155a89689372886fc07c78842d2bc0f1b1e",
     "src/rfsuite/app/pages/setup/esc_motors/throttle/page.lua": "b26b2956996f57090bca476e02adc1444831a243da8d6bb3b26959a96aced8d5",
     "src/rfsuite/app/pages/setup/power/battery/page.lua": "2638ce09dd191b4003982664ee48587da70625de9d8be2195033d3ab9c46f958",
     "src/rfsuite/app/pages/setup/power/smartfuel/page.lua": "74863d65af8394ac42d56081612dd190395ab0a4edb6a8af2a245f507edc3c95",
     "src/rfsuite/app/pages/setup/power/sources/page.lua": "6dde30b05c017650a36d5ae73524aaf4a4c72e92699aba616d43b16304b0b16c",
-    "src/rfsuite/i18n/en.lua": "022a2e40c10c46cd13a280a45a935c574f8f46bad2f95ecf7226f2e726162359",
+    "src/rfsuite/i18n/en.lua": "faebc433d568952717e72c2a4ebab2aadd5960b5ef901d3e7951f731c835c5b7",
     "src/rfsuite/lib/esc_params.lua": "2a9f2fb0fd6f762ef396ed20da5a48081a5583687bb2803b870a34ca2635eeaf",
     "src/rfsuite/lib/governor_fields.lua": "2c7407a6d75e7b00de9002dbb4be49696a6a3468b2d76013e1998549a2932a3c",
     "src/rfsuite/lib/power_fields.lua": "2204f3bd87281732a784d9aacd45a432d91cd3ab99a7a649c5976192c345c41e",
@@ -2489,80 +2489,7 @@
             "same"
           ],
           "additions": [],
-          "rows": [
-            {
-              "kind": "read",
-              "label": "Roll left / right",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ReceiverArt.svelte",
-                "tabs/setup_wizard/StepReceiver.svelte",
-                "tabs/setup_wizard/StickIcon.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/receiver.lua",
-              "expression": "w : value ( L . travelRoll , travel ( 1 ) )"
-            },
-            {
-              "kind": "read",
-              "label": "Pitch back / forward",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ReceiverArt.svelte",
-                "tabs/setup_wizard/StepReceiver.svelte",
-                "tabs/setup_wizard/StickIcon.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/receiver.lua",
-              "expression": "w : value ( L . travelPitch , travel ( 2 ) )"
-            },
-            {
-              "kind": "read",
-              "label": "Yaw left / right",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ReceiverArt.svelte",
-                "tabs/setup_wizard/StepReceiver.svelte",
-                "tabs/setup_wizard/StickIcon.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/receiver.lua",
-              "expression": "w : value ( L . travelYaw , travel ( 3 ) )"
-            },
-            {
-              "kind": "read",
-              "label": "Collective down / up",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/ReceiverArt.svelte",
-                "tabs/setup_wizard/StepReceiver.svelte",
-                "tabs/setup_wizard/StickIcon.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/receiver.lua",
-              "expression": "w : value ( L . travelCollective , travel ( 4 ) )"
-            }
-          ]
+          "rows": []
         },
         {
           "title": "Throttle range",
@@ -2810,22 +2737,6 @@
               "expression": "w : value ( L . assigned , function ( ) local _ , r = assigned ( 0 ) if not r then return L . no end return string . format ( \"CH%d  %d-%d\" , w : channelNumber ( r . auxChannelIndex ) , r . range . start , r . range [ \"end\" ] ) end )"
             },
             {
-              "kind": "read",
-              "label": "Active",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/StepModes.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/modes.lua",
-              "expression": "w : value ( L . active , function ( ) local v = state ( ) ; return v == true and L . switchOn or v == false and L . switchOff or L . unavailable end )"
-            },
-            {
               "kind": "gate",
               "label": "validation",
               "api": null,
@@ -2955,22 +2866,6 @@
               "additions": [],
               "source": "src/rfsuite/app/pages/helicopter_setup/steps/modes.lua",
               "expression": "w : value ( L . assigned , function ( ) local _ , r = assigned ( 53 ) if not r then return L . no end return string . format ( \"CH%d  %d-%d\" , w : channelNumber ( r . auxChannelIndex ) , r . range . start , r . range [ \"end\" ] ) end )"
-            },
-            {
-              "kind": "read",
-              "label": "Active",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/StepModes.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/modes.lua",
-              "expression": "w : value ( L . active , function ( ) local v = state ( ) ; return v == true and L . switchOn or v == false and L . switchOff or L . unavailable end )"
             }
           ]
         },
@@ -3001,24 +2896,21 @@
               "additions": [],
               "source": "src/rfsuite/app/pages/helicopter_setup/steps/modes.lua",
               "expression": "w : value ( L . assigned , function ( ) local _ , r = assigned ( 47 ) if not r then return L . no end return string . format ( \"CH%d  %d-%d\" , w : channelNumber ( r . auxChannelIndex ) , r . range . start , r . range [ \"end\" ] ) end )"
-            },
-            {
-              "kind": "read",
-              "label": "Active",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/StepModes.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/modes.lua",
-              "expression": "w : value ( L . active , function ( ) local v = state ( ) ; return v == true and L . switchOn or v == false and L . switchOff or L . unavailable end )"
             }
           ]
+        },
+        {
+          "title": "Switches done",
+          "title_expression": "L . switchesDone",
+          "source": "src/rfsuite/app/pages/helicopter_setup/steps/modes.lua",
+          "configurator_reference": [
+            "tabs/setup_wizard/StepModes.svelte"
+          ],
+          "configurator_status": [
+            "same"
+          ],
+          "additions": [],
+          "rows": []
         }
       ],
       "msp_reads": [
@@ -3564,38 +3456,6 @@
               "expression": "w : touch ( \"rc_tuning\" )"
             },
             {
-              "kind": "read",
-              "label": "Collective",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/StepRates.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/rates.lua",
-              "expression": "w : value ( L . collective , function ( ) return H . collective ( ( w . rateTunings or { } ) [ index ] or w . data . rc_tuning ) or \"--\" end )"
-            },
-            {
-              "kind": "pilot sets",
-              "label": "Flying style",
-              "api": null,
-              "field": null,
-              "deviation": false,
-              "configurator_status": [
-                "same"
-              ],
-              "configurator_reference": [
-                "tabs/setup_wizard/StepRates.svelte"
-              ],
-              "additions": [],
-              "source": "src/rfsuite/app/pages/helicopter_setup/steps/rates.lua",
-              "expression": "{ kind = \"choice\" , label = L . flyingStyle , values = { L . keep , L . trainerRates , L . sportRates , L . threeDRates } , get = function ( ) return ( style ( ) or 0 ) + 1 end , set = function ( v ) w . rateStyles [ index ] = v > 1 and v - 1 or nil ; w : touch ( \"rc_tuning\" ) end }"
-            },
-            {
               "kind": "MSP write",
               "label": "set_pid_profile (record/payload)",
               "api": "set_pid_profile",
@@ -3746,6 +3606,19 @@
               "scope": "live poll"
             }
           ]
+        },
+        {
+          "title": "Rates set",
+          "title_expression": "L . ratesSet",
+          "source": "src/rfsuite/app/pages/helicopter_setup/steps/rates.lua",
+          "configurator_reference": [
+            "tabs/setup_wizard/StepRates.svelte"
+          ],
+          "configurator_status": [
+            "same"
+          ],
+          "additions": [],
+          "rows": []
         }
       ],
       "msp_reads": [
@@ -4201,6 +4074,106 @@
               "additions": [],
               "source": "src/rfsuite/app/pages/helicopter_setup/steps/swash.lua",
               "expression": "w : value ( L . tailServo , function ( ) return w : motorised ( ) and L . none or L . servo4 end )"
+            }
+          ]
+        },
+        {
+          "title": "Swashplate set",
+          "title_expression": "L . swashSet",
+          "source": "src/rfsuite/app/pages/helicopter_setup/steps/swash.lua",
+          "configurator_reference": [
+            "js/tail_motor.js",
+            "tabs/setup_wizard/StepSwash.svelte"
+          ],
+          "configurator_status": [
+            "same"
+          ],
+          "additions": [],
+          "rows": [
+            {
+              "kind": "read",
+              "label": "Swash type",
+              "api": null,
+              "field": null,
+              "deviation": false,
+              "configurator_status": [
+                "same"
+              ],
+              "configurator_reference": [
+                "js/tail_motor.js",
+                "tabs/setup_wizard/StepSwash.svelte"
+              ],
+              "additions": [],
+              "source": "src/rfsuite/app/pages/helicopter_setup/steps/swash.lua",
+              "expression": "w : value ( L . swashType , function ( ) return { L . direct , \"120\" , \"135\" , \"140\" , \"90L\" , \"90V\" } [ w . data . mixer_config . swash_type ] or L . unknown end )"
+            },
+            {
+              "kind": "read",
+              "label": "Rotor direction",
+              "api": null,
+              "field": null,
+              "deviation": false,
+              "configurator_status": [
+                "same"
+              ],
+              "configurator_reference": [
+                "js/tail_motor.js",
+                "tabs/setup_wizard/StepSwash.svelte"
+              ],
+              "additions": [],
+              "source": "src/rfsuite/app/pages/helicopter_setup/steps/swash.lua",
+              "expression": "w : value ( L . rotorDirection , function ( ) return w . data . mixer_config . main_rotor_dir == 1 and L . counterclockwise or L . clockwise end )"
+            },
+            {
+              "kind": "read",
+              "label": "Tail type",
+              "api": null,
+              "field": null,
+              "deviation": false,
+              "configurator_status": [
+                "same"
+              ],
+              "configurator_reference": [
+                "js/tail_motor.js",
+                "tabs/setup_wizard/StepSwash.svelte"
+              ],
+              "additions": [],
+              "source": "src/rfsuite/app/pages/helicopter_setup/steps/swash.lua",
+              "expression": "w : value ( L . tailType , function ( ) return ( { L . servoTail , L . motorTail , L . bidirectional } ) [ w . data . mixer_config . tail_rotor_mode + 1 ] or L . unknown end )"
+            },
+            {
+              "kind": "read",
+              "label": "Yaw input rate",
+              "api": null,
+              "field": null,
+              "deviation": false,
+              "configurator_status": [
+                "same"
+              ],
+              "configurator_reference": [
+                "js/tail_motor.js",
+                "tabs/setup_wizard/StepSwash.svelte"
+              ],
+              "additions": [],
+              "source": "src/rfsuite/app/pages/helicopter_setup/steps/swash.lua",
+              "expression": "w : value ( L . yawInputRate , function ( ) local rate = math . abs ( w . data . mixer_input . inputs [ 3 ] . rate ) if rate ~= shownRate then shownRate , rateText = rate , string . format ( L . percentValue , string . format ( \"%g\" , rate / 10 ) ) end return rateText end )"
+            },
+            {
+              "kind": "read",
+              "label": "TTA gain",
+              "api": null,
+              "field": null,
+              "deviation": false,
+              "configurator_status": [
+                "same"
+              ],
+              "configurator_reference": [
+                "js/tail_motor.js",
+                "tabs/setup_wizard/StepSwash.svelte"
+              ],
+              "additions": [],
+              "source": "src/rfsuite/app/pages/helicopter_setup/steps/swash.lua",
+              "expression": "w : value ( L . ttaGain , function ( ) if ( w . startTail ~= 0 ) == w : motorised ( ) then return L . unchanged end return w : motorised ( ) and string . format ( L . ttaEvery , 100 ) or string . format ( L . ttaEvery , 0 ) end )"
             }
           ]
         }

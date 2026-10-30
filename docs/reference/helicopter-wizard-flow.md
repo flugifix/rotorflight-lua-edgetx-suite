@@ -38,7 +38,7 @@ flowchart LR
       S2c0["<b>Receiver</b><br/>sets: Protocol, Advanced<br/>reads: MSP status, MSP servo, MSP rx_channels<br/>writes: rx_config, feature_config"]:::k3
       S2c1["<b>Channel order</b><br/>sets: Standard channel order<br/>writes: rx_map"]:::k3
       S2c0 --> S2c1
-      S2c2["<b>Check sticks</b><br/>reads: Roll left / right, Pitch back / forwa..."]:::k1
+      S2c2["<b>Check sticks</b>"]:::k4
       S2c1 --> S2c2
       S2c3["<b>Throttle range</b><br/>sets: Minimum (us), Maximum (us)<br/>reads: Throttle<br/>writes: rc_config.rc_min_throttle, rc_config...."]:::k3
       S2c2 --> S2c3
@@ -51,13 +51,15 @@ flowchart LR
     S1 --> S2
     subgraph S3["3. Mode switches"]
       direction TB
-      S3c0["<b>Arm switch</b><br/>reads: Assigned, Active, MSP status, MSP rc...<br/>writes: mode_ranges, set_mode_range, set_adju..."]:::k3
-      S3c1["<b>Rescue switch</b><br/>reads: Assigned, Active"]:::k1
+      S3c0["<b>Arm switch</b><br/>reads: Assigned, MSP status, MSP rc, MSP servo<br/>writes: mode_ranges, set_mode_range, set_adju..."]:::k3
+      S3c1["<b>Rescue switch</b><br/>reads: Assigned"]:::k1
       S3c0 --> S3c1
-      S3c2["<b>Trainer switch</b><br/>reads: Assigned, Active"]:::k1
+      S3c2["<b>Trainer switch</b><br/>reads: Assigned"]:::k1
       S3c1 --> S3c2
+      S3c3["<b>Switches done</b>"]:::k4
+      S3c2 --> S3c3
       S3gate{"Advance?<br/>validation passes"}:::k4
-      S3c2 --> S3gate
+      S3c3 --> S3gate
       S3gate -->|blocked| S3gate
     end
     S2 --> S3
@@ -76,7 +78,9 @@ flowchart LR
     S3 --> S4
     subgraph S5["5. Rates"]
       direction TB
-      S5c0["<b>Switch position {n} · rate profile {n} / Rate p…</b><br/>sets: Flying style<br/>reads: Collective, MSP rc_tuning, MSP status...<br/>writes: set_pid_profile, rc_tuning"]:::k3
+      S5c0["<b>Switch position {n} · rate profile {n} / Rate p…</b><br/>reads: MSP rc_tuning, MSP status, MSP servo<br/>writes: set_pid_profile, rc_tuning"]:::k3
+      S5c1["<b>Rates set</b>"]:::k4
+      S5c0 --> S5c1
     end
     S4 --> S5
   end
@@ -89,6 +93,8 @@ flowchart LR
       S6c0 --> S6c1
       S6c2["<b>Tail type</b><br/>sets: Tail type<br/>reads: Tail output, Tail servo<br/>writes: mixer_config.tail_rotor_mode"]:::k3
       S6c1 --> S6c2
+      S6c3["<b>Swashplate set</b><br/>reads: Swash type, Rotor direction, Tail typ..."]:::k1
+      S6c2 --> S6c3
     end
     subgraph S7["7. Servo type"]
       direction TB
@@ -326,10 +332,10 @@ MSP writes include deferred dirty records and immediate commands. The inventory 
 | Model. Prepare the radio model | Interrupted session<br/>Prepare the radio model | FC name | FC power-cycled<br/>Model checked | — | name.name<br/>telemetry_config<br/>telemetry_config.buffer | differs from the Configurator |
 | 1. Board orientation | Board orientation<br/>Calibrate the accelerometer<br/>Check orientation | Roll<br/>Pitch<br/>Yaw | All blades removed<br/>Servos unplugged<br/>Direction is correct | status<br/>attitude<br/>servo<br/>board_auto_align | acc_calibration<br/>board_auto_align<br/>board_alignment_config.roll_degrees<br/>board_alignment_config.pitch_degrees<br/>board_alignment_config.yaw_degrees | same |
 | 2. Receiver | Receiver<br/>Channel order<br/>Check sticks<br/>Throttle range<br/>ELRS link | Protocol<br/>Advanced<br/>Standard channel order<br/>Minimum (us)<br/>Maximum (us) | — | status<br/>servo<br/>rx_channels | rx_config.serialrx_provider<br/>rx_config<br/>feature_config<br/>feature_config.enabledFeatures<br/>rx_map<br/>rc_config.rc_min_throttle<br/>rc_config.rc_max_throttle | same |
-| 3. Mode switches | Arm switch<br/>Rescue switch<br/>Trainer switch | — | — | status<br/>rc<br/>servo | mode_ranges<br/>set_mode_range<br/>set_adjustment_range | same |
+| 3. Mode switches | Arm switch<br/>Rescue switch<br/>Trainer switch<br/>Switches done | — | — | status<br/>rc<br/>servo | mode_ranges<br/>set_mode_range<br/>set_adjustment_range | same |
 | 4. Profiles & gain | Profiles & gain<br/>Master gain<br/>Trim-button guide<br/>Channel use | Profile switch<br/>Method | — | status<br/>rc<br/>servo | adjustment_ranges<br/>set_adjustment_range | same |
-| 5. Rates | Switch position {n} · rate profile {n} / Rate profile {n} | Flying style | — | rc_tuning<br/>status<br/>servo | set_pid_profile<br/>rc_tuning | same |
-| 6. Swashplate | Swash type<br/>Rotor direction<br/>Tail type | Swash type<br/>Servo 1<br/>Rotor direction<br/>Tail type | — | governor_profile<br/>status<br/>servo | tail_motor_output.action<br/>mixer_input<br/>mixer_config.swash_type<br/>mixer_input.rate<br/>set_pid_profile<br/>governor_profile<br/>governor_profile.governor_tta_gain<br/>mixer_config.main_rotor_dir<br/>mixer_config.tail_rotor_mode | same |
+| 5. Rates | Switch position {n} · rate profile {n} / Rate profile {n}<br/>Rates set | — | — | rc_tuning<br/>status<br/>servo | set_pid_profile<br/>rc_tuning | same |
+| 6. Swashplate | Swash type<br/>Rotor direction<br/>Tail type<br/>Swashplate set | Swash type<br/>Servo 1<br/>Rotor direction<br/>Tail type | — | governor_profile<br/>status<br/>servo | tail_motor_output.action<br/>mixer_input<br/>mixer_config.swash_type<br/>mixer_input.rate<br/>set_pid_profile<br/>governor_profile<br/>governor_profile.governor_tta_gain<br/>mixer_config.main_rotor_dir<br/>mixer_config.tail_rotor_mode | same |
 | 7. Servo type | Swash servos<br/>Tail servo<br/>Geometry correction<br/>Tail geometry correction<br/>Servo type | Swash servos<br/>Hz<br/>Tail servo<br/>Geometry correction | Servos unplugged | status<br/>servo | servo_configurations<br/>servo_configurations.mid<br/>servo_configurations.min<br/>servo_configurations.max<br/>servo_configurations.rneg<br/>servo_configurations.rpos<br/>servo_configurations.rate<br/>servo_configurations.flags | same |
 | 8. Governor | Governor Mode<br/>RPM source<br/>RPM filter<br/>Throttle Type<br/>PID profile {n}<br/>Ramp Time | Mode<br/>RPM source<br/>Throttle Type<br/>Full headspeed (rpm)<br/>Spoolup time<br/>Spooldown time<br/>Recovery time | — | filter_config<br/>rpm_filter_v2<br/>governor_profile<br/>status<br/>governor_profile.governor_headspeed<br/>filter_config.rpm_preset<br/>rpm_filter_v2.notch_source_1..16 (axes 0..2, CUSTOM only)<br/>servo<br/>governor_config.gov_spoolup_time<br/>governor_config.gov_spooldown_time<br/>governor_config.gov_recovery_time | governor_config.gov_mode<br/>feature_config.enabledFeatures<br/>governor_config.gov_throttle_type<br/>set_pid_profile<br/>governor_profile<br/>governor_profile.governor_headspeed<br/>motor_config.use_dshot_telemetry<br/>governor_config.gov_spoolup_time<br/>governor_config.gov_spooldown_time<br/>governor_config.gov_recovery_time | beyond the Configurator |
 | 9. Motor & ESC | Throttle Protocol<br/>Motor and gearing<br/>Motor and gearing (cont.) | Bidirectional DShot<br/>Protocol<br/>Main motor poles<br/>Motor pinion teeth<br/>Main gear teeth<br/>Tail motor poles<br/>Tail input gear teeth<br/>Tail output gear teeth | All blades removed | status<br/>servo | motor_config.use_dshot_telemetry<br/>motor_config.motor_pwm_protocol<br/>esc_sensor_config<br/>feature_config.enabledFeatures<br/>motor_config.motor_pole_count_0<br/>motor_config.main_rotor_gear_ratio_0<br/>motor_config.main_rotor_gear_ratio_1<br/>motor_config.motor_pole_count_1<br/>motor_config.tail_rotor_gear_ratio_0<br/>motor_config.tail_rotor_gear_ratio_1 | same |
@@ -344,4 +350,4 @@ MSP writes include deferred dirty records and immediate commands. The inventory 
 | 18. Gyro check | Roll<br/>Pitch<br/>Yaw | — | Corrects against movement | status<br/>servo | — | same |
 | 19. Finish | Finish | — | Final checks understood | status<br/>servo | — | same |
 
-Diagram: 96 nodes; 19 numbered steps plus the model card.
+Diagram: 99 nodes; 19 numbered steps plus the model card.
