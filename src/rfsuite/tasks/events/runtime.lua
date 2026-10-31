@@ -27,6 +27,10 @@ local Log = nil
 local Env = nil
 local ModelNameStore = nil
 local FlightRecord = nil
+-- The Tune Advisor capture (tasks/events/ondisarm/tasks/tune_history.lua), loaded only while a
+-- capture has work and is due. See driveTuneCapture.
+local TuneCapture = nil
+local TUNE_CAPTURE_PATH = "tasks/events/ondisarm/tasks/tune_history.lua"
 
 -- Per-category task runners cache will be stored at `_G.rfsuite.tasks.events`
 local function ensureEventRunner(name)
@@ -143,6 +147,9 @@ end
 -- still open has no honest end to it and goes with them.
 local function endSession(session)
   session.flightcount = 0
+  -- A flight controller that answered the Tune Advisor with "no such command" is asked again on
+  -- the next connection: it may have been flashed in between.
+  if type(session.tuneCapture) == "table" then session.tuneCapture.noCommand = nil end
   if FlightRecord and type(FlightRecord.reset) == "function" then
     pcall(FlightRecord.reset)
   end
@@ -153,10 +160,27 @@ end
 -- disarmed somewhere in the gap, so there is no honest duration and no line. The arm-edge
 -- detector is reset as the disconnect resets it (#278), so a craft that is armed after all opens
 -- a record of its own from here.
+-- Not through lib/require.lua: the capture's code leaves once it has nothing left to do.
+local function loadTuneCapture()
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. TUNE_CAPTURE_PATH,
+    (_G.rfsuite and _G.rfsuite.loadMode) or "bt")
+  if type(chunk) ~= "function" then return false end
+  local ok, mod = pcall(chunk)
+  return ok and type(mod) == "table" and mod or false
+end
+
 local function endKeptFlight(session)
   session.flightlog = nil
   endSession(session)
   state.lastArmed = false
+  -- The flight controller kept the Tune Advisor's numbers of the flight that ended in the gap,
+  -- so they are still owed to the flight history -- the one thing of that flight that is.
+  if Env and Env.get() == "widget" then
+    local capture = TuneCapture or loadTuneCapture()
+    if type(capture) == "table" and type(capture.owe) == "function" then
+      pcall(capture.owe, session, nowSeconds())
+    end
+  end
 end
 
 -- Whether a flight kept across a link loss went on. A sensor can keep the state from before the
@@ -318,6 +342,44 @@ local function restorePendingModelName()
   if ok and restored and Log and type(Log.emit) == "function" then
     pcall(Log.emit, "rfsuite.events", "model name put back: " .. tostring(restored), "info")
   end
+end
+
+-- The Tune Advisor capture's passes. Its state is the session's (rfsuite.session.tuneCapture),
+-- which a disarm creates, so a radio that never flew a craft with the command pays one table
+-- lookup per pass here.
+--
+-- Its code is loaded only once the capture is DUE: the first read waits five seconds after the
+-- disarm, so nothing of it is compiled or run on the disarm edge or the passes right after it,
+-- where the disarm chain does its own work. The load is a pass of its own, and the capture
+-- takes no pass the dashboard spends on its telemetry read (`carry`). Once it reports no work
+-- left the module is dropped again.
+--
+-- Arming ends any capture in progress: the flight controller keeps adding to its numbers, so
+-- the next disarm reads this flight together with the one it was still reading.
+local function driveTuneCapture(capture, armed, linkUp, t, carry, mspState)
+  if armed then
+    capture.pending = false
+    capture.state = "idle"
+    TuneCapture = nil
+    return
+  end
+  if carry then return end
+  if TuneCapture == nil then
+    local work = capture.pending or (capture.clearPending and not capture.refusedOnFc)
+      or capture.contextPending
+    if not work or t < (capture.nextAt or 0) then return end
+    TuneCapture = loadTuneCapture()
+    return
+  end
+  if not TuneCapture then
+    TuneCapture = nil
+    return
+  end
+  local ok, more = pcall(TuneCapture.tick, capture, mspState, linkUp, t)
+  if not ok and Log and type(Log.emit) == "function" then
+    pcall(Log.emit, "rfsuite.events", "tune capture error: " .. tostring(more), "error")
+  end
+  if not ok or not more then TuneCapture = nil end
 end
 
 function Events.reset()
@@ -547,6 +609,15 @@ function Events.wakeup(carry)
         if not ok and Log and type(Log.emit) == "function" then
           pcall(Log.emit, "rfsuite.events", "flight_record.wakeup error: " .. tostring(err), "error")
         end
+      end
+      -- After the record, so a disarm's own work keeps the order it had. `armed` is only taken
+      -- as the craft's state while the link is held up and no kept flight is being settled,
+      -- the same condition the edge detector above runs under.
+      local session = _G.rfsuite and _G.rfsuite.session
+      local capture = type(session) == "table" and session.tuneCapture or nil
+      if capture ~= nil then
+        local trusted = state.linkStableUp and state.flightPendingSince == nil
+        driveTuneCapture(capture, armed and trusted, trusted, t, carry, mspState)
       end
     end
   end
