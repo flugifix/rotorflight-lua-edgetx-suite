@@ -653,11 +653,15 @@ end
 do
   fresh()
   local history = assert(loadfile("src/rfsuite/lib/tune_history.lua"))()
-  local realSave, saves = history.save, 0
-  history.save = function(...)
-    saves = saves + 1
-    if saves <= 4 then return false end
-    return realSave(...)
+  -- The capture saves through history.step (a save in steps, one per pass); its write step is
+  -- the save the Ethos case fails four times.
+  local realStep, saves = history.step, 0
+  history.step = function(job)
+    if job.kind == "save" and job.phase == "write" then
+      saves = saves + 1
+      if saves <= 4 then job.phase = "done"; return false, "write" end
+    end
+    return realStep(job)
   end
   rig.shared["lib/tune_history.lua"] = history
   update(true)

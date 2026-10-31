@@ -128,6 +128,7 @@ function M.owe(s, now)
   tc.failures = 0
   tc.replies = {}
   tc.saveDue = false
+  tc.job = nil
   tc.contextPending = false
   tc.context = nil
   tc.nextAt = now + START_SECONDS
@@ -154,6 +155,7 @@ end
 local function clearReplies(tc)
   tc.replies = {}
   tc.saveDue = false
+  tc.job = nil
 end
 
 -- The four answers a request can end in, and only the last is worth repeating.
@@ -304,12 +306,23 @@ local function finishCapture(tc, mcuId)
   -- nothing new was flown.
   local saved = false
   if seconds > 0 and tc.lastSeconds[mcuId] ~= seconds then
-    local pid, rate = activeProfiles()
-    local time = ChangeJournal and ChangeJournal.timestamp and ChangeJournal.timestamp() or 0
-    local ok, why = false, "module"
-    if TuneHistory then
-      ok, why = TuneHistory.save(mcuId, replies, { pidProfile = pid, rateProfile = rate }, time)
+    -- The save is a job of a few steps, one per pass (lib/tune_history.lua, step)
+    local job = tc.job
+    if not job then
+      local pid, rate = activeProfiles()
+      local time = ChangeJournal and ChangeJournal.timestamp and ChangeJournal.timestamp() or 0
+      job = TuneHistory and TuneHistory.saveJob(mcuId, replies, { pidProfile = pid, rateProfile = rate }, time)
+      if not job then
+        log("cannot write the flight history: module")
+        waitFor(tc, RETRY_SECONDS)
+        return
+      end
+      tc.job = job
+      return
     end
+    local ok, why = TuneHistory.step(job)
+    if ok == nil then return end
+    tc.job = nil
     if not ok then
       -- The replies are kept and only the write is tried again: no MSP, so not counted against
       -- MAX_FAILURES. The flight controller is not cleared, so an arm before it succeeds still
@@ -351,14 +364,21 @@ local function advanceContext(tc, queue)
     readContext(tc, queue, PidProfileApi, function(p) ctx.relaxType = tonumber(p.iterm_relax_type) end)
   else
     PidProfileApi = nil
-    tc.contextPending = false
-    tc.context = nil
     if ctx.cyclicPolarity ~= nil or ctx.cyclicRing ~= nil or ctx.relaxType ~= nil then
-      if TuneHistory == nil then TuneHistory = loadPlain("lib/tune_history.lua") end
-      if TuneHistory and not TuneHistory.setContext(ctx.mcuId, ctx) then
-        log("cannot add the settings to the saved flight")
+      if TuneHistory == nil then TuneHistory = loadPlain("lib/tune_history.lua"); return end
+      if not ctx.job then
+        ctx.job = TuneHistory and TuneHistory.contextJob(ctx.mcuId, ctx) or false
+        if ctx.job then return end
+      end
+      if ctx.job then
+        local ok = TuneHistory.step(ctx.job)
+        if ok == nil then return end
+        if not ok then log("cannot add the settings to the saved flight") end
       end
     end
+    TuneHistory = nil
+    tc.contextPending = false
+    tc.context = nil
     waitFor(tc, 0)
   end
 end
