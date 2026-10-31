@@ -233,6 +233,10 @@ local function sendClear(tc, queue)
     processReply = function(msg)
       if msg.__errorReply then handleError(tc, "nocommand"); return end
       tc.clearPending = false
+      -- The statistics are gone from the flight controller: its next flight is a new one, even
+      -- with the same flight time as the one just saved
+      if tc.clearMcu ~= nil then tc.lastSeconds[tc.clearMcu] = nil end
+      tc.clearMcu = nil
       TuneAdvisorApi = nil
       waitFor(tc, tc.contextPending and GAP_SECONDS or 0)
       publishState(tc)

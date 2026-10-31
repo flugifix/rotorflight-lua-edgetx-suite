@@ -943,5 +943,30 @@ do
     table.concat(rig.contextAsked, ","))
 end
 
+-- ---------------------------------------------------------------------------
+print("Differences from the Ethos suite: two flights of the same length (#989)")
+-- ---------------------------------------------------------------------------
+do
+  -- The flight time is all that tells a new flight from the same statistics read again before
+  -- their clear got through; once the clear has, the next flight is a new one whatever its time.
+  fresh()
+  flyThrough(147)
+  local asked = flyThrough(147)
+  check("two flights of 147 s each are both saved", asked == "roll,pitch,yaw,clear"
+    and #tuneHistory.read(MCU) == 2, asked .. " / " .. #tuneHistory.read(MCU) .. " flights")
+
+  fresh()
+  update(true)
+  update(false)
+  asked = pump({ clear = { n = 3, reason = "timeout" } })
+  check("(setup) a saved flight whose clear never gets through", asked == "roll,pitch,yaw,clear,clear,clear"
+    and #tuneHistory.read(MCU) == 1, asked)
+  update(true)
+  update(false)
+  asked = pump()
+  check("the same statistics read again before their clear are not saved twice, and cleared then",
+    asked == "roll,pitch,yaw,clear" and #tuneHistory.read(MCU) == 1, asked .. " / " .. #tuneHistory.read(MCU) .. " flights")
+end
+
 print(string.format("\n%d checks, %d failed", checks, failures))
 os.exit(failures == 0 and 0 or 1)
