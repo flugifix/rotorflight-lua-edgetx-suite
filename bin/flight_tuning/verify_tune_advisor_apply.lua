@@ -849,19 +849,19 @@ do
   openPage()
   local lines = 0
   for _, s in ipairs(ui.view.actions) do if string.find(s, "->", 1, true) then lines = lines + 1 end end
-  check("F2 limit: F100, gain 1.53, Actual 36/100: the screen shows exactly what Save writes",
+  check("hot F at its limit, F100, gain 1.53, Actual 36/100: the screen shows exactly what Save writes",
     lines == #ui.view.changes and #ui.view.changes == 3, lines .. " lines, " .. #ui.view.changes .. " changes")
   resetFc()
   fc.tuning.pid_0_F, fc.rates.rcRates_1, fc.rates.rates_1 = 100, 36, 220
   flightRoll = { F = 100, ffGain = 1.53, rcRate = 36, sRate = 220 }
   openPage()
-  check("F2 limit: F100, gain 1.53, Actual 36/220: no proposal", not canSave()
+  check("hot F with no room in the rates, F100, gain 1.53, Actual 36/220: no proposal", not canSave()
     and not contains(ui.view.actions, "->") and contains(ui.view.whys, T().whyLimit))
 
   resetFc()
   flightRoll = { F = 100, ffGain = 1.2, rcRate = 1, sRate = 1 }
   openPage()
-  check("F2 rounding: F100, gain 1.2, Actual 1/1: no F", not canSave() and not contains(ui.view.actions, "->"),
+  check("F whose rates round back to the same values, F100, gain 1.2, Actual 1/1: no F", not canSave() and not contains(ui.view.actions, "->"),
     table.concat(ui.view.actions, " | "))
 
   resetFc()
