@@ -67,8 +67,8 @@ and a voltage gauge. In flight it is reduced to the flight time, the link qualit
 gauge; after the flight it shows the last flight's time, the total time, the lowest voltage per
 cell and the lowest link quality.
 
-Default's settings now open a grid of five pages: **Look**, **Before flight**, **In flight**,
-**Statistics** and **Keys**. Look holds the existing voltage range and link colours. Each
+Default's settings now open a grid of six pages: **Look**, **Before flight**, **In flight**,
+**Statistics**, **Info bar** and **Keys**. Look holds the existing voltage range and link colours. Each
 flight-phase page offers one dropdown per plain value tile, labelled with that tile's own
 caption: choose a live reading before or during flight, or a figure from the last flight on
 Statistics. Each choice starts on the theme's own value; choosing another changes the caption,
@@ -81,9 +81,17 @@ out and marked *(global)*; set it to **Theme** on that radio-wide page to use th
 binding. These choices are standard settings for the theme, and a model can override each
 one through [Per-Model Settings](../pages/settings/dashboard/overrides.md).
 
-In fullscreen, Default shows the dashboard at the full screen size with the same layouts.
-The controls at the top right open the suite tool (while disarmed), open the quick menu,
-and leave fullscreen with **X**. A long press on the return key also leaves fullscreen.
+Info bar chooses what the bar across the top of the full screen shows: the clock, the radio
+battery and the link quality, each switched on as it comes.
+
+In fullscreen, Default shows the dashboard at the full screen size with the same layouts,
+below an info bar that takes the place of the radio's own top bar, drawn in the colour of the
+tiles. The bar shows the clock,
+the radio battery (in the warning colour below the radio's battery warning level) and the link
+quality as four steps and a percentage (on a receiver that reports only a signal strength, as
+four steps and the strength in dB), on the left, as chosen on the Info bar page. Its
+controls at the right open the suite tool (while disarmed), open the quick menu, and leave
+fullscreen with **X**. A long press on the return key also leaves fullscreen.
 With the global [Keys](../pages/settings/dashboard/keys.md) choices as they come, SYS opens
 the suite tool, and TELE and the page keys open the quick menu, also before the FC connects;
 Default binds no key itself, so MDL, and any key put on **Theme**, does nothing while the
@@ -105,8 +113,8 @@ the timer. After the flight: the lowest and highest voltage and current, and the
 temperature of the flight controller and of the ESC.
 
 Like Default, RF Status takes the full screen with the same layouts and the same controls, and
-its settings open the same five pages: **Look** (its voltage range), **Before flight**, **In
-flight**, **Statistics** and **Keys**, as described for [Default](#default).
+its settings open the same six pages: **Look** (its voltage range), **Before flight**, **In
+flight**, **Statistics**, **Info bar** and **Keys**, as described for [Default](#default).
 
 ![RF Status before, during and after the flight](../images/dashboard/themes/rfstatus.png)
 
@@ -122,8 +130,8 @@ time, highest current, fuel left, flight count, highest ESC temperature, voltage
 speed, highest altitude and lowest link quality.
 
 Like Default, @AERC takes the full screen with the same layouts and the same controls, and
-its settings open the same five pages: **Look** (its head speed, BEC and ESC temperature ranges), **Before flight**, **In
-flight**, **Statistics** and **Keys**, as described for [Default](#default).
+its settings open the same six pages: **Look** (its head speed, BEC and ESC temperature ranges), **Before flight**, **In
+flight**, **Statistics**, **Info bar** and **Keys**, as described for [Default](#default).
 
 ![@AERC before, during and after the flight](../images/dashboard/themes/aerc.png)
 
@@ -138,8 +146,8 @@ and highest head speed, voltage and lowest voltage, total time, flight count, hi
 and highest altitude.
 
 Like Default, @AERC Nitro takes the full screen with the same layouts and the same controls, and
-its settings open the same five pages: **Look** (its head speed, BEC and ESC temperature ranges), **Before flight**, **In
-flight**, **Statistics** and **Keys**, as described for [Default](#default).
+its settings open the same six pages: **Look** (its head speed, BEC and ESC temperature ranges), **Before flight**, **In
+flight**, **Statistics**, **Info bar** and **Keys**, as described for [Default](#default).
 
 ![@AERC Nitro during and after the flight](../images/dashboard/themes/aerc-n.png)
 
@@ -154,8 +162,8 @@ highest current, fuel left, highest head speed, highest ESC temperature, lowest 
 highest power, link quality and voltage.
 
 Like Default, @RT-RC takes the full screen with the same layouts and the same controls, and
-its settings open the same five pages: **Look** (its voltage range), **Before flight**, **In
-flight**, **Statistics** and **Keys**, as described for [Default](#default).
+its settings open the same six pages: **Look** (its voltage range), **Before flight**, **In
+flight**, **Statistics**, **Info bar** and **Keys**, as described for [Default](#default).
 
 ![@RT-RC before, during and after the flight](../images/dashboard/themes/rt-rc.png)
 
@@ -170,8 +178,8 @@ lowest and highest link quality, voltage, total time, lowest voltage per cell, l
 head speed and highest throttle.
 
 Like Default, @RT-RC Nitro takes the full screen with the same layouts and the same controls, and
-its settings open the same five pages: **Look** (its voltage range), **Before flight**, **In
-flight**, **Statistics** and **Keys**, as described for [Default](#default).
+its settings open the same six pages: **Look** (its voltage range), **Before flight**, **In
+flight**, **Statistics**, **Info bar** and **Keys**, as described for [Default](#default).
 
 ![@RT-RC Nitro during and after the flight](../images/dashboard/themes/rt-rc-n.png)
 
@@ -185,8 +193,8 @@ highest ESC temperature, voltage at the end of the flight, flight count, lowest 
 voltage per cell at the end of the flight (V/CELL).
 
 Like Default, @SRB-RC takes the full screen with the same layouts and the same controls, and
-its settings open the same five pages: **Look** (its BEC and ESC temperature warnings), **Before flight**, **In
-flight**, **Statistics** and **Keys**, as described for [Default](#default).
+its settings open the same six pages: **Look** (its BEC and ESC temperature warnings), **Before flight**, **In
+flight**, **Statistics**, **Info bar** and **Keys**, as described for [Default](#default).
 
 ![@SRB-RC before, during and after the flight](../images/dashboard/themes/srb-rc.png)
 

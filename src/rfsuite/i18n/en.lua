@@ -3056,6 +3056,12 @@ return {
         field_tile = "Tile",
         field_help_live = "Choose another live reading for this tile; its title, unit and decimals follow the choice.",
         field_help_stats = "Choose another figure from the last flight for this statistics tile.",
+        -- The info bar across the top of a theme's full screen and its settings page.
+        page_bar = "Info bar",
+        bar_clock = "Clock",
+        bar_tx_battery = "Radio battery",
+        bar_link = "Link quality",
+        bar_help = "Show this in the bar across the top of the full-screen dashboard.",
         -- The Urban theme's settings pages: the tile titles its init.lua declares, which are
         -- also the section headers of its configure page.
         urban_page_look = "Look",

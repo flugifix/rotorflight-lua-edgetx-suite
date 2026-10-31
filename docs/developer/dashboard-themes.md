@@ -869,8 +869,9 @@ ordinary theme settings, so the standard values and Per-Model Settings use the s
 and override rules as the theme's other settings.
 
 To offer the shared pages, declare `pages` in `init.lua` with the ids `preflight`, `inflight`,
-`postflight` and `keys`, alongside any pages the theme owns. Use the phase titles **Before
-flight**, **In flight** and **Statistics**, and **Keys** for the key page, with literal i18n
+`postflight`, `bar` and `keys`, alongside any pages the theme owns. Use the phase titles **Before
+flight**, **In flight** and **Statistics**, **Info bar** for the bar page and **Keys** for the
+key page, with literal i18n
 markers for shipped themes as in `themes/default/init.lua`. The manifest selects the pages;
 `configure.lua` must delegate them to `app/pages/settings/dashboard/fields_form.lua` as
 `themes/default/configure.lua` does:
@@ -892,6 +893,10 @@ called with a nil zone and a state containing `themeConfig`, so it must be able 
 the same named boxes with those inputs. Rows use the box's own caption, then its default
 entry's label, then Tile as a fallback.
 
+The Info bar page holds three switches, `bar_clock`, `bar_tx_battery` and `bar_link`, which
+start on; a theme that takes fullscreen gets the bar with all three items even without the
+page, because a key never stored counts as on.
+
 The Keys page binds PAGE >, PAGE <, MDL, SYS and TELE to the host actions defined in
 `widgets/dashboard/keys.lua`: nothing, quick menu, suite tool, Flight Log and exit full
 screen. Bindings start unbound. The radio-wide Keys page takes priority; rows for keys it
@@ -911,7 +916,14 @@ The mode follows the theme's `init.lua`, not the module on screen: a phase whose
 back to the default theme's inside a theme that opted in is drawn full screen as well.
 
 The build is the theme's own. A declarative theme is built by the engine from the same boxes as
-in the zone, at the larger size; a free-form theme's `build(zone, state, ctx)` receives the
+in the zone, at the larger size, laid out below an info bar the widget draws across the top of
+the screen: the place the radio's own top bar takes on a normal screen, which fullscreen hides.
+The bar is drawn in the colour most of the theme's boxes are filled with (`bgcolor`; a box
+without one counts as `WHITE`, a function is not counted; the radio's title bar colour where no
+box has a literal fill), with dark text on `WHITE` and light text on anything else, and carries the clock, the
+radio battery and the link quality as the pilot chooses them on the shared **Info bar** page
+(theme configuration keys `bar_clock`, `bar_tx_battery` and `bar_link`; a key never stored
+counts as on), and the controls at its right. A free-form theme's `build(zone, state, ctx)` receives the
 fullscreen zone and a third argument, `ctx`, which it never receives in the zone. The render key
 is the theme's, taken at the fullscreen size and under the same 2 Hz throttle as in the zone.
 

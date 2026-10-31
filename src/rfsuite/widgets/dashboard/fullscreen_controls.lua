@@ -153,4 +153,221 @@ function M.append(children, widget)
   return children
 end
 
+-- ---------------------------------------------------------------------------
+-- The info bar
+-- ---------------------------------------------------------------------------
+--
+-- A declarative theme is laid out for the widget area of a normal screen, which lies below the
+-- radio's own top bar. At full screen that top bar is gone, so the runtime lays the theme out
+-- below a bar of the same kind instead (`M.barHeight`) and draws the bar with `M.appendBar`:
+-- what the radio's top bar showed, on the left, and the three controls above, on the right --
+-- inside the bar rather than over the theme. The bar is drawn in the colour of the theme's tiles,
+-- so it reads as one more tile above the grid.
+--
+-- Which items it shows is the pilot's choice on the theme's Info bar page; the runtime hands the
+-- ids of the items switched on, in the order they are drawn. An empty list leaves the controls.
+
+-- The readings are taken by `M.refresh`, which the runtime calls from the widget's own refresh
+-- while the bar is up, at most once a second -- never from the bar's labels: their getters run in
+-- the firmware's reactive sweep, which may read a prepared value and do nothing else. getTime()
+-- counts in 10 ms ticks.
+local REFRESH_TICKS = 100
+
+-- The link item's four steps: in percent of a link quality, or in dBm where the link sensor that
+-- answered is a signal strength (1RSS/2RSS, which the suite's search for `link` ends in; the
+-- runtime publishes which one answered as `state.lqSource`).
+local LINK_STEPS = { 1, 50, 70, 90 }
+local RSSI_STEPS = { -120, -100, -85, -70 }
+local RSSI_LINK_SOURCES = { ["1RSS"] = true, ["2RSS"] = true }
+
+-- Kept once loaded; a load that failed is tried again on the next refresh.
+local RadioStatus = nil
+
+--- Take the readings of the items in `values.items` into `values`, at most once a second
+--- (`force` skips that wait). Called from the widget's refresh, where probing the radio is legal.
+function M.refresh(widget, values, force)
+  local now = (type(getTime) == "function" and getTime()) or 0
+  if not force and values.at ~= nil and now - values.at < REFRESH_TICKS and now >= values.at then return end
+  values.at = now
+  local items = values.items or {}
+
+  if items.clock then
+    local ok, dt = false, nil
+    if type(getDateTime) == "function" then ok, dt = pcall(getDateTime) end
+    values.clock = (ok and type(dt) == "table")
+      and string.format("%02d:%02d", dt.hour or 0, dt.min or 0) or "--:--"
+  end
+
+  if items.tx_battery then
+    if RadioStatus == nil then RadioStatus = requireModule("lib/radio_status.lua") end
+    local volts, low = nil, false
+    if type(RadioStatus) == "table" and type(RadioStatus.txBattery) == "function" then
+      local okBattery, v, _, l = pcall(RadioStatus.txBattery)
+      if okBattery then volts, low = v, l == true end
+    end
+    values.tx_battery = volts and string.format("%.1fV", volts) or "-V"
+    values.batteryLow = low
+  end
+
+  if items.link then
+    local state = widget.state
+    local reading = state and state.lq
+    local rssi = state and type(state.lqSource) == "string" and RSSI_LINK_SOURCES[state.lqSource] == true
+    local steps, limits = 0, rssi and RSSI_STEPS or LINK_STEPS
+    if type(reading) == "number" and reading == reading then
+      reading = math.floor(reading + 0.5)
+      if not rssi then reading = math.max(0, math.min(100, reading)) end
+      values.link = string.format(rssi and "%ddB" or "%d%%", reading)
+      for i = 1, #limits do
+        if reading >= limits[i] then steps = i end
+      end
+    else
+      values.link = rssi and "-dB" or "-%"
+    end
+    values.linkSteps = steps
+  end
+end
+
+local function fontHeight(font, fallback)
+  if lcd and type(lcd.sizeText) == "function" then
+    local ok, _, h = pcall(lcd.sizeText, "0", font)
+    if ok and type(h) == "number" and h > 0 then return h end
+  end
+  return fallback
+end
+
+local function textWidth(text, font, fallback)
+  if lcd and type(lcd.sizeText) == "function" then
+    local ok, w = pcall(lcd.sizeText, text, font)
+    if ok and type(w) == "number" and w > 0 then return w end
+  end
+  return fallback
+end
+
+--- The height of the bar at this zone: the controls with their top inset above and below.
+function M.barHeight(widget)
+  local g = geometry(widget)
+  return g.size + 2 * g.cy
+end
+
+--- The area a declarative theme is laid out in at full screen: the zone below the bar. The whole
+--- zone where the bar would leave nothing.
+function M.bodyZone(widget)
+  local zone = widget.zone or {}
+  local barH = M.barHeight(widget)
+  local h = (zone.h or LCD_H or 0) - barH
+  if h <= 0 then return zone end
+  return { x = zone.x or 0, y = (zone.y or 0) + barH, w = zone.w or LCD_W or 0, h = h }
+end
+
+-- The items of the bar, in its order, and the theme configuration key that switches each off (the
+-- Info bar page of app/pages/settings/dashboard/fields_form.lua). A key never stored leaves its
+-- item on.
+local ITEMS = {
+  { id = "clock", pref = "bar_clock" },
+  { id = "tx_battery", pref = "bar_tx_battery" },
+  { id = "link", pref = "bar_link" },
+}
+
+--- The ids of the items the theme's configuration leaves on, in the bar's order.
+function M.items(themeConfig)
+  local items = {}
+  for i = 1, #ITEMS do
+    local value = nil
+    if type(themeConfig) == "table" then value = themeConfig[ITEMS[i].pref] end
+    if not (value == false or value == "false" or value == 0 or value == "0") then
+      items[#items + 1] = ITEMS[i].id
+    end
+  end
+  return items
+end
+
+--- Append the bar for a declarative theme's full-screen build: the items its configuration leaves
+--- on, in the colour of its tiles (`engine.tileColor(build)`).
+function M.appendThemeBar(children, widget, build, engine)
+  local tileColor = engine and type(engine.tileColor) == "function" and engine.tileColor(build) or nil
+  return M.appendBar(children, widget, M.items(widget.state and widget.state.themeConfig), tileColor)
+end
+
+--- Append the info bar to `children`, after whatever is there: its background in `bgcolor`
+--- (the colour of the theme's tiles; the radio's title bar colour when that is not known), the
+--- `items` in their order and the three controls of `M.append`.
+function M.appendBar(children, widget, items, bgcolor)
+  local g = geometry(widget)
+  local dW = (widget.zone and widget.zone.w) or LCD_W or 0
+  local barH = M.barHeight(widget)
+  local font = g.isLarge and 0 or SMLSIZE
+  local textH = fontHeight(font, g.isLarge and 24 or 12)
+  local textY = math.floor((barH - textH) / 2)
+  local gap = g.isLarge and 16 or 6
+  local barColor = bgcolor or COLOR_THEME_SECONDARY1 or BLACK
+  -- Dark text on a white bar, light text on anything else -- the pairing the themes use.
+  local textColor = (barColor == WHITE) and BLACK or WHITE
+
+  local list = type(items) == "table" and items or {}
+
+  -- The readings the getters below return, kept on the widget: the runtime refreshes them from
+  -- the widget's refresh while the bar is up, and a rebuild of the scene starts from the last.
+  local values = widget._fullscreenBarValues
+  if values == nil then
+    values = {}
+    widget._fullscreenBarValues = values
+  end
+  values.items = {}
+  for i = 1, #list do values.items[list[i]] = true end
+  M.refresh(widget, values, true)
+
+  children[#children+1] = {
+    type = "rectangle", x = 0, y = 0, w = dW, h = barH, filled = true, color = barColor
+  }
+
+  local x = g.margin + (g.isLarge and 4 or 2)
+  for i = 1, #list do
+    local id = list[i]
+    if id == "clock" then
+      local w = textWidth("00:00", font, g.isLarge and 70 or 30)
+      children[#children+1] = {
+        type = "label", x = x, y = textY, w = w + 4, font = font, color = textColor,
+        text = function() return values.clock end
+      }
+      x = x + w + gap
+    elseif id == "tx_battery" then
+      local w = textWidth("00.0V", font, g.isLarge and 70 or 32)
+      children[#children+1] = {
+        type = "label", x = x, y = textY, w = w + 4, font = font,
+        color = function() return values.batteryLow and (COLOR_THEME_WARNING or RED) or textColor end,
+        text = function() return values.tx_battery end
+      }
+      x = x + w + gap
+    elseif id == "link" then
+      -- Four rising bars, then the reading. Lines, as on the controls: a line object takes no
+      -- press, so nothing here can catch a tap meant for the screen behind it.
+      local stepW = g.isLarge and 5 or 2
+      local stepGap = g.isLarge and 3 or 1
+      local fullH = math.max(4, textH - (g.isLarge and 4 or 2))
+      local baseY = textY + math.floor((textH + fullH) / 2)
+      for s = 1, #LINK_STEPS do
+        local h = math.max(2, math.floor(fullH * s / #LINK_STEPS))
+        local lineX = x + (s - 1) * (stepW + stepGap) + math.floor(stepW / 2)
+        children[#children+1] = {
+          type = "line", x = 0, y = 0, w = 0, h = 0, thickness = stepW,
+          pts = { { lineX, baseY - h }, { lineX, baseY } },
+          color = function()
+            return (values.linkSteps or 0) >= s and textColor or (COLOR_THEME_DISABLED or textColor)
+          end
+        }
+      end
+      x = x + #LINK_STEPS * (stepW + stepGap) + (g.isLarge and 4 or 2)
+      local w = textWidth("-100dB", font, g.isLarge and 72 or 32)
+      children[#children+1] = {
+        type = "label", x = x, y = textY, w = w + 4, font = font, color = textColor,
+        text = function() return values.link end
+      }
+      x = x + w + gap
+    end
+  end
+
+  return M.append(children, widget)
+end
+
 return M
