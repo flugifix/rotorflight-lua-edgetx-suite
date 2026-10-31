@@ -142,11 +142,21 @@ function M.read(mcuId)
         or not validName(field) or not integer(old) or not integer(new) then error("invalid entry") end
     entries[#entries + 1] = { time = time, source = source, profile = profile, field = field, old = old, new = new }
   end
+  local env = { e = collector }
+  local text = table.concat(parts)
   -- loadScript discards the environment and can create stale bytecode beside the journal.
-  local chunk, err = load(table.concat(parts), "=change_journal", "t", { e = collector })
-  if not chunk then return nil, err end
-  local ok, result = pcall(chunk)
-  if not ok then return nil, tostring(result) end
+  local chunk = load(text, "=change_journal", "t", env)
+  if chunk and pcall(chunk) then return entries end
+  -- A line torn by a write that was cut short, or one broken by hand, fails the whole file.
+  -- Read it again line by line and skip only the lines that do not read.
+  entries = {}
+  for line in string.gmatch(text, "[^\r\n]+") do
+    local count = #entries
+    local lineChunk = load(line, "=change_journal", "t", env)
+    if not lineChunk or not pcall(lineChunk) then
+      for i = #entries, count + 1, -1 do entries[i] = nil end
+    end
+  end
   return entries
 end
 
