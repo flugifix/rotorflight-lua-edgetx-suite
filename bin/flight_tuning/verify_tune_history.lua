@@ -3,8 +3,8 @@
 -- Run from the repository root:
 --     lua5.3 bin/flight_tuning/verify_tune_history.lua
 --
--- Drives the real src/rfsuite/lib/tune_history.lua, lib/change_journal.lua, lib/flight_log.lua
--- (its atomic replace) and tasks/msp/api/tune_advisor.lua (the simulator replies the flights are
+-- Drives the real src/rfsuite/lib/tune_history.lua, lib/change_journal.lua, lib/atomic_file.lua
+-- (the whole-file replace) and tasks/msp/api/tune_advisor.lua (the simulator replies the flights are
 -- made of) against an in-memory card that answers io.open/io.read/io.write/io.close, fstat,
 -- mkdir, rename and del the way the radio's filesystem library does.
 --
@@ -78,7 +78,7 @@ function rename(from, to)
 end
 function loadScript(path)
   local relative = string.match(path, "^/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
-  assert(relative == "lib/flight_log.lua", "unexpected module: " .. tostring(path))
+  assert(relative == "lib/atomic_file.lua", "unexpected module: " .. tostring(path))
   return assert(loadfile("src/rfsuite/" .. relative))
 end
 _G.rfsuite = nil

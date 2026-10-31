@@ -16,9 +16,9 @@
 -- depends on and the reply does not carry; any of them may be nil, which means unknown.
 --
 -- Only the newest MAX_FLIGHTS flights are kept, since the page never looks further back. Every
--- write replaces the whole file through lib/flight_log.lua's atomic replace, so a write that is
--- cut short leaves the previous file in place rather than a torn one. A line that does not read
--- is skipped and the rest of the file still counts.
+-- write replaces the whole file through lib/atomic_file.lua, so a write that is cut short
+-- leaves the previous file in place rather than a torn one. A line that does not read is
+-- skipped and the rest of the file still counts.
 --
 -- aggregate() combines the newest flights flown on the newest flight's tune, for one axis:
 -- counts add up, ratios are averaged weighted by the count they came from. The flight
@@ -234,8 +234,8 @@ local function write(mcuId, flights)
   local path = M.path(mcuId)
   if not path then return false end
   -- Loaded only to write: reading the history never needs it
-  local FlightLog = requireModule("lib/flight_log.lua")
-  if type(FlightLog) ~= "table" or type(FlightLog.atomicReplace) ~= "function" then return false end
+  local AtomicFile = requireModule("lib/atomic_file.lua")
+  if type(AtomicFile) ~= "table" or type(AtomicFile.replace) ~= "function" then return false end
   local out = { "v(" .. FORMAT_VERSION .. ")" }
   for _, flight in ipairs(flights) do
     for axis = 1, AXIS_COUNT do
@@ -246,7 +246,7 @@ local function write(mcuId, flights)
   out[#out + 1] = ""
   makeDir(USER_ROOT)
   makeDir(DATA_DIR)
-  return FlightLog.atomicReplace(path, table.concat(out, "\n"), true) == true
+  return AtomicFile.replace(path, table.concat(out, "\n"), true) == true
 end
 
 --- Appends one flight and drops all but the newest MAX_FLIGHTS. replies: the three decoded
