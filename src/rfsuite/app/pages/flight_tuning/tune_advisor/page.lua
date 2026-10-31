@@ -1371,7 +1371,8 @@ function M.build(ctx)
     { label = T.axisNames[AXIS_YAW], value = AXIS_YAW }
   }
   cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w, T.axis, axisOptions,
-    ui.selected, onAxis)
+    ui.selected, onAxis, { helpText = pageText(i18n, "help_axis",
+      "Roll, Pitch or Yaw: the flight data, the advice and Save below are for this axis only."), helpTitle = T.axis })
 
   cursorY = cursorY + appendValueRow(children, x, cursorY, w, T.data, view.data)
   cursorY = cursorY + appendValueRow(children, x, cursorY, w, T.profile, view.profile)
