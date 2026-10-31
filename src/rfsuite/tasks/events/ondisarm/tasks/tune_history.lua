@@ -55,7 +55,9 @@ local CORE = "/SCRIPTS/TOOLS/rfsuite-core/"
 
 local done = false                -- the runner's view: this disarm has been marked
 
--- Loaded one per pass and dropped with this module once the capture is idle
+-- Loaded one per pass, each dropped again once its step is through, and all of them with this
+-- module once the capture is idle. Held together they would be most of what the capture costs
+-- in memory, for steps that never need more than one of them.
 local TuneAdvisorApi, TuneHistory, ChangeJournal, RcTuningApi, PidProfileApi = nil, nil, nil, nil, nil
 
 local function nowSeconds()
@@ -241,6 +243,7 @@ local function sendClear(tc, queue)
     processReply = function(msg)
       if msg.__errorReply then handleError(tc, "nocommand"); return end
       tc.clearPending = false
+      TuneAdvisorApi = nil
       waitFor(tc, tc.contextPending and GAP_SECONDS or 0)
       publishState(tc)
     end,
@@ -321,6 +324,7 @@ local function finishCapture(tc, mcuId)
     saved = true
   end
   clearReplies(tc)
+  TuneHistory, ChangeJournal = nil, nil
   tc.pending = false
   if seconds > 0 then tc.clearPending = true end
   if saved then
@@ -341,10 +345,12 @@ local function advanceContext(tc, queue)
       ctx.cyclicRing = tonumber(p.cyclic_ring)
     end)
   elseif ctx.step == 2 then
+    RcTuningApi = nil
     if PidProfileApi == nil then PidProfileApi = loadPlain("tasks/msp/api/pid_profile.lua"); return end
     if not PidProfileApi then ctx.step = 3; return end
     readContext(tc, queue, PidProfileApi, function(p) ctx.relaxType = tonumber(p.iterm_relax_type) end)
   else
+    PidProfileApi = nil
     tc.contextPending = false
     tc.context = nil
     if ctx.cyclicPolarity ~= nil or ctx.cyclicRing ~= nil or ctx.relaxType ~= nil then
