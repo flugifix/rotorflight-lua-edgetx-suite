@@ -252,10 +252,17 @@ end
 --- Appends one flight and drops all but the newest MAX_FLIGHTS. replies: the three decoded
 --- tasks/msp/api/tune_advisor.lua records, roll, pitch, yaw. context: any of CONTEXT_KEYS known
 --- at the time (the rest stay unknown). time: the radio clock in seconds. Returns true when
---- written.
+--- written; false and, where the file could not be read, the reason.
+---
+--- The file is rebuilt from what read() returns, so a read that failed would write this one
+--- flight over the ones before it. Only a file that read, is not there, or is of another format
+--- version (which is started again) is replaced; a file that could not be opened or read, or is
+--- over the cap, is left as it is and the save reports the failure. The caller then keeps the
+--- flight controller's statistics and tries again.
 function M.save(mcuId, replies, context, time)
   if not M.path(mcuId) or type(replies) ~= "table" then return false end
-  local flights = M.read(mcuId)
+  local flights, why = M.read(mcuId)
+  if why ~= nil and why ~= "missing" and why ~= "version" then return false, why end
   local keep = {}
   for i = math.max(1, #flights - (MAX_FLIGHTS - 1) + 1), #flights do keep[#keep + 1] = flights[i] end
   local flight = { time = time or 0, seconds = replies[1] and replies[1].seconds or 0, axes = {} }

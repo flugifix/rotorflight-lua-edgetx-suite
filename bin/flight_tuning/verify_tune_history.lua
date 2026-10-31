@@ -38,12 +38,14 @@ end
 -- luacheck: globals io
 local files = {}
 local renameFails = {}         -- source path -> true: that rename answers an error
+local openFails = {}           -- path -> n: the next n opens for reading answer nil
 local renames = {}
 
 io.open = function(path, mode)
   mode = mode or "r"
   if string.sub(mode, 1, 1) == "r" then
     if files[path] == nil then return nil end
+    if (openFails[path] or 0) > 0 then openFails[path] = openFails[path] - 1; return nil end
     return { path = path, pos = 1, mode = "r" }
   end
   if string.sub(mode, 1, 1) == "w" then files[path] = "" end
@@ -95,6 +97,7 @@ local CONTEXT = { pidProfile = 1, rateProfile = 1, cyclicPolarity = 0, cyclicRin
 local function reset()
   for k in pairs(files) do files[k] = nil end
   for k in pairs(renameFails) do renameFails[k] = nil end
+  for k in pairs(openFails) do openFails[k] = nil end
   for i = #renames, 1, -1 do renames[i] = nil end
 end
 
@@ -266,6 +269,24 @@ do
   renameFails[HISTORY .. ".new"] = nil
 
   check("erase removes the file", tuneHistory.erase(MCU) == true and files[HISTORY] == nil)
+
+  -- The file is rebuilt from what read() returned: a read that failed must not become a file
+  -- holding the new flight alone.
+  reset()
+  fly(147)
+  fly(150)
+  kept = files[HISTORY]
+  openFails[HISTORY] = 1
+  local ok, why = fly(160)
+  check("a file that cannot be opened is not written over", ok == false and why == "open"
+    and files[HISTORY] == kept, tostring(why))
+  check("the next save after it keeps every flight", fly(170) == true and #tuneHistory.read(MCU) == 3,
+    #tuneHistory.read(MCU) .. " flights")
+  files[HISTORY] = kept .. string.rep("-- padding ", 1700)
+  local big = files[HISTORY]
+  ok, why = fly(180)
+  check("a file over the read cap is not written over", ok == false and why == "too big"
+    and files[HISTORY] == big, tostring(why))
 end
 
 print("Differences from the Ethos suite: profiles, polarity, ring and relax type (#979)")
