@@ -515,13 +515,13 @@ return {
         resp_ok = "Folgt dem Knüppel",
         stops_more_fmt = "Mehr Stopps nötig (%d/%d)",
         stops_value_fmt = "%d%% Rückprall",
-        act_fly_roll = "Rollen im Rate-Modus fliegen, danach jeweils den Knüppel zentrieren",
-        act_fly_pitch = "Flips im Rate-Modus fliegen, danach jeweils den Knüppel zentrieren",
-        act_fly_yaw = "Pirouetten im Rate-Modus fliegen, danach jeweils den Knüppel zentrieren",
+        act_fly_roll = "Rollen im Acro-Modus fliegen, danach jeweils den Knüppel zentrieren",
+        act_fly_pitch = "Flips im Acro-Modus fliegen, danach jeweils den Knüppel zentrieren",
+        act_fly_yaw = "Pirouetten im Acro-Modus fliegen, danach jeweils den Knüppel zentrieren",
         act_rate_pct_up_fmt = "%s > %s: alle Raten etwa %d%% höher",
         act_rate_pct_down_fmt = "%s > %s: alle Raten etwa %d%% niedriger",
         act_none = "Keine Änderung vorgeschlagen",
-        why_more = "Die Daten sammeln sich, während Sie im Rate-Modus fliegen.",
+        why_more = "Die Daten sammeln sich, während Sie im Acro-Modus fliegen.",
         why_uneven = "Das Ansprechen schwankt zu stark zum Beurteilen. Im 3D-Flug häufig.",
         why_fast = "Der Heli dreht schneller, als der Knüppel verlangt.",
         why_slow = "Der Heli dreht langsamer, als der Knüppel verlangt.",
@@ -554,7 +554,7 @@ return {
         journal_failed = "Das Änderungsjournal konnte nicht geschrieben werden.",
         applied = "Übernommen. Neue Einstellungen im Flug prüfen.",
         help_title = "Tuning-Berater",
-        help_message = "Im Rate-Modus fliegen; jede Achse lesen, einmal ändern, erneut fliegen.\n#n oben: Raten-Profil, für das der Rat gilt.\nAchse: Roll, Nick oder Gier; alle Zeilen gelten für diese Achse.\nFlugdaten: gemessener Rate-Flug und ob gerade erfasst wird.\nAnsprechen: Helidrehrate im Vergleich zum Knüppel.\nStopps: Rückprall nach Zentrieren des Knüppels.\nVorgeschlagene Änderungen: nach Seite und Einstellung.\nWarum: Grund jeder Änderung.\n*: löscht gesammelte Daten nach Rückfrage.\nSpeichern (Kopfzeile): schreibt Vorschläge dieser Achse nach Bestätigung."
+        help_message = "Im Acro-Modus fliegen; jede Achse lesen, einmal ändern, erneut fliegen.\nAchse: Roll, Nick oder Gier; alle Zeilen gelten für diese Achse.\nFlugdaten: gemessener Acro-Flug und ob gerade erfasst wird.\nAnsprechen: Helidrehrate im Vergleich zum Knüppel.\nStopps: Rückprall nach Zentrieren des Knüppels.\nVorgeschlagene Änderungen: nach Seite und Einstellung.\nWarum: Grund jeder Änderung.\n*: löscht gesammelte Daten nach Rückfrage.\nSpeichern (Kopfzeile): schreibt Vorschläge dieser Achse nach Bestätigung."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
         save_error_title = "Fehler",
