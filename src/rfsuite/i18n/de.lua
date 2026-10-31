@@ -569,7 +569,7 @@ return {
         applied = "Änderungen im Flugcontroller gespeichert. Erneut fliegen, um die neue Abstimmung zu prüfen.",
         help_title = "Tuning-Berater",
         help_axis = "Roll, Nick oder Gier: Flugdaten, Vorschläge und Speichern darunter gelten nur für diese Achse.",
-        help_message = "Acro fliegen; jedes Entschärfen speichert den Flug. Einmal ändern, neu fliegen.\nAchse: Roll, Nick oder Gier; alle Zeilen gelten für diese Achse.\nFlugdaten: Acro-Zeit zusammen und wie viele der letzten 5 Flüge.\nProfile: PID- und Ratenprofil des neuesten Flugs.\nAnsprechen: Drehrate im Vergleich zum Knüppel.\nStopps: Rückprall nach Knüppelzentrieren oder Zittern.\nVorgeschlagene Änderungen: nach Seite und Einstellung.\nWarum: Grund jeder Änderung.\n*: löscht nach Rückfrage gespeicherte Flüge und Statistik des Flugreglers.\nSpeichern (Kopfzeile): schreibt Vorschläge dieser Achse nach Bestätigung."
+        help_message = "Acro fliegen; jedes Entschärfen speichert den Flug. Einmal ändern, neu fliegen.\nAchse: Roll, Nick oder Gier; alle Zeilen gelten für diese Achse.\nFlugdaten: Acro-Zeit zusammen und wie viele der letzten 5 Flüge.\nProfile: PID- und Ratenprofil des neuesten Flugs.\nAnsprechen: Drehrate im Vergleich zum Knüppel.\nStopps: Rückprall nach Knüppelzentrieren oder Zittern.\nVorgeschlagene Änderungen: nach Seite und Einstellung.\nWarum: Grund jeder Änderung.\n*: löscht nach Rückfrage gespeicherte Flüge und Statistik des Flugcontrollers.\nSpeichern (Kopfzeile): schreibt Vorschläge dieser Achse nach Bestätigung."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
         save_error_title = "Fehler",
