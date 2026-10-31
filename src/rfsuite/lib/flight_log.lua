@@ -538,6 +538,9 @@ local function atomicReplace(path, content, allowCreate)
   return true
 end
 
+-- Shared with lib/tune_history.lua, which replaces its whole file the same way.
+M.atomicReplace = atomicReplace
+
 -- Reads the registry for a rewrite. The second return is the distinct refusal a caller has to
 -- be able to explain: a file above the cap is read short, and a short read written back is the
 -- rest of the pilot's registry deleted.
