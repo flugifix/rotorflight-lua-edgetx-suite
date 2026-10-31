@@ -335,12 +335,17 @@ function M.appendBar(children, widget, items, bgcolor, side)
     values = {}
     widget._fullscreenBarValues = values
   end
-  values.reads = {}
+  local reads = {}
   for i = 1, #list do
     local read = READS[list[i]]
-    if read then values.reads[read] = true end
+    if read then reads[read] = true end
   end
-  M.refresh(widget, values, true)
+  values.reads = reads
+  -- A rebuild keeps the last readings and the once-a-second limit; only a reading the bar now
+  -- shows and has never taken is taken at once.
+  local missing = (reads.clock and values.clock == nil) or (reads.battery and values.batteryVolts == nil)
+    or (reads.link and values.link == nil)
+  M.refresh(widget, values, missing)
 
   children[#children+1] = {
     type = "rectangle", x = 0, y = 0, w = dW, h = barH, filled = true, color = barColor

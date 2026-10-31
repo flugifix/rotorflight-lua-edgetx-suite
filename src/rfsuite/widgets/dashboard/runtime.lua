@@ -5180,6 +5180,9 @@ function Runtime.new(zone, options)
       -- A splash that keeps raising falls back to the bare label, not to the failure surface,
       -- which is drawn by the same builder.
       if not self.built then
+        -- The splash or standby replaces whatever stood, a full-screen info bar included, whose
+        -- readings stop with it (fullscreen_controls.lua `refresh`).
+        self._fullscreenBarControls = nil
         if useStandby and not jobCapped(self, "standby") then
           self._job = { kind = "standby", step = standbyJobStep, fullscreen = fullscreenSplash }
         elseif not useStandby and not jobCapped(self, "splash") then
@@ -5354,6 +5357,9 @@ function Runtime.new(zone, options)
       -- it is drawn by the same builder: see failedJobStep.
       self._job = { kind = jobKind, step = jobStep, fullscreen = jobFullscreen or (isInteractive and self._viewId ~= nil),
         fullscreenSplash = jobKind == "failed" and isInteractive or nil }
+      -- Any build but the full-screen theme's replaces the info bar, a view over the theme
+      -- included; the theme's own build sets it again when it draws one.
+      if jobKind ~= "fs_theme" then self._fullscreenBarControls = nil end
     end
 
     -- The battery prompt's own work, last and only into a free slot: the registry read and the
