@@ -491,3 +491,11 @@ jobs:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y lua5.3
       - run: lua5.3 bin/flight_tuning/verify_tune_history.lua
+
+  tune-advisor-gate:
+    name: Tune Advisor requests are sent only to firmware that has the command
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.3
+      - run: lua5.3 bin/flight_tuning/verify_tune_advisor_gate.lua

@@ -16,7 +16,9 @@
 -- the disarm task, which this file does not cover), and each such flight is saved with one
 -- known context (profiles, cyclic polarity, cyclic ring, relax type), since a flight of unknown
 -- context is never combined with another. The Apply record is this suite's change journal.
--- The disarm capture, its pacing and its request gate are not here.
+-- The disarm capture and its pacing are the Ethos cases of the same file, driven through this
+-- suite's event runtime (bin/flight_tuning/tune_capture_rig.lua); its request gate is
+-- bin/flight_tuning/verify_tune_advisor_gate.lua.
 --
 -- Against a tree without lib/tune_history.lua this script stops at the first load: red.
 
@@ -277,7 +279,8 @@ do
   fly(150)
   kept = files[HISTORY]
   openFails[HISTORY] = 1
-  local ok, why = fly(160)
+  local ok
+  ok, why = fly(160)
   check("a file that cannot be opened is not written over", ok == false and why == "open"
     and files[HISTORY] == kept, tostring(why))
   check("the next save after it keeps every flight", fly(170) == true and #tuneHistory.read(MCU) == 3,
@@ -386,6 +389,422 @@ do
   local a, n = tuneHistory.aggregate(tuneHistory.read(MCU), 1)
   check("5 x 14000 full-stick samples sum to 70000, not capped at 16 bits", n == 5 and a.fullCount == 70000,
     tostring(a.fullCount))
+end
+
+-- ---------------------------------------------------------------------------
+-- The disarm capture, on the real event runtime (bin/flight_tuning/tune_capture_rig.lua)
+-- ---------------------------------------------------------------------------
+-- The Ethos cases drive their task through "session.update" and a scheduler; here every step is
+-- a pass of tasks/events/runtime.lua, the disarm reaches the capture through the real ondisarm
+-- runner (one task per pass, so the capture is marked a few passes after the edge), and the
+-- flight controller's answers are given between passes as the queue would give them. Their
+-- request strings name the Tune Advisor's own requests; the two settings reads that follow a
+-- saved flight's clear (a difference, below) are recorded apart and answered as they come.
+local Rig = assert(loadfile("bin/flight_tuning/tune_capture_rig.lua"))()
+local rig
+
+local function fresh(opts)
+  reset()
+  rig = Rig.new(opts)
+end
+
+local function update(armed)
+  rig.setArmed(armed)
+end
+
+-- Runs the clock forward in half-second passes for `seconds` (default 30), answering each
+-- request as it goes out. `fail` maps a request name to {n = times, reason = queue reason}:
+-- that many of its sends end in the error handler instead. `limit` stops after that many Tune
+-- Advisor requests. Returns what was asked, e.g. "roll,pitch,yaw,clear", and the clock at each.
+local function pump(fail, limit, seconds)
+  local asked, times = {}, {}
+  local stopAt = rig.clock + (seconds or 30)
+  while rig.clock < stopAt and not (limit and #asked >= limit) do
+    rig.clock = rig.clock + 0.5
+    rig.pass()
+    while rig.requests[1] and not (limit and #asked >= limit) do
+      local msg = rig.take()
+      local name = rig.name(msg)
+      if name == "rc_tuning" or name == "pid_profile" then
+        rig.contextAsked[#rig.contextAsked + 1] = name
+      else
+        asked[#asked + 1] = name
+        times[#times + 1] = rig.clock
+      end
+      local f = fail and fail[name]
+      if f and f.n > 0 then
+        f.n = f.n - 1
+        msg.errorHandler(msg, f.reason)
+      else
+        rig.answer(msg)
+      end
+    end
+  end
+  return table.concat(asked, ","), times
+end
+
+local function flyThrough(seconds, f)
+  rig.reply.seconds, rig.reply.F = seconds, f or 100
+  rig.clock = rig.clock + 60
+  update(true)
+  update(false)
+  return pump()
+end
+
+-- Disarms, then lets the start wait pass: the pass that sends the first read. The runner marks
+-- the capture a few passes after the edge, so this runs half-second passes until the read is
+-- out rather than one pass five seconds later.
+local function disarmAndWait()
+  update(true)
+  update(false)
+  for _ = 1, 40 do
+    if rig.requests[1] then break end
+    rig.clock = rig.clock + 0.5
+    rig.pass()
+  end
+end
+
+local function drop() rig.drop() end
+
+print("Ethos suite: the disarm capture")
+do
+  fresh()
+  update(false)
+  update(true)
+  check("nothing is asked while armed", #rig.requests == 0, #rig.requests .. " requests")
+  local disarmedAt = rig.clock
+  update(false)
+  check("nothing is asked straight after the disarm", #rig.requests == 0, #rig.requests .. " requests")
+  local asked, times = pump()
+  check("a disarm reads roll, pitch and yaw, then clears the FC", asked == "roll,pitch,yaw,clear", asked)
+  local spaced = times[1] ~= nil and times[1] - disarmedAt >= 5
+  for i = 2, #times do spaced = spaced and times[i] - times[i - 1] >= 2 end
+  check("the first read waits 5 s, and each request 2 s after the last", spaced, table.concat(times, " "))
+  local r = lines()
+  check("(difference, the file) a version line and one line per axis are written", #r == 4 and r[1] == "v(1)"
+    and string.find(r[2], ',147,"roll",1,1,', 1, true) ~= nil and string.find(r[2], ',70,100,0,10,4,18,24,', 1, true) ~= nil
+    and string.find(r[3], ',"pitch",', 1, true) ~= nil and string.find(r[4], ',"yaw",', 1, true) ~= nil,
+    table.concat(r, "\n"))
+  local _, commas2 = string.gsub(r[2] or "", ",", "")
+  local _, commas4 = string.gsub(r[4] or "", ",", "")
+  check("(difference, the file) every line carries the same values", commas2 == commas4 and commas2 > 0,
+    commas2 .. " vs " .. commas4)
+  local tc = rig.capture()
+  check("the page is told", tc ~= nil and tc.saved == 1 and tc.savedMcu == MCU)
+
+  asked = pump()
+  check("a disarm is captured once", asked == "", asked)
+  check("the page is told reading from the disarm until the clear, then idle",
+    table.concat(rig.states, ",") == "idle,reading,idle", table.concat(rig.states, ","))
+
+  local asked0 = flyThrough(0)
+  check("a flight with no acro flight saves nothing and clears nothing", asked0 == "roll,pitch,yaw"
+    and #lines() == 4, asked0 .. " / " .. #lines() .. " lines")
+
+  for n = 1, 6 do flyThrough(100 + n) end
+  r = lines()
+  check("only the last 5 flights are kept", #r == 16 and string.find(r[2], ',102,"roll",', 1, true) ~= nil
+    and string.find(r[14], ',106,"roll",', 1, true) ~= nil, #r .. " lines; first " .. tostring(r[2]))
+end
+
+do
+  -- The link goes while the craft is armed and comes back with it disarmed: the runtime kept the
+  -- flight across the loss and ends it in the gap (endKeptFlight) once the board says disarmed.
+  fresh()
+  update(true)
+  rig.setLink(false)
+  rig.passes(30)
+  rig.session.mcu_id = nil
+  rig.mspState.lastArmed = false
+  rig.armedReading = { false, true }
+  rig.setLink(true)
+  rig.passes(100)
+  check("waits for the aircraft identity", #rig.requests == 0, #rig.requests .. " requests")
+  rig.session.mcu_id = MCU
+  pump()
+  check("a disarm during a link loss is captured on reconnect", #lines() == 4, #lines() .. " lines")
+end
+
+do
+  fresh()
+  disarmAndWait()
+  rig.errorReply(rig.requests[1])
+  drop()
+  local asked = pump()
+  check("firmware without the tune advisor is asked once", asked == "" and files[HISTORY] == nil, asked)
+end
+
+-- A reply this suite refuses is deterministic: the same bytes come back on every request, so
+-- waiting out the link error's retry buys nothing.
+do
+  fresh()
+  disarmAndWait()
+  local t0 = rig.clock
+  rig.refusedReply(rig.requests[1])
+  drop()
+  rig.pass()
+  check("a refused reply is not asked again straight away", #rig.requests == 0, #rig.requests .. " requests")
+  rig.clock = t0 + 11
+  rig.pass()
+  check("a refused reply is never retried", #rig.requests == 0, #rig.requests .. " requests")
+  rig.clock = t0 + 17
+  rig.pass()
+  check("a refused reply stays refused, flight by flight", #rig.requests == 0, #rig.requests .. " requests")
+  check("a refused flight is not saved", files[HISTORY] == nil, tostring(files[HISTORY]))
+  disarmAndWait()
+  check("the next disarm asks once", #rig.requests == 1, #rig.requests .. " requests")
+end
+
+do
+  fresh()
+  disarmAndWait()
+  local msg = rig.requests[1]
+  msg.errorHandler(msg, "max_retries")
+  drop()
+  rig.pass()
+  check("a link error waits before asking again", #rig.requests == 0, #rig.requests .. " requests")
+  local asked = pump({ clear = { n = 1, reason = "timeout" } })
+  check("a clear that did not get through is sent again", asked == "roll,pitch,yaw,clear,clear"
+    and #lines() == 4, asked .. " / " .. #lines() .. " lines")
+end
+
+do
+  fresh()
+  update(true)
+  update(false)
+  local asked = pump({ pitch = { n = 1, reason = "max_retries" } })
+  check("a lost axis is asked again on its own", asked == "roll,pitch,pitch,yaw,clear" and #lines() == 4,
+    asked .. " / " .. #lines() .. " lines")
+end
+
+-- What the pacing fixes: a reply lost on every try kept the MSP queue and the telemetry link busy
+-- for as long as the model sat disarmed.
+do
+  fresh()
+  local asked = flyThrough(147)
+  check("(setup) one flight saved", asked == "roll,pitch,yaw,clear", asked)
+  rig.clock = rig.clock + 60
+  update(true)
+  update(false)
+  asked = pump({ roll = { n = 99, reason = "max_retries" } }, nil, 120)
+  check("three link errors, then nothing until the next disarm", asked == "roll,roll,roll", asked)
+  check("the page is told the flight was not read", rig.states[#rig.states] == "failed",
+    table.concat(rig.states, ","))
+  update(true)
+  check("arming ends the failed note", rig.states[#rig.states] == "idle", table.concat(rig.states, ","))
+  asked = flyThrough(200)
+  check("the next disarm reads again", asked == "roll,pitch,yaw,clear" and #lines() == 7,
+    asked .. " / " .. #lines() .. " lines")
+end
+
+do
+  fresh()
+  update(true)
+  update(false)
+  local asked = pump({ roll = { n = 5, reason = "cleared" } }, nil, 60)
+  check("a cleared queue is not counted as a link error",
+    asked == "roll,roll,roll,roll,roll,roll,pitch,yaw,clear", asked)
+end
+
+-- Ethos: the session publishes only when its snapshot changes, so the waits must run out on the
+-- task's own clock. Here the event runtime's pass is that clock: nothing but passes go by.
+do
+  fresh()
+  update(true)
+  update(false)
+  local asked = {}
+  for _ = 1, 60 do
+    rig.clock = rig.clock + 0.5
+    rig.pass()
+    while rig.requests[1] do
+      local msg = rig.take()
+      local name = rig.name(msg)
+      if name ~= "rc_tuning" and name ~= "pid_profile" then asked[#asked + 1] = name end
+      rig.answer(msg)
+    end
+  end
+  asked = table.concat(asked, ",")
+  check("a quiet session still captures, on the task's clock", asked == "roll,pitch,yaw,clear"
+    and #lines() == 4, asked .. " / " .. #lines() .. " lines")
+end
+
+-- A flight controller that restarted between two reads answers with another flight
+do
+  fresh()
+  rig.reply.seconds = 147
+  disarmAndWait()
+  rig.answer(rig.take())
+  rig.reply.seconds = 0
+  local asked = pump()
+  check("axes from two flights are not saved as one", asked == "pitch,yaw,roll,pitch,yaw"
+    and files[HISTORY] == nil, asked .. " / " .. tostring(files[HISTORY]))
+  rig.reply.seconds = 147
+end
+
+do
+  fresh()
+  disarmAndWait()
+  rig.answer(rig.take())
+  local asked = pump({ pitch = { n = 1, reason = "cleared" } })
+  check("a cleared queue drops the axes already read", asked == "pitch,roll,pitch,yaw,clear"
+    and #lines() == 4, asked .. " / " .. #lines() .. " lines")
+end
+
+do
+  fresh()
+  local history = assert(loadfile("src/rfsuite/lib/tune_history.lua"))()
+  local realSave, saves = history.save, 0
+  history.save = function(...)
+    saves = saves + 1
+    if saves <= 4 then return false end
+    return realSave(...)
+  end
+  rig.shared["lib/tune_history.lua"] = history
+  update(true)
+  update(false)
+  local asked = pump(nil, nil, 60)
+  check("a failed write is tried again without reading again, past the link-error limit",
+    asked == "roll,pitch,yaw,clear" and saves == 5 and #lines() == 4,
+    asked .. " / " .. saves .. " saves / " .. #lines() .. " lines")
+end
+
+do
+  fresh()
+  disarmAndWait()
+  local msg = rig.requests[1]
+  check("a tune read gives up after three sends", msg ~= nil and msg.maxRetries == 2, tostring(msg and msg.maxRetries))
+end
+
+do
+  fresh()
+  disarmAndWait()
+  rig.errorReply(rig.requests[1])
+  drop()
+  rig.pass()
+  check("firmware without the tune advisor leaves the page idle", rig.states[#rig.states] == "idle",
+    table.concat(rig.states, ","))
+end
+
+-- A flight is saved and its clear fails, so a clear stays outstanding. The next flight is refused.
+-- The clear must not go out now: it would erase the refused flight on the flight controller.
+do
+  fresh()
+  update(true)
+  update(false)
+  local asked = pump({ clear = { n = 1, reason = "timeout" } }, 4)
+  check("flight one is saved before its clear fails", asked == "roll,pitch,yaw,clear" and #lines() == 4,
+    asked .. " / " .. #lines() .. " lines")
+  disarmAndWait()
+  rig.refusedReply(rig.requests[1])
+  drop()
+  asked = pump()
+  check("a clear is not sent over a refused flight on the FC", asked == "", asked)
+  check("the refused flight is not saved", #lines() == 4, #lines() .. " lines")
+end
+
+-- ---------------------------------------------------------------------------
+print("Differences from the Ethos suite: the capture (#979)")
+-- ---------------------------------------------------------------------------
+do
+  fresh()
+  local Manifest = assert(loadfile("src/rfsuite/tasks/events/ondisarm/manifest.lua"))()
+  local last = Manifest[#Manifest]
+  check("the capture is the last disarm task, and the widget's alone", type(last) == "table"
+    and last.name == "tune_history" and last.context == "widget", tostring(last and last.name))
+
+  -- The disarm edge and the passes after it carry the disarm chain's own work: nothing of the
+  -- capture but the runner's one call that marks it.
+  for i = #rig.loads, 1, -1 do rig.loads[i] = nil end
+  update(true)
+  update(false)
+  rig.passes(40)
+  local captureModules = {
+    ["tasks/msp/api/tune_advisor.lua"] = true, ["lib/tune_history.lua"] = true, ["lib/atomic_file.lua"] = true,
+    ["lib/change_journal.lua"] = true, ["lib/profile.lua"] = true, ["tasks/msp/api/rc_tuning.lua"] = true,
+    ["tasks/msp/api/pid_profile.lua"] = true,
+  }
+  local early = {}
+  for _, path in ipairs(rig.loads) do
+    if captureModules[path] then early[#early + 1] = path end
+  end
+  local marked = 0
+  for _, path in ipairs(rig.loads) do
+    if path == "tasks/events/ondisarm/tasks/tune_history.lua" then marked = marked + 1 end
+  end
+  check("for four seconds after the disarm nothing is sent and nothing of the capture loads but its mark",
+    #rig.requests == 0 and #early == 0 and marked == 1, #rig.requests .. " requests; " .. table.concat(early, " ")
+    .. "; capture loaded " .. marked .. "x")
+  local asked = pump()
+  check("then it runs as above", asked == "roll,pitch,yaw,clear", asked)
+  check("nothing is left owed once the capture is through", rig.capture().pending == false
+    and rig.capture().contextPending == false)
+end
+
+do
+  fresh()
+  rig.session.activeProfile, rig.session.activeRateProfile = 2, 4
+  local asked = flyThrough(147)
+  local a = tuneHistory.read(MCU)[1].axes[1]
+  check("after the clear, RC_TUNING and PID_PROFILE are read", asked == "roll,pitch,yaw,clear"
+    and table.concat(rig.contextAsked, ",") == "rc_tuning,pid_profile", table.concat(rig.contextAsked, ","))
+  local rc = assert(loadfile("src/rfsuite/tasks/msp/api/rc_tuning.lua"))().parse(
+    assert(loadfile("src/rfsuite/tasks/msp/api/rc_tuning.lua"))().simulatorResponse)
+  local pid = assert(loadfile("src/rfsuite/tasks/msp/api/pid_profile.lua"))().parse(
+    assert(loadfile("src/rfsuite/tasks/msp/api/pid_profile.lua"))().simulatorResponse)
+  check("the flight carries the profiles, the cyclic polarity, the cyclic ring and the relax type",
+    a.pidProfile == 3 and a.rateProfile == 5 and a.cyclicPolarity == rc.cyclic_polarity
+    and a.cyclicRing == rc.cyclic_ring and a.relaxType == pid.iterm_relax_type,
+    tostring(a.pidProfile) .. " " .. tostring(a.rateProfile) .. " " .. tostring(a.cyclicPolarity) .. " "
+    .. tostring(a.cyclicRing) .. " " .. tostring(a.relaxType))
+  check("the flight carries the radio clock the change journal writes", tuneHistory.read(MCU)[1].time == rig.rtc,
+    tostring(tuneHistory.read(MCU)[1].time))
+
+  fresh()
+  rig.reply.seconds, rig.reply.F = 150, 100
+  rig.clock = rig.clock + 60
+  update(true)
+  update(false)
+  pump({ rc_tuning = { n = 1, reason = "max_retries" } })
+  a = tuneHistory.read(MCU)[1].axes[2]
+  check("a settings read that fails leaves its values unknown, the other still counts",
+    a.cyclicPolarity == nil and a.cyclicRing == nil and a.relaxType == pid.iterm_relax_type and a.pidProfile == 1,
+    tostring(a.cyclicRing) .. " " .. tostring(a.relaxType))
+end
+
+do
+  -- The file could not be opened at the disarm: nothing is written over it, the flight
+  -- controller keeps the flight, and the next try saves it beside the others.
+  fresh()
+  flyThrough(140)
+  flyThrough(141)
+  openFails[HISTORY] = 1
+  local asked = flyThrough(142)
+  check("a history that cannot be read at the save is tried again, and the FC cleared only then",
+    asked == "roll,pitch,yaw,clear" and #tuneHistory.read(MCU) == 3, asked .. " / " .. #tuneHistory.read(MCU) .. " flights")
+
+  fresh()
+  flyThrough(140)
+  files[HISTORY] = files[HISTORY] .. string.rep("-- padding ", 1700)
+  local big = files[HISTORY]
+  asked = flyThrough(150)
+  check("a history over the read cap is never written over, and the FC never cleared", asked == "roll,pitch,yaw"
+    and files[HISTORY] == big, asked)
+end
+
+do
+  -- The pilot unplugs the pack before the start wait is over; the same flight controller comes
+  -- back with its numbers: the flight is still owed and read then.
+  fresh()
+  update(true)
+  update(false)
+  rig.passes(10)
+  rig.setLink(false)
+  rig.passes(40)
+  check("(setup) nothing was asked while the link was down", #rig.requests == 0, #rig.requests .. " requests")
+  rig.setLink(true)
+  local asked = pump()
+  check("a flight still owed when the link went is read once it is back", asked == "roll,pitch,yaw,clear"
+    and #lines() == 4, asked .. " / " .. #lines() .. " lines")
 end
 
 print(string.format("\n%d checks, %d failed", checks, failures))
