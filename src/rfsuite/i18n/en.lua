@@ -3056,6 +3056,21 @@ return {
         field_tile = "Tile",
         field_help_live = "Choose another live reading for this tile; its title, unit and decimals follow the choice.",
         field_help_stats = "Choose another figure from the last flight for this statistics tile.",
+        -- The info bar across the top of a theme's full screen and its settings page.
+        page_bar = "Info bar",
+        bar_buttons = "Buttons",
+        bar_buttons_left = "Left",
+        bar_buttons_right = "Right",
+        bar_buttons_help = "The side of the bar the tool, menu and close buttons sit on; the readings fill the other side.",
+        bar_slot = "Position",
+        bar_slot_help = "What this position shows. Position 1 is the outer end, opposite the buttons; the others follow inwards. What does not fit is left out.",
+        bar_item_none = "Empty",
+        bar_item_clock = "Clock",
+        bar_item_battery_icon = "Radio battery symbol",
+        bar_item_battery_percent = "Radio battery %",
+        bar_item_battery_volts = "Radio battery V",
+        bar_item_link_bars = "Link bars",
+        bar_item_link_value = "Link value",
         -- The Urban theme's settings pages: the tile titles its init.lua declares, which are
         -- also the section headers of its configure page.
         urban_page_look = "Look",
