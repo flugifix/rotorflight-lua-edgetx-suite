@@ -9,7 +9,9 @@
 --
 -- The geometry is the quick menu's: the X lands exactly where the menu's close box lands, at
 -- both layout profiles (`dH > 350` is the split fullscreen_menu.lua uses), the menu control
--- sits one box to its left and the tool control one box to the left of that.
+-- sits one box to its left and the tool control one box to the left of that. The info bar can
+-- put the three at the left end instead, mirrored: the X in the corner, the menu control one box
+-- to its right, the tool control one further.
 --
 -- The tool control is also drawn on its own, on the connect splash at full screen
 -- (`M.appendTool`), so the tool can be reached before the dashboard has anything to show.
@@ -101,19 +103,23 @@ function M.appendTool(children, widget)
 end
 
 --- Append the tool control, the menu control and the close control to `children`, after
---- whatever is there, so they lie above it.
-function M.append(children, widget)
+--- whatever is there, so they lie above it: at the right end, or mirrored at the left end where
+--- `side` is "left".
+function M.append(children, widget, side)
   local g = geometry(widget)
   local isLarge, size, margin = g.isLarge, g.size, g.margin
   local fontH = isLarge and 24 or 12
   local font = isLarge and MIDSIZE or SMLSIZE
   local textOffY = isLarge and -8 or -4
 
-  local cx = g.cx
-  local gx = cx - size - margin
+  -- The X in the corner, then the menu and the tool control one box inwards each.
+  local step = size + margin
+  local cx = (side == "left") and margin or g.cx
+  if side == "left" then step = -step end
+  local gx = cx - step
   local cy = g.cy
 
-  appendToolControl(children, widget, gx - size - margin, cy, size)
+  appendToolControl(children, widget, gx - step, cy, size)
 
   children[#children+1] = {
     type = "button", x = gx, y = cy, w = size, h = size, color = COLOR_THEME_PRIMARY1 or BLACK,
@@ -159,13 +165,14 @@ end
 --
 -- A declarative theme is laid out for the widget area of a normal screen, which lies below the
 -- radio's own top bar. At full screen that top bar is gone, so the runtime lays the theme out
--- below a bar of the same kind instead (`M.barHeight`) and draws the bar with `M.appendBar`:
--- what the radio's top bar showed, on the left, and the three controls above, on the right --
--- inside the bar rather than over the theme. The bar is drawn in the colour of the theme's tiles,
--- so it reads as one more tile above the grid.
+-- below a bar of the same kind instead (`M.barHeight`) and draws the bar with `M.appendBar`: the
+-- three controls above at one end, inside the bar rather than over the theme, and readings of
+-- the kind the radio's top bar showed at the other. The bar is drawn in the colour of the
+-- theme's tiles, so it reads as one more tile above the grid.
 --
--- Which items it shows is the pilot's choice on the theme's Info bar page; the runtime hands the
--- ids of the items switched on, in the order they are drawn. An empty list leaves the controls.
+-- What it shows is the pilot's choice on the theme's Info bar page (`M.layout`): the end the
+-- controls sit at, and up to six positions, counted from the far end inwards. What does not fit
+-- before the controls is left out, so nothing is drawn under them.
 
 -- The readings are taken by `M.refresh`, which the runtime calls from the widget's own refresh
 -- while the bar is up, at most once a second -- never from the bar's labels: their getters run in
@@ -180,36 +187,48 @@ local LINK_STEPS = { 1, 50, 70, 90 }
 local RSSI_STEPS = { -120, -100, -85, -70 }
 local RSSI_LINK_SOURCES = { ["1RSS"] = true, ["2RSS"] = true }
 
+-- The battery symbol's segments, one lit per started fifth of the charge.
+local BATTERY_SEGMENTS = 5
+
+-- Which reading each choice needs; the refresh takes only those.
+local READS = {
+  clock = "clock",
+  battery_icon = "battery", battery_percent = "battery", battery_volts = "battery",
+  link_bars = "link", link_value = "link",
+}
+
 -- Kept once loaded; a load that failed is tried again on the next refresh.
 local RadioStatus = nil
 
---- Take the readings of the items in `values.items` into `values`, at most once a second
---- (`force` skips that wait). Called from the widget's refresh, where probing the radio is legal.
+--- Take the readings `values.reads` asks for into `values`, at most once a second (`force` skips
+--- that wait). Called from the widget's refresh, where probing the radio is legal.
 function M.refresh(widget, values, force)
   local now = (type(getTime) == "function" and getTime()) or 0
   if not force and values.at ~= nil and now - values.at < REFRESH_TICKS and now >= values.at then return end
   values.at = now
-  local items = values.items or {}
+  local reads = values.reads or {}
 
-  if items.clock then
+  if reads.clock then
     local ok, dt = false, nil
     if type(getDateTime) == "function" then ok, dt = pcall(getDateTime) end
     values.clock = (ok and type(dt) == "table")
       and string.format("%02d:%02d", dt.hour or 0, dt.min or 0) or "--:--"
   end
 
-  if items.tx_battery then
+  if reads.battery then
     if RadioStatus == nil then RadioStatus = requireModule("lib/radio_status.lua") end
-    local volts, low = nil, false
+    local volts, percent, low = nil, nil, false
     if type(RadioStatus) == "table" and type(RadioStatus.txBattery) == "function" then
-      local okBattery, v, _, l = pcall(RadioStatus.txBattery)
-      if okBattery then volts, low = v, l == true end
+      local okBattery, v, p, l = pcall(RadioStatus.txBattery)
+      if okBattery then volts, percent, low = v, p, l == true end
     end
-    values.tx_battery = volts and string.format("%.1fV", volts) or "-V"
+    values.batteryVolts = volts and string.format("%.1fV", volts) or "-V"
+    values.batteryPercent = percent and string.format("%d%%", percent) or "-%"
+    values.batterySegments = percent and math.ceil(percent * BATTERY_SEGMENTS / 100) or 0
     values.batteryLow = low
   end
 
-  if items.link then
+  if reads.link then
     local state = widget.state
     local reading = state and state.lq
     local rssi = state and type(state.lqSource) == "string" and RSSI_LINK_SOURCES[state.lqSource] == true
@@ -260,49 +279,52 @@ function M.bodyZone(widget)
   return { x = zone.x or 0, y = (zone.y or 0) + barH, w = zone.w or LCD_W or 0, h = h }
 end
 
--- The items of the bar, in its order, and the theme configuration key that switches each off (the
--- Info bar page of app/pages/settings/dashboard/fields_form.lua). A key never stored leaves its
--- item on.
-local ITEMS = {
-  { id = "clock", pref = "bar_clock" },
-  { id = "tx_battery", pref = "bar_tx_battery" },
-  { id = "link", pref = "bar_link" },
-}
+-- The theme configuration keys of the Info bar page (app/pages/settings/dashboard/fields_form.lua,
+-- which offers the same choices with the same defaults): the end the controls sit at, and what
+-- each position shows, position 1 at the far end. A key never stored, or holding a choice this
+-- file does not know, takes its default.
+local SIDE_PREF = "bar_buttons"
+local SLOT_DEFAULTS = { "battery_icon", "clock", "link_bars", "none", "none", "none" }
 
---- The ids of the items the theme's configuration leaves on, in the bar's order.
-function M.items(themeConfig)
+--- The end the controls sit at ("left" or "right") and the choices of the positions that show
+--- something, from the far end inwards.
+function M.layout(themeConfig)
+  local config = type(themeConfig) == "table" and themeConfig or {}
+  local side = (config[SIDE_PREF] == "right") and "right" or "left"
   local items = {}
-  for i = 1, #ITEMS do
-    local value = nil
-    if type(themeConfig) == "table" then value = themeConfig[ITEMS[i].pref] end
-    if not (value == false or value == "false" or value == 0 or value == "0") then
-      items[#items + 1] = ITEMS[i].id
-    end
+  for i = 1, #SLOT_DEFAULTS do
+    local choice = config["bar_slot" .. i]
+    if READS[choice] == nil and choice ~= "none" then choice = SLOT_DEFAULTS[i] end
+    if READS[choice] ~= nil then items[#items + 1] = choice end
   end
-  return items
+  return side, items
 end
 
---- Append the bar for a declarative theme's full-screen build: the items its configuration leaves
---- on, in the colour of its tiles (`engine.tileColor(build)`).
+--- Append the bar for a declarative theme's full-screen build: what its configuration chooses,
+--- in the colour of its tiles (`engine.tileColor(build)`).
 function M.appendThemeBar(children, widget, build, engine)
   local tileColor = engine and type(engine.tileColor) == "function" and engine.tileColor(build) or nil
-  return M.appendBar(children, widget, M.items(widget.state and widget.state.themeConfig), tileColor)
+  local side, items = M.layout(widget.state and widget.state.themeConfig)
+  return M.appendBar(children, widget, items, tileColor, side)
 end
 
 --- Append the info bar to `children`, after whatever is there: its background in `bgcolor`
 --- (the colour of the theme's tiles; the radio's title bar colour when that is not known), the
---- `items` in their order and the three controls of `M.append`.
-function M.appendBar(children, widget, items, bgcolor)
+--- three controls of `M.append` at the `side` end ("left"; anything else is the right), and the
+--- `items` from the other end inwards, as far as they fit.
+function M.appendBar(children, widget, items, bgcolor, side)
   local g = geometry(widget)
+  local isLarge = g.isLarge
   local dW = (widget.zone and widget.zone.w) or LCD_W or 0
   local barH = M.barHeight(widget)
-  local font = g.isLarge and 0 or SMLSIZE
-  local textH = fontHeight(font, g.isLarge and 24 or 12)
+  local font = isLarge and 0 or SMLSIZE
+  local textH = fontHeight(font, isLarge and 24 or 12)
   local textY = math.floor((barH - textH) / 2)
-  local gap = g.isLarge and 16 or 6
+  local gap = isLarge and 16 or 6
   local barColor = bgcolor or COLOR_THEME_SECONDARY1 or BLACK
   -- Dark text on a white bar, light text on anything else -- the pairing the themes use.
   local textColor = (barColor == WHITE) and BLACK or WHITE
+  local warnColor = COLOR_THEME_WARNING or RED
 
   local list = type(items) == "table" and items or {}
 
@@ -313,61 +335,142 @@ function M.appendBar(children, widget, items, bgcolor)
     values = {}
     widget._fullscreenBarValues = values
   end
-  values.items = {}
-  for i = 1, #list do values.items[list[i]] = true end
+  values.reads = {}
+  for i = 1, #list do
+    local read = READS[list[i]]
+    if read then values.reads[read] = true end
+  end
   M.refresh(widget, values, true)
 
   children[#children+1] = {
     type = "rectangle", x = 0, y = 0, w = dW, h = barH, filled = true, color = barColor
   }
 
-  local x = g.margin + (g.isLarge and 4 or 2)
-  for i = 1, #list do
-    local id = list[i]
-    if id == "clock" then
-      local w = textWidth("00:00", font, g.isLarge and 70 or 30)
+  -- Everything drawn on the bar is a label or a line: a line object takes no press, so nothing
+  -- here can catch a tap meant for the screen behind it.
+  local stepW = isLarge and 5 or 2
+  local stepGap = isLarge and 3 or 1
+  local glyphH = math.max(4, textH - (isLarge and 4 or 2))
+  local glyphBottom = textY + math.floor((textH + glyphH) / 2)
+  local battH = math.max(6, math.floor(glyphH * 0.7))
+  local battW = battH * 2
+  local battNub = isLarge and 3 or 2
+  local battLine = isLarge and 2 or 1
+
+  local function label(x, w, getText, color)
+    children[#children+1] = {
+      type = "label", x = x, y = textY, w = w + 4, font = font, color = color or textColor,
+      text = getText
+    }
+  end
+
+  local function lowColor()
+    return values.batteryLow and warnColor or textColor
+  end
+
+  local function widthOf(choice)
+    if choice == "clock" then return textWidth("00:00", font, isLarge and 70 or 30) end
+    if choice == "battery_icon" then return battW + battNub end
+    if choice == "battery_percent" then return textWidth("100%", font, isLarge and 56 or 26) end
+    if choice == "battery_volts" then return textWidth("00.0V", font, isLarge and 70 or 32) end
+    if choice == "link_bars" then return #LINK_STEPS * (stepW + stepGap) - stepGap end
+    if choice == "link_value" then return textWidth("-100dB", font, isLarge and 72 or 32) end
+    return 0
+  end
+
+  local function drawBattery(x)
+    -- An outline with a terminal on the right and five segments inside: the lit ones in the text
+    -- colour (the warning colour while the radio's battery is low), the others in the bar's own.
+    local top = glyphBottom - battH
+    local right = x + battW
+    local half = math.floor(battLine / 2)
+    local outline = {
+      { { x, top + half }, { right, top + half } },
+      { { x, glyphBottom - half }, { right, glyphBottom - half } },
+      { { x + half, top }, { x + half, glyphBottom } },
+      { { right - half, top }, { right - half, glyphBottom } },
+    }
+    for i = 1, #outline do
       children[#children+1] = {
-        type = "label", x = x, y = textY, w = w + 4, font = font, color = textColor,
-        text = function() return values.clock end
+        type = "line", x = 0, y = 0, w = 0, h = 0, thickness = battLine, color = textColor,
+        pts = outline[i]
       }
-      x = x + w + gap
-    elseif id == "tx_battery" then
-      local w = textWidth("00.0V", font, g.isLarge and 70 or 32)
+    end
+    local nubX = right + math.floor(battNub / 2)
+    local nubH = math.max(2, math.floor(battH * 0.4))
+    local nubTop = top + math.floor((battH - nubH) / 2)
+    children[#children+1] = {
+      type = "line", x = 0, y = 0, w = 0, h = 0, thickness = battNub, color = textColor,
+      pts = { { nubX, nubTop }, { nubX, nubTop + nubH } }
+    }
+    local inset = battLine + 1
+    local segW = math.max(1, math.floor((battW - 2 * inset - (BATTERY_SEGMENTS - 1)) / BATTERY_SEGMENTS))
+    for s = 1, BATTERY_SEGMENTS do
+      local segX = x + inset + (s - 1) * (segW + 1) + math.floor(segW / 2)
       children[#children+1] = {
-        type = "label", x = x, y = textY, w = w + 4, font = font,
-        color = function() return values.batteryLow and (COLOR_THEME_WARNING or RED) or textColor end,
-        text = function() return values.tx_battery end
+        type = "line", x = 0, y = 0, w = 0, h = 0, thickness = segW,
+        pts = { { segX, top + inset }, { segX, glyphBottom - inset } },
+        color = function()
+          if (values.batterySegments or 0) < s then return barColor end
+          return values.batteryLow and warnColor or textColor
+        end
       }
-      x = x + w + gap
-    elseif id == "link" then
-      -- Four rising bars, then the reading. Lines, as on the controls: a line object takes no
-      -- press, so nothing here can catch a tap meant for the screen behind it.
-      local stepW = g.isLarge and 5 or 2
-      local stepGap = g.isLarge and 3 or 1
-      local fullH = math.max(4, textH - (g.isLarge and 4 or 2))
-      local baseY = textY + math.floor((textH + fullH) / 2)
-      for s = 1, #LINK_STEPS do
-        local h = math.max(2, math.floor(fullH * s / #LINK_STEPS))
-        local lineX = x + (s - 1) * (stepW + stepGap) + math.floor(stepW / 2)
-        children[#children+1] = {
-          type = "line", x = 0, y = 0, w = 0, h = 0, thickness = stepW,
-          pts = { { lineX, baseY - h }, { lineX, baseY } },
-          color = function()
-            return (values.linkSteps or 0) >= s and textColor or (COLOR_THEME_DISABLED or textColor)
-          end
-        }
-      end
-      x = x + #LINK_STEPS * (stepW + stepGap) + (g.isLarge and 4 or 2)
-      local w = textWidth("-100dB", font, g.isLarge and 72 or 32)
+    end
+  end
+
+  local function drawLinkBars(x)
+    for s = 1, #LINK_STEPS do
+      local h = math.max(2, math.floor(glyphH * s / #LINK_STEPS))
+      local lineX = x + (s - 1) * (stepW + stepGap) + math.floor(stepW / 2)
       children[#children+1] = {
-        type = "label", x = x, y = textY, w = w + 4, font = font, color = textColor,
-        text = function() return values.link end
+        type = "line", x = 0, y = 0, w = 0, h = 0, thickness = stepW,
+        pts = { { lineX, glyphBottom - h }, { lineX, glyphBottom } },
+        color = function()
+          return (values.linkSteps or 0) >= s and textColor or (COLOR_THEME_DISABLED or textColor)
+        end
       }
+    end
+  end
+
+  local function draw(choice, x, w)
+    if choice == "clock" then
+      label(x, w, function() return values.clock end)
+    elseif choice == "battery_icon" then
+      drawBattery(x)
+    elseif choice == "battery_percent" then
+      label(x, w, function() return values.batteryPercent end, lowColor)
+    elseif choice == "battery_volts" then
+      label(x, w, function() return values.batteryVolts end, lowColor)
+    elseif choice == "link_bars" then
+      drawLinkBars(x)
+    elseif choice == "link_value" then
+      label(x, w, function() return values.link end)
+    end
+  end
+
+  -- The readings fill from the far end towards the controls, which take three boxes and their
+  -- insets at the other end; the first that would reach them ends the row.
+  local pad = g.margin + (isLarge and 4 or 2)
+  local controlsW = 3 * (g.size + g.margin) + g.margin
+  if side == "left" then
+    local x = dW - pad
+    for i = 1, #list do
+      local w = widthOf(list[i])
+      if x - w < controlsW then break end
+      draw(list[i], x - w, w)
+      x = x - w - gap
+    end
+  else
+    local x = pad
+    for i = 1, #list do
+      local w = widthOf(list[i])
+      if x + w > dW - controlsW then break end
+      draw(list[i], x, w)
       x = x + w + gap
     end
   end
 
-  return M.append(children, widget)
+  return M.append(children, widget, side)
 end
 
 return M

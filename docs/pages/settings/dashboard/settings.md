@@ -68,9 +68,14 @@ starts on the theme's own value, and the caption, unit and decimals follow a dif
 A tile without a caption stays without one. Gauges, timers, governor, blackbox, flight count
 and the model image keep what the theme draws.
 
-The shared Info bar page chooses what the bar across the top of the theme's full screen shows:
-**Clock**, **Radio battery** and **Link quality**, each a switch, each on as it comes. The bar
-itself, with the quick menu, tool and close controls at its right, is drawn whatever is chosen.
+The shared Info bar page arranges the bar across the top of the theme's full screen.
+**Buttons** puts the tool, quick menu and close buttons at the **Left** (as it comes) or the
+**Right** end. **Position 1** to **Position 6** choose what the other end shows, Position 1 at
+the far end and the others following inwards: **Empty**, **Clock**, **Radio battery symbol**,
+**Radio battery %**, **Radio battery V**, **Link bars** or **Link value**. As it comes,
+Position 1 is the battery symbol, Position 2 the clock and Position 3 the link bars; the rest
+are empty. What does not fit before the buttons is left out; on the smaller screens that can be
+the inner positions. The bar and its buttons are drawn whatever is chosen.
 
 The shared Keys page assigns PAGE >, PAGE <, MDL, SYS and TELE to nothing, the quick menu, the
 suite tool, Flight Log or leaving full screen for that theme. A key held by the radio-wide
@@ -78,7 +83,7 @@ suite tool, Flight Log or leaving full screen for that theme. A key held by the 
 it there, or set it to **Theme** there to enable the theme's binding. Theme bindings start on
 Nothing. The radio-wide choice takes priority over both standard and model-specific bindings.
 
-The phase choices, the info bar items and theme key bindings are ordinary theme settings: the theme tile edits
+The phase choices, the info bar arrangement and theme key bindings are ordinary theme settings: the theme tile edits
 the standard values, and opening the theme through [Per-Model Settings](overrides.md) lets
 the connected model override them, along with its Look settings. Save each page before leaving
 it for another page.

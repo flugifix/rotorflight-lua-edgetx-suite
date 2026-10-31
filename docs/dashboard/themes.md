@@ -81,17 +81,20 @@ out and marked *(global)*; set it to **Theme** on that radio-wide page to use th
 binding. These choices are standard settings for the theme, and a model can override each
 one through [Per-Model Settings](../pages/settings/dashboard/overrides.md).
 
-Info bar chooses what the bar across the top of the full screen shows: the clock, the radio
-battery and the link quality, each switched on as it comes.
+Info bar chooses what the bar across the top of the full screen shows: the end its buttons sit
+at, and what each of six positions shows. As it comes, the buttons are at the left and the bar
+shows the radio battery symbol at the far right, the clock beside it and the link bars.
 
 In fullscreen, Default shows the dashboard at the full screen size with the same layouts,
 below an info bar that takes the place of the radio's own top bar, drawn in the colour of the
-tiles. The bar shows the clock,
-the radio battery (in the warning colour below the radio's battery warning level) and the link
-quality as four steps and a percentage (on a receiver that reports only a signal strength, as
-four steps and the strength in dB), on the left, as chosen on the Info bar page. Its
-controls at the right open the suite tool (while disarmed), open the quick menu, and leave
-fullscreen with **X**. A long press on the return key also leaves fullscreen.
+tiles. The bar's buttons open the suite tool (while disarmed), open the quick menu, and leave
+fullscreen with **X**; at the left they sit mirrored, **X** in the corner. The other end
+carries what the Info bar page chooses, from the far end inwards: the clock, the radio battery
+as a symbol, a percentage or a voltage (in the warning colour below the radio's battery warning
+level), and the link quality as four steps or as a percentage (on a receiver that reports only
+a signal strength, the strength in dB). What does not fit before the buttons is left out. The
+quick menu keeps its own **X** at the top right. A long press on the return key also leaves
+fullscreen.
 With the global [Keys](../pages/settings/dashboard/keys.md) choices as they come, SYS opens
 the suite tool, and TELE and the page keys open the quick menu, also before the FC connects;
 Default binds no key itself, so MDL, and any key put on **Theme**, does nothing while the
