@@ -64,7 +64,6 @@ local Palette = _G.rfsuite and _G.rfsuite.palette or (_G.rfsuite and _G.rfsuite.
 local Common = nil
 local Controls = nil
 local MspRuntime = nil
-local TuneAdvisorApi = nil
 local Profile = nil
 local ConfirmDialog = nil
 local TuneHistory = nil
@@ -213,6 +212,7 @@ local ui = {
   profileKey = nil,
   applied = {},             -- per axis: changes written since the flights were read
   text = nil,
+  i18n = nil,
   view = nil,
   snapshot = nil,
   applying = false,
@@ -246,9 +246,7 @@ local function ensureDeps()
   if not Common then Common = loadModule("app/pages/settings/common.lua") end
   if not Controls then Controls = loadModule("ui/controls.lua") end
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
-  if not TuneAdvisorApi then TuneAdvisorApi = loadModule("tasks/msp/api/tune_advisor.lua") end
   if not Profile then Profile = loadModule("lib/profile.lua") end
-  if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not t then t = Common and Common.pageT("flight_tuning_tune_advisor") or nil end
 end
 
@@ -360,31 +358,11 @@ local function loadTexts(i18n)
     whyLimit = pageText(i18n, "why_limit", "The change needed goes past a setting's limit."),
     whyPMaxFmt = pageText(i18n, "why_p_max_fmt", "P is already %d%% above your setting. Check the mechanics."),
 
-    saveQuestion = pageText(i18n, "save_question", "Write these changes to the flight controller and save them?"),
-    reading = pageText(i18n, "reading", "Reading current settings..."),
-    checking = pageText(i18n, "checking", "Checking saved settings..."),
-    readFailed = pageText(i18n, "read_failed",
-      "Could not read the settings from the flight controller. Nothing was changed."),
     armed = pageText(i18n, "save_armed", "Disarm first. Nothing was saved."),
     disconnected = pageText(i18n, "save_disconnected", "Connect the flight controller first."),
     noBoard = pageText(i18n, "save_no_board", "The flight controller ID is not known."),
     busy = pageText(i18n, "save_busy", "An apply is already running."),
     noChanges = pageText(i18n, "save_no_changes", "There are no writable changes for this axis."),
-    noSnapshot = pageText(i18n, "save_no_snapshot", "Confirm the changes before saving."),
-    changed = pageText(i18n, "save_changed",
-      "The settings on the flight controller are not the ones these flights were flown with. Nothing was changed. Fly again with the current settings."), -- luacheck: ignore 631
-    range = pageText(i18n, "save_range", "A suggested value is out of range. Nothing was written."),
-    startFailed = pageText(i18n, "save_start_failed", "Could not start the save: %s"),
-    saved = pageText(i18n, "save_done", "Saved: %d change(s) written and read back."),
-    differs = pageText(i18n, "save_differs", "Saved, but the read-back differs: %s"),
-    notStored = pageText(i18n, "save_not_stored",
-      "Saving failed. The changes are active until the flight controller restarts, then undone."),
-    writeFailed = pageText(i18n, "save_write_failed",
-      "Writing failed. Nothing was saved: restart the flight controller to undo any part already sent."),
-    profileMoved = pageText(i18n, "save_profile_moved", "The profile changed during the save. Check both profiles."),
-    unverified = pageText(i18n, "save_unverified",
-      "Saved, but reading back did not confirm it. Check the settings on PIDs, Rates and PID Controller."),
-    journalFailed = pageText(i18n, "journal_failed", "The change journal could not be written."),
     applied = pageText(i18n, "applied", "Changes saved to the flight controller. Fly again to check the new tune."),
 
     -- Where each change is made
@@ -405,6 +383,34 @@ local function loadTexts(i18n)
       [RATE_TYPE_ROTORFLIGHT] = { rcRate = rate }
     }
   }
+end
+
+-- The texts only Save shows, resolved on the first Save of a visit rather than on every opening.
+local function addSaveTexts(T, i18n)
+  T.saveQuestion = pageText(i18n, "save_question", "Write these changes to the flight controller and save them?")
+  T.reading = pageText(i18n, "reading", "Reading current settings...")
+  T.checking = pageText(i18n, "checking", "Checking saved settings...")
+  T.readFailed = pageText(i18n, "read_failed",
+    "Could not read the settings from the flight controller. Nothing was changed.")
+  T.noSnapshot = pageText(i18n, "save_no_snapshot", "Confirm the changes before saving.")
+  T.changed = pageText(i18n, "save_changed",
+    "The settings on the flight controller are not the ones these flights were flown with. Nothing was changed. Fly again with the current settings.") -- luacheck: ignore 631
+  T.range = pageText(i18n, "save_range", "A suggested value is out of range. Nothing was written.")
+  T.startFailed = pageText(i18n, "save_start_failed", "Could not start the save: %s")
+  T.saved = pageText(i18n, "save_done", "Saved: %d change(s) written and read back.")
+  T.differs = pageText(i18n, "save_differs", "Saved, but the read-back differs: %s")
+  T.notStored = pageText(i18n, "save_not_stored",
+    "Saving failed. The changes are active until the flight controller restarts, then undone.")
+  T.writeFailed = pageText(i18n, "save_write_failed",
+    "Writing failed. Nothing was saved: restart the flight controller to undo any part already sent.")
+  T.profileMoved = pageText(i18n, "save_profile_moved", "The profile changed during the save. Check both profiles.")
+  T.unverified = pageText(i18n, "save_unverified",
+    "Saved, but reading back did not confirm it. Check the settings on PIDs, Rates and PID Controller.")
+  T.journalFailed = pageText(i18n, "journal_failed", "The change journal could not be written.")
+end
+
+local function ensureSaveTexts()
+  if ui.text and not ui.text.saveQuestion then addSaveTexts(ui.text, ui.i18n) end
 end
 
 local function round(v)
@@ -721,6 +727,7 @@ local function adviceBasis(T, axis)
     -- Under polar cyclic the flight controller ignores the Roll rates: both axes follow Pitch's.
     local p = ui.newestHasPitch and ui.axes[AXIS_PITCH].a
     if not p then
+      ensureSaveTexts()
       blocked = blocked or T.changed
       ctx.polar = false
     else
@@ -788,8 +795,8 @@ local function getQueue()
 end
 
 -- Starts this visit's read of the saved flights. The read runs as steps on the page's wakeups
--- (readHistoryStep): the file, then the three axes combined, then the change journal for the
--- pilot's own P. Nothing can be saved until it has finished.
+-- (readHistoryStep): the history module, the file, then the three axes combined, then the change
+-- journal for the pilot's own P. Nothing can be saved until it has finished.
 local function queueHistoryRead()
   ui.runtime.historyRead = false
   ui.mcu = sessionMcu()
@@ -805,8 +812,12 @@ end
 local function readHistoryStep()
   local step = ui.loadStep
   if step == "read" then
-    if not TuneHistory then TuneHistory = loadModule("lib/tune_history.lua") end
-    if not TuneHistory then ui.loadStep = nil; return end
+    -- The module on one pass and the file on the next: together they are the dearest step
+    if not TuneHistory then
+      TuneHistory = loadModule("lib/tune_history.lua")
+      if not TuneHistory then ui.loadStep = nil end
+      return
+    end
     ui.maxFlights = TuneHistory.MAX_FLIGHTS or ui.maxFlights
     ui.flights = TuneHistory.read(ui.mcu)
     ui.loadStep = "aggregate"
@@ -844,9 +855,12 @@ end
 -- One request, on open and on Reload: whether the firmware has the command at all. The flight
 -- controller's error reply, or a reply of another layout, means it does not.
 local function probe()
-  local api = TuneAdvisorApi
+  -- Loaded for the request alone, which holds it until the answer; the build does not need it,
+  -- and Clear loads it again
+  local api = loadModule("tasks/msp/api/tune_advisor.lua")
   local queue = getQueue()
-  if not api or not queue then return end
+  if not api then ui.probeOwed = false; return end
+  if not queue then return end
   ui.probeOwed = false
   ui.probing = true
   local generation = ui.generation
@@ -879,7 +893,7 @@ local function clear()
   if not TuneHistory then TuneHistory = loadModule("lib/tune_history.lua") end
   if TuneHistory then TuneHistory.erase(mcu) end
   TuneHistory = nil
-  local api = TuneAdvisorApi
+  local api = loadModule("tasks/msp/api/tune_advisor.lua")
   local queue = getQueue()
   if api and queue and not ui.unsupported then
     local generation = ui.generation
@@ -915,6 +929,7 @@ local function ensureLoaded(i18n)
   ui.probing = false
   ui.captureState = captureState()
   ui.profileKey = nil
+  ui.i18n = i18n
   ui.text = loadTexts(i18n)
   ui.view = newView()
   queueHistoryRead()
@@ -954,6 +969,7 @@ end
 function M.getSaveConfirm(ctx)
   ui.snapshot = nil
   if not M.canSave() then return nil end
+  ensureSaveTexts()
   local view = ui.view
   local snapshot = { tune = copy(view.tune), changes = {} }
   local lines = {}
@@ -1104,6 +1120,7 @@ end
 
 function M.onSave(ctx)
   if ui.applying then return false end
+  ensureSaveTexts()
   local snapshot = ui.snapshot
   ui.snapshot = nil
   ui.reportSave = ctx and ctx.reportSave
@@ -1372,6 +1389,7 @@ end
 function M.onStar(ctx)
   if ui.applying or captureState() == "reading" then return false end
   ensureDeps()
+  if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not ConfirmDialog or not ui.text then return false end
   ConfirmDialog.show({
     title = ui.text.pageTitle,
@@ -1390,7 +1408,7 @@ function M.onClose()
   ui.probeOwed, ui.probing, ui.unsupported = false, false, false
   ui.captureState, ui.seenSaved, ui.profileKey = nil, nil, nil
   for axis = AXIS_ROLL, AXIS_YAW do ui.applied[axis] = nil end
-  ui.text = nil
+  ui.text, ui.i18n = nil, nil
   ui.view = nil
   ui.snapshot, ui.status, ui.reportSave = nil, nil, nil
   ui.applying, ui.readStarted, ui.readTimeout = false, nil, nil
@@ -1404,7 +1422,6 @@ function M.onClose()
   Common = nil
   Controls = nil
   MspRuntime = nil
-  TuneAdvisorApi = nil
   Profile = nil
   ConfirmDialog = nil
   TuneHistory = nil
