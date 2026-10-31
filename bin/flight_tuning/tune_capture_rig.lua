@@ -102,6 +102,8 @@ function Rig.new(opts)
   local modules = {}
   _G.rfsuite = {
     loadMode = "t",
+    -- lib/require.lua publishes the radio's own loader here; the capture loads through it
+    utils = { loadScriptUncached = function(...) return _G.loadScript(...) end },
     session = {
       event_context = "widget",
       mcu_id = opts.mcu or "abc123",

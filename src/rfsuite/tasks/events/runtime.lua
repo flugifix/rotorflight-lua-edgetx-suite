@@ -159,9 +159,13 @@ end
 -- disarmed somewhere in the gap, so there is no honest duration and no line. The arm-edge
 -- detector is reset as the disconnect resets it (#278), so a craft that is armed after all opens
 -- a record of its own from here.
--- Not through lib/require.lua: the capture's code leaves once it has nothing left to do.
+-- Not through lib/require.lua, and not through the caching loader a tool hosted by the dashboard
+-- puts over loadScript (widgets/dashboard/tool_host.lua): the capture's code leaves once it has
+-- nothing left to do.
 local function loadPlain(path)
-  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. path, (_G.rfsuite and _G.rfsuite.loadMode) or "bt")
+  local utils = _G.rfsuite and _G.rfsuite.utils
+  local loader = utils and utils.loadScriptUncached or loadScript
+  local chunk = loader("/SCRIPTS/TOOLS/rfsuite-core/" .. path, (_G.rfsuite and _G.rfsuite.loadMode) or "bt")
   if type(chunk) ~= "function" then return false end
   local ok, mod = pcall(chunk)
   return ok and type(mod) == "table" and mod or false
@@ -369,8 +373,11 @@ local function driveTuneCapture(capture, armed, linkUp, t, carry, mspState)
     TuneCapture = loadPlain("tasks/events/tune_capture.lua")
     return
   end
+  -- A capture whose code cannot be loaded is dropped rather than asked for from the card on
+  -- every pass; the next arm lets the next disarm try again.
   if not TuneCapture then
-    TuneCapture = nil
+    capture.pending, capture.clearPending, capture.contextPending = false, false, false
+    capture.state = "idle"
     return
   end
   local ok, more = pcall(TuneCapture.tick, capture, mspState, linkUp, t)

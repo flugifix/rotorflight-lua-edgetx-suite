@@ -65,9 +65,12 @@ local function nowSeconds()
   return 0
 end
 
--- Not kept by lib/require.lua: these leave with this module
+-- Not kept by lib/require.lua, nor by the caching loader of a tool the dashboard hosts
+-- (widgets/dashboard/tool_host.lua): these leave with this module
 local function loadPlain(path)
-  local chunk = loadScript(CORE .. path, (_G.rfsuite and _G.rfsuite.loadMode) or "bt")
+  local utils = _G.rfsuite and _G.rfsuite.utils
+  local loader = utils and utils.loadScriptUncached or loadScript
+  local chunk = loader(CORE .. path, (_G.rfsuite and _G.rfsuite.loadMode) or "bt")
   if type(chunk) ~= "function" then return false end
   local ok, mod = pcall(chunk)
   if not ok or type(mod) ~= "table" then return false end
