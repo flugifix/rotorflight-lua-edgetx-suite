@@ -207,7 +207,7 @@ local ui = {
   newestHasPitch = false,
   probeOwed = false,
   probing = false,
-  unsupported = false,      -- the flight controller refused the command: until Reload
+  unsupported = false,      -- this flight controller refused the command: until another is asked
   captureState = nil,       -- the flight capture's state, when it runs in this Lua state
   seenSaved = nil,
   profileKey = nil,
@@ -880,8 +880,9 @@ local function probe()
     processReply = function(_, buf)
       if generation ~= ui.generation then return end
       ui.probing = false
-      if not api.parse(buf) then
-        ui.unsupported = true
+      local supported = api.parse(buf) ~= nil
+      if supported == ui.unsupported then
+        ui.unsupported = not supported
         render()
       end
     end,
@@ -1271,6 +1272,8 @@ function M.wakeup(ctx)
   -- flights do not need the link, so only another flight controller changes what is shown.
   local mcu = sessionMcu()
   if mcu ~= nil and mcu ~= ui.mcu then
+    -- Another flight controller: whether its firmware has the command is asked afresh
+    ui.unsupported = false
     queueHistoryRead()
     render()
     return

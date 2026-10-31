@@ -972,6 +972,20 @@ do
   Page.onReload()
   for _ = 1, 20 do pass(function(m) if m.command == Api.command then return { 1 } end end, sentProbe) end
   check("firmware without the command: Needs newer firmware", shown(T().unsupported) and not canSave())
+
+  -- Another flight controller is connected while the page stays open: its firmware is asked
+  -- afresh, and the answer of the one before does not stand for it
+  _G.rfsuite.session.mcu_id = "def456"
+  local sentOther = {}
+  for _ = 1, 30 do pass(nil, sentOther) end
+  check("another flight controller is asked again and not shown as needing newer firmware",
+    has(sentOther, Api.command) and not ui.unsupported and not shown(T().unsupported), table.concat(sentOther, ","))
+  _G.rfsuite.session.mcu_id = "ghi789"
+  local sentThird = {}
+  for _ = 1, 30 do pass(function(m) if m.command == Api.command then return { 1 } end end, sentThird) end
+  check("(control) one that refuses the command is shown as needing newer firmware", ui.unsupported
+    and shown(T().unsupported))
+  _G.rfsuite.session.mcu_id = MCU
 end
 
 print()
