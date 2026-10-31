@@ -17,7 +17,8 @@
 --
 -- Only the newest MAX_FLIGHTS flights are kept, since the page never looks further back. Every
 -- write replaces the whole file through lib/atomic_file.lua, so a write that is cut short
--- leaves the previous file in place rather than a torn one. A line that does not read is
+-- leaves the previous file in place rather than a torn one -- under its name, or as the `.bak`
+-- the replace parked it as, which is then read instead. A line that does not read is
 -- skipped and the rest of the file still counts.
 --
 -- aggregate() combines the newest flights flown on the newest flight's tune, for one axis:
@@ -165,6 +166,15 @@ local function readText(path)
   return table.concat(parts)
 end
 
+-- The saved flights' text. A write cut short between lib/atomic_file.lua's two renames leaves
+-- no file under the name but the previous one as `.bak`: that is read instead, and the next save
+-- writes it back under the name.
+local function readStored(path)
+  local text, reason = readText(path)
+  if text or reason ~= "missing" then return text, reason end
+  return readText(path .. ".bak")
+end
+
 -- A read in steps, so that no step parses more than one flight's lines: building the axis tables
 -- of all five flights in one call was the dearest pass of the page's open. The file is read
 -- once, then AXIS_COUNT lines are run per step with the two collectors below. Each group of
@@ -233,7 +243,7 @@ function M.readStep(job)
   if job.phase == "read" then
     local path = M.path(job.mcuId)
     if not path then job.phase = "done"; return {}, "mcu id" end
-    local text, reason = readText(path)
+    local text, reason = readStored(path)
     if not text then job.phase = "done"; return {}, reason end
     local lines = {}
     for oneLine in string.gmatch(text, "[^\r\n]+") do lines[#lines + 1] = oneLine end
@@ -402,7 +412,7 @@ function M.step(job)
     if axis == AXIS_COUNT then job.phase = "read" end
     return nil
   elseif job.phase == "read" then
-    local text, reason = readText(M.path(job.mcuId))
+    local text, reason = readStored(M.path(job.mcuId))
     if not text then
       -- Missing: started anew. Anything else: the file is left as it is.
       if reason ~= "missing" then return false, reason end
@@ -483,8 +493,11 @@ end
 function M.erase(mcuId)
   local path = M.path(mcuId)
   if not path or type(del) ~= "function" then return false end
+  -- The .bak too: a read finding no file would bring it back
   pcall(del, path)
-  return fileSize(path) == nil
+  pcall(del, path .. ".bak")
+  pcall(del, path .. ".new")
+  return fileSize(path) == nil and fileSize(path .. ".bak") == nil
 end
 
 local RATE_KEYS = { ratesType = true, rcRate = true, sRate = true }

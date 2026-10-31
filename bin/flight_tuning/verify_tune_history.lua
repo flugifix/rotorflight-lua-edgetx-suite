@@ -306,6 +306,35 @@ do
 
   check("erase removes the file", tuneHistory.erase(MCU) == true and files[HISTORY] == nil)
 
+  -- A replace cut short between parking the file as .bak and renaming .new into place leaves no
+  -- file under the name, only the .bak.
+  reset()
+  for n = 1, 4 do fly(100 + n) end
+  files[HISTORY .. ".bak"], files[HISTORY] = files[HISTORY], nil
+  check("a replace cut short after parking the file: the flights are read from the .bak",
+    #tuneHistory.read(MCU) == 4, #tuneHistory.read(MCU) .. " flights")
+  fly(105)
+  check("the next save keeps them", #tuneHistory.read(MCU) == 5 and files[HISTORY] ~= nil,
+    #tuneHistory.read(MCU) .. " flights")
+  fly(106)
+  check("and so does the save after it, which replaces the .bak", #tuneHistory.read(MCU) == 5
+    and tuneHistory.read(MCU)[1].seconds == 102, #tuneHistory.read(MCU) .. " flights")
+  files[HISTORY .. ".bak"] = files[HISTORY]
+  check("erase removes the .bak too, so nothing comes back after it", tuneHistory.erase(MCU) == true
+    and files[HISTORY] == nil and files[HISTORY .. ".bak"] == nil and #tuneHistory.read(MCU) == 0)
+
+  -- The replace itself: a file that is not there is never parked, and a .bak is never removed
+  -- while no file stands under the name
+  local AtomicFile = assert(loadfile("src/rfsuite/lib/atomic_file.lua"))()
+  reset()
+  files["/x.bak"] = "only copy"
+  check("a replace that may not create leaves the .bak alone when the file is missing",
+    AtomicFile.replace("/x", "new", false) == false and files["/x.bak"] == "only copy" and files["/x"] == nil)
+  reset()
+  files["/x.bak"] = "only copy"
+  check("a replace that may create writes the file and leaves the .bak alone",
+    AtomicFile.replace("/x", "new", true) == true and files["/x"] == "new" and files["/x.bak"] == "only copy")
+
   -- The file is rebuilt from what read() returned: a read that failed must not become a file
   -- holding the new flight alone.
   reset()

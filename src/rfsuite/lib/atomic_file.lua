@@ -3,6 +3,8 @@
 -- The new content is written beside the file as `.new` and its size verified, the original is
 -- parked as `.bak`, and only then is the new file renamed into place. Every failure exit leaves
 -- the original where it was, and a failure of the final rename leaves the data in the `.bak`.
+-- A write cut short between the two renames leaves only the `.bak`; a reader that finds no file
+-- under the name may read that instead (lib/tune_history.lua does).
 --
 -- A module of its own so that a caller replacing one small file does not have to load the
 -- module of another feature to do it: lib/flight_log.lua and lib/tune_history.lua both write
@@ -38,7 +40,10 @@ function M.replace(path, content, allowCreate)
   if written == nil or written ~= #content then return false end
   if type(rename) ~= "function" then return false end
 
-  local parked = not (allowCreate and fileSize(path) == nil)
+  -- No file under the name: nothing to park, and a `.bak` left by a replace cut short after
+  -- parking may be the only copy of the data, so it is never removed here.
+  local parked = fileSize(path) ~= nil
+  if not parked and not allowCreate then return false end
   if parked then
     if type(del) == "function" then pcall(del, bakPath) end
     local ok, res = pcall(rename, path, bakPath)

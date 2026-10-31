@@ -51,7 +51,8 @@ The flights are kept on the radio's SD card in `/SCRIPTS/TOOLS/rfsuite.user/tune
 flight and axis, newest last; only the last 5 flights are kept. `<mcu id>` is the flight controller's board ID,
 with characters other than letters, digits, underscores and hyphens replaced by underscores, the same name as its
 [change journal](../../reference/change-journal.md) in `journal/<mcu id>.lua` beside the `tune` folder. Each save
-replaces the whole file, so a save that is cut short leaves the previous file in place. A line that does not read
+replaces the whole file, so a save that is cut short leaves the previous file in place (or as `<mcu id>.lua.bak`,
+which is then read instead). A line that does not read
 is skipped, and the rest of the file still counts.
 
 ## Where to find it
