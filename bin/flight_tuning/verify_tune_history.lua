@@ -968,5 +968,47 @@ do
     asked == "roll,pitch,yaw,clear" and #tuneHistory.read(MCU) == 1, asked .. " / " .. #tuneHistory.read(MCU) .. " flights")
 end
 
+-- ---------------------------------------------------------------------------
+print("Differences from the Ethos suite: the settings read for the profiles flown (#979)")
+-- ---------------------------------------------------------------------------
+do
+  -- The settings are read from the active profiles. Switched after the save, they are another
+  -- profile's, not the flight's: they stay unknown.
+  local function switchedAfterSave(field)
+    fresh()
+    update(true)
+    update(false)
+    local asked = pump(nil, 4)
+    rig.session[field] = 1
+    pump()
+    local a = tuneHistory.read(MCU)[1].axes[1]
+    return asked == "roll,pitch,yaw,clear" and a.pidProfile == 1 and a.rateProfile == 1
+      and a.cyclicPolarity == nil and a.cyclicRing == nil and a.relaxType == nil and #rig.contextAsked == 0,
+      table.concat(rig.contextAsked, ",") .. " / " .. tostring(a.cyclicPolarity) .. " " .. tostring(a.relaxType)
+  end
+  check("a PID profile switched after the save leaves the flight's settings unknown",
+    switchedAfterSave("activeProfile"))
+  check("so does a rate profile switched after the save", switchedAfterSave("activeRateProfile"))
+
+  -- Switched while a read is on its way: its answer is the other profile's
+  fresh()
+  update(true)
+  update(false)
+  pump(nil, 4)
+  for _ = 1, 20 do
+    if rig.requests[1] then break end
+    rig.clock = rig.clock + 0.5
+    rig.pass()
+  end
+  local first = rig.requests[1] and rig.name(rig.requests[1])
+  rig.session.activeRateProfile = 1
+  rig.answer(rig.take())
+  pump()
+  local a = tuneHistory.read(MCU)[1].axes[1]
+  check("a read answered after a profile switch is not used", first == "rc_tuning"
+    and a.cyclicPolarity == nil and a.cyclicRing == nil and a.relaxType == nil, tostring(first) .. " / "
+    .. tostring(a.cyclicPolarity) .. " " .. tostring(a.relaxType))
+end
+
 print(string.format("\n%d checks, %d failed", checks, failures))
 os.exit(failures == 0 and 0 or 1)

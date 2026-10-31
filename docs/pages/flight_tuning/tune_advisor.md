@@ -19,7 +19,8 @@ give.
 The page combines up to the last 5 flights flown on the same tune as the newest one. Counting back from the
 newest flight, the first flight with a different P, F, B, I-term relax cut-off, rate type or rates on that axis
 ends the count, because the advice is worked out against the tune you fly now. So does a flight with a different
-cyclic polarity, cyclic ring or I-term relax type, or one where any of these three is not known. Combining flights
+cyclic polarity, cyclic ring or I-term relax type, or one where any of these three is not known. Under polar
+cyclic, Roll flies on the Pitch rates, so for Roll a change of the Pitch rates ends the count too. Combining flights
 adds up the counts and averages each measurement weighted by how much data it came from; the flight controller
 weights its own figures slightly differently, so the combined response is a close estimate rather than exact,
 while the stop figures combine exactly.
@@ -31,7 +32,8 @@ the flight controller's measurements so the next flight is measured on its own. 
 disarm and waits 2 seconds after each answer before the next request, so telemetry sensors keep updating; the
 flight is saved about 10 seconds after the disarm. Then it reads the cyclic polarity, the cyclic ring and the
 I-term relax type and adds them to the saved flight, since they change what its numbers mean. A value that could
-not be read stays unknown.
+not be read stays unknown, and so do all three if you switch the PID or rate profile before they are read: the
+values read then would belong to the other profile.
 
 - **The saving is done by the RFSuite dashboard widget or the RFSuite Service widget**, whether or not this page
   is open (see [Service widget](../../dashboard/service-widget.md)). With neither of them on the model, no flight
@@ -43,6 +45,8 @@ not be read stays unknown.
   reconnects, provided the flight controller has not been powered off in between. If the link drops the reading,
   the radio asks again 5 seconds later; after three failures it waits for the next disarm, and since the flight
   controller was not cleared, that flight is then saved together with this one.
+- **If another flight controller is connected before the clear**, it is not cleared, and its settings are not
+  added to the first one's flight; that flight stays saved with its settings unknown.
 - **Arming again before the flight is saved** stops the reading. The flight controller keeps adding to its
   measurements, so the next disarm saves both flights as one.
 - A flight with no acro flight time is not saved.

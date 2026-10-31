@@ -247,8 +247,25 @@ local function sendClear(tc, queue)
   })
 end
 
+local function activeProfiles()
+  local Profile = loadShared("lib/profile.lua")
+  if type(Profile) ~= "table" then return nil, nil end
+  local okP, pid = pcall(Profile.getActivePidProfile)
+  local okR, rate = pcall(Profile.getActiveRateProfile)
+  return okP and pid or nil, okR and rate or nil
+end
+
+-- The settings are read from the active profiles, so they are the flight's only while those are
+-- the profiles it was flown on; after a switch they would be another profile's.
+local function flownProfilesActive(ctx)
+  if ctx.flownPid == nil or ctx.flownRate == nil then return false end
+  local pid, rate = activeProfiles()
+  return pid == ctx.flownPid and rate == ctx.flownRate
+end
+
 -- After the clear: one read for each of the two settings the flight's numbers depend on. A read
--- that fails leaves its value unknown; only a dropped request is asked again.
+-- that fails, or is answered after a profile switch, leaves its value unknown; only a dropped
+-- request is asked again.
 local function readContext(tc, queue, api, onParsed)
   tc.busy = true
   queue:add({
@@ -258,7 +275,7 @@ local function readContext(tc, queue, api, onParsed)
     simulatorResponse = api.simulatorResponse,
     processReply = function(_, buf)
       local parsed = api.parse(buf)
-      if type(parsed) == "table" then onParsed(parsed) end
+      if type(parsed) == "table" and flownProfilesActive(tc.context) then onParsed(parsed) end
       tc.context.step = tc.context.step + 1
       waitFor(tc, GAP_SECONDS)
     end,
@@ -267,14 +284,6 @@ local function readContext(tc, queue, api, onParsed)
       waitFor(tc, reason == "cleared" and RETRY_SECONDS or GAP_SECONDS)
     end,
   })
-end
-
-local function activeProfiles()
-  local Profile = loadShared("lib/profile.lua")
-  if type(Profile) ~= "table" then return nil, nil end
-  local okP, pid = pcall(Profile.getActivePidProfile)
-  local okR, rate = pcall(Profile.getActiveRateProfile)
-  return okP and pid or nil, okR and rate or nil
 end
 
 -- All three axes are in: save them as one flight. Each call is one pass: a module to load, or
@@ -296,7 +305,7 @@ local function finishCapture(tc, mcuId)
   end
   -- 0: no acro flight. Same as last time: the clear after that flight never got through and
   -- nothing new was flown.
-  local saved = false
+  local saved, flown = false, nil
   if seconds > 0 and tc.lastSeconds[mcuId] ~= seconds then
     -- The save is a job of a few steps, one per pass (lib/tune_history.lua, step)
     local job = tc.job
@@ -317,6 +326,7 @@ local function finishCapture(tc, mcuId)
     local ok, why = TuneHistory.step(job)
     if ok == nil then return end
     tc.job = nil
+    flown = job.context
     if not ok then
       -- The replies are kept and only the write is tried again: no MSP, so not counted against
       -- MAX_FAILURES. The flight controller is not cleared, so an arm before it succeeds still
@@ -340,7 +350,8 @@ local function finishCapture(tc, mcuId)
   end
   if saved then
     tc.contextPending = true
-    tc.context = { mcuId = mcuId, step = 1 }
+    tc.context = { mcuId = mcuId, step = 1,
+      flownPid = flown and flown.pidProfile, flownRate = flown and flown.rateProfile }
   end
   waitFor(tc, GAP_SECONDS)
 end
@@ -348,6 +359,8 @@ end
 -- The context reads, then the one write that adds them to the flight
 local function advanceContext(tc, queue)
   local ctx = tc.context
+  -- Not the profiles the flight was flown on: its settings stay unknown
+  if ctx.step < 3 and not flownProfilesActive(ctx) then ctx.step = 3 end
   if ctx.step == 1 then
     if RcTuningApi == nil then RcTuningApi = loadPlain("tasks/msp/api/rc_tuning.lua"); return end
     if not RcTuningApi then ctx.step = 2; return end
