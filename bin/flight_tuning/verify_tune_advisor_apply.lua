@@ -479,6 +479,8 @@ do
   local sent = applyNow(function(m) if m.command == codecs.rates.writeCommand then return "error" end end)
   check("no EEPROM commit after a failed write", not has(sent, EEPROM), table.concat(sent, ","))
   check("the failed write is reported", lastReport().message == T().writeFailed, lastReport().message)
+  check("after a failed write the advice is still shown, not marked as saved", ui.view.actions[1] ~= T().applied
+    and #ui.view.changes == 3 and canSave(), ui.view.actions[1])
   journal({})
 end
 
@@ -507,6 +509,12 @@ do
   mspState.lastArmed, mspState.lastConnected = false, false
   pump()
   check("disabled while the link is down", not canSave())
+  -- The next connection reads the flight controller's id again; until then the session has none
+  _G.rfsuite.session.mcu_id = nil
+  pump()
+  check("a link loss keeps the saved flights' advice on screen", shown("2m 27s, 1/5 flights")
+    and #ui.view.changes == 3, ui.view.data)
+  _G.rfsuite.session.mcu_id = MCU
   mspState.lastConnected = true
 end
 

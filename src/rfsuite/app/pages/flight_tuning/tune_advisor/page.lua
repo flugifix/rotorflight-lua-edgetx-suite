@@ -1208,7 +1208,6 @@ function M.onSave(ctx)
         end
       end,
       onDone = function(result)
-        if result.status ~= "done" then markApplied() end
         if applyGeneration ~= ui.applyGeneration or not ui.applying then return end
         if result.status ~= "done" then
           if type(SavePipeline.hasOutcome) == "function" and SavePipeline.hasOutcome() then SavePipeline.dismiss() end
@@ -1261,9 +1260,11 @@ function M.wakeup(ctx)
     return
   end
 
-  -- The aircraft, the flight capture and the profiles: field tests only, no file is read here
+  -- The aircraft, the flight capture and the profiles: field tests only, no file is read here.
+  -- A link loss clears the session's mcu_id until the next connection reads it again; the saved
+  -- flights do not need the link, so only another flight controller changes what is shown.
   local mcu = sessionMcu()
-  if mcu ~= ui.mcu then
+  if mcu ~= nil and mcu ~= ui.mcu then
     queueHistoryRead()
     render()
     return
