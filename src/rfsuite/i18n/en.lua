@@ -569,7 +569,7 @@ return {
         applied = "Changes saved to the flight controller. Fly again to check the new tune.",
         help_title = "Tune Advisor",
         help_axis = "Roll, Pitch or Yaw: the flight data, the advice and Save below are for this axis only.",
-        help_message = "Fly in acro mode; each disarm saves the flight. Apply once, fly again.\nAxis: Roll, Pitch or Yaw; all lines are for this axis.\nFlight data: acro time combined, and how many of the last 5 flights.\nProfiles: PID and rate profile of the newest flight.\nResponse: heli turn rate compared with the stick.\nStops: bounce-back after centring the stick, or shaking.\nSuggested changes: what to change, by page and setting.\nWhy: reason for each change.\n*: erases saved flights and the flight controller's statistics after asking.\nSave (header): writes suggested changes for this axis after you confirm."
+        help_message = "Fly in acro mode; the dashboard or service widget saves each flight at disarm.\nAxis: Roll, Pitch or Yaw; all lines are for this axis.\nFlight data: acro time combined, and how many of the last 5 flights.\nProfiles: PID and rate profile of the newest flight.\nResponse: heli turn rate compared with the stick.\nStops: bounce-back after centring the stick, or shaking.\nSuggested changes: what to change, by page and setting.\nWhy: reason for each change.\n*: erases saved flights and the flight controller's statistics after asking.\nSave (header): writes suggested changes for this axis after you confirm."
       },
       flight_tuning_rates_advanced_cyclic_behaviour = {
         save_error_title = "Error",
