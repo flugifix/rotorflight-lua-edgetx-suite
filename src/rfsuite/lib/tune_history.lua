@@ -487,12 +487,29 @@ function M.erase(mcuId)
   return fileSize(path) == nil
 end
 
-local function sameTune(a, b)
-  for _, k in ipairs(TUNE_KEYS) do
-    if a[k] ~= b[k] then return false end
-  end
+local RATE_KEYS = { ratesType = true, rcRate = true, sRate = true }
+
+-- The axis table whose rate bytes the flight controller flew an axis with: under polar cyclic
+-- Roll follows Pitch's rates and its own go unused. Nil when a polar flight has no Pitch line.
+local function ratesFlown(flight, axis)
+  local a = flight.axes[axis]
+  if axis == 1 and a.cyclicPolarity == 1 then return flight.axes[2] end
+  return a
+end
+
+local function sameTune(flightA, flightB, axis)
+  local a, b = flightA.axes[axis], flightB.axes[axis]
   for _, k in ipairs(MEANING_KEYS) do
     if a[k] == nil or b[k] == nil or a[k] ~= b[k] then return false end
+  end
+  local ra, rb = ratesFlown(flightA, axis), ratesFlown(flightB, axis)
+  if not ra or not rb then return false end
+  for _, k in ipairs(TUNE_KEYS) do
+    if RATE_KEYS[k] then
+      if ra[k] ~= rb[k] then return false end
+    elseif a[k] ~= b[k] then
+      return false
+    end
   end
   return true
 end
@@ -512,7 +529,9 @@ end
 
 --- One axis (1 roll, 2 pitch, 3 yaw) over the newest flights on the newest flight's tune.
 --- Returns the combined axis table (shaped like a decoded reply's `a`, with the newest flight's
---- context keys; all zeros with no flights), the flights used and their total seconds.
+--- context keys; all zeros with no flights), the flights used and their total seconds. Under
+--- polar cyclic a Roll flight's rates are the Pitch rates it flew on, so a Pitch rate change ends
+--- Roll's flights too; the table keeps Roll's own bytes.
 function M.aggregate(flights, axis)
   local out = newAxis()
   local newest = flights[#flights] and flights[#flights].axes[axis]
@@ -524,7 +543,7 @@ function M.aggregate(flights, axis)
   for i = #flights, math.max(1, #flights - MAX_FLIGHTS + 1), -1 do
     local a = flights[i].axes[axis]
     -- The newest flight always counts; an older one only on the same tune, in the same context
-    if not a or (i < #flights and not sameTune(a, newest)) then break end
+    if not a or (i < #flights and not sameTune(flights[i], flights[#flights], axis)) then break end
     used = used + 1
     seconds = seconds + flights[i].seconds
 

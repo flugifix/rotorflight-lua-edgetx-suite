@@ -369,6 +369,28 @@ do
   check("another relax type is not combined", pairUsed(base, with("relaxType", 1)) == 1)
 end
 
+print("Differences from the Ethos suite: under polar cyclic Roll flies on Pitch's rates (#981)")
+do
+  -- Two flights, each with these rate bytes on Roll and on Pitch; how many Roll combines
+  local function rollUsed(polarity, roll1, pitch1, roll2, pitch2)
+    reset()
+    local ctx = { pidProfile = 1, rateProfile = 1, cyclicPolarity = polarity, cyclicRing = 100, relaxType = 2 }
+    for _, pair in ipairs({ { roll1, pitch1 }, { roll2, pitch2 } }) do
+      local r = replies(60)
+      r[1].a.rcRate, r[2].a.rcRate = pair[1], pair[2]
+      clock = clock + 60
+      assert(tuneHistory.save(MCU, r, ctx, clock))
+    end
+    local _, n = tuneHistory.aggregate(tuneHistory.read(MCU), 1)
+    return n
+  end
+  check("polar: a Pitch rate change ends Roll's flights, though Roll's own bytes are equal",
+    rollUsed(1, 24, 24, 24, 30) == 1)
+  check("polar: Roll's own unused rate bytes do not end them", rollUsed(1, 24, 24, 30, 24) == 2)
+  check("polar off: Roll still goes by its own rates", rollUsed(0, 24, 24, 24, 30) == 2
+    and rollUsed(0, 24, 24, 30, 24) == 1)
+end
+
 print("Differences from the Ethos suite: the change journal reads past a broken line (#979)")
 do
   reset()
