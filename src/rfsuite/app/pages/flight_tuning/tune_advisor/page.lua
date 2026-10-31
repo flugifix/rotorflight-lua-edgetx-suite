@@ -131,7 +131,7 @@ end
 -- src/main/flight/setpoint.c):
 --   setpointInitProfile, lines 237-245: ringLimit = applyRatesCurve(axis, 1.0) * cyclic_ring / 100,
 --     and 2000 deg/s when cyclic_ring is 0.
---   setpointUpdate, polar off, lines 330-340: both setpoints are divided by
+--   setpointUpdate, polar off, lines 326-341: both setpoints are divided by
 --     C = sqrt((roll / ringLimit[ROLL])^2 + (pitch / ringLimit[PITCH])^2) when C > 1, so one
 --     axis alone is held at min(curve(1), ringLimit).
 --   setpointUpdate, polar on, lines 310-316: rate = min(applyRatesCurve(PITCH, dist),
