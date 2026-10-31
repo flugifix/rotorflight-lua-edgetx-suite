@@ -725,7 +725,7 @@ do
   local captureModules = {
     ["tasks/msp/api/tune_advisor.lua"] = true, ["lib/tune_history.lua"] = true, ["lib/atomic_file.lua"] = true,
     ["lib/change_journal.lua"] = true, ["lib/profile.lua"] = true, ["tasks/msp/api/rc_tuning.lua"] = true,
-    ["tasks/msp/api/pid_profile.lua"] = true,
+    ["tasks/msp/api/pid_profile.lua"] = true, ["tasks/events/tune_capture.lua"] = true,
   }
   local early = {}
   for _, path in ipairs(rig.loads) do

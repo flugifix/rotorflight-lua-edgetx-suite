@@ -3,7 +3,7 @@
 -- Run from the repository root:
 --     lua5.3 bin/flight_tuning/verify_tune_advisor_gate.lua
 --
--- The claim: the disarm capture (src/rfsuite/tasks/events/ondisarm/tasks/tune_history.lua) sends
+-- The claim: the disarm capture (src/rfsuite/tasks/events/tune_capture.lua) sends
 -- no Tune Advisor request to a flight controller below MSP API 12.10, which has no such command,
 -- and none while the version is not known yet. From 12.10 a disarm sends the capture read. A
 -- flight controller that answers with the MSP error reply is not asked again until the next
@@ -46,8 +46,8 @@ function mkdir() return 0 end
 function del() return 0 end
 function rename() return 1 end
 
-local TASK = "src/rfsuite/tasks/events/ondisarm/tasks/tune_history.lua"
-local capture = assert(loadfile(TASK))()
+local CAPTURE = "src/rfsuite/tasks/events/tune_capture.lua"
+local capture = assert(loadfile(CAPTURE))()
 
 -- ---------------------------------------------------------------------------
 print("Ethos suite: version support")

@@ -3,7 +3,8 @@
 --
 -- Loads the real src/rfsuite/tasks/events/runtime.lua, the real ondisarm runner
 -- (tasks/events/common/runner.lua) with the real ondisarm manifest, the real capture
--- (tasks/events/ondisarm/tasks/tune_history.lua) and every module it loads. Stubbed: the MSP
+-- (tasks/events/ondisarm/tasks/tune_history.lua, tasks/events/tune_capture.lua) and every module
+-- it loads. Stubbed: the MSP
 -- runtime (its state: link, armed, a recording queue), the logger, the sensors, the other ondisarm
 -- tasks (each completes on its first call), and the onconnect, onarm and telemetry runners. The
 -- card is the caller's: it installs io/fstat/rename/del/mkdir before it builds a rig.
