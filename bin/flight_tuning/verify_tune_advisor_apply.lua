@@ -729,6 +729,31 @@ do
   openPage()
   check("nor does one over its read cap", #files[Journal.path(MCU)] > 65536 and not canSave()
     and contains(ui.view.whys, T().whyJournalUnread), table.concat(ui.view.whys, " | "))
+
+  -- A long journal (a thousand entries, about 40 kB) is read over many passes, and the walk
+  -- still finds the advisor's own raises at its end
+  local long = {}
+  for i = 1, 998 do
+    long[i] = string.format('e(%d,"pids",1,"pid_%d_F",%d,%d)', 1761800000 + i, i % 3, 100 + i % 7, 90 + i % 5)
+  end
+  long[#long + 1] = 'e(1761801000,"tune_advisor",1,"pid_0_P",50,60)'
+  long[#long + 1] = 'e(1761801001,"tune_advisor",1,"pid_0_P",60,70)'
+  files[Journal.path(MCU)] = table.concat(long, "\n") .. "\n"
+  Page.onClose()
+  opened = false
+  files[TuneHistory.path(MCU)] = nil
+  saveFlight()
+  queue.entries = {}
+  build()
+  opened = true
+  local journalPasses = 0
+  for _ = 1, 200 do
+    if ui.loadStep == "journal" then journalPasses = journalPasses + 1 end
+    pass(nil, {})
+  end
+  check("a long journal is read over many passes and still caps P", journalPasses >= 30
+    and not canSave() and contains(ui.view.whys, string.format(T().whyPMaxFmt, 40)),
+    journalPasses .. " passes; " .. table.concat(ui.view.whys, " | "))
   journal({})
   resetFlights()
 end

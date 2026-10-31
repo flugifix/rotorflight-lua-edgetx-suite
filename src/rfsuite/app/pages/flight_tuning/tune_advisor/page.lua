@@ -201,6 +201,8 @@ local ui = {
   mcu = nil,                -- the aircraft whose flights are on screen
   loadStep = nil,           -- the history read in progress: "read", "aggregate", "journal"
   readJob = nil,            -- the file read's own steps (lib/tune_history.lua readJob)
+  journalJob = nil,         -- the change journal read's own steps (lib/change_journal.lua readJob)
+  axesBuilt = nil,          -- the axes combined so far, one per pass
   flights = nil,            -- held only between the read and the aggregate
   axes = nil,               -- per axis {a, used, seconds, pilotP}: all the page keeps
   maxFlights = 5,
@@ -801,12 +803,12 @@ end
 
 -- Starts this visit's read of the saved flights. The read runs as steps on the page's wakeups
 -- (readHistoryStep): the history module, the file, its lines a flight at a time, then the three
--- axes combined, then the change journal for the pilot's own P. Nothing can be saved until it has
--- finished.
+-- axes combined one per pass, then the change journal for the pilot's own P a few lines per pass.
+-- Nothing can be saved until it has finished.
 local function queueHistoryRead()
   ui.runtime.historyRead = false
   ui.mcu = sessionMcu()
-  ui.axes, ui.flights, ui.readJob = nil, nil, nil
+  ui.axes, ui.axesBuilt, ui.flights, ui.readJob, ui.journalJob = nil, nil, nil, nil, nil
   for axis = AXIS_ROLL, AXIS_YAW do ui.applied[axis] = nil end
   local session = getSession()
   local capture = session and session.tuneCapture
@@ -832,27 +834,49 @@ local function readHistoryStep()
     ui.flights, ui.readJob = flights, nil
     ui.loadStep = "aggregate"
   elseif step == "aggregate" then
+    -- One axis per pass: all three in one were the dearest pass of the open
     local flights = ui.flights or {}
-    local newest = flights[#flights]
-    ui.newestHasPitch = newest ~= nil and newest.axes[AXIS_PITCH] ~= nil
-    local axes = {}
-    for axis = AXIS_ROLL, AXIS_YAW do
-      local a, used, seconds = TuneHistory.aggregate(flights, axis)
-      axes[axis] = { a = a, used = used, seconds = seconds, pilotP = a.P }
+    local axes = ui.axesBuilt
+    if not axes then
+      axes = {}
+      ui.axesBuilt = axes
+      local newest = flights[#flights]
+      ui.newestHasPitch = newest ~= nil and newest.axes[AXIS_PITCH] ~= nil
     end
-    ui.axes, ui.flights = axes, nil
+    local axis = #axes + 1
+    local a, used, seconds = TuneHistory.aggregate(flights, axis)
+    axes[axis] = { a = a, used = used, seconds = seconds, pilotP = a.P }
+    if axis < AXIS_YAW then return end
+    ui.axes, ui.axesBuilt, ui.flights = axes, nil, nil
     ui.loadStep = "journal"
   elseif step == "journal" then
-    -- The pilot's own P, per axis, on the PID profile the flights were flown on
-    if not ChangeJournal then ChangeJournal = loadModule("lib/change_journal.lua") end
+    -- The pilot's own P, per axis, on the PID profile the flights were flown on. The journal
+    -- grows with every save, so it is read like the flights: the module and the job on one pass,
+    -- then a bounded number of its lines per pass, keeping only the entries for P.
+    if not ui.journalJob then
+      if not ChangeJournal then ChangeJournal = loadModule("lib/change_journal.lua") end
+      if ChangeJournal and type(ChangeJournal.readJob) == "function" then
+        ui.journalJob = ChangeJournal.readJob(ui.mcu, { pid_0_P = true, pid_1_P = true, pid_2_P = true })
+        return
+      end
+    end
+    local entries = nil
+    if ui.journalJob then
+      entries = ChangeJournal.readStep(ui.journalJob)
+      if entries == false then return end
+      ui.journalJob = nil
+    end
     -- No journal is no record: the current P is the pilot's. A journal that is there but cannot
-    -- be read leaves it unknown (nil), and P is then not raised.
-    local entries = ChangeJournal and ChangeJournal.read(ui.mcu)
+    -- be read leaves it unknown (nil), and P is then not raised. One walk for the three axes.
     local pid = currentProfiles()
+    local wants = {}
     for axis = AXIS_ROLL, AXIS_YAW do
-      local entry = ui.axes[axis]
-      entry.pilotP = type(entries) == "table"
-        and TuneHistory.pilotValue(entries, entry.a.pidProfile or pid, "pid_" .. (axis - 1) .. "_P", entry.a.P) or nil
+      local a = ui.axes[axis].a
+      wants[axis] = { profile = a.pidProfile or pid, field = "pid_" .. (axis - 1) .. "_P", value = a.P }
+    end
+    if type(entries) == "table" then TuneHistory.pilotValues(entries, wants) end
+    for axis = AXIS_ROLL, AXIS_YAW do
+      ui.axes[axis].pilotP = type(entries) == "table" and wants[axis].value or nil
     end
     -- Neither module is needed again until Clear or Save
     TuneHistory, ChangeJournal = nil, nil
@@ -1420,7 +1444,8 @@ end
 function M.onClose()
   ui.generation = ui.generation + 1
   ui.applyGeneration = ui.applyGeneration + 1
-  ui.mcu, ui.loadStep, ui.readJob, ui.flights, ui.axes = nil, nil, nil, nil, nil
+  ui.mcu, ui.loadStep, ui.readJob, ui.journalJob, ui.flights, ui.axes = nil, nil, nil, nil, nil, nil
+  ui.axesBuilt = nil
   ui.probeOwed, ui.probing, ui.unsupported = false, false, false
   ui.captureState, ui.seenSaved, ui.profileKey = nil, nil, nil
   for axis = AXIS_ROLL, AXIS_YAW do ui.applied[axis] = nil end

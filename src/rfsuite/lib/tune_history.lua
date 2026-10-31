@@ -595,14 +595,34 @@ end
 --- -- ends the walk, so the value it set counts as the pilot's. No entry: the current value.
 function M.pilotValue(entries, profile, field, value)
   if type(entries) ~= "table" then return value end
+  local want = { profile = profile, field = field, value = value }
+  M.pilotValues(entries, { want })
+  return want.value
+end
+
+--- pilotValue() for several settings in one walk over the entries: `wants` is a list of
+--- {profile, field, value}, one per field; each `value` is replaced by the pilot's own.
+function M.pilotValues(entries, wants)
+  if type(entries) ~= "table" then return end
+  local byField, open = {}, 0
+  for _, w in ipairs(wants) do
+    byField[w.field] = w
+    open = open + 1
+  end
   for i = #entries, 1, -1 do
     local e = entries[i]
-    if e.field == field and e.profile == profile then
-      if e.source ~= "tune_advisor" or e.new ~= value then break end
-      value = e.old
+    local w = byField[e.field]
+    if w and e.profile == w.profile then
+      if e.source ~= "tune_advisor" or e.new ~= w.value then
+        -- This setting's walk ends here
+        byField[e.field] = nil
+        open = open - 1
+        if open == 0 then return end
+      else
+        w.value = e.old
+      end
     end
   end
-  return value
 end
 
 return M

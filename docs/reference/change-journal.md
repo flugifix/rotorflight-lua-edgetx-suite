@@ -49,7 +49,9 @@ it can be put in order.
 A reader reads the whole text (up to 64 KiB) and compiles it with Lua's
 `load(text, name, "t", { e = collector })`, where `collector(time, source, profile, field, old, new)` receives
 each line. Use `load`, not `loadScript`: on EdgeTX, `loadScript` does not pass its environment argument to
-the chunk. The append-only file otherwise grows without limit, so archive a large file by hand.
+the chunk. The append-only file otherwise grows without limit, so archive a large file by hand. The suite
+itself reads the text a few lines at a time, one group per pass of the page, so that a long journal never holds
+up the radio.
 
 The Tune Advisor page reads the journal when it opens, to find the P you last set yourself: it follows its own
 entries for P on an axis and PID profile back from the current value and stops at any other change. If the file
@@ -61,8 +63,8 @@ again.
 The file is never rewritten by the suite. Each append is checked against the file's growth on the card.
 A failed journal append is reported by the Tune Advisor and does not undo the board's EEPROM commit.
 
-When the whole text does not compile or run -- a half-written last line, or a line broken by hand -- the
-reader reads it again line by line and skips only the lines that do not read; every other line still counts.
+When a group of lines does not compile or run -- a half-written last line, or a line broken by hand -- the
+reader reads that group again line by line and skips only the lines that do not read; every other line still counts.
 A later append starts on a new line and leaves the broken fragment in place, where it is skipped again; delete
 it by hand to tidy the file. Files above 64 KiB are reported as too big rather than read partly; archive the
 file by hand if it reaches that size.

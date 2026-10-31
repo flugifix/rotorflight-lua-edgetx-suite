@@ -435,6 +435,56 @@ do
   files[JOURNAL] = nil
 end
 
+print("Differences from the Ethos suite: the change journal is read in steps (#980)")
+do
+  -- The journal grows with every save; the page reads it a bounded number of lines per step.
+  reset()
+  local text = {}
+  for i = 1, 100 do
+    local field = ({ "pid_0_F", "pid_1_P", "pid_0_P", "pid_2_B" })[i % 4 + 1]
+    text[#text + 1] = string.format('e(%d,"%s",1,"%s",%d,%d)', 1761900000 + i, i % 2 == 0 and "tune_advisor" or "pids",
+      field, 50 + i, 51 + i)
+  end
+  text[50] = 'e(1,"pids",1,"pid_0_P",4'
+  files[JOURNAL] = table.concat(text, "\n") .. "\n"
+  local whole = journal.read(MCU)
+  local job, steps, most, got = journal.readJob(MCU), 0, 0, nil
+  repeat
+    local before = job.entries and #job.entries or 0
+    got = journal.readStep(job)
+    steps = steps + 1
+    if type(job.entries) == "table" then most = math.max(most, #job.entries - before) end
+  until got ~= false
+  check("the journal is read a bounded number of lines per step and reads what read() reads",
+    type(got) == "table" and #got == 99 and #whole == 99 and steps >= 7 and most >= 1 and most <= 16
+    and got[50].time == whole[50].time and got[99].new == whole[99].new,
+    steps .. " steps, at most " .. most .. " entries, " .. tostring(got and #got))
+
+  local only = journal.readJob(MCU, { pid_0_P = true, pid_1_P = true })
+  repeat got = journal.readStep(only) until got ~= false
+  local wrong = 0
+  for _, e in ipairs(got) do
+    if e.field ~= "pid_0_P" and e.field ~= "pid_1_P" then wrong = wrong + 1 end
+  end
+  check("a read asked for some fields keeps only their entries", #got == 49 and wrong == 0, #got .. " entries")
+
+  -- One walk for the three axes answers what three walks answer
+  local agree = true
+  local wants = {}
+  for axis = 0, 2 do wants[#wants + 1] = { profile = 1, field = "pid_" .. axis .. "_P", value = 51 + 99 } end
+  tuneHistory.pilotValues(whole, wants)
+  for _, w in ipairs(wants) do
+    agree = agree and w.value == tuneHistory.pilotValue(whole, 1, w.field, 51 + 99)
+  end
+  check("pilotValues walks once and answers what pilotValue answers per field", agree)
+
+  files[JOURNAL] = string.rep('e(1,"pids",1,"pid_0_P",1,2)\n', 3000)
+  local none, why = journal.read(MCU)
+  check("a journal over its read cap still answers nothing and the reason", none == nil and why == "too big",
+    tostring(why))
+  files[JOURNAL] = nil
+end
+
 print("Differences from the Ethos suite: pilotValue follows the Tune Advisor's own entries only (#980)")
 do
   local handFirst = {
