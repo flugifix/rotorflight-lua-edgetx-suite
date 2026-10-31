@@ -159,20 +159,23 @@ local function readText(path)
   return table.concat(parts)
 end
 
--- Runs the file's text with the two collectors and answers the format version it declared and
--- the flight lines, oldest first. The whole file is loaded in one go; when that fails anywhere
--- -- a torn or hand-broken line, a value that is not a number -- it is read again line by line
--- and every line that does not read is skipped. loadScript is not used: it drops the
--- environment and can leave compiled bytecode beside the file.
-local function collect(text)
-  local version, rows = nil, {}
+-- A read in steps, so that no step parses more than one flight's lines: building the axis tables
+-- of all five flights in one call was the dearest pass of the page's open. The file is read
+-- once, then AXIS_COUNT lines are run per step with the two collectors below. Each group of
+-- lines is loaded in one go; when that fails anywhere -- a torn or hand-broken line, a value
+-- that is not a number -- the group is run again line by line and every line that does not
+-- read is skipped. loadScript is not used: it drops the environment and can leave compiled
+-- bytecode beside the file.
+local LINES_PER_READ_STEP = AXIS_COUNT
+
+local function newCollector()
   local axisByName = {}
   for i = 1, AXIS_COUNT do axisByName[AXIS_NAMES[i]] = i end
-
+  local col = { version = nil, rows = {} }
   local env = {}
   function env.v(n)
     if type(n) ~= "number" then error("invalid version") end
-    version = n
+    col.version = n
   end
   function env.f(...)
     local n = select("#", ...)
@@ -191,36 +194,58 @@ local function collect(text)
       if type(v) ~= "number" then error("invalid flight line") end
       if f.band then a[f.band][f.index][f[2]] = v else a[f[2]] = v end
     end
-    rows[#rows + 1] = { time = args[1], seconds = args[2], axis = axis, a = a }
+    col.rows[#col.rows + 1] = { time = args[1], seconds = args[2], axis = axis, a = a }
   end
-
-  local chunk = load(text, "=tune_history", "t", env)
-  if chunk and pcall(chunk) then return version, rows end
-
-  version, rows = nil, {}
-  for oneLine in string.gmatch(text, "[^\r\n]+") do
-    local count = #rows
-    local lineChunk = load(oneLine, "=tune_history", "t", env)
-    if not lineChunk or not pcall(lineChunk) then
-      for i = #rows, count + 1, -1 do rows[i] = nil end
-    end
-  end
-  return version, rows
+  col.env = env
+  return col
 end
 
---- The saved flights for one flight controller, oldest first: {time, seconds, axes = {a, a, a}}.
---- Each axis table is shaped like a decoded reply's `a`, plus the context keys. A missing file,
---- or one of another format version, reads as no flights; the second value says why.
-function M.read(mcuId)
-  local path = M.path(mcuId)
-  if not path then return {}, "mcu id" end
-  local text, reason = readText(path)
-  if not text then return {}, reason end
-  local version, rows = collect(text)
-  if version ~= FORMAT_VERSION then return {}, "version" end
+-- Runs lines first..last of the job's text with the collectors
+local function collectLines(job, first, last)
+  local col, lines = job.collector, job.lines
+  local rows, version, count = col.rows, col.version, #col.rows
+  local chunk = load(table.concat(lines, "\n", first, last), "=tune_history", "t", col.env)
+  if chunk and pcall(chunk) then return end
+  for i = #rows, count + 1, -1 do rows[i] = nil end
+  col.version = version
+  for i = first, last do
+    local before = #rows
+    local lineChunk = load(lines[i], "=tune_history", "t", col.env)
+    if not lineChunk or not pcall(lineChunk) then
+      for k = #rows, before + 1, -1 do rows[k] = nil end
+    end
+  end
+end
+
+--- A read of one flight controller's saved flights in steps (see M.readStep).
+function M.readJob(mcuId)
+  return { kind = "read", phase = "read", mcuId = mcuId }
+end
+
+--- One step of a job from readJob(): nil while there is more to do, then what read() answers.
+function M.readStep(job)
+  if job.phase == "read" then
+    local path = M.path(job.mcuId)
+    if not path then job.phase = "done"; return {}, "mcu id" end
+    local text, reason = readText(path)
+    if not text then job.phase = "done"; return {}, reason end
+    local lines = {}
+    for oneLine in string.gmatch(text, "[^\r\n]+") do lines[#lines + 1] = oneLine end
+    job.lines, job.next, job.collector = lines, 1, newCollector()
+    job.phase = "parse"
+    return nil
+  elseif job.phase == "parse" then
+    local last = math.min(#job.lines, job.next + LINES_PER_READ_STEP - 1)
+    if job.next <= last then collectLines(job, job.next, last) end
+    job.next = last + 1
+    if job.next <= #job.lines then return nil end
+  end
+  local col = job.collector
+  job.phase, job.lines, job.collector = "done", nil, nil
+  if not col or col.version ~= FORMAT_VERSION then return {}, "version" end
 
   local flights, current = {}, nil
-  for _, row in ipairs(rows) do
+  for _, row in ipairs(col.rows) do
     if not current or current.time ~= row.time or current.axes[row.axis] then
       current = { time = row.time, seconds = row.seconds, axes = {} }
       flights[#flights + 1] = current
@@ -228,6 +253,17 @@ function M.read(mcuId)
     current.axes[row.axis] = row.a
   end
   return flights
+end
+
+--- The saved flights for one flight controller, oldest first: {time, seconds, axes = {a, a, a}}.
+--- Each axis table is shaped like a decoded reply's `a`, plus the context keys. A missing file,
+--- or one of another format version, reads as no flights; the second value says why.
+function M.read(mcuId)
+  local job = M.readJob(mcuId)
+  while true do
+    local flights, reason = M.readStep(job)
+    if flights ~= nil then return flights, reason end
+  end
 end
 
 -- A rewrite of the file in steps, each small enough for one widget pass.

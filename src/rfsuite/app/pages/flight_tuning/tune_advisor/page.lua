@@ -200,6 +200,7 @@ local ui = {
   selected = AXIS_ROLL,
   mcu = nil,                -- the aircraft whose flights are on screen
   loadStep = nil,           -- the history read in progress: "read", "aggregate", "journal"
+  readJob = nil,            -- the file read's own steps (lib/tune_history.lua readJob)
   flights = nil,            -- held only between the read and the aggregate
   axes = nil,               -- per axis {a, used, seconds, pilotP}: all the page keeps
   maxFlights = 5,
@@ -795,12 +796,13 @@ local function getQueue()
 end
 
 -- Starts this visit's read of the saved flights. The read runs as steps on the page's wakeups
--- (readHistoryStep): the history module, the file, then the three axes combined, then the change
--- journal for the pilot's own P. Nothing can be saved until it has finished.
+-- (readHistoryStep): the history module, the file, its lines a flight at a time, then the three
+-- axes combined, then the change journal for the pilot's own P. Nothing can be saved until it has
+-- finished.
 local function queueHistoryRead()
   ui.runtime.historyRead = false
   ui.mcu = sessionMcu()
-  ui.axes, ui.flights = nil, nil
+  ui.axes, ui.flights, ui.readJob = nil, nil, nil
   for axis = AXIS_ROLL, AXIS_YAW do ui.applied[axis] = nil end
   local session = getSession()
   local capture = session and session.tuneCapture
@@ -812,14 +814,18 @@ end
 local function readHistoryStep()
   local step = ui.loadStep
   if step == "read" then
-    -- The module on one pass and the file on the next: together they are the dearest step
+    -- The module on one pass and the file on the next: together they were the dearest step
     if not TuneHistory then
       TuneHistory = loadModule("lib/tune_history.lua")
       if not TuneHistory then ui.loadStep = nil end
       return
     end
     ui.maxFlights = TuneHistory.MAX_FLIGHTS or ui.maxFlights
-    ui.flights = TuneHistory.read(ui.mcu)
+    -- The file on one pass, then at most one flight's lines per pass
+    if not ui.readJob then ui.readJob = TuneHistory.readJob(ui.mcu) end
+    local flights = TuneHistory.readStep(ui.readJob)
+    if flights == nil then return end
+    ui.flights, ui.readJob = flights, nil
     ui.loadStep = "aggregate"
   elseif step == "aggregate" then
     local flights = ui.flights or {}
@@ -1405,7 +1411,7 @@ end
 function M.onClose()
   ui.generation = ui.generation + 1
   ui.applyGeneration = ui.applyGeneration + 1
-  ui.mcu, ui.loadStep, ui.flights, ui.axes = nil, nil, nil, nil
+  ui.mcu, ui.loadStep, ui.readJob, ui.flights, ui.axes = nil, nil, nil, nil, nil
   ui.probeOwed, ui.probing, ui.unsupported = false, false, false
   ui.captureState, ui.seenSaved, ui.profileKey = nil, nil, nil
   for axis = AXIS_ROLL, AXIS_YAW do ui.applied[axis] = nil end

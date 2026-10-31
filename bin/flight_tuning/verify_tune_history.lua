@@ -260,6 +260,23 @@ do
   check("a file of another version is started again", fly(160) and #lines() == 4 and lines()[1] == "v(1)",
     #lines() .. " lines")
 
+  -- The page reads in steps: the file on one, then no more than one flight's lines on each
+  reset()
+  for n = 1, 5 do fly(100 + n) end
+  local job, steps, most, got = tuneHistory.readJob(MCU), 0, 0, nil
+  repeat
+    local col = job.collector
+    local before = col and #col.rows or 0
+    got = tuneHistory.readStep(job)
+    steps = steps + 1
+    if col then most = math.max(most, #col.rows - before) end
+  until got ~= nil
+  local whole = tuneHistory.read(MCU)
+  check("a stepped read parses at most one flight's lines per step and reads what read() reads",
+    steps >= 6 and most >= 1 and most <= 3 and #got == 5 and #whole == 5 and got[5].seconds == 105
+    and got[5].axes[3].P == whole[5].axes[3].P and got[1].axes[1].ffGain == whole[1].axes[1].ffGain,
+    steps .. " steps, at most " .. most .. " lines, " .. #got .. " flights")
+
   reset()
   fly(147)
   check("a save writes beside the file and renames it into place",
