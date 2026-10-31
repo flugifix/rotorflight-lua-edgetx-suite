@@ -289,9 +289,11 @@ local function finishCapture(tc, mcuId)
     if not job then
       local pid, rate = activeProfiles()
       local time = ChangeJournal and ChangeJournal.timestamp and ChangeJournal.timestamp() or 0
+      ChangeJournal = false       -- its clock was all the save needed of it
       job = TuneHistory and TuneHistory.saveJob(mcuId, replies, { pidProfile = pid, rateProfile = rate }, time)
       if not job then
         log("cannot write the flight history: module")
+        ChangeJournal = nil
         waitFor(tc, RETRY_SECONDS)
         return
       end
@@ -306,6 +308,7 @@ local function finishCapture(tc, mcuId)
       -- MAX_FAILURES. The flight controller is not cleared, so an arm before it succeeds still
       -- leaves the numbers for the next disarm.
       log("cannot write the flight history: " .. tostring(why))
+      ChangeJournal = nil         -- the next try takes the clock again
       waitFor(tc, RETRY_SECONDS)
       return
     end
