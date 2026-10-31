@@ -147,6 +147,11 @@ finish. The tool and the background decoder are not stopped that way.
 ## The other files beside them
 
 - `journal/<mcu id>.lua` — the append-only [change journal](change-journal.md), recording each value committed by the Tune Advisor.
+- `tune/<mcu id>.lua` — the [Tune Advisor](../pages/flight_tuning/tune_advisor.md)'s saved flights, the last 5 per
+  flight controller, written by the dashboard or the service widget after each disarm. Lua data read with an
+  environment of its own, never run as a script: a version line `v(1)`, then one `f(...)` line per flight and axis.
+  Each save writes `<mcu id>.lua.new` beside it, checks its size and renames it into place, keeping the previous
+  file as `<mcu id>.lua.bak` until the next save. Deleting the file, or *\** on the page, forgets the flights.
 - `reload.req` — a few bytes the tool writes when you save, so the dashboard widget knows to
   re-read the settings. Unchanged by the move to Lua files. Do not delete it while the suite is
   running.
