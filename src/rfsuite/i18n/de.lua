@@ -546,6 +546,7 @@ return {
         why_ok = "Der Heli folgt dem Knüppel wie verlangt.",
         why_limit = "Die nötige Änderung überschreitet die Grenze einer Einstellung.",
         why_p_max_fmt = "P liegt schon %d%% über Ihrer Einstellung. Die Mechanik prüfen.",
+        why_journal_unread = "Das Änderungsjournal konnte nicht gelesen werden, daher wird P nicht erhöht.",
         save_question = "Diese Änderungen in den Flugcontroller schreiben und speichern?",
         reading = "Lese aktuelle Einstellungen...",
         checking = "Prüfe gespeicherte Einstellungen...",

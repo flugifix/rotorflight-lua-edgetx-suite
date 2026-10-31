@@ -52,7 +52,9 @@ each line. Use `load`, not `loadScript`: on EdgeTX, `loadScript` does not pass i
 the chunk. The append-only file otherwise grows without limit, so archive a large file by hand.
 
 The Tune Advisor page reads the journal when it opens, to find the P you last set yourself: it follows its own
-entries for P on an axis and PID profile back from the current value and stops at any other change.
+entries for P on an axis and PID profile back from the current value and stops at any other change. If the file
+is there but cannot be read -- over 64 KiB, or it does not open -- the page raises no P until it can be read
+again.
 
 ## Reading and repairing
 

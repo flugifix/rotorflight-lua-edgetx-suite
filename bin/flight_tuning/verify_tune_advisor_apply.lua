@@ -60,11 +60,12 @@ local PIPELINE_PATH = "tasks/msp/save_pipeline.lua"
 -- ---------------------------------------------------------------------------
 -- luacheck: globals io
 local files = {}
+local openFails = {}           -- path -> true: opening it for reading answers nil
 io.open = function(path, mode)
   mode = mode or "r"
   local m = string.sub(mode, 1, 1)
   if m == "r" then
-    if files[path] == nil then return nil end
+    if files[path] == nil or openFails[path] then return nil end
     return { path = path, pos = 1 }
   end
   if m == "w" then files[path] = "" end
@@ -714,6 +715,20 @@ do
   openPage()
   check("control: the advisor's own raises on this profile cap it", not canSave()
     and contains(ui.view.whys, string.format(T().whyPMaxFmt, 40)), table.concat(ui.view.whys, " | "))
+
+  -- The same journal, but it cannot be read: the pilot's own P cannot be told, so P is not
+  -- raised at all, and the page says why. (No journal at all is no record: the Ethos case
+  -- "with no Apply record, P 70 -> 84".)
+  openFails[Journal.path(MCU)] = true
+  openPage()
+  check("a change journal that cannot be opened raises no P, and says so", not canSave()
+    and contains(ui.view.whys, T().whyJournalUnread) and not contains(ui.view.actions, "->"),
+    table.concat(ui.view.whys, " | "))
+  openFails[Journal.path(MCU)] = nil
+  files[Journal.path(MCU)] = string.rep('e(1761900000,"pids",1,"pid_2_P",1,2)\n', 2000)
+  openPage()
+  check("nor does one over its read cap", #files[Journal.path(MCU)] > 65536 and not canSave()
+    and contains(ui.view.whys, T().whyJournalUnread), table.concat(ui.view.whys, " | "))
   journal({})
   resetFlights()
 end

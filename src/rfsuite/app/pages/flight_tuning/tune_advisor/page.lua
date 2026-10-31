@@ -358,6 +358,7 @@ local function loadTexts(i18n)
     whyOk = pageText(i18n, "why_ok", "The heli answers the stick as asked."),
     whyLimit = pageText(i18n, "why_limit", "The change needed goes past a setting's limit."),
     whyPMaxFmt = pageText(i18n, "why_p_max_fmt", "P is already %d%% above your setting. Check the mechanics."),
+    whyJournalUnread = pageText(i18n, "why_journal_unread", "The change journal could not be read, so P is not raised."),
 
     armed = pageText(i18n, "save_armed", "Disarm first. Nothing was saved."),
     disconnected = pageText(i18n, "save_disconnected", "Connect the flight controller first."),
@@ -526,7 +527,7 @@ end
 --
 -- rates: the rate set the advice works on ({ratesType, rcRate, sRate, row, axis}); ctx: the
 -- newest flight's cyclic ring and I-term relax type where they apply (nil = unknown); pilotP:
--- the pilot's own P for this axis.
+-- the pilot's own P for this axis, nil when the change journal could not be read.
 local function advise(T, a, axis, rates, ctx, pilotP, actions, whys, changes)
   local function room(n) return #actions + n <= MAX_ACTIONS end
   local function act(s) if #actions < MAX_ACTIONS then actions[#actions + 1] = s end end
@@ -642,6 +643,9 @@ local function advise(T, a, axis, rates, ctx, pilotP, actions, whys, changes)
         local newP = math.max(round(a.P * P_STEP), a.P + 1)
         if not inRange("P", newP) then
           atLimit()
+        elseif pilotP == nil then
+          -- The journal could not be read: how far P is above the pilot's own cannot be told
+          why(T.whyJournalUnread)
         elseif newP > math.floor(pilotP * P_RAISE_MAX) then
           -- Already raised as far as this page goes; a P of 0 or 1 gets no raise
           if a.P > pilotP and pilotP > 0 then
@@ -841,13 +845,14 @@ local function readHistoryStep()
   elseif step == "journal" then
     -- The pilot's own P, per axis, on the PID profile the flights were flown on
     if not ChangeJournal then ChangeJournal = loadModule("lib/change_journal.lua") end
+    -- No journal is no record: the current P is the pilot's. A journal that is there but cannot
+    -- be read leaves it unknown (nil), and P is then not raised.
     local entries = ChangeJournal and ChangeJournal.read(ui.mcu)
-    if type(entries) == "table" then
-      local pid = currentProfiles()
-      for axis = AXIS_ROLL, AXIS_YAW do
-        local entry = ui.axes[axis]
-        entry.pilotP = TuneHistory.pilotValue(entries, entry.a.pidProfile or pid, "pid_" .. (axis - 1) .. "_P", entry.a.P)
-      end
+    local pid = currentProfiles()
+    for axis = AXIS_ROLL, AXIS_YAW do
+      local entry = ui.axes[axis]
+      entry.pilotP = type(entries) == "table"
+        and TuneHistory.pilotValue(entries, entry.a.pidProfile or pid, "pid_" .. (axis - 1) .. "_P", entry.a.P) or nil
     end
     -- Neither module is needed again until Clear or Save
     TuneHistory, ChangeJournal = nil, nil

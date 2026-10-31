@@ -546,6 +546,7 @@ return {
         why_ok = "The heli answers the stick as asked.",
         why_limit = "The change needed goes past a setting's limit.",
         why_p_max_fmt = "P is already %d%% above your setting. Check the mechanics.",
+        why_journal_unread = "The change journal could not be read, so P is not raised.",
         save_question = "Write these changes to the flight controller and save them?",
         reading = "Reading current settings...",
         checking = "Checking saved settings...",
