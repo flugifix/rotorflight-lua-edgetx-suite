@@ -133,6 +133,13 @@ local function failed(tc)
   waitFor(tc, RETRY_SECONDS)
 end
 
+-- The settings reads owed to a saved flight are given up: the flight stays saved, its context
+-- unknown
+local function dropContext(tc)
+  tc.contextPending = false
+  tc.context = nil
+end
+
 local function clearReplies(tc)
   tc.replies = {}
   tc.saveDue = false
@@ -323,7 +330,10 @@ local function finishCapture(tc, mcuId)
   clearReplies(tc)
   TuneHistory, ChangeJournal = nil, nil
   tc.pending = false
-  if seconds > 0 then tc.clearPending = true end
+  if seconds > 0 then
+    tc.clearPending = true
+    tc.clearMcu = mcuId
+  end
   if saved then
     tc.contextPending = true
     tc.context = { mcuId = mcuId, step = 1 }
@@ -388,6 +398,11 @@ function M.tick(tc, mspState, linkUp, now)
   if support ~= true or tc.busy or linkUp ~= true then return true end
   local mcuId = s and s.mcu_id
   if mcuId == nil or (type(mspState) == "table" and mspState.unsupportedApi == true) then return true end
+  -- A clear and the settings reads belong to the flight controller that flew the flight. Sent to
+  -- another, the clear would erase a flight it has not saved and the reads would write its
+  -- settings into this one's flight: both are dropped.
+  if tc.clearPending and tc.clearMcu ~= mcuId then tc.clearPending, tc.clearMcu = false, nil end
+  if tc.contextPending and not (tc.context and tc.context.mcuId == mcuId) then dropContext(tc) end
   -- Given up until the next disarm: nothing to keep this module loaded for
   if now < (tc.nextAt or 0) then return tc.nextAt ~= math.huge end
   local queue = queueOf(mspState)

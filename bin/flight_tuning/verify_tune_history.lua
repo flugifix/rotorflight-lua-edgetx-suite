@@ -896,5 +896,52 @@ do
     and #lines() == 4, asked .. " / " .. #lines() .. " lines")
 end
 
+-- ---------------------------------------------------------------------------
+print("Differences from the Ethos suite: owed work stays with its flight controller (#988)")
+-- ---------------------------------------------------------------------------
+do
+  local OTHER = "def456"
+  local OTHER_HISTORY = "/SCRIPTS/TOOLS/rfsuite.user/tune/" .. OTHER .. ".lua"
+
+  -- Flight controller A's flight is saved; before its clear goes out, B is connected. The clear
+  -- would erase B's statistics, a flight B has not saved.
+  fresh()
+  update(true)
+  update(false)
+  pump(nil, 3)
+  for _ = 1, 40 do
+    if rig.capture().clearPending then break end
+    rig.clock = rig.clock + 0.5
+    rig.pass()
+  end
+  check("(setup) A's flight is saved and its clear owed", rig.capture().clearPending == true and #lines() == 4)
+  rig.session.mcu_id = OTHER
+  local asked = pump()
+  check("a clear owed to one flight controller is never sent to another", asked == ""
+    and #rig.contextAsked == 0, asked .. " / " .. table.concat(rig.contextAsked, ","))
+  local a = tuneHistory.read(MCU)[1].axes[1]
+  check("A's flight stays saved, its settings unknown, and nothing is written for B",
+    a.cyclicPolarity == nil and a.relaxType == nil and files[OTHER_HISTORY] == nil)
+  check("nothing is left owed", rig.capture().clearPending == false and rig.capture().contextPending == false)
+  asked = flyThrough(150)
+  check("(control) B's own next flight is read, saved and cleared", asked == "roll,pitch,yaw,clear"
+    and files[OTHER_HISTORY] ~= nil, asked)
+
+  -- A's clear went through; before its settings are read, B is connected. Its settings would be
+  -- written into A's flight.
+  fresh()
+  update(true)
+  update(false)
+  asked = pump(nil, 4)
+  check("(setup) A's flight is saved and cleared", asked == "roll,pitch,yaw,clear"
+    and rig.capture().contextPending == true, asked)
+  rig.session.mcu_id = OTHER
+  pump()
+  a = tuneHistory.read(MCU)[1].axes[1]
+  check("another flight controller's settings are never read into a saved flight", #rig.contextAsked == 0
+    and a.cyclicPolarity == nil and a.cyclicRing == nil and a.relaxType == nil and files[OTHER_HISTORY] == nil,
+    table.concat(rig.contextAsked, ","))
+end
+
 print(string.format("\n%d checks, %d failed", checks, failures))
 os.exit(failures == 0 and 0 or 1)
