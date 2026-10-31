@@ -231,6 +231,22 @@ do
     commas2 .. " vs " .. commas4)
   check("values keep their precision", string.find(r[2], ",1.531,", 1, true) ~= nil
     and string.find(r[2], ",3.0)", 1, true) ~= nil, r[2])
+  -- A time stamp is an integer and is written as one: a radio built with 32-bit floats cannot
+  -- hold today's clock in a float, so no step may pass it through one. 2^53 + 1 shows a float
+  -- step on a desktop build as well.
+  reset()
+  tuneHistory.save(MCU, replies(147), CONTEXT, 1761900001)
+  local stamped = tuneHistory.read(MCU)[1]
+  check("the radio clock is written and read back as the same integer", stamped ~= nil
+    and math.type(stamped.time) == "integer" and stamped.time == 1761900001, tostring(stamped and stamped.time))
+  reset()
+  tuneHistory.save(MCU, replies(147), CONTEXT, 9007199254740993)
+  stamped = tuneHistory.read(MCU)[1]
+  check("a time stamp never passes through a float on its way to the card", stamped ~= nil
+    and stamped.time == 9007199254740993, tostring(stamped and stamped.time))
+  reset()
+  fly(147)
+  r = lines()
   check("the file lives per flight controller under the user directory",
     tuneHistory.path("ab c/1") == "/SCRIPTS/TOOLS/rfsuite.user/tune/ab_c_1.lua"
     and string.match(journal.path("ab c/1"), "[^/]+$") == string.match(tuneHistory.path("ab c/1"), "[^/]+$"))

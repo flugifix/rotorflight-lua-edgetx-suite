@@ -122,10 +122,16 @@ local function newAxis()
   return a
 end
 
+-- An integer is written as it is: on a radio built with 32-bit floats, adding 0.5 to today's
+-- clock would round it to a float that no longer holds the second. Only a float is rounded.
+local function rounded(v)
+  if math.type(v) == "integer" then return v end
+  return math.tointeger(math.floor(v + 0.5)) or 0
+end
+
 local function integerOrNil(v)
-  if v == nil then return "nil" end
   if type(v) ~= "number" then return "nil" end
-  return string.format("%d", math.floor(v + 0.5))
+  return string.format("%d", rounded(v))
 end
 
 local function line(time, seconds, axis, a)
@@ -134,7 +140,7 @@ local function line(time, seconds, axis, a)
   for _, f in ipairs(FIELDS) do
     local v = f.band and a[f.band][f.index][f[2]] or a[f[2]]
     v = tonumber(v) or 0
-    if f[3] == "%d" then v = math.floor(v + 0.5) end
+    if f[3] == "%d" then v = rounded(v) end
     parts[#parts + 1] = string.format(f[3], v)
   end
   return "f(" .. table.concat(parts, ",") .. ")"
