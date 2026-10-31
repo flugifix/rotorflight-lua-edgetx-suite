@@ -1002,6 +1002,8 @@ do
   check("Clear erases the saved flights", files[TuneHistory.path(MCU)] == nil)
   check("Clear resets the flight controller's statistics", has(sent, Api.writeCommand), table.concat(sent, ","))
   check("after Clear: no flights, fly more", shown("0m 00s, 0/5 flights") and not canSave())
+  check("with no saved flight the page names no profiles the flights were flown on",
+    not shown(T().profileUnknown))
 
   _G.rfsuite.session.mcu_id = nil
   openPage(true)

@@ -720,7 +720,9 @@ local function adviceBasis(T, axis)
   local a = entry.a
   local pid, rate = currentProfiles()
   local ctx, blocked = {}, nil
-  if a.pidProfile == nil or a.rateProfile == nil then
+  if (entry.used or 0) == 0 then
+    -- No flight saved: nothing was flown on any profile, and there is nothing to save.
+  elseif a.pidProfile == nil or a.rateProfile == nil then
     blocked = T.profileUnknown
   elseif a.pidProfile ~= pid or a.rateProfile ~= rate then
     blocked = string.format(T.profileSwitchFmt, a.pidProfile, a.rateProfile)
