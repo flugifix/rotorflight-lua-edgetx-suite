@@ -901,7 +901,8 @@ do
   resetFc()
   flightRoll = { F = 100, ffGain = 1.2, rcRate = 1, sRate = 1 }
   openPage()
-  check("F whose rates round back to the same values, F100, gain 1.2, Actual 1/1: no F", not canSave() and not contains(ui.view.actions, "->"),
+  check("F whose rates round back to the same values, F100, gain 1.2, Actual 1/1: no F", not canSave()
+    and not contains(ui.view.actions, "->"),
     table.concat(ui.view.actions, " | "))
 
   resetFc()

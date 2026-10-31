@@ -246,7 +246,6 @@ do
     and stamped.time == 9007199254740993, tostring(stamped and stamped.time))
   reset()
   fly(147)
-  r = lines()
   check("the file lives per flight controller under the user directory",
     tuneHistory.path("ab c/1") == "/SCRIPTS/TOOLS/rfsuite.user/tune/ab_c_1.lua"
     and string.match(journal.path("ab c/1"), "[^/]+$") == string.match(tuneHistory.path("ab c/1"), "[^/]+$"))
@@ -448,7 +447,8 @@ do
   text[50] = 'e(1,"pids",1,"pid_0_P",4'
   files[JOURNAL] = table.concat(text, "\n") .. "\n"
   local whole = journal.read(MCU)
-  local job, steps, most, got = journal.readJob(MCU), 0, 0, nil
+  local job, steps, most = journal.readJob(MCU), 0, 0
+  local got
   repeat
     local before = job.entries and #job.entries or 0
     got = journal.readStep(job)
