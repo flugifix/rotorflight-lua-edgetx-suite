@@ -74,6 +74,10 @@ local function timestamp()
   return base + seconds
 end
 
+-- The radio clock in seconds, 0 without one. The Tune Advisor's flight capture stamps each saved
+-- flight with it, so a flight and a change applied after it carry times from the same clock.
+M.timestamp = timestamp
+
 local function validName(value)
   return type(value) == "string" and string.match(value, "^[%w_%.]+$") ~= nil
 end
