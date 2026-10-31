@@ -376,6 +376,11 @@ local function driveTuneCapture(capture, armed, linkUp, t, carry, mspState)
   -- A capture whose code cannot be loaded is dropped rather than asked for from the card on
   -- every pass; the next arm lets the next disarm try again.
   if not TuneCapture then
+    -- A saved flight whose settings were owed is complete as it is: a reader is told
+    if capture.contextPending and type(capture.context) == "table" then
+      capture.saved = (capture.saved or 0) + 1
+      capture.savedMcu = capture.context.mcuId
+    end
     capture.pending, capture.clearPending, capture.contextPending = false, false, false
     capture.state = "idle"
     return

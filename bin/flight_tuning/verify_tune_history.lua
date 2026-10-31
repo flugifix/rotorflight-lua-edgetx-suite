@@ -1010,5 +1010,80 @@ do
     .. tostring(a.cyclicPolarity) .. " " .. tostring(a.relaxType))
 end
 
+-- ---------------------------------------------------------------------------
+print("Differences from the Ethos suite: the open page is told once the flight is complete (#979)")
+-- ---------------------------------------------------------------------------
+do
+  -- The real page (app/pages/flight_tuning/tune_advisor/page.lua), opened from the dashboard in
+  -- the capture's own Lua state: each pass is the capture's and then the page's. Its controls and
+  -- texts are stubbed; it reads the card through the real lib/tune_history.lua.
+  fresh()
+  flyThrough(147)
+  _G.rfsuite.palette = { text = 0, border = 0 }
+  _G.SMLSIZE, _G.RIGHT = 1, 2
+  rig.shared["app/pages/settings/common.lua"] = {
+    pageT = function() return function(_, _, fallback) return fallback end end,
+    resetPageState = assert(loadfile("src/rfsuite/app/pages/settings/common.lua"))().resetPageState,
+  }
+  rig.shared["ui/controls.lua"] = {
+    ROW_H = 40, LABEL_H = 21, STATIC_SECTION_H = 38,
+    labelY = function(y) return y + 10 end,
+    appendStaticSectionHeader = function() end,
+    appendComboSelect = function() return 40 end,
+  }
+  local Page = assert(loadfile("src/rfsuite/app/pages/flight_tuning/tune_advisor/page.lua"))()
+  local ui
+  for i = 1, 40 do
+    local name, value = debug.getupvalue(Page.canSave, i)
+    if name == "ui" then ui = value; break end
+    if not name then break end
+  end
+  local pageCtx = { x = 0, y = 0, w = 800, h = 480, children = {}, requestRebuild = function() end }
+  Page.build(pageCtx)
+  -- Half-second passes: the capture, the page, then the flight controller answers
+  local function run(seconds)
+    local stopAt = rig.clock + seconds
+    while rig.clock < stopAt do
+      rig.clock = rig.clock + 0.5
+      rig.pass()
+      Page.wakeup(pageCtx)
+      while rig.requests[1] do rig.answer(rig.take()) end
+    end
+  end
+  run(10)
+  local roll = ui.axes and ui.axes[1]
+  check("(setup) the page shows the saved flight", roll ~= nil and roll.used == 1
+    and roll.a.cyclicPolarity ~= nil, roll and roll.used)
+
+  rig.reply.seconds = 150
+  update(true)
+  update(false)
+  run(40)
+  roll = ui.axes and ui.axes[1]
+  check("a flight saved while the page is open is shown with its settings, without Reload",
+    roll ~= nil and roll.a.cyclicPolarity ~= nil and roll.a.cyclicRing ~= nil and roll.a.relaxType ~= nil
+    and roll.used == 2 and roll.seconds == 297,
+    roll and (tostring(roll.used) .. " flights, " .. tostring(roll.seconds) .. " s, polarity "
+    .. tostring(roll.a.cyclicPolarity)))
+  Page.onClose()
+  _G.rfsuite.palette = nil
+
+  -- The same, on the capture's state alone
+  fresh()
+  update(true)
+  update(false)
+  pump(nil, 4)
+  check("a reader is not told while the saved flight's settings are still to be read",
+    rig.capture().saved == 0 and rig.capture().contextPending == true, rig.capture().saved)
+  pump()
+  check("it is told once they are in", rig.capture().saved == 1 and rig.capture().savedMcu == MCU)
+  fresh()
+  update(true)
+  update(false)
+  pump({ clear = { n = 3, reason = "timeout" } })
+  check("it is told too when the capture gives up before the settings are read",
+    rig.capture().saved == 1 and rig.capture().contextPending == false and #rig.contextAsked == 0)
+end
+
 print(string.format("\n%d checks, %d failed", checks, failures))
 os.exit(failures == 0 and 0 or 1)

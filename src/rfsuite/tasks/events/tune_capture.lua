@@ -42,7 +42,8 @@
 --   state   "reading" disarmed with this flight not saved yet, or its clear still to go
 --           "failed"  gave up after MAX_FAILURES; the next disarm reads it
 --           "idle"    anything else
---   saved   how many flights were saved, so a reader can notice a new one; savedMcu: whose
+--   saved   how many flights were saved and complete (their settings added or given up), so a
+--           reader can notice a new one; savedMcu: whose
 
 local M = {}
 
@@ -104,6 +105,25 @@ function M.supportFor(apiVersion)
   return major * 100 + minor >= 1210
 end
 
+-- A saved flight is complete once its settings are added or given up, and only then is a reader
+-- told (saved, savedMcu): told at the save, the page would read the flight with its settings
+-- still unknown, and nothing would tell it again.
+local function announce(tc)
+  local ctx = tc.context
+  if ctx then
+    tc.saved = (tc.saved or 0) + 1
+    tc.savedMcu = ctx.mcuId
+  end
+end
+
+-- The settings reads owed to a saved flight are given up: the flight stays saved, its context
+-- unknown
+local function dropContext(tc)
+  if tc.contextPending then announce(tc) end
+  tc.contextPending = false
+  tc.context = nil
+end
+
 local function publishState(tc)
   local now
   if tc.pending then
@@ -128,16 +148,11 @@ local function failed(tc)
   if tc.failures >= MAX_FAILURES then
     tc.busy = false
     tc.nextAt = math.huge
+    -- Nothing runs again before the next disarm, which starts afresh
+    dropContext(tc)
     return
   end
   waitFor(tc, RETRY_SECONDS)
-end
-
--- The settings reads owed to a saved flight are given up: the flight stays saved, its context
--- unknown
-local function dropContext(tc)
-  tc.contextPending = false
-  tc.context = nil
 end
 
 local function clearReplies(tc)
@@ -167,7 +182,7 @@ local function handleError(tc, reason)
     tc.busy = false
     tc.pending = false
     tc.clearPending = false
-    tc.contextPending = false
+    dropContext(tc)
     tc.noCommand = true
   elseif reason == "refused" then
     clearReplies(tc)
@@ -337,8 +352,6 @@ local function finishCapture(tc, mcuId)
       return
     end
     tc.lastSeconds[mcuId] = seconds
-    tc.saved = (tc.saved or 0) + 1
-    tc.savedMcu = mcuId
     saved = true
   end
   clearReplies(tc)
@@ -388,8 +401,7 @@ local function advanceContext(tc, queue)
       end
     end
     TuneHistory = nil
-    tc.contextPending = false
-    tc.context = nil
+    dropContext(tc)
     waitFor(tc, 0)
   end
 end
@@ -405,7 +417,8 @@ function M.tick(tc, mspState, linkUp, now)
   if support == false or tc.noCommand then
     -- Nothing is sent, and what was owed is dropped. A version not known yet waits instead,
     -- with everything kept, so a flight still in the flight controller is read once it is.
-    tc.pending, tc.clearPending, tc.contextPending, tc.busy = false, false, false, false
+    tc.pending, tc.clearPending, tc.busy = false, false, false
+    dropContext(tc)
     publishState(tc)
     return false
   end
@@ -430,7 +443,8 @@ function M.tick(tc, mspState, linkUp, now)
     return true
   end
   if not TuneAdvisorApi then
-    tc.pending, tc.clearPending, tc.contextPending = false, false, false
+    tc.pending, tc.clearPending = false, false
+    dropContext(tc)
     publishState(tc)
     return false
   end

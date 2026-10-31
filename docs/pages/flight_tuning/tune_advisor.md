@@ -66,7 +66,8 @@ is skipped, and the rest of the file still counts.
 Needs MSP API 12.10; greyed out on an older flight controller, and it cannot be opened while the model is armed.
 The page and the saving both need firmware that sends the packed tune advisor reply (payload version 3, added to
 the firmware by rotorflight-firmware pull request #570). A flight controller without it, or with an older reply
-layout, shows "Needs newer firmware" on this page, and its flights are not saved; *Reload* asks again.
+layout, shows "Needs newer firmware" on this page, and its flights are not saved; *Reload* asks again, and so
+does connecting another flight controller while the page is open.
 
 The page does not poll the flight controller. It reads the flights saved for the connected model when it opens
 and on *Reload*, and asks the flight controller once, then, whether it has the tune advisor at all. Through a link
@@ -74,7 +75,8 @@ loss it keeps showing the flights; only a different flight controller brings up 
 it shows "Connect to a model first".
 
 Opened from the dashboard (see [Quick menu](../../dashboard/quick-menu.md)), the page runs inside the dashboard,
-which keeps saving flights meanwhile, and it reads the flights again when one is saved while it is open. Until
+which keeps saving flights meanwhile, and it reads the flights again when one is saved while it is open, once
+the cyclic polarity, cyclic ring and I-term relax type have been added to it (a few seconds after the save). Until
 that flight is saved it shows "Reading the last flight..." in place of the advice, with *Save* and *\** greyed
 out. If the radio could not read the flight, the advice from the saved flights comes back with "Last flight not
 read. It is read at the next disarm." above it.

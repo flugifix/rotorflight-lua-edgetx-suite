@@ -27,6 +27,11 @@ function M.owe(s, now)
     tc = { lastSeconds = {}, saved = 0 }
     s.tuneCapture = tc
   end
+  -- A saved flight whose settings were still owed is complete as it is: tell the reader now
+  if tc.contextPending and type(tc.context) == "table" then
+    tc.saved = (tc.saved or 0) + 1
+    tc.savedMcu = tc.context.mcuId
+  end
   tc.pending = true
   tc.failures = 0
   tc.replies = {}
